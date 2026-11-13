@@ -1,6 +1,6 @@
 # Tank and enemy AI: what Shawn decided (13 Nov 2026)
 
-Status: AGREED IN QUESTIONS, NOT YET BUILT. This replaces the decision logic in `src/battle/battle.js`. The missile / HKOI / Trophy
+Status: stage 1 and stage 2 (weapons, target order, scanning, counter-fire, loader, missions) BUILT; stage 3 NOT built. See docs/WORKLOG.md for what is where. This replaces the decision logic in `src/battle/battle.js`. The missile / HKOI / Trophy
 outcome engine (`src/engine.js`) is not rewritten: the AI decides who does what, when and from where, and hands each engagement to
 the engine. Every number below marked (A) is my assumption and is open to challenge.
 

@@ -34,6 +34,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 ## Map of the code
 - `src/app/` main.js (shell, frame loop, HUD, map, sound wiring), index.tpl.html (markup + CSS), mapview.js, enemyviews.js (enemy sight reticles, team menu)
 - `src/render/` scene3d.js (renderer, weather, quality levels), cameras.js, units.js (TankView incl. HKOI station, TeamView, PropView, model loading, poses), volleyview.js (missiles, tracers, Trophy, impacts), fx.js, env.js (weather, vehicle finish), terrain.js, scenery.js
+- `src/battle/tankai.js` the tank crew: independent weapons, target order, thermal scanning, counter-fire, loader, missions and movement (decisions in `docs/AI_SPEC.md`)
 - `src/battle/battle.js` time-stepped battle layer (enemy teams, tank behaviour, return fire, machine guns); each enemy volley is resolved by `HK.runMission` in `src/engine.js`
 - `src/world/world.js` generated 8x8 km terrain, sight lines, routes; `src/audio/sound.js` synthesised effects + recorded voices
 - `tools/` build_beta.py, dev.sh, setup.sh, serve_csp.sh, glb2json.py, lineup_split.py + vehicle_pack.py (cut a vehicle out of a multi-variant OBJ and pack hull/turret)
