@@ -42,8 +42,8 @@ for (rx, low, high, H), fl in pending:      # group the faces into connected pie
     nlow = nhigh = 0
     for root, cf in comp.items():
         ys = [float(V[vid(t)][1]) for m, toks in cf for t in toks]; mid = (min(ys) + max(ys)) / 2
-        if mid < float(H): faces[low].extend(cf); nlow += 1
-        else: faces[high].extend(cf); nhigh += 1
+        if mid < float(H): faces.setdefault(low, []).extend(cf); nlow += 1      # (a part named only here, such as 'skirts', gets its own file)
+        else: faces.setdefault(high, []).extend(cf); nhigh += 1
     seen.setdefault('(split ' + rx + ')', []).append('%d pieces to %s, %d to %s' % (nlow, low, nhigh, high))
 open(os.path.join(out, 'parts.mtl'), 'w').write(''.join(f'newmtl {m}\nKd 0.8 0.8 0.8\n' for m in sorted(mats)))
 info = {}
