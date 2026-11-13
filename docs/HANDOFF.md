@@ -1,7 +1,7 @@
 # Hand-off: where the project stands (13 Nov 2026, about 15:15 CT)
 
 ## What exists on `main`
-Beta 0.20 is what Shawn last tested from the hosted page; `main` is ahead of it (0.21 work, not yet shown to him):
+Beta 0.22 is published on the hosted page (0.21 enemy AI + movement, 0.22 sights/menu/close-up); Shawn has not yet commented on 0.21 or 0.22:
 - Generated 8x8 km battlefields (farmland, desert, town edge, forest), eight weather/light conditions, graphics levels with automatic resolution scaling.
 - Battle layer: enemy teams (Kornet, Konkurs, RPG, laser designator, FPV crews) with skill levels, volleys resolved by the legacy engine, fog of war and a spectator mode.
 - Tank: M1A2 SEPv3 TUSK with Trophy (supplied model, separate turret), finish by theatre, HKOI weapon station (M230LF on the turret roof) that slews and fires, main-gun return fire on located sites, machine guns on located teams within 914 m, hull-down position search after each volley.
@@ -11,7 +11,7 @@ Beta 0.20 is what Shawn last tested from the hosted page; `main` is ahead of it 
 - Sound: synthesised effects (30 mm, explosions, Trophy, launches, drones, turbine, weather, machine guns, 120 mm) and recorded crew/enemy voices. NOBODY HAS CONFIRMED BY EAR that any of it sounds right.
 
 ## In flight when this was written (check WORKLOG's last entries to see whether they were merged)
-1. Enemy sight reticles per weapon + a menu to pick the unit + a new "enemy close-up" camera with the same menu (cameras.js, index.tpl.html, main.js).
+1. (MERGED and published as beta 0.22) Enemy sight reticles per weapon + a menu to pick the unit + a new "enemy close-up" camera with the same menu (cameras.js, index.tpl.html, main.js).
 2. Tank animation: running tracks (texture scroll), turning roadwheels (need cutting out of the hull mesh with tools/lineup_split.py), suspension feel (`tank.animate(dt, speed, yawRate)`, `tank.kick()`).
 If the work log does not say "merged", they are NOT in `main`: do them (the task descriptions are in WORKLOG and docs/AGENT_BRIEF.md).
 
