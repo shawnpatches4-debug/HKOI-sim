@@ -6,9 +6,9 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'])
         pg = await b.new_page(viewport={'width': int(os.environ.get('W', '1280')), 'height': int(os.environ.get('H', '720'))})
-        errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:300])); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text[:300]))
+        errs = []; pg.on('response', lambda r: r.status >= 400 and errs.append('HTTP %d %s' % (r.status, r.url[-80:]))); pg.on('pageerror', lambda e: errs.append(str(e)[:300])); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text[:300]))
         root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../build/beta/index.html')
-        await pg.goto('file://' + os.path.abspath(root) + ('#' + params if params else ''), timeout=120000)
+        await pg.goto((os.environ.get('BASE') or 'file://' + os.path.abspath(root)) + ('#' + params if params else ''), timeout=120000)
         try: await pg.wait_for_function('window.__beta && window.__beta.scene', timeout=int(os.environ.get('WAIT', '120000')))
         except Exception as e: print('NOT READY', str(e)[:200], errs[:5]); await b.close(); return
         for cmd in json.loads(os.environ.get('PRE', '[]')): await pg.evaluate(cmd)

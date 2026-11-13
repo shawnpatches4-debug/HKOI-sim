@@ -1,14 +1,14 @@
 // Beta entry point: title and setup, the battle loop, cameras, the on-screen information and the result screen.
 import * as THREE from 'three';
 import { Scene3D, CONDITIONS, QUALITY } from '../render/scene3d.js';
-import { TankView, TeamView } from '../render/units.js';
+import { TankView, TeamView, PropView } from '../render/units.js';
 import { VolleyView } from '../render/volleyview.js';
 import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.16';
+const VERSION = '0.17';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -36,6 +36,7 @@ const BattleAPI = HKBattle.create({ HK, CAMP, World: HKWorld });
 const cfg0 = HK.defaultConfig(); let lookup = null;
 const ASSETS = q.get('assets') === '0' ? null : 'assets/';
 const tank = new TankView(ASSETS); scene.units.add(tank.group);
+const props = [];
 let battle = null, teams = [], volleys = null, state = 'title', playing = false, speed = +(q.get('speed') || 1), logShown = 0, capT = -9, capW = 0, ended = false, showLog = store.get('log', true), showPerf = store.get('perf', q.get('perf') === '1');
 
 function newBattle() {
@@ -44,6 +45,12 @@ function newBattle() {
   const pos = tankPos();
   battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
   teams = battle.units.map(u => { const t = new TeamView(u.type, ASSETS); scene.units.add(t.group); return t; });
+  // enemy transport parked in dead ground behind some of the teams: seen only when the team it belongs to is
+  for (const p of props) scene.units.remove(p.view.group); props.length = 0;
+  { const T = battle.tank, kinds = ['bmp2', 'uaz', 'bmp2']; let k = 0; for (const u of battle.units) { if (k >= 3 || u.spec.indirect || u.type === 'rpg') continue; const a = Math.atan2(u.e - T.e, u.n - T.n), side = (u.id % 2 ? 1 : -1) * 18;
+      for (const back of [70, 95, 50, 120]) { const e = u.e + Math.sin(a) * back + Math.cos(a) * side, n = u.n + Math.cos(a) * back - Math.sin(a) * side; if (!world.inside(e, n) || !world.passable(e, n, true) || world.slope(e, n) > 0.25) continue;
+        const view = new PropView(kinds[k++], ASSETS), face = (a * 180 / Math.PI + 180 + (u.id * 37) % 50 - 25 + 360) % 360, hh = face * Math.PI / 180, d = 2, pitch = Math.atan2(world.h(e + Math.sin(hh) * d, n + Math.cos(hh) * d) - world.h(e - Math.sin(hh) * d, n - Math.cos(hh) * d), 2 * d);
+        view.place(scene.at(e, n, 0), face, -pitch, 0); scene.units.add(view.group); props.push({ view, u, e, n }); break; } } }
   scene.marks.clear(); scene.fx.n = 0;
   volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
   api.battle = battle; place();
@@ -70,6 +77,7 @@ function place() {
   const T = { e: P.e, n: P.n, h: P.h }, w = world, d = 2.5, hh = T.h * Math.PI / 180, fe = Math.sin(hh), fn = Math.cos(hh);
   const pitch = Math.atan2(w.h(T.e + fe * d, T.n + fn * d) - w.h(T.e - fe * d, T.n - fn * d), 2 * d), roll = Math.atan2(w.h(T.e + fn * 1.6, T.n - fe * 1.6) - w.h(T.e - fn * 1.6, T.n + fe * 1.6), 3.2);
   tank.place(scene.at(T.e, T.n, 0), T.h, -pitch, roll); scene.setFocus(T.e, T.n); FINISH.ground.value = w.h(T.e, T.n); shown.e = T.e; shown.n = T.n; shown.h = T.h;
+  for (const p of props) p.view.group.visible = set.spectator || p.u.known;
   battle.units.forEach((u, i) => { teams[i].group.visible = u.alive && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); teams[i].place(scene.at(u.e, u.n, 0), Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); });
 }
 // markers: what the vehicle's sensors hold (threats cued and tracked, launch sites located); in spectator mode every team, faintly
@@ -193,10 +201,10 @@ function frameBody(now) {
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } } else { scene.render(dt); drawMarks(); }
   cpuMs = Math.max(cpuMs * 0.97, performance.now() - tCpu);
   frames++; if (now - fpsT > 500) { fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; if (state === 'play') drawStatus();
-    if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${QUALITY[s.quality].name} graphics   ${Math.round(canvas.width)}×${Math.round(canvas.height)} (${Math.round(s.scale * 100)}% scale)\nsim ${simMs.toFixed(1)} ms   whole frame on the processor ${cpuMs.toFixed(1)} ms\nGraphics chip: ${scene.gpu()}${scene.software ? '   << SOFTWARE DRAWING: the graphics card is not being used' : ''}\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
+    if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${QUALITY[s.quality].name} graphics   ${Math.round(canvas.width)}×${Math.round(canvas.height)} (${Math.round(s.scale * 100)}% scale)\nsim ${simMs.toFixed(1)} ms   whole frame on the processor ${cpuMs.toFixed(1)} ms\nModels: tank ${tank.loaded ? (tank.variant || 'M1A2 SEPv2') : tank.failed ? 'FAILED (boxes)' : 'loading'}, enemy teams ${teams.filter(t => t.loaded).length}/${teams.length}, vehicles ${props.filter(p => p.view.loaded).length}/${props.length}\nGraphics chip: ${scene.gpu()}${scene.software ? '   << SOFTWARE DRAWING: the graphics card is not being used' : ''}\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
 }
 window.addEventListener('resize', () => scene.resize());
-const api = window.__beta = { prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state,
+const api = window.__beta = { props, prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state,
   runTo(t) { while (battle.t < t && battle.tank.alive) battle.step(); tNow = battle.t; place(); }, playFor(sec) { const n = Math.round(sec / battle.dt); for (let i = 0; i < n; i++) { battle.step(); if (battle._pending) battle.step(); tNow = battle.t; place(); volleys.update(battle.t, battle.dt); scene.fx.update(battle.dt); } },
   near(dist, height, brg) { const T = battle.tank, a = (brg || 200) * Math.PI / 180; this.view(T.e + Math.sin(a) * dist, T.n + Math.cos(a) * dist, 0, height, T.e, T.n); },
   view(e, n, dist, height, lookE, lookN) { cams.mode = 'free'; scene.controls.enabled = false; scene.camera.up.set(0, 1, 0); scene.camera.position.set(e, world.h(e, n) + height, -n); scene.camera.lookAt(lookE, world.h(lookE, lookN) + 2, -lookN); } };
