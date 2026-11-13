@@ -2,6 +2,7 @@
 # Run with the CSP server up and BASE set, like sheet.py. The team is taken away from the battle and driven by hand in steps of 1/120 s.
 #   STEPS  = JSON list of stages, each {"mode": "still|down|walk|run", "spd": m/s, "t": seconds between pictures, "shots": pictures, "turn": degrees added to the heading}
 #   ANG    = camera bearing relative to the team's heading (90 = side-on), DIST, CAMH = camera distance and height, FOLLOW = 1 keeps the camera on the team, BACK = metres behind the team's point the camera looks at
+#   EVAL   = no pictures: print the result of this expression (it can use __D)
 #   NUM=1  = no pictures: print measurements instead (foot slide, frame-rate independence, cost per team per frame)
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
@@ -51,6 +52,8 @@ async def main():
             await pg.wait_for_timeout(1000)
         await pg.evaluate('document.getElementById("go").click()'); await pg.wait_for_timeout(1500); await pg.evaluate('__beta.setPlaying(false)')
         await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight{display:none!important}'); await pg.evaluate('void (' + DRIVE + ')'); await pg.evaluate(f"__drv('{kind}')"); await pg.evaluate('__D.reset()')
+        if os.environ.get('EVAL'):   # print the result of one expression (it can use __D, the driver) and stop
+            print(json.dumps(await pg.evaluate(os.environ['EVAL']))); print('errors', errs[:5]); await b.close(); return
         if os.environ.get('NUM'):
             print(json.dumps(await pg.evaluate(NUM), indent=1)); print('errors', errs[:5]); await b.close(); return
         pre = json.loads(os.environ.get('PRE', '[]'))
