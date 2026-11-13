@@ -176,7 +176,7 @@ function trackDust(dt) { const T = battle.tank; if (!(state === 'play' && playin
 function mainGun() {
   const S = battle.shots || []; const live = state === 'play' && playing;
   while (shotI < S.length && S[shotI].t <= battle.t) { const sh = S[shotI++]; if (battle.t - sh.t > 2) continue; const T = battle.tank, a = Math.atan2(sh.to.e - sh.from.e, sh.to.n - sh.from.n), m = scene.at(T.e + Math.sin(a) * 6.5, T.n + Math.cos(a) * 6.5, 2.3);
-    scene.fx.flash(m.x, m.y, m.z, 3.2); scene.fx.backblast(m.x, m.y, m.z, -Math.sin(a), Math.cos(a), 1.6); const g = scene.at(T.e, T.n, 0.3); scene.fx.dust(g.x, g.y, g.z, 3.5); scene.blast(m, 1.4, false); if (live && speed <= 2.01) { sound.gun120(camDist(m)); sound.say('CDR', ['Fire!'], 1); } landing.push(sh); }
+    scene.fx.flash(m.x, m.y, m.z, 3.2); scene.fx.backblast(m.x, m.y, m.z, -Math.sin(a), Math.cos(a), 1.6); const g = scene.at(T.e, T.n, 0.3); scene.fx.dust(g.x, g.y, g.z, 3.5); scene.blast(m, 1.4, false); tank.kick(); if (live && speed <= 2.01) { sound.gun120(camDist(m)); sound.say('CDR', ['Fire!'], 1); } landing.push(sh); }
   for (let i = landing.length - 1; i >= 0; i--) { const sh = landing[i]; if (battle.t < sh.t + sh.tof) continue; landing.splice(i, 1); const p = scene.at(sh.to.e, sh.to.n, 0.4); scene.fx.explosion(p.x, p.y, p.z, 1.5); scene.blast(p, 1.4); if (live && speed <= 2.01) { sound.explosion(camDist(p), 1.5); if (sh.hit) sound.say('CDR', ['Target! Cease fire!'], 1); } }
 }
 // Simulated time. The battle moves in fixed steps of battle.dt (0.1 s); frames come far more often than that, so time is banked

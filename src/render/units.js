@@ -111,8 +111,10 @@ export class TankView {
   // positive (leave it out and it is measured from the headings given to place()).
   //   Tracks: the picture of the links slides along the track by the distance covered (one repeat of the picture is 0.5646 m of track).
   //   Wheels: each turns by distance / its radius. In a turn the outer track and its wheels run faster than the inner ones.
+  //   Body: squats back when speeding up, dips when braking, leans out a little in turns, rocks back from the main gun (see kick) and
+  //   settles like a heavy vehicle on stiff springs. It is worked out in fixed steps of 1/240 s, so it looks the same at any frame rate.
   animate(dt, speedMps = 0, yawRateDegPerSec) {
-    const A = this._anim || (this._anim = { dir: 1, fwd: 0, turn: 0 });
+    const A = this._anim || (this._anim = { dir: 1, fwd: 0, turn: 0, bank: 0, vf: 0, p: 0, pv: 0, r: 0, rv: 0, y: 0, yv: 0, dist: 0, kp: 0, kr: 0, ky: 0 });
     if (!(dt > 0)) { A.fwd = 0; A.turn = 0; return; } dt = Math.min(dt, 0.25);
     if (A.fwd > 1e-4) A.dir = 1; else if (A.fwd < -1e-4) A.dir = -1;                                           // which way place() moved the vehicle since the last call
     const v = speedMps < 0 ? speedMps : speedMps * A.dir, yaw = (yawRateDegPerSec != null ? yawRateDegPerSec : Math.max(-60, Math.min(60, A.turn / dt))) * DEG; A.fwd = 0; A.turn = 0;
@@ -122,7 +124,26 @@ export class TankView {
       if (T.length === 2 && !this._trackSplit && T[0].mesh.material.map && T[0].mesh.material.map.image) { this._trackSplit = true; const m = T[1].mesh, mat = m.material.clone(); mat.map = m.material.map.clone(); mat.map.needsUpdate = true; m.material = mat; }   // a second copy of the picture (same image) so the two tracks can run at different speeds
       for (const t of T) { const map = t.mesh.material.map; if (!map) continue; map.wrapT = THREE.RepeatWrapping; t.off = (t.off + (t.side > 0 ? dL : t.side < 0 ? dR : v * dt) / 0.5646) % 1; if (this._trackSplit || t === T[0]) map.offset.y = t.off; } }
     if (this.wheels) for (const w of this.wheels) { w.a = (w.a + (w.side > 0 ? dL : dR) * w.perM) % (Math.PI * 2); w.mesh.rotation.x = w.a; }
+    if (!this.body) return;
+    // body on its springs
+    const h = 1 / 240, W = 7.5, Z = 0.85, lag = 0.3, kf = 1 - Math.exp(-h / lag); A.bank += dt; let n = Math.min(60, Math.floor(A.bank / h + 1e-6)); A.bank -= n * h; if (A.bank > h) A.bank = 0;
+    while (n-- > 0) {
+      A.vf += (v - A.vf) * kf; const acc = (v - A.vf) / lag;                                                   // smoothed acceleration, m/s2 (the battle changes speed in steps)
+      const pt = Math.max(-0.022, Math.min(0.03, -acc * 0.0075)), rt = Math.max(-0.014, Math.min(0.014, v * yaw * 0.004));   // where the springs want to be: nose up when speeding up, lean to the outside of a turn
+      A.pv += A.kp; A.rv += A.kr; A.yv += A.ky; A.kp = A.kr = A.ky = 0;                                         // a shot from the main gun arrives as a shove
+      A.pv += (-(A.p - pt) * W * W - A.pv * 2 * Z * W) * h; A.p += A.pv * h;
+      A.rv += (-(A.r - rt) * W * W * 1.6 - A.rv * 2 * Z * W * 1.26) * h; A.r += A.rv * h;                      // stiffer side to side
+      A.yv += (-A.y * W * W * 1.3 - A.yv * 2 * Z * W * 1.14) * h; A.y += A.yv * h;
+      A.dist += v * h; A.amp = Math.min(1, Math.abs(A.vf) / 7);
+    }
+    // a very small bounce from the ground that grows with speed (a pattern tied to distance covered, so it stops when the vehicle stops)
+    const amp = A.amp || 0, bp = amp * (Math.sin(A.dist * 1.37) * 0.0022 + Math.sin(A.dist * 0.61 + 1) * 0.0016), by = amp * (Math.sin(A.dist * 1.05 + 2) * 0.006 + Math.sin(A.dist * 2.3) * 0.003);
+    const P = A.p + bp, R = A.r + amp * Math.sin(A.dist * 0.83 + 0.5) * 0.0015, cy = 0.9;                       // the body turns about a point 0.9 m up, roughly where the suspension holds it
+    this.body.rotation.set(P, 0, R); this.body.position.set(cy * Math.sin(R), A.y + by, -cy * Math.sin(P));
   }
+  // The main gun has fired: the body rocks away from the direction the gun points (back on its haunches when firing ahead, sideways when
+  // firing over the side) and sinks a little, then settles. strength 1 is a full-charge 120 mm round.
+  kick(strength = 1) { const A = this._anim; if (!A) return; const ty = (this.turretYaw || 0) * DEG; A.kp -= 0.3 * strength * Math.cos(ty); A.kr -= 0.2 * strength * Math.sin(ty); A.ky -= 0.2 * strength; }
   _loadOld(assetBase) {
     const stand = this.standIn;
     loadGLTF(assetBase + 'm1/m1.json').then(scene => { const g = { scene }; const done = new Set(); g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && !done.has(m) && !m.transparent) { done.add(m); vehicleFinish(m); } } }); this.model = g.scene; this.group.add(g.scene); stand.visible = false; this.loaded = true; }).catch(e => { this.failed = true; console.warn('tank model not loaded', e && e.message); });
