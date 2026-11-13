@@ -27,10 +27,11 @@ export const CONDITIONS = {
 // Graphics settings. pr = most device pixels drawn per screen pixel; samples = edge smoothing; shadow = shadow map size;
 // near/mid/far = distances (m) at which trees drop to simpler shapes and then vanish.
 export const QUALITY = {
-  low: { name: 'Low', pr: 1, samples: 0, shadow: 1024, shadowEvery: 3, bloom: false, near: 90, mid: 600, far: 2600, precip: 3000 },
-  medium: { name: 'Medium', pr: 1, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 150, mid: 900, far: 4200, precip: 6000 },
-  high: { name: 'High', pr: 1.5, samples: 4, shadow: 4096, shadowEvery: 1, bloom: true, near: 230, mid: 1400, far: 9000, precip: 9000 },
-  auto: { name: 'Auto', auto: true, pr: 1.5, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 170, mid: 1000, far: 5000, precip: 6000 },
+  min: { name: 'Minimum', pr: 0.75, samples: 0, shadow: 512, shadowEvery: 4, bloom: false, near: 0, mid: 120, far: 450, precip: 1500, plain: true },   // no film pipeline, no shadows: for weak or software graphics
+  low: { name: 'Low', pr: 1, samples: 0, shadow: 1024, shadowEvery: 3, bloom: false, near: 50, mid: 220, far: 650, precip: 3000 },
+  medium: { name: 'Medium', pr: 1, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 90, mid: 330, far: 950, precip: 6000 },
+  high: { name: 'High', pr: 1.5, samples: 4, shadow: 4096, shadowEvery: 1, bloom: true, near: 160, mid: 560, far: 1700, precip: 9000 },
+  auto: { name: 'Auto', auto: true, pr: 1.5, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 110, mid: 380, far: 1100, precip: 6000 },
 };
 export class Scene3D {
   constructor(canvas, world, opt = {}) {
@@ -71,8 +72,13 @@ export class Scene3D {
     const dpr = window.devicePixelRatio || 1; this.prMax = Math.min(dpr, Q.pr); this.prMin = Math.min(this.prMax, Q.auto ? 0.55 : this.prMax); this.pr = Q.auto ? Math.min(this.prMax, 1) : this.prMax;
     for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== Q.samples) { rt.samples = Q.samples; rt.dispose(); }
     if (this.sun.shadow.mapSize.x !== Q.shadow) { this.sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
-    this.bloom.enabled = Q.bloom; this.precip.mesh.geometry.setDrawRange(0, Q.precip * 2); this.applySize();
+    this.bloom.enabled = Q.bloom; this.precip.mesh.geometry.setDrawRange(0, Q.precip * 2);
+    this.post = !Q.plain; this.sun.castShadow = !Q.plain; this.renderer.shadowMap.needsUpdate = true;
+    this.applySize();
   }
+  // which graphics chip the browser is actually using (a 'SwiftShader', 'llvmpipe' or 'Basic Render' answer means none: it is drawing on the processor)
+  gpu() { if (this._gpu) return this._gpu; const gl = this.renderer.getContext(), e = gl.getExtension('WEBGL_debug_renderer_info'); this._gpu = String(e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); return this._gpu; }
+  get software() { return /swiftshader|llvmpipe|basic render|software/i.test(this.gpu()); }
   applySize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setPixelRatio(this.pr); this.renderer.setSize(w, h, false); this.composer.setPixelRatio(this.pr); this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   // build (or rebuild) the ground and scenery for a world, freeing what was there before
   setWorld(world) {
@@ -81,6 +87,8 @@ export class Scene3D {
     this.terrain = buildTerrain(world); sc.add(this.terrain.mesh);
     this.trees = buildTrees(world, { perCell: this.opt.treesPerCell || 2 }); sc.add(this.trees);
     this.buildings = buildBuildings(world); sc.add(this.buildings);
+    // scenery never moves: work out its placement once and skip the per-frame pass over its thousands of parts
+    for (const o of [this.trees, this.buildings]) { o.updateMatrixWorld(true); o.updateMatrixWorld = () => { }; }
     this.buildMs = Math.round(performance.now() - t0);
     if (this.focus) this.focus.set(0, world.h(0, 0), 0);
   }

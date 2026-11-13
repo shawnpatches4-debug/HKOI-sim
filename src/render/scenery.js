@@ -32,6 +32,20 @@ function conifer(fine, seed) {
 }
 function bush(seed) { const parts = [], leaf = new THREE.Color('#5d6f3a'), centre = new THREE.Vector3(0, 0.3, 0); [[0, 0.4, 0, 0.42], [0.3, 0.3, 0.1, 0.3], [-0.28, 0.32, -0.12, 0.32]].forEach(([x, y, z, r], q) => { const g = lump(r, 0, seed + q); g.translate(x, y, z); parts.push({ g, c: leaf, centre, shade: [0, 0.8] }); }); return merge(parts); }
 
+// The top of a wood seen from far off: a bumpy green surface at tree-top height over the wooded cells of one chunk, with sides down to
+// the ground where the wood ends.
+function canopyFor(world, ci, cj, CH, mat, pConifer) {
+  const n = world.n, c = world.cell, half = world.half, V = world.V, VH = world.VH, wood = (i, j) => i >= 0 && j >= 0 && i < n && j < n && V[j * n + i] === 4, pos = [], col = [], nor = [];
+  const top = (i, j) => { let m = 0; for (const [a, b] of [[i, j], [i - 1, j], [i, j - 1], [i - 1, j - 1]]) if (wood(a, b)) m = Math.max(m, VH[b * n + a]); const e = i * c - half - c / 2, nn = j * c - half - c / 2; return [e, world.h(e, nn) + m * (0.78 + 0.3 * hash(i, j, 77)), -nn, world.h(e, nn)]; };
+  const base = new THREE.Color(pConifer > 0.4 ? '#2a4429' : '#3f632c'), k = new THREE.Color();
+  const tri = (A, B, C, shade) => { const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = C[0] - A[0], vy = C[1] - A[1], vz = C[2] - A[2]; let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const L = Math.hypot(nx, ny, nz) || 1; nx /= L; ny /= L; nz /= L; for (const P of [A, B, C]) { pos.push(P[0], P[1], P[2]); nor.push(nx * 0.5, ny * 0.5 + 0.5, nz * 0.5); k.copy(base).multiplyScalar(shade); col.push(k.r, k.g, k.b); } };
+  for (let j = cj; j < Math.min(n, cj + CH); j++) for (let i = ci; i < Math.min(n, ci + CH); i++) { if (!wood(i, j)) continue; const a = top(i, j), b = top(i + 1, j), d = top(i, j + 1), e = top(i + 1, j + 1), sh = 0.8 + 0.3 * hash(i, j, 78);
+    tri(a, b, e, sh); tri(a, e, d, sh);
+    const side = (P, Q) => { const p0 = [P[0], P[3], P[2]], q0 = [Q[0], Q[3], Q[2]]; tri(P, p0, q0, 0.6); tri(P, q0, Q, 0.6); };
+    if (!wood(i, j - 1)) side(a, b); if (!wood(i + 1, j)) side(b, e); if (!wood(i, j + 1)) side(e, d); if (!wood(i - 1, j)) side(d, a); }
+  if (!pos.length) return null; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); const m = new THREE.Mesh(g, mat); m.castShadow = false; m.receiveShadow = true; return m;
+}
+
 // Trees and bushes are grouped into square chunks so the graphics card can skip the ones out of view, and each chunk
 // switches to the close-up shapes only when the camera is near.
 export function buildTrees(world, opt = {}) {
@@ -45,18 +59,21 @@ export function buildTrees(world, opt = {}) {
   for (let cj = 0; cj < n; cj += CH) for (let ci = 0; ci < n; ci += CH) {
     const list = [];
     for (let j = cj; j < Math.min(n, cj + CH); j++) for (let i = ci; i < Math.min(n, ci + CH); i++) { const k = j * n + i, v = world.V[k]; if (v !== 4 && v !== 5 && v !== 3) continue; const cnt = v === 5 ? 2 : v === 3 ? 1 : perCell;
-      for (let q = 0; q < cnt; q++) { const e = i * c - half + (hash(i, j, 11 + q) - 0.5) * c, nn = j * c - half + (hash(i, j, 23 + q) - 0.5) * c, r = hash(i, j, 41 + q); if (v === 3) { if (r < 0.45) list.push([e, nn, 1.2 + r * 2.2, r, 'bush']); continue; } const h = world.VH[k] * (0.7 + 0.5 * hash(i, j, 31 + q)); list.push([e, nn, h, r, hash(i, j, 51 + q) < pConifer ? 'fir' : r < 0.5 ? 'leafA' : 'leafB']); } }
+      for (let q = 0; q < cnt; q++) { const e = i * c - half + (hash(i, j, 11 + q) - 0.5) * c, nn = j * c - half + (hash(i, j, 23 + q) - 0.5) * c, r = hash(i, j, 41 + q); if (v === 3) { if (r < 0.45) list.push([e, nn, 1.2 + r * 2.2, r, 'bush']); continue; } const h = world.VH[k] * (0.7 + 0.5 * hash(i, j, 31 + q)); list.push([e, nn, h, r, hash(i, j, 51 + q) < pConifer ? 'fir' : r < 0.5 ? 'leafA' : 'leafB', v === 4]); } }
     if (!list.length) continue;
-    const ce = (ci + CH / 2) * c - half, cn = (cj + CH / 2) * c - half, centre = new THREE.Vector3(ce, world.h(ce, cn), -cn), near = new THREE.Group(), far = new THREE.Group(), tiny = new THREE.Group();
+    const ce = (ci + CH / 2) * c - half, cn = (cj + CH / 2) * c - half, centre = new THREE.Vector3(ce, world.h(ce, cn), -cn), near = new THREE.Group(), far = new THREE.Group(), tiny = new THREE.Group(), tinyLine = new THREE.Group(), canopy = canopyFor(world, ci, cj, CH, mat, pConifer);
     for (const kind of Object.keys(KIND)) { const sub = list.filter(t => t[4] === kind); if (!sub.length) continue;
-      for (const lv of [0, 1, 2]) { if (!KIND[kind][lv]) continue; const im = new THREE.InstancedMesh(KIND[kind][lv], mat, sub.length); im.castShadow = lv < 2; im.receiveShadow = false;
+      // levels: 0 middle distance, 1 close up, 2 far (trees inside woods), 3 far (tree lines and lone trees, which stay visible further out)
+      for (const lv of [0, 1, 2, 3]) { const geo = KIND[kind][Math.min(lv, 2)]; if (!geo) continue; const sub0 = sub; { const sub = lv === 2 ? sub0.filter(t => t[5]) : lv === 3 ? sub0.filter(t => !t[5]) : sub0; if (!sub.length) continue; const im = new THREE.InstancedMesh(geo, mat, sub.length); im.castShadow = lv < 2; im.receiveShadow = false;
         sub.forEach((t, q) => { P.set(t[0], world.h(t[0], t[1]) - 0.15, -t[1]); Q.setFromAxisAngle(up, t[3] * 6.283); const w = t[2] * (kind === 'fir' ? 0.8 + 0.3 * t[3] : kind === 'bush' ? 1.3 : 0.85 + 0.5 * t[3]); S.set(w, t[2], w); M.compose(P, Q, S); im.setMatrixAt(q, M); tint.setHSL(0.26 + (hash(q, 7, ci + cj) - 0.5) * 0.08, 0.1 + 0.25 * hash(q, 9, ci), 0.8 + 0.25 * hash(q, 7, 3)); tint.r = 0.75 + tint.r * 0.4; tint.g = 0.75 + tint.g * 0.4; tint.b = 0.7 + tint.b * 0.4; im.setColorAt(q, tint); });
-        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); (lv === 1 ? near : lv === 0 ? far : tiny).add(im); } }
-    near.visible = false; tiny.visible = false; group.add(near, far, tiny); lods.push({ centre, near, far, tiny }); total += list.length;
+        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); (lv === 1 ? near : lv === 0 ? far : lv === 2 ? tiny : tinyLine).add(im); } } }
+    near.visible = false; tiny.visible = false; tinyLine.visible = false; group.add(near, far, tiny, tinyLine); if (canopy) { canopy.visible = false; group.add(canopy); } lods.push({ centre, near, far, tiny, tinyLine, canopy }); total += list.length;
   }
   group.userData.count = total; group.userData.lods = lods;
   // call each frame: chunks within `dist` metres of the camera show the close-up shapes
-  group.userData.update = (camPos, dNear = 170, dMid = 1000, dFar = 5000) => { for (const l of lods) { const d = l.centre.distanceTo(camPos) - 180, lv = d < dNear ? 1 : d < dMid ? 0 : d < dFar ? 2 : 3; if (l.lv !== lv) { l.lv = lv; l.near.visible = lv === 1; l.far.visible = lv === 0; l.tiny.visible = lv === 2; } } };
+  // call each frame. Close: detailed trees. Middle: simple trees. Far: one small lump per tree. Beyond that a wood is drawn as a single
+  // canopy surface (a wood of twenty thousand trees costs a few hundred triangles) and only tree lines keep their lumps.
+  group.userData.update = (camPos, dNear = 110, dMid = 380, dFar = 1100) => { for (const l of lods) { const d = l.centre.distanceTo(camPos) - 180, lv = d < dNear ? 1 : d < dMid ? 0 : d < dFar ? 2 : d < dFar * 5 ? 3 : 4; if (l.lv !== lv) { l.lv = lv; l.near.visible = lv === 1; l.far.visible = lv === 0; l.tiny.visible = lv === 2; l.tinyLine.visible = lv === 2 || lv === 3; if (l.canopy) l.canopy.visible = lv >= 3; } } };
   return group;
 }
 
