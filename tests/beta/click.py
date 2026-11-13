@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 async def main():
     out = sys.argv[1]; params = sys.argv[2] if len(sys.argv) > 2 else ''
     async with async_playwright() as p:
-        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'])
+        b = await p.chromium.launch(**({'executable_path': os.environ.get('CHROME', '/usr/bin/google-chrome')} if os.path.exists(os.environ.get('CHROME', '/usr/bin/google-chrome')) else {}), args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'])
         pg = await b.new_page(viewport={'width': int(os.environ.get('W', '1280')), 'height': int(os.environ.get('H', '720'))})
         errs = []; pg.on('response', lambda r: r.status >= 400 and errs.append('HTTP %d %s' % (r.status, r.url[-80:]))); pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(getattr(e, 'stack', e))[:900])); pg.on('console', lambda m: m.type in ('error', 'warning') and errs.append(m.type + ' ' + m.text[:300]))
         root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../build/', os.environ.get('BUILD', 'beta'), 'index.html')
