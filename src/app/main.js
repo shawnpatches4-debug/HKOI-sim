@@ -152,7 +152,7 @@ function ctx() { const T = battle.tank, m = volleys.info; let brg = null; if (m.
 function frame(now) {
   const raw = (now - last) / 1000, dt = Math.min(0.1, raw); last = now; scene.rawMs = raw * 1000; worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
   const tSim = performance.now();
-  if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) { let acc = dt * speed, n = 0; while (acc > 1e-6 && n++ < 60) { battle.step(); acc -= battle.dt; } }
+  if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) { let acc = dt * speed, n = 0; while (acc > 1e-6 && n++ < 60) { battle.step(); acc -= battle.dt; if (battle._pending) break; }   /* a volley is half worked out: finish it next frame */ }
   place(); volleys.update(battle.t, dt * (state === 'play' && playing ? speed : 0)); simMs = Math.max(simMs * 0.98, performance.now() - tSim);
   if (state === 'play') { cams.update(dt, ctx()); drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
@@ -165,7 +165,7 @@ function frame(now) {
 }
 window.addEventListener('resize', () => scene.resize());
 const api = window.__beta = { sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state,
-  runTo(t) { while (battle.t < t && battle.tank.alive) battle.step(); place(); }, playFor(sec) { const n = Math.round(sec / battle.dt); for (let i = 0; i < n; i++) { battle.step(); place(); volleys.update(battle.t, battle.dt); scene.fx.update(battle.dt); } },
+  runTo(t) { while (battle.t < t && battle.tank.alive) battle.step(); place(); }, playFor(sec) { const n = Math.round(sec / battle.dt); for (let i = 0; i < n; i++) { battle.step(); if (battle._pending) battle.step(); place(); volleys.update(battle.t, battle.dt); scene.fx.update(battle.dt); } },
   near(dist, height, brg) { const T = battle.tank, a = (brg || 200) * Math.PI / 180; this.view(T.e + Math.sin(a) * dist, T.n + Math.cos(a) * dist, 0, height, T.e, T.n); },
   view(e, n, dist, height, lookE, lookN) { cams.mode = 'free'; scene.controls.enabled = false; scene.camera.up.set(0, 1, 0); scene.camera.position.set(e, world.h(e, n) + height, -n); scene.camera.lookAt(lookE, world.h(lookE, lookN) + 2, -lookN); } };
 buildTitle(); newBattle(); if (q.get('play') === '1') start(); else { state = 'title'; show(); }

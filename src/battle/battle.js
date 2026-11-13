@@ -96,6 +96,7 @@
 
       // ---------------------------------------------------------------- one step of the fight
       step() {
+        if (this._pending) { const f = this._pending; this._pending = null; f(); this._finishVolleys(); return; }
         const dt = this.dt; this.t += dt;
         if (!this.tank.alive) return;
         this._moveTank(dt);
@@ -103,7 +104,7 @@
         this._commander();
         this._finishVolleys();
       }
-      run(seconds) { const n = Math.round(seconds / this.dt); for (let i = 0; i < n && this.tank.alive; i++) this.step(); return this; }
+      run(seconds) { const end = this.t + seconds - 1e-6; while (this.t < end && this.tank.alive) this.step(); return this; }
 
       // ---------------------------------------------------------------- the vehicle
       tankAt(t) {   // where the vehicle is at battle time t, following the volley it is in (the engine fixed its path when the volley was resolved)
@@ -215,6 +216,9 @@
         // how far out each missile becomes visible to the vehicle's own sensors (terrain between them)
         for (const l of launches) { const tt = HK.THREATS[l.key], hgt = Math.max(1.5, tt.launch_h || 2); let vis = l.R; for (let x = l.R; x > 100; x -= 100) { const f = x / l.R, e = T.e + (l.u.e - T.e) * f, n = T.n + (l.u.n - T.n) * f; if (W.los(T.e, T.n, 3, e, n, hgt, { ignoreVeg: true }).clear) { vis = x; break; } vis = x - 100; } l.los = Math.max(150, vis); }
         const p1 = mk(null, null), cues = p1.rec.threats.map(th => th.cue).filter(c => c != null), warnT = cues.length ? Math.min(...cues) : null, tEnd = p1.rec.t_end;
+        // The second half is heavy too, so it is done on the next call to step() (no simulated time passes in between):
+        // the display gets a frame in between and the launch does not cause a visible pause.
+        this._pending = () => {
         const observers = launches.map(l => ({ e: l.u.e, n: l.u.n, agl: l.u.spec.agl }));
         const plan = this._drivePlan(at, warnT, observers, tEnd);
         // which guided missiles lose their gunner's sight line because the vehicle got behind something
@@ -240,6 +244,7 @@
         masks.forEach((m, i) => { if (m != null) this.say(this.t + launches[i].t0 + 1, 'enemy', launches[i].u.id, `${launches[i].u.spec.name} #${launches[i].u.id + 1} loses sight of the vehicle behind cover.`, 'sight line broken'); });
         for (const e of rec.events) { this.say(this.t + e.t, 'engine', e.idx, e.text); this.log[this.log.length - 1].sub = e.kind; }
         for (const l of launches) { l.u.state = l.u.spec.needsLos ? 'guiding' : 'firing'; l.u.since = this.t; l.u.ammo--; l.u.fired++; l.u.volley = v.i; }
+        };
       }
 
       // when a volley is over: carry the vehicle's state forward, let the crew locate who fired, and send the firers to their next position
