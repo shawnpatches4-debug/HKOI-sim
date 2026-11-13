@@ -78,7 +78,15 @@ purpose, and both take far too long to fire. Measured on the old logic (`node te
 22. Morale: a team with no rounds pulls back. The force breaks contact when about half its teams are destroyed or spent (experts hold
     longer, green crews break sooner). The battle ends when the mission is done or the enemy has gone.
 
-## Suppression tiers (my proposal, Shawn asked me to design them) (A)
+### Settled in the last round
+23. Suppression tiers below: approved as written.
+24. Main gun load: a real 42 rounds, mixed. A set number are multi-purpose rounds suited to teams; the rest are anti-armour and kept
+    for enemy tanks later. Split to be stated when built (A: 18 multi-purpose, 24 anti-armour).
+25. The loader can become a casualty while up on the M240 (enemy fire or fragments on the tank, or Trophy firing on his side), with
+    stated odds. Loader down: no M240 and a much slower main gun.
+26. Four enemy crew levels on the setup screen: Green, Trained, Expert, Veteran.
+
+## Suppression tiers (designed by Claude, approved by Shawn) (A)
 Suppression level of a team at any moment:
 - None.
 - Light: rounds passing within about 15 m, or fire at the wrong spot nearby.
@@ -118,7 +126,4 @@ A team not guiding is simply delayed: it cannot acquire or fire while heavily su
 - Suppression during flight needs the engine to accept a steadiness value per missile; today it has one value for all
   (`gunner_jitter_mrad`). That is a small, careful addition to the engine's inputs, not a change to how it decides outcomes. To be
   checked against the old build's results before and after.
-- The simulator gives the tank 10 main gun rounds. A real M1A2 carries 42. Which does Shawn want?
-- A "Veteran" crew level is added as a fourth skill choice. Confirm.
-- Loader casualties (from enemy fire or from Trophy firing beside him) are not modelled today. Should they be?
 - Expect HKOI and tank survival numbers to get WORSE with a faster, adapting enemy. Each stage reports the pace table before and after.
