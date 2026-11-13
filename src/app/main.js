@@ -7,7 +7,7 @@ import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 
-const VERSION = '0.12';
+const VERSION = '0.13';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -27,7 +27,7 @@ if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get(
 const canvas = $('view'), hud = $('hud');
 const sound = new Sound(); sound.on = store.get('sound', true);
 const camDist = p => scene.camera.position.distanceTo(p);
-function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01) return; voiceEvent(type, o); const d = camDist(p); if (type === 'gun') sound.gun30(d); else if (type === 'explosion') sound.explosion(d, o.size); else if (type === 'airburst') sound.airburst(d, o.size); else if (type === 'aps') sound.aps(d); else if (type === 'launch') sound.launch(d, o.big); else if (type === 'pass') sound.whoosh(0.5, Math.min(0.6, 30 / (30 + d))); else if (type === 'hit') { sound.explosion(d, o.killing ? 2.2 : 1.4); if (cams.mode === 'cdr' || d < 25) sound.hit(o.killing); } }
+function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01) return; voiceEvent(type, o); const d = camDist(p); if (type === 'gun') sound.gun30(d); else if (type === 'explosion') sound.explosion(d, o.size); else if (type === 'airburst') sound.airburst(d, o.size); else if (type === 'aps') sound.aps(d); else if (type === 'launch') sound.launch(d, o.big); else if (type === 'pass') sound.whoosh(0.5, Math.min(0.6, 30 / (30 + d))); else if (type === 'hit') { sound.explosion(d, o.killing ? 2.2 : 1.4); if (cams.mode === 'cdr' || cams.mode === 'gnr' || d < 25) sound.hit(o.killing); } }
 let world = new HKWorld.World({ seed: set.map, biome: set.biome });
 const scene = new Scene3D(canvas, world, { condition: set.cond, quality: set.gfx });
 const cams = new Cameras(scene);
@@ -137,7 +137,7 @@ function buildBar() {
   const mn = el('button', 'btn', 'Menu'); mn.onclick = () => { state = 'title'; playing = false; cams.set('orbit'); show(); }; g.append(mn);
 }
 $('r-again').onclick = start; $('r-next').onclick = () => { set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = () => { state = 'title'; cams.set('orbit'); show(); };
-window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT') return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } const n = '123456'.indexOf(e.key); if (n >= 0) { const m = CAMERA_MODES[n]; if (!m.spectator || set.spectator) { cams.set(m.key); buildBar(); } } });
+window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT') return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } const n = '1234567'.indexOf(e.key); if (n >= 0) { const m = CAMERA_MODES[n]; if (!m.spectator || set.spectator) { cams.set(m.key); buildBar(); } } });
 
 // crew talk: each volley's record carries the lines the crew spoke and when; play them as their moment comes.
 // From an enemy sight the crew cannot be heard; the enemy team's own calls are heard instead.
@@ -169,7 +169,7 @@ function advance(sec) {
 }
 // ---------------------------------------------------------------- the frame
 let simMs = 0, cpuMs = 0, last = performance.now(), frames = 0, fps = 0, fpsT = last, worst = 0, slow = 0, titleA = 0;
-function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length) { const c = m.filter(x => x.cued); if (c.length) brg = c.sort((a, b) => a.range - b.range)[0].brg; } return { tank: T, units: battle.units, missiles: m, threatBrg: brg }; }
+function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length) { const c = m.filter(x => x.cued); if (c.length) brg = c.sort((a, b) => a.range - b.range)[0].brg; } const rf = battle._rf, fl = landing[landing.length - 1], aim = rf ? rf.k : fl ? fl.to : null; return { tank: T, units: battle.units, missiles: m, threatBrg: brg, aim }; }
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
 function frame(now) {
@@ -181,10 +181,14 @@ function frameBody(now) {
   const tSim = performance.now(), tCpu = tSim;
   if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) advance(dt * speed);
   if (state !== 'play') tNow = battle.t; place(); volleys.update(Math.min(tNow, battle.t), dt * (state === 'play' && playing ? speed : 0)); mainGun(); trackDust(dt); simMs = Math.max(simMs * 0.98, performance.now() - tSim);
+  { const on = state === 'play' && cams.mode === 'gnr' && !mapOpen, sg = $('sight'); if (sg.hidden === on) sg.hidden = !on; tank.group.visible = !on;   /* the sight looks out from the turret roof: the vehicle's own model would only block it */
+    if (on) { const rf = battle._rf, fl = landing[landing.length - 1], T = battle.tank, R = rf ? rf.R : fl ? Math.hypot(fl.to.e - fl.from.e, fl.to.n - fl.from.n) : null, wait = rf ? Math.max(0, rf.at - battle.t) : 0;
+      const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
+      const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   if (state === 'play') { cams.update(dt, ctx()); drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (sound.ctx && state === 'play' && playing && speed <= 2.01) voices();
-  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { inside: cams.mode === 'cdr', cond: set.cond, speed: act ? T.v : 0, alive: T.alive && state === 'play', camDist: camDist(tp), drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p), closing: cams.mode === 'cdr' || cams.mode === 'chase' || cams.mode === 'orbit' ? 25 : 0 })) : [] }); }
+  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { inside: cams.mode === 'cdr' || cams.mode === 'gnr', cond: set.cond, speed: act ? T.v : 0, alive: T.alive && state === 'play', camDist: camDist(tp), drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p), closing: cams.mode === 'cdr' || cams.mode === 'chase' || cams.mode === 'orbit' ? 25 : 0 })) : [] }); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } } else { scene.render(dt); drawMarks(); }
   cpuMs = Math.max(cpuMs * 0.97, performance.now() - tCpu);
   frames++; if (now - fpsT > 500) { fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; if (state === 'play') drawStatus();

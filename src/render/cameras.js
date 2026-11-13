@@ -6,6 +6,7 @@ export const CAMERA_MODES = [
   { key: 'orbit', name: 'Orbit', hint: 'Drag to look around the vehicle, wheel to zoom' },
   { key: 'chase', name: 'Chase', hint: 'Behind the vehicle' },
   { key: 'cdr', name: 'Commander', hint: 'From the commander\'s hatch, facing the threat' },
+  { key: 'gnr', name: 'Gunner sight', hint: 'Through the gunner\'s primary sight: watch the crew lay, range and fire' },
   { key: 'top', name: 'Overhead', hint: 'Straight down, north up' },
   { key: 'enemy', name: 'Enemy sight', hint: 'Through an enemy launcher\'s optic (spectator)', spectator: true },
   { key: 'missile', name: 'Missile', hint: 'Riding the latest missile or drone (spectator)', spectator: true },
@@ -27,6 +28,12 @@ export class Cameras {
     this.lastTank = null; const h = T.h * DEG;
     if (this.mode === 'chase') { const b = 17, e = T.e - Math.sin(h) * b, n = T.n - Math.cos(h) * b; this.pos.set(e, Math.max(W.h(e, n) + 2.5, tp.y + 6), -n); this.look.copy(tp); this.look.y += 2.2; fov = 55; }
     else if (this.mode === 'cdr') { let yaw = ctx.threatBrg != null ? ctx.threatBrg : T.h; if (this.cdrYaw == null || this.snap) this.cdrYaw = yaw; const d = ((yaw - this.cdrYaw + 540) % 360) - 180; this.cdrYaw = (this.cdrYaw + d * Math.min(1, dt * 2.2) + 360) % 360; const a = this.cdrYaw * DEG; this.pos.copy(tp); this.pos.y += 3.9; this.pos.x += Math.sin(a) * 1.2; this.pos.z -= Math.cos(a) * 1.2; this.look.set(tp.x + Math.sin(a) * 200, tp.y + 6, tp.z - Math.cos(a) * 200); fov = 62; k = 1; }
+    else if (this.mode === 'gnr') {   // the sight follows what the gunner is laid on: the main-gun target, else the nearest threat, else straight ahead
+      const tgt = ctx.aim, want = tgt ? Math.atan2(tgt.e - T.e, tgt.n - T.n) / DEG : ctx.threatBrg != null ? ctx.threatBrg : T.h; if (this.gYaw == null || this.snap) this.gYaw = want;
+      const d = ((want - this.gYaw + 540) % 360) - 180; this.gYaw = (this.gYaw + Math.max(-40 * dt, Math.min(40 * dt, d)) + 360) % 360;   // turret traverse, 40 degrees a second
+      const a = this.gYaw * DEG; this.pos.copy(tp); this.pos.y += 2.75; this.pos.x += Math.sin(a) * 1.6 + Math.cos(a) * 0.7; this.pos.z += -Math.cos(a) * 1.6 + Math.sin(a) * 0.7;
+      const R = tgt ? Math.hypot(tgt.e - T.e, tgt.n - T.n) : 1500, ty = tgt ? W.h(tgt.e, tgt.n) + 1 : this.pos.y - 8; this.look.set(tp.x + Math.sin(a) * R, ty, tp.z - Math.cos(a) * R);
+      this.onTarget = Math.abs(d) < 0.6; fov = tgt && Math.abs(d) < 8 ? 6.5 : 21; k = 1; }
     else if (this.mode === 'top') { this.pos.set(tp.x, tp.y + this.topH, tp.z + 0.01); this.look.copy(tp); fov = 50; }
     else if (this.mode === 'enemy') { const us = ctx.units.filter(u => u.alive); if (!us.length) { this.set('orbit'); return; } const u = us[this.enemyIdx % us.length]; this.unit = u; S.at(u.e, u.n, u.spec.agl + 0.25, this.pos); this.look.copy(tp); this.look.y += 1.8; const R = this.pos.distanceTo(this.look); fov = Math.max(1.2, Math.min(30, Math.atan(14 / R) * 2 / DEG)); k = 1; }
     else if (this.mode === 'missile') { const m = ctx.missiles[ctx.missiles.length - 1]; if (!m) { if (this.snap) { this.pos.copy(tp).add(new THREE.Vector3(-40, 18, 40)); this.look.copy(tp); } k = this.snap ? 1 : 0; } else { this.pos.copy(m.p).addScaledVector(m.dir, -7); this.pos.y += 1.6; this.look.copy(tp); this.look.y += 2; fov = 70; k = 1 - Math.exp(-dt * 12); if (this.snap) k = 1; } }
