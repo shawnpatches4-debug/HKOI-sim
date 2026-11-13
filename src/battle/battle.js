@@ -50,7 +50,7 @@
         this.pending = null;    // a volley being assembled by the enemy commander
         const tk = opt.tank || {};
         this.tank = {
-          e: tk.e || 0, n: tk.n || 0, h: tk.hull == null ? 0 : tk.hull, v: 0, alive: true, main: 10, mainReady: 0,
+          e: tk.e || 0, n: tk.n || 0, h: tk.hull == null ? 0 : tk.hull, v: 0, alive: true, main: 10, mainReady: 0, coax: 2400, m2: 600,
           home: { e: tk.e || 0, n: tk.n || 0 }, route: null, goal: null, mode: 'overwatch', modeSince: 0,
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
@@ -104,6 +104,7 @@
         this._commander();
         this._finishVolleys();
         this._returnFire();
+        this._machineGuns();
       }
       run(seconds) { const end = this.t + seconds - 1e-6; while (this.t < end && this.tank.alive) this.step(); return this; }
 
@@ -279,6 +280,26 @@
         T.goal = { e: b.e, n: b.n }; T.goalFace = (Math.atan2(fe, fn) / DEG + 360) % 360; T.mode = 'moving'; T.modeSince = this.t;
         this.say(this.t, 'tank', 'CDR', `Commander moves ${Math.round(b.d / 5) * 5} m to a ${b.hid > 0 && b.see > 0 ? 'hull-down' : b.hid === N ? 'covered' : 'better'} position: hull hidden from ${b.hid} of ${N} known firing directions (was ${h.hid}), turret sees ${b.see} of them (was ${h.see}).`, 'he will not sit where he has just been shot at; frontal armour turned toward the threat');
       }
+      // Machine guns. A located enemy team within 1000 yards (914 m) and in view is engaged at once: the coaxial 7.62 mm out to 800 m, the
+      // commander's .50 calibre out to the full 914 m (both together inside 800 m). Bursts of about three seconds with a second's pause.
+      // Fire on a dug-in team mostly suppresses it (heads down, cannot aim or fire for a while); each burst has a modest chance of
+      // knocking the team out, falling with range, and less from a moving vehicle. Limit of the model: a missile already in flight
+      // when its gunner is suppressed is NOT thrown off; the volley was worked out when it was fired.
+      _machineGuns() {
+        const T = this.tank, W = this.world; if (!T.alive || this._pending) return;
+        if (this._mg && this.t < this._mg.t + this._mg.dur + 1.0) return;
+        let best = null; for (const u of this.units) { if (!u.alive || !u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 914 || R < 15) continue; if (!W.los(T.e, T.n, 2.5, u.e, u.n, 0.8).clear) continue; if (!best || R < best.R) best = { u, R }; }
+        if (!best) { this._mg = null; return; }
+        const { u, R } = best, coax = R <= 800 && T.coax > 0, m2 = T.m2 > 0; if (!coax && !m2) return;
+        const dur = 3, moving = (T.v || 0) > 1.5, base = (coax ? 0.42 * Math.exp(-R / 330) : 0) + (m2 ? 0.34 * Math.exp(-R / 520) : 0), p = Math.min(0.6, base) * (moving ? 0.6 : 1), first = !this._mg || this._mg.id !== u.id;
+        if (coax) T.coax -= 40; if (m2) T.m2 -= 24;
+        const hit = this.rng.random() < p; u.suppressedUntil = Math.max(u.suppressedUntil || 0, this.t + dur + 12); u.sight = 0;
+        this._mg = { t: this.t, dur, id: u.id, e: u.e, n: u.n, R, coax, m2, hit }; (this.mgs = this.mgs || []).push(this._mg);
+        const who = coax && m2 ? 'Coax and commander\'s .50' : coax ? 'Coax' : 'Commander\'s .50';
+        if (first) this.say(this.t, 'tank', 'GNR', `${who} engage${coax && m2 ? '' : 's'} ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m.`, 'located team inside 1000 yards with a clear line of sight');
+        if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; const k = T.known.find(q => q.id === u.id); if (k) k.done = true; this.say(this.t + dur, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by machine-gun fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst against a dug-in team at this range${moving ? ', firing on the move' : ''}`); }
+        else if (first) this.say(this.t + dur, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} suppressed: heads down, cannot aim or fire.`, 'machine-gun fire on a dug-in team mostly pins it');
+      }
       // Return fire. Between volleys the crew engages launch sites it has located (seen on the HKOI track at launch) with the main gun:
       // nearest first, only with a clear line of sight, one aimed multi-purpose round at a time. A team that has already moved is not
       // there to be hit; a near miss makes a team pull out. Ten such rounds are carried.
@@ -317,7 +338,7 @@
       summary() {
         const T = this.tank, fired = this.volleys.reduce((s, v) => s + v.rec.threats.length, 0), hits = this.volleys.reduce((s, v) => s + (v.rec.hits || 0), 0), by = {};
         for (const v of this.volleys) for (const th of v.rec.threats) { const k = th.defeated_by || (th.viz.end.type === 'hit' ? 'HIT' : th.state); by[k] = (by[k] || 0) + 1; }
-        return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, teamsLeft: this.units.filter(u => u.alive && u.ammo > 0).length, main: T.main, killedByTank: this.killedByTank || 0 };
+        return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, teamsLeft: this.units.filter(u => u.alive && u.ammo > 0).length, main: T.main, killedByTank: this.killedByTank || 0, killedByMg: this.killedByMg || 0, coax: T.coax, m2: T.m2 };
       }
     }
     return { Battle, TEAMS, SKILL };

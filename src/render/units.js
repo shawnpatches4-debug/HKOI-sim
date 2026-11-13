@@ -40,30 +40,47 @@ export class TankView {
     const g = new THREE.Group(); g.add(prep(hull)); this.turret = new THREE.Group(); this.turret.position.fromArray(meta.pivot); this.turret.add(prep(tur)); g.add(this.turret);
     this._station(); this.model = g; this.group.add(g); this.standIn.visible = false; this.loaded = true; this.variant = 'M1A2 SEPv3 TUSK with Trophy'; return true;
   }
-  // The HKOI weapon station: a remotely operated 30 mm gun on the turret roof with its own sensor head. Built from simple shapes
-  // (no supplied model yet). It turns and elevates on its own, independent of the main turret.
+  // The HKOI weapon station: a remote weapon station carrying an M230LF 30 mm chain gun, laid out after the real thing: a pedestal,
+  // a trunnion drum that elevates the gun, a boxy sight unit on the left, a large ammunition box on the right and a flexible feed
+  // chute arching from the box over into the gun. Built from simple shapes. It is seated on the turret roof by measuring the roof
+  // under it, and turns and elevates on its own, independent of the main turret.
   _station() {
-    const paint = vehicleFinish(new THREE.MeshStandardMaterial({ color: '#3f4234', roughness: 0.72, metalness: 0.2 })), dark = new THREE.MeshStandardMaterial({ color: '#17191a', roughness: 0.45, metalness: 0.6 }), glass = new THREE.MeshStandardMaterial({ color: '#0a1420', roughness: 0.08, metalness: 0.7 });
-    const M = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; par.add(m); return m; };
-    const base = this.rws = new THREE.Group(); base.position.set(0.62, 0.86, -1.25); this.turret.add(base);                      // left rear of the turret roof, behind the loader's hatch
-    M(new THREE.CylinderGeometry(0.34, 0.4, 0.14, 20), paint, 0, 0.07, 0, base); M(new THREE.CylinderGeometry(0.2, 0.26, 0.22, 16), paint, 0, 0.25, 0, base);
-    const yaw = this.rwsYaw = new THREE.Group(); yaw.position.y = 0.36; base.add(yaw);
-    M(new THREE.BoxGeometry(0.62, 0.1, 0.56), paint, 0, 0.05, 0, yaw); M(new THREE.BoxGeometry(0.06, 0.46, 0.4), paint, -0.25, 0.33, 0, yaw); M(new THREE.BoxGeometry(0.06, 0.46, 0.4), paint, 0.25, 0.33, 0, yaw);   // deck and the two cheeks of the cradle
-    M(new THREE.BoxGeometry(0.3, 0.34, 0.5), paint, 0.44, 0.3, -0.05, yaw);                                                         // ammunition box, 150 + 150 rounds in two bays
-    const pitch = this.rwsPitch = new THREE.Group(); pitch.position.set(0, 0.38, 0); yaw.add(pitch);
-    M(new THREE.BoxGeometry(0.2, 0.2, 0.9), dark, 0, 0, 0.05, pitch);                                                               // receiver
-    const brl = M(new THREE.CylinderGeometry(0.03, 0.036, 1.75, 12), dark, 0, 0.01, 1.35, pitch); brl.rotation.x = Math.PI / 2; const mb = M(new THREE.CylinderGeometry(0.052, 0.052, 0.2, 12), dark, 0, 0.01, 2.2, pitch); mb.rotation.x = Math.PI / 2;
-    M(new THREE.BoxGeometry(0.12, 0.1, 0.5), paint, 0.14, -0.02, 0.1, pitch);                                                       // feed chute
-    const head = M(new THREE.SphereGeometry(0.15, 18, 14), paint, -0.42, 0.06, 0.12, pitch); const lens = M(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 18), glass, 0, 0, 0.14, head); lens.rotation.x = Math.PI / 2; M(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 12), glass, 0.09, 0.07, 0.115, head).rotation.x = Math.PI / 2;   // day and thermal cameras
-    M(new THREE.BoxGeometry(0.06, 0.1, 0.3), paint, -0.3, 0.02, 0.05, pitch);
-    for (const sx of [-1, 1]) { const pan = M(new THREE.BoxGeometry(0.3, 0.2, 0.035), dark, sx * 0.2, 0.72, 0.16, yaw); pan.rotation.x = -0.25; pan.rotation.y = sx * -0.5; }   // the two small radar faces above the gun
-    M(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8), paint, 0, 0.56, 0.12, yaw);
-    this.muzzle = new THREE.Object3D(); this.muzzle.position.set(0, 0.01, 2.32); pitch.add(this.muzzle); this.rwsY = 0; this.rwsP = 0; this.recoil = 0; this.barrel = [brl, mb];
+    const paint = vehicleFinish(new THREE.MeshStandardMaterial({ color: '#3f4234', roughness: 0.72, metalness: 0.2 })), dark = new THREE.MeshStandardMaterial({ color: '#141516', roughness: 0.5, metalness: 0.55 }), steel = new THREE.MeshStandardMaterial({ color: '#8a8c8c', roughness: 0.4, metalness: 0.75 }), glass = new THREE.MeshStandardMaterial({ color: '#081018', roughness: 0.06, metalness: 0.8 });
+    const M = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; par.add(m); return m; }, cyl = (r0, r1, len, seg, mat, x, y, z, par) => { const m = M(new THREE.CylinderGeometry(r0, r1, len, seg), mat, x, y, z, par); m.rotation.x = Math.PI / 2; return m; };
+    // where on the roof: left rear, behind the loader's hatch. Find the roof under the pedestal by looking straight down at five points.
+    const px = 0.55, pz = -0.95; this.turret.updateMatrixWorld(true); const ray = new THREE.Raycaster(), o = this.turret.position, hs = [];
+    for (const [dx, dz] of [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]]) { ray.set(new THREE.Vector3(o.x + px + dx, o.y + 6, o.z + pz + dz), new THREE.Vector3(0, -1, 0)); const h = ray.intersectObject(this.turret, true)[0]; if (h) hs.push(h.point.y - o.y); }
+    hs.sort((a, b) => a - b); const roof = hs.length ? hs[Math.floor(hs.length / 2)] : 0.75;
+    const base = this.rws = new THREE.Group(); base.position.set(px, roof - 0.03, pz); this.turret.add(base); this.rwsRoof = roof;
+    M(new THREE.CylinderGeometry(0.36, 0.4, 0.07, 24), paint, 0, 0.035, 0, base); M(new THREE.CylinderGeometry(0.27, 0.3, 0.1, 24), dark, 0, 0.12, 0, base);       // mounting ring bolted to the roof, slew bearing
+    const yaw = this.rwsYaw = new THREE.Group(); yaw.position.y = 0.17; base.add(yaw);
+    M(new THREE.BoxGeometry(0.34, 0.3, 0.36), dark, 0, 0.15, -0.02, yaw);                                                         // drive housing
+    M(new THREE.BoxGeometry(0.5, 0.06, 0.5), paint, 0, 0.32, 0, yaw);                                                             // deck
+    M(new THREE.BoxGeometry(0.42, 0.46, 0.9), paint, 0.47, 0.5, -0.12, yaw); M(new THREE.BoxGeometry(0.44, 0.03, 0.92), paint, 0.47, 0.745, -0.12, yaw);   // ammunition box and its lid (right side)
+    M(new THREE.BoxGeometry(0.2, 0.18, 0.22), paint, 0.42, 0.85, -0.2, yaw);                                                      // feed motor on top of the box
+    M(new THREE.BoxGeometry(0.07, 0.36, 0.3), paint, -0.2, 0.52, 0, yaw); M(new THREE.BoxGeometry(0.07, 0.36, 0.3), paint, 0.2, 0.52, 0, yaw);            // trunnion cheeks
+    const mast = M(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 8), paint, -0.05, 0.95, -0.3, yaw); M(new THREE.CylinderGeometry(0.04, 0.04, 0.09, 10), dark, 0, 0.29, 0, mast);   // small mast with a sensor on top
+    const pitch = this.rwsPitch = new THREE.Group(); pitch.position.set(0, 0.6, 0); yaw.add(pitch);
+    const drum = M(new THREE.CylinderGeometry(0.15, 0.15, 0.72, 20), paint, -0.1, 0, 0, pitch); drum.rotation.z = Math.PI / 2;    // elevation drum running across
+    // sight unit: a box on the left with one large and three small windows
+    const sight = M(new THREE.BoxGeometry(0.36, 0.34, 0.42), paint, -0.62, 0.02, 0.1, pitch);
+    for (const [lx, ly, lr] of [[0.02, 0.05, 0.085], [-0.11, -0.09, 0.04], [0.02, -0.11, 0.04], [0.12, -0.06, 0.03]]) { const l = M(new THREE.CylinderGeometry(lr, lr, 0.02, 18), glass, lx, ly, 0.215, sight); l.rotation.x = Math.PI / 2; }
+    // the gun: receiver, barrel with its recoil sleeve, and the big slotted muzzle brake
+    M(new THREE.BoxGeometry(0.24, 0.24, 0.82), dark, 0.05, 0.2, -0.08, pitch); M(new THREE.BoxGeometry(0.16, 0.12, 0.3), dark, 0.05, 0.36, -0.2, pitch);
+    const slide = new THREE.Group(); pitch.add(slide); this.rwsSlide = slide;
+    cyl(0.06, 0.06, 0.5, 14, dark, 0.05, 0.2, 0.55, slide); cyl(0.034, 0.04, 1.6, 12, dark, 0.05, 0.2, 1.55, slide);
+    cyl(0.075, 0.075, 0.42, 16, steel, 0.05, 0.2, 2.5, slide); for (let k = 0; k < 5; k++) M(new THREE.BoxGeometry(0.17, 0.03, 0.035), dark, 0.05, 0.2, 2.36 + k * 0.07, slide); cyl(0.085, 0.07, 0.05, 16, steel, 0.05, 0.2, 2.72, slide);
+    // flexible feed chute: an arch of links from the top of the ammunition box up, over and down into the receiver
+    const chute = new THREE.Group(); yaw.add(chute); this.rwsChute = chute; const link = new THREE.BoxGeometry(0.16, 0.03, 0.06);
+    for (let k = 0; k <= 14; k++) { const f = k / 14, a = Math.PI * f, x = 0.47 - 0.42 * f, y = 0.93 + Math.sin(a) * 0.17, z = -0.2 + 0.1 * f, m = M(link, dark, x, y, z, chute); m.rotation.z = Math.PI / 2 - Math.cos(a) * 1.15; m.rotation.y = 0.2; }
+    this.muzzle = new THREE.Object3D(); this.muzzle.position.set(0.05, 0.2, 2.78); pitch.add(this.muzzle); this.rwsY = 0; this.rwsP = 0; this.recoil = 0;
   }
   // point the station at a place in the scene (or stow it forward when there is nothing to shoot at). Traverse 90 and elevation 60 degrees a second.
-  aimStation(point, dt) { if (!this.rws) return; let wy = 0, wp = 0; if (point) { const o = this.rwsYaw.getWorldPosition(new THREE.Vector3()), dx = point.x - o.x, dy = point.y - o.y - 0.38, dz = point.z - o.z, brg = Math.atan2(dx, -dz) / DEG, facing = (this.heading || 0) + this.turretYaw; wy = ((brg - facing + 540) % 360) - 180; wp = Math.max(-10, Math.min(65, Math.atan2(dy, Math.hypot(dx, dz)) / DEG)); }
+  aimStation(point, dt) { if (!this.rws) return; let wy = 0, wp = 0; if (point) { const o = this.rwsYaw.getWorldPosition(new THREE.Vector3()), dx = point.x - o.x, dy = point.y - o.y - 0.8, dz = point.z - o.z, brg = Math.atan2(dx, -dz) / DEG, facing = (this.heading || 0) + this.turretYaw; wy = ((brg - facing + 540) % 360) - 180; wp = Math.max(-10, Math.min(65, Math.atan2(dy, Math.hypot(dx, dz)) / DEG)); }
     const d = ((wy - this.rwsY + 540) % 360) - 180; this.rwsY += Math.max(-90 * dt, Math.min(90 * dt, d)); this.rwsP += Math.max(-60 * dt, Math.min(60 * dt, wp - this.rwsP)); this.rwsYaw.rotation.y = -this.rwsY * DEG; this.rwsPitch.rotation.x = -this.rwsP * DEG;
-    this.recoil = Math.max(0, this.recoil - dt * 1.4); const k = -this.recoil; this.barrel[0].position.z = 1.35 + k; this.barrel[1].position.z = 2.2 + k; }
+    this.recoil = Math.max(0, this.recoil - dt * 1.4); this.rwsSlide.position.z = -this.recoil; }
+  // where the coaxial machine gun (beside the main gun) and the commander's .50 are in the scene
+  mgMuzzle(which, out) { if (!this.turret) return null; this.group.updateWorldMatrix(true, true); out.set(which === 'coax' ? -0.32 : -0.75, which === 'coax' ? 0.48 : 1.38, which === 'coax' ? 2.1 : 1.1); return this.turret.localToWorld(out); }
   // where the 30 mm muzzle is in the scene right now; kick = true when a round has just left
   hkoiMuzzle(out, kick) { if (!this.muzzle) return null; this.group.updateWorldMatrix(true, true); if (kick) this.recoil = 0.12; return this.muzzle.getWorldPosition(out); }
   // swing the turret toward a compass bearing at traverse speed (40 degrees a second); hullDeg is the hull's heading
@@ -112,6 +129,19 @@ export function setPose(fig, pose) {
   for (const [bn, cn] of LIMBS) { const want = pose[bn], bone = B[bn], child = B[cn]; if (!want || !bone || !child) continue; bone.getWorldPosition(a); child.getWorldPosition(b); b.sub(a).normalize(); turnWorld(bone, q.setFromUnitVectors(b, new THREE.Vector3(want[0], want[1], want[2]).normalize())); }
   // seat it: the lowest joint goes to just above the ground (joints sit a few centimetres inside the body)
   let low = 1e9; for (const k in B) { B[k].getWorldPosition(a); if (a.y < low) low = a.y; } fig.userData.seat = -low + (pose.tip ? 0.13 : 0.07);
+}
+
+// A tank crewman: the supplied soldier with his infantry kit removed, wearing the supplied CVC helmet. Returns a group 1.8 m tall
+// standing at the origin facing +z. The helmet is fixed to the head bone so it follows any pose.
+export const CREW = { helmetYaw: 0, helmetScale: 0.36, helmetUp: -0.13, helmetFwd: 0.0 };
+export async function crewFigure(base) {
+  const [body, cvc] = await Promise.all([loadModel(base + 'crew/crew.json'), loadModel(base + 'crew/cvc.json')]); if (!body) return null;
+  const fig = cloneSkinned(body), g = new THREE.Group(); g.add(fig); fig.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.metalness = 0; o.material.roughness = 0.85; o.material.emissive.set(0); if (/Eye/i.test(o.material.name)) { o.material.color.set('#ffffff'); o.material.opacity = 1; o.material.transparent = false; o.material.roughness = 0.25; } } }); skin(fig, { Mark_Eye: { map: base + 'crew/eye_c.webp', rough: 0.25, metal: 0 } }); fig.updateMatrixWorld(true);
+  let b = new THREE.Box3().setFromObject(fig); const k = 1.8 / (b.max.y - b.min.y); fig.scale.multiplyScalar(k); fig.updateMatrixWorld(true); b = new THREE.Box3().setFromObject(fig); fig.position.y -= b.min.y; fig.position.x -= (b.min.x + b.max.x) / 2; fig.position.z -= (b.min.z + b.max.z) / 2; fig.updateMatrixWorld(true);
+  let head = null; fig.traverse(o => { if (o.isBone && /CC_Base_Head$/.test(o.name)) head = o; });
+  if (cvc && head) { const h = skin(cvc.clone(), { NormalTest_01: { map: base + 'crew/cvc_c.webp', rough: 0.6, metal: 0.05 } }), hb = new THREE.Box3().setFromObject(h), sz = hb.getSize(new THREE.Vector3()), c = hb.getCenter(new THREE.Vector3()), w = new THREE.Group(); h.position.sub(c); w.add(h); w.scale.setScalar(CREW.helmetScale / Math.max(sz.x, sz.y, sz.z)); w.rotation.y = CREW.helmetYaw;
+    const hp = head.getWorldPosition(new THREE.Vector3()), top = new THREE.Box3().setFromObject(fig).max.y; w.position.set(hp.x, top + CREW.helmetUp, hp.z + CREW.helmetFwd); g.add(w); g.updateMatrixWorld(true); head.attach(w); g.userData.helmet = w; }
+  g.userData.figure = fig; return g;
 }
 
 // Parked vehicles (enemy transport and support). len = real length in metres; flip = the file's nose points the other way.
