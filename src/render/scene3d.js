@@ -87,7 +87,7 @@ export class Scene3D {
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
   render(dt = 0.016) {
-    this.fx.update(dt, this.wind); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
+    this.fx.update(dt, this.wind); if (this.trees.userData.update) this.trees.userData.update(this.camera.position); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset();

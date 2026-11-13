@@ -19,9 +19,20 @@ export function bakeGroundMap(world, size = 4096) {
   x.fillStyle = G.open; x.fillRect(0, 0, size, size);
   const img = x.getImageData(0, 0, size, size), d = img.data, col = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
   const C = { open: col(G.open), plough: col(G.plough), low: G.low.map(col), high: G.high.map(col), scrub: col(G.scrub), forest: col(G.forest), built: col(G.built), road: col(G.road) };
-  for (let py = 0; py < size; py++) { const j = Math.min(n - 1, Math.round((size - 1 - py) / px)); for (let pxx = 0; pxx < size; pxx++) { const i = Math.min(n - 1, Math.round(pxx / px)), k = j * n + i, v = world.V[k], f = world.F[k]; let c = C.open;
-      if (v === 1) c = C.low[f % C.low.length]; else if (v === 2) c = C.high[f % C.high.length]; else if (v === 3) c = C.scrub; else if (v === 4 || v === 5) c = C.forest; else if (v === 6) c = C.built; else if (v === 7) c = C.open; else if (f) c = (f % 3 === 0) ? C.plough : C.open;
-      const m = 0.9 + 0.2 * hash(pxx >> 2, py >> 2, 3) * 0.6 + 0.08 * hash(pxx >> 5, py >> 5, 5) + (f ? (hash(f, 1, 9) - 0.5) * 0.16 : 0), o = (py * size + pxx) * 4; d[o] = Math.min(255, c[0] * m); d[o + 1] = Math.min(255, c[1] * m); d[o + 2] = Math.min(255, c[2] * m); d[o + 3] = 255; } }
+  // smooth value noise for natural edges and mottling
+  const vn = (u, v, sd) => { const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, a = fu * fu * (3 - 2 * fu), b = fv * fv * (3 - 2 * fv); return (hash(i, j, sd) * (1 - a) + hash(i + 1, j, sd) * a) * (1 - b) + (hash(i, j + 1, sd) * (1 - a) + hash(i + 1, j + 1, sd) * a) * b; };
+  const cell = world.cell, half = world.half, V = world.V, mpp = world.size / size, isWood = v => v === 4 || v === 5, cls = (i, j) => V[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))];
+  for (let py = 0; py < size; py++) { const nn = half - (py + 0.5) * mpp, gj = (nn + half) / cell, j0 = Math.floor(gj), fj = gj - j0;
+    for (let pxx = 0; pxx < size; pxx++) { const e = (pxx + 0.5) * mpp - half, gi = (e + half) / cell, i0 = Math.floor(gi), fi = gi - i0;
+      const v00 = cls(i0, j0), v10 = cls(i0 + 1, j0), v01 = cls(i0, j0 + 1), v11 = cls(i0 + 1, j0 + 1), vN = fi < 0.5 ? (fj < 0.5 ? v00 : v01) : (fj < 0.5 ? v10 : v11);
+      const mix4 = f => (f(v00) * (1 - fi) + f(v10) * fi) * (1 - fj) + (f(v01) * (1 - fi) + f(v11) * fi) * fj;
+      const rag = (vn(e * 0.11, nn * 0.11, 21) - 0.5) * 0.7 + (vn(e * 0.5, nn * 0.5, 22) - 0.5) * 0.25;   // ragged edges for woods and scrub
+      let c = C.open, row = 0;
+      const F = world.fieldAt(e, nn);
+      if (F && vN !== 6) { if (F.t < 0.4) { c = (F.id % 3 === 0) ? C.plough : C.open; if (F.id % 3 === 0) row = Math.sin(F.x * 1.05) * 0.05; } else if (F.t < 0.84) { c = C.low[F.id % C.low.length]; row = Math.sin(F.x * 0.52) * 0.035; } else { c = C.high[F.id % C.high.length]; row = Math.sin(F.x * 0.52) * 0.05; } }
+      const wood = mix4(v => isWood(v) ? 1 : 0) + rag, scrub = mix4(v => v === 3 ? 1 : 0) + rag, built = mix4(v => v === 6 ? 1 : 0) + rag * 0.4;
+      if (built > 0.5) { c = C.built; row = 0; } else if (wood > 0.5) { c = C.forest; row = 0; } else if (scrub > 0.5) { c = C.scrub; row = 0; }
+      const m = 0.88 + row + 0.14 * vn(e * 0.06, nn * 0.06, 3) + 0.1 * vn(e * 0.011, nn * 0.011, 5) + 0.06 * hash(pxx, py, 7) + (F ? (hash(F.id, 1, 9) - 0.5) * 0.16 : 0), o = (py * size + pxx) * 4; d[o] = Math.min(255, c[0] * m); d[o + 1] = Math.min(255, c[1] * m); d[o + 2] = Math.min(255, c[2] * m); d[o + 3] = 255; } }
   x.putImageData(img, 0, 0);
   // plough lines and crop rows inside fields, roads on top
   const P = (e, nn) => [(e + world.half) / world.size * size, (1 - (nn + world.half) / world.size) * size];

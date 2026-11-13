@@ -62,6 +62,7 @@
           if (hash2(fi, fj, S + 3) > B.fields) continue; this.F[k] = id; const t = hash2(fi, fj, S + 4); this.V[k] = t < 0.4 ? VEG.OPEN : t < 0.84 ? VEG.CROP_LOW : VEG.CROP_HIGH; this.VH[k] = t < 0.4 ? 0 : t < 0.84 ? 0.6 + hash2(fi, fj, S + 5) * 0.5 : 1.9 + hash2(fi, fj, S + 5) * 0.5;   // plough or pasture, a low crop, or maize and sunflowers tall enough to hide a man
           if (!edge.has(id)) edge.set(id, { fi, fj, crop: this.V[k], h: this.VH[k] }); }
         this.fields = [...edge.entries()].map(([id, f]) => Object.assign({ id }, f));
+        this.fieldGrid = { cs, sn, FW, FD, S, share: B.fields };
         // a tree line where two different fields meet, on a share of the boundaries
         for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) { const k = j * n + i, a = this.F[k]; if (!a) continue; const b = this.F[k + 1] || 0, d = this.F[k + n] || 0; for (const o of [b, d]) { if (o && o !== a && hash2(Math.min(a, o), Math.max(a, o), S + 11) < B.treeLines) { this.V[k] = VEG.TREELINE; this.VH[k] = 9 + hash2(i, j, S + 12) * 7; } } } }
       // 5. woods: low-frequency patches; the forest setting is mostly trees with clearings
@@ -93,6 +94,9 @@
     inside(e, n) { return Math.abs(e) <= this.half && Math.abs(n) <= this.half; }
     h(e, n) { const c = this.cell, N = this.n, x = clamp((e + this.half) / c, 0, N - 1.001), z = clamp((n + this.half) / c, 0, N - 1.001), i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, k = j * N + i, H = this.H; return H[k] * (1 - fx) * (1 - fz) + H[k + 1] * fx * (1 - fz) + H[k + N] * (1 - fx) * fz + H[k + N + 1] * fx * fz; }
     _k(e, n) { const N = this.n, i = clamp(Math.round((e + this.half) / this.cell), 0, N - 1), j = clamp(Math.round((n + this.half) / this.cell), 0, N - 1); return j * N + i; }
+    // the field at a point, worked out exactly (not from the grid) so that maps and ground textures get straight field edges:
+    // { id, t (0..1: below 0.4 plough or pasture, below 0.84 a low crop, else a tall crop), x, z (metres along and across the field grid) } or null
+    fieldAt(e, n) { const g = this.fieldGrid; if (!g) return null; const x = e * g.cs + n * g.sn, z = -e * g.sn + n * g.cs, fj = Math.floor(z / g.FD), fi = Math.floor(x / g.FW + (hash2(fj, 7, g.S) - 0.5) * 0.6); if (hash2(fi, fj, g.S + 3) > g.share) return null; return { id: ((fi + 64) & 127) * 128 + ((fj + 64) & 127) + 1, t: hash2(fi, fj, g.S + 4), x, z }; }
     veg(e, n) { const k = this._k(e, n); return { cls: this.V[k], h: this.VH[k], field: this.F[k] }; }
     slope(e, n) { const d = this.cell; return Math.hypot(this.h(e + d, n) - this.h(e - d, n), this.h(e, n + d) - this.h(e, n - d)) / (2 * d); }
     buildingAt(e, n, pad) { const list = this.bgrid.get(Math.floor(e / this.bcell) * 4096 + Math.floor(n / this.bcell)); if (!list) return null; for (const q of list) { const b = this.buildings[q], dx = e - b.e, dz = n - b.n, cs = Math.cos(-b.rot), sn = Math.sin(-b.rot), x = dx * cs - dz * sn, z = dx * sn + dz * cs; if (Math.abs(x) <= b.w / 2 + (pad || 0) && Math.abs(z) <= b.d / 2 + (pad || 0)) return b; } return null; }
