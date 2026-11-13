@@ -63,7 +63,7 @@ export class TeamView {
   }
   // swap the stand-in shapes for the real models once they arrive: a gunner at the launcher and a second man beside him
   async _load(kind, base) {
-    const [sol, kor] = await Promise.all([loadModel(base + 'enemy/soldier.glb'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.glb')]); if (!sol) return;
+    const [sol, kor] = await Promise.all([loadModel(base + 'enemy/soldier.json'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.json')]); if (!sol) return;
     const keep = []; const man = (pose, x, z, yaw) => { const f = cloneSkinned(sol); setPose(f, POSES[pose]); f.position.set(x, f.userData.seat, z); f.rotation.y = yaw; keep.push(f); return f; };
     const fresh = new THREE.Group();
     if (kor) { const l = fit(kor.clone(), 1.35); l.rotation.y = this.constructor.LAUNCHER_YAW; fresh.add(l); fresh.add(man('kneel', 0.3, -0.85, 0), man('prone', -1.5, -0.6, 0.12)); }
@@ -77,7 +77,7 @@ export class TeamView {
 TeamView.LAUNCHER_YAW = -Math.PI / 2; TeamView.DEBUG = new URLSearchParams(location.hash.slice(1)).get('dbg') === '1';
 
 export function missileMesh(drone, assetBase) {
-  if (drone && assetBase) { const g = new THREE.Group(), stand = missileMesh(true); g.add(stand); loadModel(assetBase + 'enemy/fpv.glb').then(m => { if (!m) return; g.remove(stand); const f = fit(m.clone(), 0.62); f.position.y = -0.1; f.rotation.y = missileMesh.DRONE_YAW; g.add(f); }); return g; }
+  if (drone && assetBase) { const g = new THREE.Group(), stand = missileMesh(true); g.add(stand); loadModel(assetBase + 'enemy/fpv.json').then(m => { if (!m) return; g.remove(stand); const f = fit(m.clone(), 0.62); f.position.y = -0.1; f.rotation.y = missileMesh.DRONE_YAW; g.add(f); }); return g; }
   const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: drone ? '#1c1e20' : '#55594f', roughness: 0.6, metalness: 0.3 });
   if (drone) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.3), m); g.add(b); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.01, 10), new THREE.MeshBasicMaterial({ color: '#aab3b7', transparent: true, opacity: 0.3 })); r.position.set(x * 0.17, 0.04, z * 0.17); g.add(r); } const w = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.02, 0.45, 8), new THREE.MeshStandardMaterial({ color: '#4d5638' })); w.rotation.x = Math.PI / 2; w.position.set(0, -0.07, 0.08); g.add(w); g.scale.setScalar(2.2); }
   else { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 1.2, 10), m); b.rotation.x = Math.PI / 2; const n = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.25, 10), m); n.rotation.x = Math.PI / 2; n.position.z = 0.72; g.add(b, n); const glow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd9a0' })); glow.position.z = -0.7; g.add(glow); g.scale.setScalar(1.6); }
