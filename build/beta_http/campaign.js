@@ -1,1 +1,1 @@
-/home/claude/hkoi-sim/build/beta/campaign.js
+/home/user/HKOI-sim/build/beta/campaign.js

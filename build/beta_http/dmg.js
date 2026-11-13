@@ -1,1 +1,1 @@
-/home/claude/hkoi-sim/build/beta/dmg.js
+/home/user/HKOI-sim/build/beta/dmg.js

@@ -109,11 +109,15 @@ function fit(obj, len) { const b = new THREE.Box3().setFromObject(obj), sz = b.g
 // forward about the hips first (1.57 = lying face down). The figure is then seated so its lowest joint rests on the ground.
 const LIMBS = [['Spine', 'Spine1'], ['Spine1', 'Spine2'], ['Spine2', 'Neck'], ['Neck', 'Head'], ['LeftUpLeg', 'LeftLeg'], ['LeftLeg', 'LeftFoot'], ['RightUpLeg', 'RightLeg'], ['RightLeg', 'RightFoot'], ['LeftFoot', 'LeftToeBase'], ['RightFoot', 'RightToeBase'], ['LeftArm', 'LeftForeArm'], ['LeftForeArm', 'LeftHand'], ['RightArm', 'RightForeArm'], ['RightForeArm', 'RightHand']];
 export const POSES = {
+  // upright with a straight back: loads are fixed to a figure in this pose
+  ready: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.05], LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
   stand: { LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
   // down on the right knee behind a launcher, hands forward on the controls
-  kneel: { Spine: [0, 1, 0.12], Spine1: [0, 1, 0.2], Spine2: [0, 1, 0.25], Neck: [0, 1, 0.25], LeftUpLeg: [0.12, -0.12, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, -0.12, -1], RightFoot: [0, -1, -0.3], LeftArm: [0.2, -0.85, 0.45], LeftForeArm: [-0.35, 0.1, 0.95], RightArm: [-0.2, -0.85, 0.45], RightForeArm: [0.35, 0.1, 0.95] },
+  kneel: { Spine: [0, 1, 0.12], Spine1: [0, 1, 0.2], Spine2: [0, 1, 0.25], Neck: [0, 1, 0.25], LeftUpLeg: [0.12, -0.12, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, 0.16, -1], RightFoot: [0, -0.4, -1], LeftArm: [0.2, -0.85, 0.45], LeftForeArm: [-0.35, 0.1, 0.95], RightArm: [-0.2, -0.85, 0.45], RightForeArm: [0.35, 0.1, 0.95] },
+  // sitting back on the heels beside a tripod launcher, leaning in to the eyepiece (the hands are put on the controls separately)
+  gunner: { Spine: [0, 1, 0.3], Spine1: [0, 1, 0.42], Spine2: [0, 1, 0.5], Neck: [0, 1, 0.3], LeftUpLeg: [0.22, -0.6, 1], LeftLeg: [0, 0.06, -1], LeftFoot: [0, -0.15, -1], RightUpLeg: [-0.22, -0.6, 1], RightLeg: [0, 0.06, -1], RightFoot: [0, -0.15, -1], LeftArm: [0.1, -0.6, 0.8], LeftForeArm: [-0.4, 0.1, 0.9], RightArm: [-0.1, -0.6, 0.8], RightForeArm: [-0.2, 0.1, 0.95] },
   // kneeling with a tube on the right shoulder
-  shoulder: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.1], LeftUpLeg: [0.12, -0.12, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, -0.12, -1], RightFoot: [0, -1, -0.3], LeftArm: [-0.35, -0.45, 0.85], LeftForeArm: [-0.95, 0.35, 0.25], RightArm: [-0.55, -0.75, 0.4], RightForeArm: [0.02, 0.8, 0.6] },
+  shoulder: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.1], LeftUpLeg: [0.12, -0.12, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, 0.16, -1], RightFoot: [0, -0.4, -1], LeftArm: [-0.35, -0.45, 0.85], LeftForeArm: [-0.95, 0.35, 0.25], RightArm: [-0.55, -0.75, 0.4], RightForeArm: [0.02, 0.8, 0.6] },
   // squatting low, forearms on the knees
   crouch: { Spine: [0, 1, 0.35], Spine1: [0, 1, 0.5], Spine2: [0, 1, 0.55], Neck: [0, 1, 0.1], LeftUpLeg: [0.22, 0.15, 1], LeftLeg: [0, -1, -0.28], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.22, 0.15, 1], RightLeg: [0, -1, -0.28], RightFoot: [0, -0.3, 1], LeftArm: [0.1, -0.5, 0.85], LeftForeArm: [-0.3, -0.2, 0.9], RightArm: [-0.1, -0.5, 0.85], RightForeArm: [0.3, -0.2, 0.9] },
   // lying face down on the elbows, head up, looking forward
@@ -121,13 +125,37 @@ export const POSES = {
 };
 // Two halves of a stride (left foot forward, right foot forward) for walking and for running; a moving figure swings between them.
 const STRIDE = {
-  walk: [{ Spine: [0, 1, 0.1], Spine1: [0, 1, 0.12], Neck: [0, 1, 0.05], LeftUpLeg: [0.04, -1, 0.42], LeftLeg: [0, -1, 0.08], LeftFoot: [0, -0.25, 1], RightUpLeg: [-0.04, -1, -0.28], RightLeg: [0, -0.78, -0.62], RightFoot: [0, -0.85, 0.5], LeftArm: [0.22, -1, -0.28], LeftForeArm: [0.1, -0.85, 0.25], RightArm: [-0.22, -1, 0.3], RightForeArm: [-0.1, -0.55, 0.8] }],
-  run: [{ Spine: [0, 1, 0.3], Spine1: [0, 1, 0.36], Neck: [0, 1, 0.1], LeftUpLeg: [0.04, -0.8, 0.75], LeftLeg: [0, -1, -0.15], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.04, -1, -0.5], RightLeg: [0, -0.25, -1], RightFoot: [0, -1, 0.1], LeftArm: [0.22, -0.9, -0.5], LeftForeArm: [0.1, -0.2, 0.95], RightArm: [-0.22, -0.9, 0.55], RightForeArm: [-0.1, 0.25, 0.95] }],
+  walk: [{ Spine: [0, 1, 0.1], Spine1: [0, 1, 0.12], Spine2: [0, 1, 0.12], Neck: [0, 1, 0.05], LeftUpLeg: [0.04, -1, 0.42], LeftLeg: [0, -1, 0.08], LeftFoot: [0, -0.25, 1], RightUpLeg: [-0.04, -1, -0.28], RightLeg: [0, -0.78, -0.62], RightFoot: [0, -0.85, 0.5], LeftArm: [0.22, -1, -0.28], LeftForeArm: [0.1, -0.85, 0.25], RightArm: [-0.22, -1, 0.3], RightForeArm: [-0.1, -0.55, 0.8] }],
+  run: [{ Spine: [0, 1, 0.3], Spine1: [0, 1, 0.36], Spine2: [0, 1, 0.36], Neck: [0, 1, 0.1], LeftUpLeg: [0.04, -0.8, 0.75], LeftLeg: [0, -1, -0.15], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.04, -1, -0.5], RightLeg: [0, -0.25, -1], RightFoot: [0, -1, 0.1], LeftArm: [0.22, -0.9, -0.5], LeftForeArm: [0.1, -0.2, 0.95], RightArm: [-0.22, -0.9, 0.55], RightForeArm: [-0.1, 0.25, 0.95] }],
 };
 const SIDE = k => k.startsWith('Left') ? 'Right' + k.slice(4) : k.startsWith('Right') ? 'Left' + k.slice(5) : k;
 for (const g of Object.values(STRIDE)) { const A = g[0], B = {}; for (const k in A) B[SIDE(k)] = [-A[k][0], A[k][1], A[k][2]]; g.push(B); }   // the other half is the mirror image
 // the pose a fraction f (0..1) of the way from one half-stride to the other; `keep` (optional) is a pose whose arms replace the swinging ones (carrying a weapon)
 export function stridePose(gait, f, keep) { const [A, B] = STRIDE[gait] || STRIDE.walk, o = {}; for (const k in A) { const a = A[k], b = B[k]; o[k] = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; } if (keep) for (const k of ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm']) if (keep[k]) o[k] = keep[k]; return o; }
+// --- helpers for fixing loads to a figure and putting his hands on them ---
+const boneMap = fig => { let B = fig.userData.B; if (!B) { B = fig.userData.B = {}; fig.traverse(o => { if (o.isBone) B[o.name.replace(/^mixamorig:?/, '')] = o; }); } return B; };
+const bone = (fig, name) => boneMap(fig)[name];
+// where a joint is, in the frame the figure stands in (its team, or the world if it stands alone)
+function jointAt(fig, name, out) { bone(fig, name).getWorldPosition(out); return fig.parent ? fig.parent.worldToLocal(out) : out; }
+const home = o => ({ p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() });
+// remember how an object sits relative to a bone (it is placed in the figure's frame first), then lift it off again
+function ride(obj, b) { const par = obj.parent; b.attach(obj); const r = { bone: b, p: obj.position.clone(), q: obj.quaternion.clone(), s: obj.scale.clone() }; if (par) par.attach(obj); else obj.removeFromParent(); if (obj.userData.home) unmount(obj, par); return r; }
+function mount(obj, r) { r.bone.add(obj); obj.position.copy(r.p); obj.quaternion.copy(r.q); obj.scale.copy(r.s); }
+function unmount(obj, to) { if (to) to.add(obj); const h = obj.userData.home; if (h) { obj.position.copy(h.p); obj.quaternion.copy(h.q); obj.scale.copy(h.s); } }
+// Bend one arm so the hand lands on a point (given in the frame the figure stands in). pole says which way the elbow should point.
+const _S = new THREE.Vector3(), _E = new THREE.Vector3(), _H = new THREE.Vector3(), _T = new THREE.Vector3(), _P = new THREE.Vector3(), _D = new THREE.Vector3(), _q = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+function turnBone(b, from, to) { _q.setFromUnitVectors(from, to); b.getWorldQuaternion(_wq); b.parent.getWorldQuaternion(_pq); b.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq))); b.updateMatrixWorld(true); }
+export function reach(fig, side, target, pole) {
+  const B = boneMap(fig), up = B[side + 'Arm'], fo = B[side + 'ForeArm'], ha = B[side + 'Hand']; if (!up || !fo || !ha) return;
+  up.getWorldPosition(_S); fo.getWorldPosition(_E); ha.getWorldPosition(_H); const L1 = _E.distanceTo(_S), L2 = _H.distanceTo(_E);
+  _T.copy(target); _P.copy(pole); if (fig.parent) { fig.parent.localToWorld(_T); _P.transformDirection(fig.parent.matrixWorld); }
+  _D.copy(_T).sub(_S); const len = _D.length() || 1e-6, dist = Math.max(Math.abs(L1 - L2) * 1.02 + 1e-4, Math.min(len, (L1 + L2) * 0.999)); _D.divideScalar(len);
+  const along = (L1 * L1 - L2 * L2 + dist * dist) / (2 * dist), out = Math.sqrt(Math.max(0, L1 * L1 - along * along)); _P.addScaledVector(_D, -_P.dot(_D)); if (_P.lengthSq() < 1e-8) _P.set(0, -1, 0); _P.normalize();
+  _T.copy(_S).addScaledVector(_D, dist);                                    /* where the hand will end up (the target, or as far as the arm goes) */
+  _H.copy(_S).addScaledVector(_D, along).addScaledVector(_P, out);          /* the elbow */
+  turnBone(up, _E.sub(_S).normalize(), _H.sub(_S).normalize());
+  fo.getWorldPosition(_E); ha.getWorldPosition(_H); turnBone(fo, _H.sub(_E).normalize(), _T.sub(_E).normalize());
+}
 // Apply a pose to a figure that is not yet attached to anything (so its own frame is the world frame).
 export function setPose(fig, pose) {
   const B = {}; fig.traverse(o => { if (o.isBone) { B[o.name.replace(/^mixamorig:?/, '')] = o; if (!o.userData.rest) o.userData.rest = o.quaternion.clone(); o.quaternion.copy(o.userData.rest); } });
@@ -177,32 +205,90 @@ export class TeamView {
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 8), dark); tube.rotation.x = Math.PI / 2; tube.position.set(0, kind === 'rpg' ? 1.25 : 0.95, -0.2); tube.castShadow = true; g.add(tube);
     if (kind !== 'rpg') for (let k = 0; k < 3; k++) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.0, 5), dark); leg.position.set(Math.sin(k * 2.094) * 0.3, 0.45, -0.2 + Math.cos(k * 2.094) * 0.3); leg.rotation.set(Math.cos(k * 2.094) * 0.35, 0, -Math.sin(k * 2.094) * 0.35); g.add(leg); }
   }
-  // swap the stand-in shapes for the real models once they arrive: a gunner at the launcher and a second man beside him
+  // swap the stand-in shapes for the real models once they arrive: a gunner at the weapon and a second man beside him
   async _load(kind, base) {
-    const [sol, kor, rpg] = await Promise.all([loadModel(base + 'enemy/soldier.json'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.json'), kind === 'rpg' ? loadModel(base + 'enemy/rpg7.json') : null]); if (!sol) return;
-    const keep = []; const man = (pose, x, z, yaw) => { const f = cloneSkinned(sol); setPose(f, POSES[pose]); f.position.set(x, f.userData.seat, z); f.rotation.y = yaw; f.userData.home = { pose, x, z, yaw }; keep.push(f); return f; };
-    const fresh = new THREE.Group();
-    if (kor) { const l = fit(kor.clone(), 1.35); l.rotation.y = this.constructor.LAUNCHER_YAW; fresh.add(l); this.launcher = l; fresh.add(man('kneel', 0.3, -0.85, 0), man('prone', -1.5, -0.6, 0.12)); }
-    else if (kind === 'rpg' && rpg) { const w = alongZ(skin(rpg.clone(), { RPG7: base + 'enemy/rpg7_albedo.webp', RPG7Rocket: base + 'enemy/rpg7rocket_albedo.webp' }), 1.34, TeamView.RPG_FLIP); w.position.set(-0.26, 1.1, 0.22); w.rotation.z = TeamView.RPG_ROLL; this.shoulderW = w; fresh.add(w, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
-    else if (kind === 'rpg') { const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 8), new THREE.MeshStandardMaterial({ color: '#3a3d33', roughness: 0.7 })); tube.rotation.x = Math.PI / 2; tube.position.set(-0.26, 1.1, 0.1); const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.4, 8), tube.material); head.rotation.x = -Math.PI / 2; head.position.set(-0.26, 1.1, 0.75); head.rotation.x = Math.PI / 2; fresh.add(tube, head, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
-    else fresh.add(man('crouch', 0, 0.3, 0), man('kneel', -1.1, 0.5, 0.4));
+    const atgm = kind === 'kornet' || kind === 'saclos' || kind === 'sal';
+    const [sol, kor, rpg] = await Promise.all([loadModel(base + 'enemy/soldier.json'), atgm ? loadModel(base + 'enemy/kornet.json') : null, kind === 'rpg' ? loadModel(base + 'enemy/rpg7.json') : null]); if (!sol) return;
+    const fresh = this.inner = new THREE.Group(), keep = [], V = (x, y, z) => new THREE.Vector3(x, y, z);
+    // a figure, first standing upright at the origin so loads can be fixed to his body, then put in his pose at his place
+    const man = (pose, x, z, yaw, downAt) => { const f = cloneSkinned(sol); setPose(f, POSES.ready); f.updateMatrixWorld(true); f.userData.home = { pose, x, z, yaw, downAt }; keep.push(f); return f; };
+    const settle = () => keep.forEach(f => { const h = f.userData.home; setPose(f, POSES[h.pose]); f.position.set(h.x, f.userData.seat, h.z); f.rotation.y = h.yaw; fresh.add(f); });
+    if (kor) {
+      // The launcher model has four parts: tripod, sight unit, launch tube and a loose display missile. The missile is hidden (a real one
+      // stays sealed in its tube). Tripod + sight unit are one load (the gunner's), the tube is the other (the second man's).
+      const l = fit(kor.clone(), 1.35); l.rotation.y = TeamView.LAUNCHER_YAW; fresh.add(l); fresh.updateMatrixWorld(true);
+      const part = {}; l.traverse(o => { if (o.isMesh) part[o.name] = o; }); const stand = part['стойка'], unit = part['комплекс'], tube = part['ракетница']; if (part.missile) part.missile.visible = false;
+      const pivot = (objs, into) => { const b = new THREE.Box3(); objs.forEach(o => b.expandByObject(o)); const p = new THREE.Group(); b.getCenter(p.position); if (into) { into.updateMatrixWorld(true); into.worldToLocal(p.position); } (into || fresh).add(p); p.updateMatrixWorld(true); objs.forEach(o => p.attach(o)); p.userData.home = home(p); return p; };
+      if (stand && unit) { this.base = pivot([stand, unit]); this.legs = pivot([stand], this.base); }
+      if (tube) { if (kind === 'sal') tube.visible = false; else { this.tube = pivot([tube]); this.spare = this.tube.clone(); this.spare.position.set(1.22, 0.1, -0.8); this.spare.rotation.y = 0.12; fresh.add(this.spare); } }
+      const g = man('gunner', 0.44, -0.78, 0, { x: 0.8, z: -1.1 }), s = man('prone', 1.75, -0.75, 0.12);
+      // where each load rides on the move: the folded launcher on the gunner's back, the tube on the second man's right shoulder
+      if (this.base) { const c = jointAt(g, 'Spine2', V()); this.base.position.set(c.x, c.y - 0.2, c.z - 0.25); this.base.rotation.y = Math.PI / 2; this.baseRide = ride(this.base, bone(g, 'Spine2')); }
+      if (this.tube) { const c = jointAt(s, 'RightArm', V()); this.tube.position.set(c.x + 0.05, c.y + 0.11, c.z + 0.04); this.tube.rotation.x = 0.04; this.tubeRide = ride(this.tube, bone(s, 'RightArm').parent.parent); }
+      this.launcher = l;
+    } else if (kind === 'rpg') {
+      const g = man('shoulder', 0, 0.2, 0), s = man('crouch', -1.3, 0.9, 0.3);
+      if (rpg) {
+        // The supplied RPG-7 arrives with its rocket lying beside the launcher. Numbers below were measured on that model after it is laid
+        // along z (muzzle forward): where the bore runs, where the muzzle is, and the two ends of the loose rocket.
+        const R = TeamView.RPG, w = alongZ(skin(rpg.clone(), { RPG7: base + 'enemy/rpg7_albedo.webp', RPG7Rocket: base + 'enemy/rpg7rocket_albedo.webp' }), 1.34, false), G = this.weapon = new THREE.Group();
+        w.position.set(-R.bore[0], -R.bore[1], -R.rest); G.add(w); G.updateMatrixWorld(true);
+        let rk = null; w.traverse(o => { if (o.isMesh && o.name === 'rocket') rk = o; });
+        if (rk) { const tail = V(R.tail[0] - R.bore[0], R.tail[1] - R.bore[1], R.tail[2] - R.rest), dir = V(R.nose[0] - R.tail[0], R.nose[1] - R.tail[1], R.nose[2] - R.tail[2]).normalize(), P = this.rocket = new THREE.Group(); P.position.copy(tail); G.add(P); P.updateMatrixWorld(true); P.attach(rk);
+          P.quaternion.setFromUnitVectors(dir, V(0, 0, 1)); P.position.set(0, 0, R.muzzle - R.rest - R.seated);   /* seated in the muzzle, warhead out in front */
+          // the second man carries two more rounds on his back
+          const bag = this.bag = new THREE.Group(); for (const dx of [-0.07, 0.07]) { const c = P.clone(); c.position.set(dx, -0.58, 0); c.quaternion.setFromUnitVectors(V(0, 0, 1), V(dx * 1.2, 1, -0.06).normalize()); bag.add(c); } bag.scale.setScalar(R.scale);
+          const pack = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.15), new THREE.MeshStandardMaterial({ color: '#3d4031', roughness: 0.95 })); pack.position.set(0, -0.3, 0); pack.castShadow = true; bag.add(pack);
+          const c = jointAt(s, 'Spine2', V()); bag.position.set(c.x, c.y, c.z - 0.19); this.bagRide = ride(bag, bone(s, 'Spine2')); }
+        G.scale.setScalar(R.scale);   /* the launcher alone is 0.95 m long */
+        // on the right shoulder, level, the shoulder about a third of the way from the back
+        const c = jointAt(g, 'RightArm', V()); G.position.set(c.x + 0.045, c.y + 0.09, c.z - 0.02); this.weaponRide = ride(G, bone(g, 'Spine2'));
+      }
+    } else { man('crouch', 0, 0.3, 0); man('kneel', -1.1, 0.5, 0.4); }
+    settle();
     if (TeamView.DEBUG) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({ color: 'red' })); m.position.set(0, 0.6, 2); fresh.add(m); }
-    while (this.group.children.length) this.group.remove(this.group.children[0]); this.group.add(fresh); this.figures = keep; this.loaded = true;
+    while (this.group.children.length) this.group.remove(this.group.children[0]); this.group.add(fresh); this.figures = keep; this.mode = null; this.loaded = true;
   }
-  // Bring the figures to life. mode: 'still' (at their weapon), 'down' (flat on the ground under fire), 'walk' or 'run' (moving: the gunner
-  // leads with the launcher on his shoulder, the second man follows). Called every frame; the stride is recomputed at most 30 times a second.
-  update(dt, mode, near) {
-    if (!this.figures) return; const F = this.figures, moving = mode === 'walk' || mode === 'run';
-    if (mode !== this.mode) { this.mode = mode; this.phase = 0; this.acc = 1;
-      if (!moving) { F.forEach(f => { const h = f.userData.home, p = mode === 'down' ? 'prone' : h.pose; setPose(f, POSES[p]); f.position.set(h.x, f.userData.seat, h.z); f.rotation.y = h.yaw; }); if (this.launcher) { this.launcher.position.set(0, 0, 0); this.launcher.rotation.set(0, TeamView.LAUNCHER_YAW, 0); } if (this.shoulderW) { this.shoulderW.visible = mode !== 'down'; this.shoulderW.position.set(-0.26, 1.1, 0.22); } return; }
-      if (this.launcher) { this.launcher.position.set(-0.28, 0.95, 0.15); this.launcher.rotation.set(-0.35, TeamView.LAUNCHER_YAW, 0); } if (this.shoulderW) { this.shoulderW.visible = true; this.shoulderW.position.set(-0.26, 1.42, 0.45); } }   // folded launcher carried over the right shoulder
+  // Bring the figures to life. mode: 'still' (at their weapon), 'down' (flat on the ground under fire), 'walk' or 'run' (moving).
+  // info.loaded: a round is in the launcher (false between firing and the end of reloading). info.spare: a spare round lies ready.
+  // Called every frame; the stride is recomputed at most 30 times a second.
+  update(dt, mode, near, info) {
+    if (!this.figures) return; const moving = mode === 'walk' || mode === 'run';
+    if (info) { if (this.rocket && this.rocket.visible !== info.loaded) this.rocket.visible = info.loaded; if (this.spare) { const on = info.spare && !moving; if (this.spare.visible !== on) this.spare.visible = on; } }
+    if (mode !== this.mode) { this.mode = mode; this.phase = 0; this.acc = 1; this._arrange(mode); }
     if (!moving) return; const hz = mode === 'run' ? 2.7 : 1.75; this.phase += dt * hz; this.acc += dt; if (this.acc < (near ? 1 / 30 : 0.25)) return; this.acc = 0;
-    F.forEach((f, i) => { const ph = this.phase + i * 0.37, tri = Math.abs(((ph % 1) + 1) % 1 * 2 - 1), ease = tri * tri * (3 - 2 * tri), keep = (this.kind === 'rpg' && i === 0) ? POSES.shoulder : (i === 0 && this.launcher) ? { RightArm: [-0.25, -0.75, 0.5], RightForeArm: [0.15, 0.8, 0.5] } : null;
-      setPose(f, stridePose(mode, ease, keep)); f.position.set(i === 0 ? 0 : -0.7, f.userData.seat, i === 0 ? 0.4 : -1.9); f.rotation.y = 0; });
+    this.group.updateWorldMatrix(true, false);
+    this.figures.forEach((f, i) => { const ph = this.phase + i * 0.37, tri = Math.abs(((ph % 1) + 1) % 1 * 2 - 1), ease = tri * tri * (3 - 2 * tri);
+      setPose(f, stridePose(mode, ease)); f.position.set(i === 0 ? 0 : -0.7, f.userData.seat, i === 0 ? 0.4 : -1.9); f.rotation.y = 0; f.updateMatrixWorld(true); this._hands(f, i, true); });
+  }
+  // put everything where it belongs for a new mode: who is in which pose, and whether each load is on the ground or on a man
+  _arrange(mode) {
+    const F = this.figures, moving = mode === 'walk' || mode === 'run', down = mode === 'down'; this.group.updateWorldMatrix(true, false);
+    if (this.base) { if (moving) mount(this.base, this.baseRide); else unmount(this.base, this.inner); this.legs.scale.set(moving ? 0.34 : 1, 1, moving ? 0.34 : 1); }   /* tripod legs folded in for the march */
+    if (this.tube) { if (moving) mount(this.tube, this.tubeRide); else unmount(this.tube, this.inner); }
+    if (this.bag && this.bag.parent !== this.bagRide.bone) mount(this.bag, this.bagRide);
+    if (this.weapon) { if (down) { unmount(this.weapon, this.inner); const h = F[0].userData.home; this.weapon.position.set(h.x - 0.38, 0.07, h.z + 0.55); this.weapon.quaternion.identity(); this.weapon.scale.setScalar(TeamView.RPG.scale); } else mount(this.weapon, this.weaponRide); }
+    if (moving) return;
+    F.forEach((f, i) => { const h = f.userData.home, at = down && h.downAt ? h.downAt : h; setPose(f, POSES[down ? 'prone' : h.pose]); f.position.set(at.x, f.userData.seat, at.z); f.rotation.y = h.yaw; f.updateMatrixWorld(true); if (!down) this._hands(f, i, false); });
+  }
+  // hands onto the weapon or the load (the arms are bent to reach the exact spot, whatever the body is doing)
+  _hands(f, i, moving) {
+    const a = this._a || (this._a = new THREE.Vector3()), R = TeamView.RPG, poleR = TeamView.POLE_R, poleL = TeamView.POLE_L;
+    const on = (obj, x, y, z) => this.group.worldToLocal(obj.localToWorld(a.set(x, y, z)));
+    if (this.weapon && i === 0) { reach(f, 'Right', on(this.weapon, R.grip[0], R.grip[1], R.grip[2]), poleR); if (!moving) reach(f, 'Left', on(this.weapon, R.grip2[0], R.grip2[1], R.grip2[2]), poleL); }
+    else if (this.base && i === 0) {
+      if (moving) { jointAt(f, 'RightArm', a); a.x += 0.05; a.y -= 0.14; a.z += 0.13; reach(f, 'Right', a, poleR); jointAt(f, 'LeftArm', a); a.x -= 0.05; a.y -= 0.14; a.z += 0.13; reach(f, 'Left', a, poleL); }   /* thumbs in the pack straps */
+      else { const h = this.base.userData.home.p; reach(f, 'Right', a.set(h.x - 0.03, h.y + 0.14, h.z - 0.36), poleR); reach(f, 'Left', a.set(h.x + 0.13, h.y + 0.1, h.z - 0.36), poleL); }   /* on the controls at the back of the sight unit */
+    }
+    else if (this.tube && i === 1 && moving) reach(f, 'Right', on(this.tube, -0.07, -0.05, 0.3), poleR);   /* steadying the tube on his shoulder */
   }
   place(pos, faceDeg) { this.group.position.copy(pos); this.group.rotation.y = Math.PI - faceDeg * DEG; }
 }
-TeamView.LAUNCHER_YAW = -Math.PI / 2; TeamView.RPG_FLIP = false; TeamView.RPG_ROLL = 0; TeamView.DEBUG = new URLSearchParams(location.hash.slice(1)).get('dbg') === '1';
+TeamView.LAUNCHER_YAW = -Math.PI / 2;
+// RPG-7 as supplied, after laying it along z: bore centre [x, y], muzzle z, where the shoulder sits (rest), the loose rocket's two ends,
+// how far the rocket sits inside the muzzle, the grips (in the weapon's own frame: origin on the bore at the shoulder), and the scale to 0.95 m.
+TeamView.RPG = { bore: [0.163, 0.038], muzzle: 0.344, rest: -0.25, tail: [-0.188, -0.112, -0.134], nose: [0.163, -0.089, 0.654], seated: 0.45, grip: [0.0, -0.12, 0.38], grip2: [0.0, -0.1, 0.25], scale: 0.94 };
+TeamView.POLE_R = new THREE.Vector3(-0.7, -1, -0.1); TeamView.POLE_L = new THREE.Vector3(0.7, -1, -0.1);   /* which way the elbows point: down and out */ TeamView.DEBUG = new URLSearchParams(location.hash.slice(1)).get('dbg') === '1';
 
 export function missileMesh(drone, assetBase) {
   if (drone && assetBase) { const g = new THREE.Group(), stand = missileMesh(true); g.add(stand); loadModel(assetBase + 'enemy/fpv.json').then(m => { if (!m) return; g.remove(stand); const f = fit(m.clone(), 0.62); f.position.y = -0.1; f.rotation.y = missileMesh.DRONE_YAW; g.add(f); }); return g; }
