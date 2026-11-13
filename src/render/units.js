@@ -38,8 +38,34 @@ export class TankView {
     const mats = {}, byName = o => o.traverse(m => { if (!m.isMesh) return; const tag = (m.name + ' ' + (m.parent ? m.parent.name : '')).toLowerCase(), key = Object.keys(TEX).find(k => tag.includes(k.toLowerCase())) || (/m240/.test(tag) ? 'M240L' : /^m2|_m2|browning/.test(tag) ? 'M2' : 'US_1M1_ABRAMS'); if (key) m.material = mats[key] || (mats[key] = new THREE.MeshStandardMaterial({ name: key })); });   // the part files name each piece after its material
     const done = new Set(), prep = o => { byName(o); skin(o, TEX); o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; for (const mt of [].concat(m.material)) if (mt && !done.has(mt)) { done.add(mt); if (mt.name === 'US_1M1_ABRAMS' || mt.name === 'US_2Abrams_armor') vehicleFinish(mt); } } }); return o; };
     const g = new THREE.Group(); g.add(prep(hull)); this.turret = new THREE.Group(); this.turret.position.fromArray(meta.pivot); this.turret.add(prep(tur)); g.add(this.turret);
-    this.model = g; this.group.add(g); this.standIn.visible = false; this.loaded = true; this.variant = 'M1A2 SEPv3 TUSK with Trophy'; return true;
+    this._station(); this.model = g; this.group.add(g); this.standIn.visible = false; this.loaded = true; this.variant = 'M1A2 SEPv3 TUSK with Trophy'; return true;
   }
+  // The HKOI weapon station: a remotely operated 30 mm gun on the turret roof with its own sensor head. Built from simple shapes
+  // (no supplied model yet). It turns and elevates on its own, independent of the main turret.
+  _station() {
+    const paint = vehicleFinish(new THREE.MeshStandardMaterial({ color: '#3f4234', roughness: 0.72, metalness: 0.2 })), dark = new THREE.MeshStandardMaterial({ color: '#17191a', roughness: 0.45, metalness: 0.6 }), glass = new THREE.MeshStandardMaterial({ color: '#0a1420', roughness: 0.08, metalness: 0.7 });
+    const M = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; par.add(m); return m; };
+    const base = this.rws = new THREE.Group(); base.position.set(0.62, 0.86, -1.25); this.turret.add(base);                      // left rear of the turret roof, behind the loader's hatch
+    M(new THREE.CylinderGeometry(0.34, 0.4, 0.14, 20), paint, 0, 0.07, 0, base); M(new THREE.CylinderGeometry(0.2, 0.26, 0.22, 16), paint, 0, 0.25, 0, base);
+    const yaw = this.rwsYaw = new THREE.Group(); yaw.position.y = 0.36; base.add(yaw);
+    M(new THREE.BoxGeometry(0.62, 0.1, 0.56), paint, 0, 0.05, 0, yaw); M(new THREE.BoxGeometry(0.06, 0.46, 0.4), paint, -0.25, 0.33, 0, yaw); M(new THREE.BoxGeometry(0.06, 0.46, 0.4), paint, 0.25, 0.33, 0, yaw);   // deck and the two cheeks of the cradle
+    M(new THREE.BoxGeometry(0.3, 0.34, 0.5), paint, 0.44, 0.3, -0.05, yaw);                                                         // ammunition box, 150 + 150 rounds in two bays
+    const pitch = this.rwsPitch = new THREE.Group(); pitch.position.set(0, 0.38, 0); yaw.add(pitch);
+    M(new THREE.BoxGeometry(0.2, 0.2, 0.9), dark, 0, 0, 0.05, pitch);                                                               // receiver
+    const brl = M(new THREE.CylinderGeometry(0.03, 0.036, 1.75, 12), dark, 0, 0.01, 1.35, pitch); brl.rotation.x = Math.PI / 2; const mb = M(new THREE.CylinderGeometry(0.052, 0.052, 0.2, 12), dark, 0, 0.01, 2.2, pitch); mb.rotation.x = Math.PI / 2;
+    M(new THREE.BoxGeometry(0.12, 0.1, 0.5), paint, 0.14, -0.02, 0.1, pitch);                                                       // feed chute
+    const head = M(new THREE.SphereGeometry(0.15, 18, 14), paint, -0.42, 0.06, 0.12, pitch); const lens = M(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 18), glass, 0, 0, 0.14, head); lens.rotation.x = Math.PI / 2; M(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 12), glass, 0.09, 0.07, 0.115, head).rotation.x = Math.PI / 2;   // day and thermal cameras
+    M(new THREE.BoxGeometry(0.06, 0.1, 0.3), paint, -0.3, 0.02, 0.05, pitch);
+    for (const sx of [-1, 1]) { const pan = M(new THREE.BoxGeometry(0.3, 0.2, 0.035), dark, sx * 0.2, 0.72, 0.16, yaw); pan.rotation.x = -0.25; pan.rotation.y = sx * -0.5; }   // the two small radar faces above the gun
+    M(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8), paint, 0, 0.56, 0.12, yaw);
+    this.muzzle = new THREE.Object3D(); this.muzzle.position.set(0, 0.01, 2.32); pitch.add(this.muzzle); this.rwsY = 0; this.rwsP = 0; this.recoil = 0; this.barrel = [brl, mb];
+  }
+  // point the station at a place in the scene (or stow it forward when there is nothing to shoot at). Traverse 90 and elevation 60 degrees a second.
+  aimStation(point, dt) { if (!this.rws) return; let wy = 0, wp = 0; if (point) { const o = this.rwsYaw.getWorldPosition(new THREE.Vector3()), dx = point.x - o.x, dy = point.y - o.y - 0.38, dz = point.z - o.z, brg = Math.atan2(dx, -dz) / DEG, facing = (this.heading || 0) + this.turretYaw; wy = ((brg - facing + 540) % 360) - 180; wp = Math.max(-10, Math.min(65, Math.atan2(dy, Math.hypot(dx, dz)) / DEG)); }
+    const d = ((wy - this.rwsY + 540) % 360) - 180; this.rwsY += Math.max(-90 * dt, Math.min(90 * dt, d)); this.rwsP += Math.max(-60 * dt, Math.min(60 * dt, wp - this.rwsP)); this.rwsYaw.rotation.y = -this.rwsY * DEG; this.rwsPitch.rotation.x = -this.rwsP * DEG;
+    this.recoil = Math.max(0, this.recoil - dt * 1.4); const k = -this.recoil; this.barrel[0].position.z = 1.35 + k; this.barrel[1].position.z = 2.2 + k; }
+  // where the 30 mm muzzle is in the scene right now; kick = true when a round has just left
+  hkoiMuzzle(out, kick) { if (!this.muzzle) return null; this.group.updateWorldMatrix(true, true); if (kick) this.recoil = 0.12; return this.muzzle.getWorldPosition(out); }
   // swing the turret toward a compass bearing at traverse speed (40 degrees a second); hullDeg is the hull's heading
   aim(bearingDeg, hullDeg, dt) { if (!this.turret) return; const want = ((bearingDeg - hullDeg + 540) % 360) - 180, d = ((want - this.turretYaw + 540) % 360) - 180; this.turretYaw += Math.max(-40 * dt, Math.min(40 * dt, d)); this.turret.rotation.y = -this.turretYaw * DEG; }
   _loadOld(assetBase) {
@@ -47,7 +73,7 @@ export class TankView {
     loadGLTF(assetBase + 'm1/m1.json').then(scene => { const g = { scene }; const done = new Set(); g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && !done.has(m) && !m.transparent) { done.add(m); vehicleFinish(m); } } }); this.model = g.scene; this.group.add(g.scene); stand.visible = false; this.loaded = true; }).catch(e => { this.failed = true; console.warn('tank model not loaded', e && e.message); });
   }
   // heading in degrees clockwise from north; the model's nose points along +z, scene north is -z
-  place(pos, headingDeg, pitch = 0, roll = 0) { this.group.position.copy(pos); this.group.rotation.set(pitch, Math.PI - headingDeg * DEG, roll, 'YXZ'); }
+  place(pos, headingDeg, pitch = 0, roll = 0) { this.heading = headingDeg; this.group.position.copy(pos); this.group.rotation.set(pitch, Math.PI - headingDeg * DEG, roll, 'YXZ'); }
 }
 
 // Models supplied for the enemy: each file is fetched once and copied for every use. If a file is missing the plain stand-in shapes stay.
