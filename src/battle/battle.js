@@ -117,10 +117,11 @@
         const T = this.tank, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
         if (v && this.t <= v.tEnd) { const p = this.tankAt(this.t); T.e = p.e; T.n = p.n; T.h = p.h; T.v = p.v; return; }   // inside a volley: follow its path
         // between volleys: after a quiet spell in cover, come back up to the overwatch position (the berm drill)
-        if (T.mode === 'cover' && this.t - T.modeSince > 45 && !this.pending) { T.mode = 'returning'; T.modeSince = this.t; T.goal = { e: T.home.e, n: T.home.n }; this.say(this.t, 'tank', 'CDR', 'Quiet for 45 seconds: moving back up to the overwatch position.', 'berm drill'); }
+        // between volleys the commander looks for a better place to fight from (see _hullDown) rather than going back to where he was seen
+        if (v && v.done && T.alive && !T.goal && T.searched !== v.i && this.t > v.tEnd + (T.mode === 'cover' ? 30 : 5)) this._hullDown(v);
         if (T.goal) {
           const dx = T.goal.e - T.e, dn = T.goal.n - T.n, d = Math.hypot(dx, dn);
-          if (d < 2) { T.goal = null; T.v = 0; if (T.mode === 'returning') { T.mode = 'overwatch'; T.modeSince = this.t; } }
+          if (d < 2) { T.goal = null; T.v = 0; if (T.mode === 'returning' || T.mode === 'moving') { T.mode = 'overwatch'; T.modeSince = this.t; if (T.goalFace != null) T.h = T.goalFace; } }
           else { const want = brgOf(T.e, T.n, T.goal.e, T.goal.n), dh = angDiff(want, T.h); T.h = (T.h + clamp(dh, -35 * dt, 35 * dt) + 360) % 360; const vmax = Math.abs(dh) > 50 ? 2 : Math.min(9, 1 + d * 0.5); T.v += clamp(vmax - T.v, -4 * dt, 2.4 * dt); T.e += Math.sin(T.h * DEG) * T.v * dt; T.n += Math.cos(T.h * DEG) * T.v * dt; }
         }
       }
@@ -163,6 +164,14 @@
         u.sight = seen ? u.sight + dt : 0;
         u.hasShot = seen && this.t >= u.readyAt && this.t >= u.suppressedUntil && u.sight >= sp.aim * S.aim;
         if (seen) u.lastSeen = this.t;
+        // A direct-fire team that has lost its view of the vehicle does not sit blind for ever. After a wait (shorter for green crews, who
+        // fidget; longer for experts, who expect the vehicle to come back up) it moves to whichever of its prepared positions looks onto
+        // where the vehicle now is, provided someone on its side can see the vehicle to tell it so.
+        if (!sp.indirect && !seen && u.state === 'hidden' && u.sites.length > 1 && this.t - Math.max(u.lastSeen || 0, u.since) > 40 + S.patience * 0.6 && this.t >= (u.nextLook || 0)) {
+          u.nextLook = this.t + 20; if (!this._spotted()) return;
+          let best = -1; for (let j = 0; j < u.sites.length; j++) { if (j === u.site) continue; const g = u.sites[j], dd = Math.hypot(T.e - g.e, T.n - g.n); if (dd < sp.rmin || dd > sp.rmax) continue; if (W.los(g.e, g.n, sp.agl, T.e, T.n, 2.2).clear) { best = j; break; } }
+          if (best >= 0) { u.site = best; u.state = 'moving'; u.since = this.t; u.known = false; this.say(this.t, 'enemy', u.id, `${sp.name} #${u.id + 1} has lost sight of the vehicle: moves to another prepared position that looks onto it.`, 'told where the vehicle is by a team that can still see it'); }
+        }
       }
       // can anyone on the enemy side see the vehicle (so that crews firing over a hill can be given its position)?
       _spotted() { const T = this.tank; return this.units.some(o => o.alive && !o.spec.indirect && o.state !== 'moving' && this.world.los(o.e, o.n, o.spec.agl, T.e, T.n, 2.2).clear); }
@@ -248,11 +257,33 @@
         };
       }
 
+      // Choosing where to fight from. After a volley the commander knows roughly where fire came from (located launch sites, and the bearings
+      // of launches he saw). He looks at the ground within 200 m for a spot where the hull is hidden from as many of those as possible while the
+      // turret can still see them (hull-down), prefers near over far, and moves only if it is clearly better than where he is. The search is
+      // spread over several steps so it never stalls a frame.
+      _hullDown(v) {
+        const T = this.tank, W = this.world;
+        if (!this._hd || this._hd.v !== v.i) {
+          const obs = []; for (const k of T.known) if (!k.done) obs.push({ e: k.e, n: k.n, w: 2, known: true });
+          for (const vv of this.volleys.slice(-2)) for (const l of vv.launches) { if (l.u.spec.indirect) continue; const a = l.brg * DEG, le = vv.at.e + Math.sin(a) * l.R, ln = vv.at.n + Math.cos(a) * l.R; if (obs.some(o => o.known && Math.hypot(o.e - le, o.n - ln) < 60)) continue; const R = Math.min(l.R, 2500); obs.push({ e: vv.at.e + Math.sin(a) * R, n: vv.at.n + Math.cos(a) * R, w: 1 }); }
+          if (!obs.length) { T.searched = v.i; return; }
+          const cands = [{ e: T.e, n: T.n, here: true }]; for (let de = -200; de <= 200; de += 25) for (let dn = -200; dn <= 200; dn += 25) { const d = Math.hypot(de, dn); if (d < 20 || d > 205) continue; const e = T.e + de, n = T.n + dn; if (!W.inside(e, n) || !W.passable(e, n, true) || W.slope(e, n) > 0.32) continue; cands.push({ e, n, d }); }
+          this._hd = { v: v.i, obs, cands, i: 0, best: null, here: null };
+        }
+        const H = this._hd, cost = c => { let s = 0, hid = 0, see = 0; for (const o of H.obs) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * (hull ? 1 : tur ? 0.15 : 0.4); if (!hull) hid++; if (tur) see++; } return { s: s + (c.d || 0) * 0.0025, hid, see }; };
+        for (let k = 0; k < 24 && H.i < H.cands.length; k++, H.i++) { const c = H.cands[H.i]; if (!c.here) { let ok = true; for (let f = 0.15; f < 1 && ok; f += 0.15) ok = W.passable(T.e + (c.e - T.e) * f, T.n + (c.n - T.n) * f, true); if (!ok) continue; } const r = cost(c); c.s = r.s; c.hid = r.hid; c.see = r.see; if (c.here) H.here = c; else if (!H.best || c.s < H.best.s) H.best = c; }
+        if (H.i < H.cands.length) return;
+        T.searched = v.i; const N = H.obs.length, b = H.best, h = H.here; this._hd = null;
+        if (!b || !h || b.s > h.s - 0.3 * Math.max(1, N * 0.25)) { if (T.mode === 'cover') { T.mode = 'overwatch'; T.modeSince = this.t; } this.say(this.t, 'tank', 'CDR', `Commander stays put: no clearly better position within 200 m (hull hidden here from ${h ? h.hid : 0} of ${N} known firing directions).`, 'position search after the volley'); return; }
+        let fe = 0, fn = 0; for (const o of H.obs) { fe += (o.e - b.e) * o.w; fn += (o.n - b.n) * o.w; }
+        T.goal = { e: b.e, n: b.n }; T.goalFace = (Math.atan2(fe, fn) / DEG + 360) % 360; T.mode = 'moving'; T.modeSince = this.t;
+        this.say(this.t, 'tank', 'CDR', `Commander moves ${Math.round(b.d / 5) * 5} m to a ${b.hid > 0 && b.see > 0 ? 'hull-down' : b.hid === N ? 'covered' : 'better'} position: hull hidden from ${b.hid} of ${N} known firing directions (was ${h.hid}), turret sees ${b.see} of them (was ${h.see}).`, 'he will not sit where he has just been shot at; frontal armour turned toward the threat');
+      }
       // Return fire. Between volleys the crew engages launch sites it has located (seen on the HKOI track at launch) with the main gun:
       // nearest first, only with a clear line of sight, one aimed multi-purpose round at a time. A team that has already moved is not
       // there to be hit; a near miss makes a team pull out. Ten such rounds are carried.
       _returnFire() {
-        const T = this.tank, W = this.world; if (!T.alive || T.main <= 0 || this._volleyActive() || this._pending) return;
+        const T = this.tank, W = this.world; if (!T.alive || T.main <= 0 || this._volleyActive() || this._pending || T.goal) return;   // fires from the halt only
         if (!this._rf) {
           let best = null; for (const k of T.known) { if (k.done) continue; const R = Math.hypot(k.e - T.e, k.n - T.n); if (R > 4200 || R < 60) continue; if (!W.los(T.e, T.n, 2.4, k.e, k.n, 1.0).clear) continue; if (!best || R < best.R) best = { k, R }; }
           if (!best) return; const u = this.units.find(q => q.id === best.k.id), brg = (Math.atan2(best.k.e - T.e, best.k.n - T.n) / DEG + 360) % 360;

@@ -7,7 +7,7 @@ import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 
-const VERSION = '0.11';
+const VERSION = '0.12';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -44,7 +44,7 @@ function newBattle() {
   battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
   teams = battle.units.map(u => { const t = new TeamView(u.type, ASSETS); scene.units.add(t.group); return t; });
   scene.marks.clear(); scene.fx.n = 0;
-  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; logShown = 0; ended = false; simBank = 0; tNow = 0; voiceV = null; voiceHits = 0; shotI = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
+  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
   api.battle = battle; place();
 }
 // the player's chosen start position for this map (none = the default at the map centre)
@@ -64,7 +64,9 @@ function ensureWorld() { if (world.seed !== set.map || world.biomeKey !== set.bi
 // ---------------------------------------------------------------- drawing the battle state
 const shown = { e: 0, n: 0, h: 0 };   // where the vehicle is drawn this frame
 function place() {
-  const T0 = battle.tank, P = state === 'play' && tNow < battle.t ? battle.tankAt(tNow) : T0, T = { e: P.e, n: P.n, h: P.h }, w = world, d = 2.5, hh = T.h * Math.PI / 180, fe = Math.sin(hh), fn = Math.cos(hh);
+  const T0 = battle.tank, lastV = battle.volleys[battle.volleys.length - 1], inVolley = lastV && tNow >= lastV.t0 && tNow <= lastV.tEnd; let P = T0;
+  if (state === 'play' && tNow < battle.t) { if (inVolley) P = battle.tankAt(tNow); else { const f = Math.max(0, Math.min(1, simBank / battle.dt)), dh = ((T0.h - prevT.h + 540) % 360) - 180; if (Math.hypot(T0.e - prevT.e, T0.n - prevT.n) < 3) P = { e: prevT.e + (T0.e - prevT.e) * f, n: prevT.n + (T0.n - prevT.n) * f, h: prevT.h + dh * f }; } }
+  const T = { e: P.e, n: P.n, h: P.h }, w = world, d = 2.5, hh = T.h * Math.PI / 180, fe = Math.sin(hh), fn = Math.cos(hh);
   const pitch = Math.atan2(w.h(T.e + fe * d, T.n + fn * d) - w.h(T.e - fe * d, T.n - fn * d), 2 * d), roll = Math.atan2(w.h(T.e + fn * 1.6, T.n - fe * 1.6) - w.h(T.e - fn * 1.6, T.n + fe * 1.6), 3.2);
   tank.place(scene.at(T.e, T.n, 0), T.h, -pitch, roll); scene.setFocus(T.e, T.n); shown.e = T.e; shown.n = T.n; shown.h = T.h;
   battle.units.forEach((u, i) => { teams[i].group.visible = u.alive && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); teams[i].place(scene.at(u.e, u.n, 0), Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); });
@@ -150,6 +152,7 @@ function voiceEvent(type, o) { const enemyView = cams.mode === 'enemy' || cams.m
   if (type === 'hit') { voiceHits++; if (o.killing) { sound.scream('scream', 0.25); sound.scream('scream', 0.9, 0.7); } else { sound.react('CDR', 'hit', 0.5); sound.react(['GNR', 'LDR', 'DRV'][voiceHits % 3], 'panic', 2.2); } } }
 // the vehicle's own main gun: flash, dust and report at the muzzle, then the round arriving
 let shotI = 0; const landing = [];
+function trackDust(dt) { const T = battle.tank; if (!(state === 'play' && playing) || !T.alive || Math.abs(T.v || 0) < 1.2 || Math.random() > dt * 14 * Math.min(1, Math.abs(T.v) / 6)) return; const h = shown.h * Math.PI / 180, side = Math.random() < 0.5 ? 1.5 : -1.5, p = scene.at(shown.e - Math.sin(h) * 3.6 + Math.cos(h) * side, shown.n - Math.cos(h) * 3.6 - Math.sin(h) * side, 0.2); scene.fx.dust(p.x, p.y, p.z, set.cond === 'rain' || set.cond === 'snow' ? 0.35 : 1); }
 function mainGun() {
   const S = battle.shots || []; const live = state === 'play' && playing;
   while (shotI < S.length && S[shotI].t <= battle.t) { const sh = S[shotI++]; if (battle.t - sh.t > 2) continue; const T = battle.tank, a = Math.atan2(sh.to.e - sh.from.e, sh.to.n - sh.from.n), m = scene.at(T.e + Math.sin(a) * 6.5, T.n + Math.cos(a) * 6.5, 2.3);
@@ -158,10 +161,10 @@ function mainGun() {
 }
 // Simulated time. The battle moves in fixed steps of battle.dt (0.1 s); frames come far more often than that, so time is banked
 // and a step is taken only when a full step's worth has built up. What is drawn sits between steps (tNow) so motion stays smooth.
-let simBank = 0, tNow = 0;
+let simBank = 0, tNow = 0; const prevT = { e: 0, n: 0, h: 0 };   // where the vehicle was one step ago, to draw it between steps
 function advance(sec) {
   simBank = Math.min(Math.max(0, simBank) + Math.max(0, sec), 1.5); let n = 0;
-  while (simBank >= battle.dt && n++ < 20) { battle.step(); if (battle._pending) break; simBank -= battle.dt; }   // a volley half worked out is finished next frame
+  while (simBank >= battle.dt && n++ < 20) { const T = battle.tank; prevT.e = T.e; prevT.n = T.n; prevT.h = T.h; battle.step(); if (battle._pending) break; simBank -= battle.dt; }   // a volley half worked out is finished next frame
   tNow = Math.max(0, battle.t - battle.dt + Math.min(simBank, battle.dt));
 }
 // ---------------------------------------------------------------- the frame
@@ -177,7 +180,7 @@ function frameBody(now) {
   const raw = Math.max(0, (now - last) / 1000), dt = Math.min(0.1, raw); last = now; scene.rawMs = raw * 1000;   /* raw is never negative: the first frame's clock can read earlier than the page's */ worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
   const tSim = performance.now(), tCpu = tSim;
   if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) advance(dt * speed);
-  if (state !== 'play') tNow = battle.t; place(); volleys.update(Math.min(tNow, battle.t), dt * (state === 'play' && playing ? speed : 0)); mainGun(); simMs = Math.max(simMs * 0.98, performance.now() - tSim);
+  if (state !== 'play') tNow = battle.t; place(); volleys.update(Math.min(tNow, battle.t), dt * (state === 'play' && playing ? speed : 0)); mainGun(); trackDust(dt); simMs = Math.max(simMs * 0.98, performance.now() - tSim);
   if (state === 'play') { cams.update(dt, ctx()); drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (sound.ctx && state === 'play' && playing && speed <= 2.01) voices();
