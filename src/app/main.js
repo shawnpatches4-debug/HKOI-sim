@@ -1,12 +1,12 @@
 // Beta entry point: title and setup, the battle loop, cameras, the on-screen information and the result screen.
 import * as THREE from 'three';
-import { Scene3D, CONDITIONS } from '../render/scene3d.js';
+import { Scene3D, CONDITIONS, QUALITY } from '../render/scene3d.js';
 import { TankView, TeamView } from '../render/units.js';
 import { VolleyView } from '../render/volleyview.js';
 import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { MapView } from './mapview.js';
 
-const VERSION = '0.4';
+const VERSION = '0.5';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -19,13 +19,13 @@ const FORCES = {
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert']];
-const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1 }, store.get('setup', {}));
-for (const k of ['biome', 'cond', 'force', 'skill']) if (q.get(k)) set[k] = q.get(k);
+const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto' }, store.get('setup', {}));
+for (const k of ['biome', 'cond', 'force', 'skill', 'gfx']) if (q.get(k)) set[k] = q.get(k);
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
 
 const canvas = $('view'), hud = $('hud');
 let world = new HKWorld.World({ seed: set.map, biome: set.biome });
-const scene = new Scene3D(canvas, world, { condition: set.cond });
+const scene = new Scene3D(canvas, world, { condition: set.cond, quality: set.gfx });
 const cams = new Cameras(scene);
 const BattleAPI = HKBattle.create({ HK, CAMP, World: HKWorld });
 const cfg0 = HK.defaultConfig(); let lookup = null;
@@ -109,7 +109,7 @@ function seg(id, items, key, after) { const box = $(id); box.textContent = ''; f
 function note() { $('o-note').textContent = FORCES[set.force].note + '. ' + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.'); }
 function buildTitle() {
   $('ver').textContent = VERSION;
-  seg('o-biome', BIOMES, 'biome', preview); seg('o-cond', Object.entries(CONDITIONS).map(([k, c]) => [k, c.name]), 'cond', preview); seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name]), 'force', note); seg('o-skill', SKILLS, 'skill'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note);
+  seg('o-biome', BIOMES, 'biome', preview); seg('o-cond', Object.entries(CONDITIONS).map(([k, c]) => [k, c.name]), 'cond', preview); seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name]), 'force', note); seg('o-skill', SKILLS, 'skill'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note); seg('o-gfx', Object.entries(QUALITY).sort((a, b) => (b[1].auto ? 1 : 0) - (a[1].auto ? 1 : 0)).map(([k, v]) => [k, v.name]), 'gfx', () => scene.setQuality(set.gfx));
   $('o-map').value = set.map; $('o-map').onchange = () => { set.map = Math.max(1, Math.min(9999, Math.round(+$('o-map').value || 1))); store.set('setup', set); preview(); };
   $('o-rand').onclick = () => { set.map = 1 + Math.floor(Math.random() * 9999); $('o-map').value = set.map; store.set('setup', set); preview(); };
   $('go').onclick = start; note();
@@ -131,17 +131,18 @@ $('r-again').onclick = start; $('r-next').onclick = () => { set.seed++; store.se
 window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT') return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } const n = '123456'.indexOf(e.key); if (n >= 0) { const m = CAMERA_MODES[n]; if (!m.spectator || set.spectator) { cams.set(m.key); buildBar(); } } });
 
 // ---------------------------------------------------------------- the frame
-let last = performance.now(), frames = 0, fps = 0, fpsT = last, worst = 0, slow = 0, titleA = 0;
+let simMs = 0, last = performance.now(), frames = 0, fps = 0, fpsT = last, worst = 0, slow = 0, titleA = 0;
 function ctx() { const T = battle.tank, m = volleys.info; let brg = null; if (m.length) { const c = m.filter(x => x.cued); if (c.length) brg = c.sort((a, b) => a.range - b.range)[0].brg; } return { tank: T, units: battle.units, missiles: m, threatBrg: brg }; }
 function frame(now) {
-  const raw = (now - last) / 1000, dt = Math.min(0.1, raw); last = now; worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
+  const raw = (now - last) / 1000, dt = Math.min(0.1, raw); last = now; scene.rawMs = raw * 1000; worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
+  const tSim = performance.now();
   if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) { let acc = dt * speed, n = 0; while (acc > 1e-6 && n++ < 60) { battle.step(); acc -= battle.dt; } }
-  place(); volleys.update(battle.t, dt * (state === 'play' && playing ? speed : 0));
+  place(); volleys.update(battle.t, dt * (state === 'play' && playing ? speed : 0)); simMs = Math.max(simMs * 0.98, performance.now() - tSim);
   if (state === 'play') { cams.update(dt, ctx()); drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } } else { scene.render(dt); drawMarks(); }
   frames++; if (now - fpsT > 500) { fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; if (state === 'play') drawStatus();
-    if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
+    if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${QUALITY[s.quality].name} graphics   ${Math.round(canvas.width)}×${Math.round(canvas.height)} (${Math.round(s.scale * 100)}% scale)   sim ${simMs.toFixed(1)} ms\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
   requestAnimationFrame(frame);
 }
 window.addEventListener('resize', () => scene.resize());

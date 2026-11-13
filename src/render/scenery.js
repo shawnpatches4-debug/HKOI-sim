@@ -37,7 +37,9 @@ function bush(seed) { const parts = [], leaf = new THREE.Color('#5d6f3a'), centr
 export function buildTrees(world, opt = {}) {
   const group = new THREE.Group(); group.name = 'trees'; const n = world.n, c = world.cell, half = world.half, CH = opt.chunk || 16, bk = world.biomeKey, pConifer = bk === 'forest' ? 0.62 : bk === 'desert' ? 0 : 0.08;
   const mat = weatherise(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }), 0.55);
-  const KIND = { leafA: [broadleaf(false, 1), broadleaf(true, 1)], leafB: [broadleaf(false, 9), broadleaf(true, 9)], fir: [conifer(false, 3), conifer(true, 3)], bush: [bush(4), bush(4)] };
+  // three shapes per kind: [middle distance, close up, far away]. The far shape is a single lump or cone of a few triangles.
+  const tinyLeaf = () => { const g = lump(0.34, 0, 2); g.scale(1, 0.85, 1); g.translate(0, 0.68, 0); return merge([{ g, c: new THREE.Color('#44692e'), centre: new THREE.Vector3(0, 0.6, 0), shade: [0.4, 1] }]); }, tinyFir = () => { const g = new THREE.ConeGeometry(0.24, 0.86, 5, 1, true); g.translate(0, 0.55, 0); return merge([{ g, c: new THREE.Color('#2b472c'), centre: new THREE.Vector3(0, 0.5, 0), shade: [0.15, 1] }]); };
+  const tl = tinyLeaf(), KIND = { leafA: [broadleaf(false, 1), broadleaf(true, 1), tl], leafB: [broadleaf(false, 9), broadleaf(true, 9), tl], fir: [conifer(false, 3), conifer(true, 3), tinyFir()], bush: [bush(4), bush(4), null] };
   const perCell = opt.perCell || 2, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), P = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tint = new THREE.Color(); let total = 0;
   const lods = [];
   for (let cj = 0; cj < n; cj += CH) for (let ci = 0; ci < n; ci += CH) {
@@ -45,16 +47,16 @@ export function buildTrees(world, opt = {}) {
     for (let j = cj; j < Math.min(n, cj + CH); j++) for (let i = ci; i < Math.min(n, ci + CH); i++) { const k = j * n + i, v = world.V[k]; if (v !== 4 && v !== 5 && v !== 3) continue; const cnt = v === 5 ? 2 : v === 3 ? 1 : perCell;
       for (let q = 0; q < cnt; q++) { const e = i * c - half + (hash(i, j, 11 + q) - 0.5) * c, nn = j * c - half + (hash(i, j, 23 + q) - 0.5) * c, r = hash(i, j, 41 + q); if (v === 3) { if (r < 0.45) list.push([e, nn, 1.2 + r * 2.2, r, 'bush']); continue; } const h = world.VH[k] * (0.7 + 0.5 * hash(i, j, 31 + q)); list.push([e, nn, h, r, hash(i, j, 51 + q) < pConifer ? 'fir' : r < 0.5 ? 'leafA' : 'leafB']); } }
     if (!list.length) continue;
-    const ce = (ci + CH / 2) * c - half, cn = (cj + CH / 2) * c - half, centre = new THREE.Vector3(ce, world.h(ce, cn), -cn), near = new THREE.Group(), far = new THREE.Group();
+    const ce = (ci + CH / 2) * c - half, cn = (cj + CH / 2) * c - half, centre = new THREE.Vector3(ce, world.h(ce, cn), -cn), near = new THREE.Group(), far = new THREE.Group(), tiny = new THREE.Group();
     for (const kind of Object.keys(KIND)) { const sub = list.filter(t => t[4] === kind); if (!sub.length) continue;
-      for (const lv of [0, 1]) { const im = new THREE.InstancedMesh(KIND[kind][lv], mat, sub.length); im.castShadow = true; im.receiveShadow = false;
+      for (const lv of [0, 1, 2]) { if (!KIND[kind][lv]) continue; const im = new THREE.InstancedMesh(KIND[kind][lv], mat, sub.length); im.castShadow = lv < 2; im.receiveShadow = false;
         sub.forEach((t, q) => { P.set(t[0], world.h(t[0], t[1]) - 0.15, -t[1]); Q.setFromAxisAngle(up, t[3] * 6.283); const w = t[2] * (kind === 'fir' ? 0.8 + 0.3 * t[3] : kind === 'bush' ? 1.3 : 0.85 + 0.5 * t[3]); S.set(w, t[2], w); M.compose(P, Q, S); im.setMatrixAt(q, M); tint.setHSL(0.26 + (hash(q, 7, ci + cj) - 0.5) * 0.08, 0.1 + 0.25 * hash(q, 9, ci), 0.8 + 0.25 * hash(q, 7, 3)); tint.r = 0.75 + tint.r * 0.4; tint.g = 0.75 + tint.g * 0.4; tint.b = 0.7 + tint.b * 0.4; im.setColorAt(q, tint); });
-        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); (lv ? near : far).add(im); } }
-    near.visible = false; group.add(near, far); lods.push({ centre, near, far }); total += list.length;
+        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); (lv === 1 ? near : lv === 0 ? far : tiny).add(im); } }
+    near.visible = false; tiny.visible = false; group.add(near, far, tiny); lods.push({ centre, near, far, tiny }); total += list.length;
   }
   group.userData.count = total; group.userData.lods = lods;
   // call each frame: chunks within `dist` metres of the camera show the close-up shapes
-  group.userData.update = (camPos, dist = 230) => { for (const l of lods) { const nearNow = l.centre.distanceTo(camPos) < dist + 180; if (l.near.visible !== nearNow) { l.near.visible = nearNow; l.far.visible = !nearNow; } } };
+  group.userData.update = (camPos, dNear = 170, dMid = 1000, dFar = 5000) => { for (const l of lods) { const d = l.centre.distanceTo(camPos) - 180, lv = d < dNear ? 1 : d < dMid ? 0 : d < dFar ? 2 : 3; if (l.lv !== lv) { l.lv = lv; l.near.visible = lv === 1; l.far.visible = lv === 0; l.tiny.visible = lv === 2; } } };
   return group;
 }
 

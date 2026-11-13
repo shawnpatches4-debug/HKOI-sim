@@ -24,11 +24,19 @@ export const CONDITIONS = {
   night: { name: 'Night', el: 42, az: 215, sun: '#9db4e6', sunI: 1.5, sky: '#7088bd', ground: '#1a202c', hemiI: 0.7, fog: '#0a0e18', fogD: 0.0003, exposure: 1.3, flatSky: '#05070d', tint: '#e2eaff', shadow: '#c2d0ff', sat: 0.5, contrast: 1.0, grain: 0.07, night: true, envI: 0.5 },
 };
 
+// Graphics settings. pr = most device pixels drawn per screen pixel; samples = edge smoothing; shadow = shadow map size;
+// near/mid/far = distances (m) at which trees drop to simpler shapes and then vanish.
+export const QUALITY = {
+  low: { name: 'Low', pr: 1, samples: 0, shadow: 1024, shadowEvery: 3, bloom: false, near: 90, mid: 600, far: 2600, precip: 3000 },
+  medium: { name: 'Medium', pr: 1, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 150, mid: 900, far: 4200, precip: 6000 },
+  high: { name: 'High', pr: 1.5, samples: 4, shadow: 4096, shadowEvery: 1, bloom: true, near: 230, mid: 1400, far: 9000, precip: 9000 },
+  auto: { name: 'Auto', auto: true, pr: 1.5, samples: 2, shadow: 2048, shadowEvery: 2, bloom: true, near: 170, mid: 1000, far: 5000, precip: 6000 },
+};
 export class Scene3D {
   constructor(canvas, world, opt = {}) {
     this.world = world; this.canvas = canvas;
-    const R = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    R.setPixelRatio(Math.min(window.devicePixelRatio || 1, opt.maxPixelRatio || 2)); R.toneMapping = THREE.ACESFilmicToneMapping; R.outputColorSpace = THREE.SRGBColorSpace; R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap; R.info.autoReset = false;
+    const R = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });   // smoothing is done in the film pipeline's own target, not here
+    this.pr = 1; R.setPixelRatio(1); R.shadowMap.autoUpdate = false; this.frameN = 0; this.emaMs = 16; this.prHold = 0; R.toneMapping = THREE.ACESFilmicToneMapping; R.outputColorSpace = THREE.SRGBColorSpace; R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap; R.info.autoReset = false;
     const sc = this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 30000);
     this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true; this.controls.maxPolarAngle = Math.PI * 0.495; this.controls.minDistance = 4; this.controls.maxDistance = 9000;
@@ -51,12 +59,21 @@ export class Scene3D {
     this.composer = new EffectComposer(R, rt); this.composer.addPass(new RenderPass(sc, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.6, 1.0); this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass()); this.grade = new ShaderPass(GradeShader); this.composer.addPass(this.grade);
-    this.clock = 0;
+    this.clock = 0; this.setQuality(opt.quality || 'auto');
     this.focus = new THREE.Vector3(0, world.h(0, 0), 0);
     this.setCondition(opt.condition || 'day');
     this.camera.position.set(-120, world.h(0, 0) + 70, 170); this.controls.target.copy(this.focus);
     this.resize();
   }
+  // Graphics load. 'auto' holds the frame rate by trading resolution: it renders fewer pixels when frames run long and more when there is room.
+  setQuality(key) {
+    const Q = QUALITY[key] || QUALITY.auto; this.quality = QUALITY[key] ? key : 'auto'; this.Q = Q;
+    const dpr = window.devicePixelRatio || 1; this.prMax = Math.min(dpr, Q.pr); this.prMin = Math.min(this.prMax, Q.auto ? 0.55 : this.prMax); this.pr = Q.auto ? Math.min(this.prMax, 1) : this.prMax;
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== Q.samples) { rt.samples = Q.samples; rt.dispose(); }
+    if (this.sun.shadow.mapSize.x !== Q.shadow) { this.sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
+    this.bloom.enabled = Q.bloom; this.precip.mesh.geometry.setDrawRange(0, Q.precip * 2); this.applySize();
+  }
+  applySize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setPixelRatio(this.pr); this.renderer.setSize(w, h, false); this.composer.setPixelRatio(this.pr); this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   // build (or rebuild) the ground and scenery for a world, freeing what was there before
   setWorld(world) {
     const sc = this.scene, t0 = performance.now(); this.world = world;
@@ -87,16 +104,20 @@ export class Scene3D {
   }
   // light the surroundings for an instant (explosions, launches), and leave a scorch mark if on the ground
   blast(p, k = 1, scorch = true) { const l = this.flares[this.flareI++ % this.flares.length]; l.position.copy(p); l.position.y += 2; l.intensity = 900 * k * (this.night ? 1 : 0.5); l.userData.decay = 7; if (scorch) this.marks.add(p.x, p.z, 2.2 * k, (x, z) => this.world.h(x, -z)); }
-  resize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setSize(w, h, false); if (this.composer) this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
+  resize() { this.applySize(); }
   // world east/north to scene position on the ground
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
   render(dt = 0.016) {
-    this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
+    this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position, this.Q.near, this.Q.mid, this.Q.far); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset();
+    // shadows are redrawn every frame on the highest setting, every second frame otherwise: the eye does not see the difference at walking pace
+    this.frameN++; if (this.Q.shadowEvery <= 1 || this.frameN % this.Q.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
+    // hold the frame rate by resolution (auto only). rawMs is the true time since the last frame.
+    if (this.Q.auto && this.rawMs) { this.emaMs += (Math.min(this.rawMs, 100) - this.emaMs) * 0.08; if (--this.prHold < 0) { let pr = this.pr; if (this.emaMs > 21 && pr > this.prMin) pr = Math.max(this.prMin, pr * (this.emaMs > 30 ? 0.82 : 0.92)); else if (this.emaMs < 17.2 && pr < this.prMax) pr = Math.min(this.prMax, pr * 1.04); if (Math.abs(pr - this.pr) > 0.004) { this.pr = pr; this.applySize(); this.prHold = 45; } else this.prHold = 20; } }
     if (this.post) this.composer.render(dt); else this.renderer.render(this.scene, this.camera);
   }
-  stats() { const i = this.renderer.info; return { calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, trees: this.trees.userData.count, buildings: this.world.buildings.length, buildMs: this.buildMs }; }
+  stats() { const i = this.renderer.info; return { calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, scale: this.pr, quality: this.quality, trees: this.trees.userData.count, buildings: this.world.buildings.length, buildMs: this.buildMs }; }
 }
