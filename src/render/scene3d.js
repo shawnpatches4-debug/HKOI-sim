@@ -38,10 +38,7 @@ export class Scene3D {
     this.hemi = new THREE.HemisphereLight('#ffffff', '#444444', 1); sc.add(this.hemi);
     sc.fog = new THREE.FogExp2('#ffffff', 0.0001);
     // ground and scenery
-    const t0 = performance.now(); this.terrain = buildTerrain(world); sc.add(this.terrain.mesh);
-    this.trees = buildTrees(world, { perCell: opt.treesPerCell || 2 }); sc.add(this.trees);
-    this.buildings = buildBuildings(world); sc.add(this.buildings);
-    this.buildMs = Math.round(performance.now() - t0);
+    this.opt = opt; this.setWorld(world);
     this.units = new THREE.Group(); sc.add(this.units);
     this.fx = new Particles(8000); sc.add(this.fx.mesh);
     this.precip = new Precipitation(); sc.add(this.precip.mesh);
@@ -56,6 +53,16 @@ export class Scene3D {
     this.setCondition(opt.condition || 'day');
     this.camera.position.set(-120, world.h(0, 0) + 70, 170); this.controls.target.copy(this.focus);
     this.resize();
+  }
+  // build (or rebuild) the ground and scenery for a world, freeing what was there before
+  setWorld(world) {
+    const sc = this.scene, t0 = performance.now(); this.world = world;
+    for (const o of [this.terrain && this.terrain.mesh, this.trees, this.buildings]) if (o) { sc.remove(o); o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } }); }
+    this.terrain = buildTerrain(world); sc.add(this.terrain.mesh);
+    this.trees = buildTrees(world, { perCell: this.opt.treesPerCell || 2 }); sc.add(this.trees);
+    this.buildings = buildBuildings(world); sc.add(this.buildings);
+    this.buildMs = Math.round(performance.now() - t0);
+    if (this.focus) this.focus.set(0, world.h(0, 0), 0);
   }
   setCondition(key) {
     const C = CONDITIONS[key] || CONDITIONS.day; this.condition = key;
@@ -80,7 +87,7 @@ export class Scene3D {
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
   render(dt = 0.016) {
-    this.controls.update(); this.fx.update(dt, this.wind); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
+    this.fx.update(dt, this.wind); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset();

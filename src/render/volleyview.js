@@ -6,7 +6,7 @@ import { missileMesh } from './units.js';
 const DEG = Math.PI / 180, lerp = (a, b, t) => a + (b - a) * t;
 
 export class VolleyView {
-  constructor(scene3d, battle, particles) { this.s = scene3d; this.b = battle; this.fx = particles; this.live = new Map(); this.seen = new Set(); this.tracers = []; this.group = new THREE.Group(); scene3d.scene.add(this.group); this.tmp = new THREE.Vector3(); this.lastT = 0;
+  constructor(scene3d, battle, particles) { this.s = scene3d; this.b = battle; this.fx = particles; this.live = new Map(); this.info = []; this.seen = new Set(); this.tracers = []; this.group = new THREE.Group(); scene3d.scene.add(this.group); this.tmp = new THREE.Vector3(); this.lastT = 0;
     this.tracerGeo = new THREE.CylinderGeometry(0.035, 0.035, 1, 5); this.tracerGeo.rotateX(Math.PI / 2); this.tracerMat = new THREE.MeshBasicMaterial({ color: '#ffd27a' }); }
   // where a missile of volley v is at volley time tv: along the line from its launcher to where the vehicle is now, at the range the engine gives
   pos(v, th, l, tv, out) {
@@ -15,13 +15,15 @@ export class VolleyView {
     let y = lerp(h0, h1, f); if (drone) y = Math.max(y, W.h(e, n) + 3) + Math.sin(Math.PI * Math.min(1, f * 1.1)) * 34; else y = Math.max(y + Math.sin(Math.PI * f) * Math.min(12, th.R * 0.004), W.h(e, n) + 1.0);
     const end = th.viz.end; if (end.type === 'ground' && tv >= end.t - 0.6) y = lerp(y, W.h(e, n), Math.min(1, (tv - (end.t - 0.6)) / 0.6));
     return out.set(e, y, -n); }
+  dispose() { this.s.scene.remove(this.group); }
   update(t, dt) {
+    this.info.length = 0;
     const B = this.b, HKe = window.HK, v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null; if (!v) return;
     const tv = t - v.t0, rec = v.rec, fx = this.fx, W = B.world;
     for (const l of v.launches) if (!l.u0) l.u0 = { e: l.u.e, n: l.u.n };   // remember where each launcher stood when it fired
     rec.threats.forEach((th, i) => { const l = v.launches.find(q => q.u.id === th.uid) || v.launches[i], key = v.i + ':' + th.idx, tt = HKe.THREATS[th.key], drone = tt.guidance === 'drone', end = th.viz.end; if (!l) return;
       if (tv >= th.t0 && tv < end.t) { let m = this.live.get(key); if (!m) { m = missileMesh(drone); this.group.add(m); this.live.set(key, m); if (!drone) { const p = this.pos(v, th, l, th.t0, this.tmp); fx.flash(p.x, p.y, p.z, 1.2); fx.dust(p.x, p.y - 1, p.z, 1.6); } }
-        const p = this.pos(v, th, l, tv, this.tmp); m.position.copy(p); const p2 = this.pos(v, th, l, tv + 0.05, new THREE.Vector3()); m.lookAt(p2); if (!drone && Math.random() < dt * 60) fx.trail(p.x, p.y, p.z); }
+        const p = this.pos(v, th, l, tv, this.tmp); m.position.copy(p); const p2 = this.pos(v, th, l, tv + 0.05, new THREE.Vector3()); m.lookAt(p2); this.info.push({ p: p.clone(), dir: p2.sub(p).normalize(), th, tt, drone, cued: th.cue != null && tv >= th.cue, tracked: th.track != null && tv >= th.track, range: Math.max(0, HKe.distAt(th, tv)), brg: l.brg }); if (!drone && Math.random() < dt * 60) fx.trail(p.x, p.y, p.z); }
       else if (tv >= end.t && !this.seen.has(key)) { this.seen.add(key); const m = this.live.get(key); if (m) { this.group.remove(m); this.live.delete(key); } const p = this.pos(v, th, l, end.t, this.tmp);
         if (end.type === 'hit') { const T = B.tankAt(v.t0 + end.t); this.s.at(T.e, T.n, 2, p); fx.flash(p.x, p.y, p.z, 2.5); fx.explosion(p.x, p.y, p.z, end.killing ? 2.4 : 1.3); }
         else if (end.type === 'ground') { p.y = W.h(p.x, -p.z) + 0.3; fx.flash(p.x, p.y, p.z, 1.4); fx.explosion(p.x, p.y, p.z, 0.9); fx.dust(p.x, p.y, p.z, 2); }
