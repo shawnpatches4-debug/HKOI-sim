@@ -8,3 +8,4 @@ node_modules/
 *.png
 *.log
 build/beta/
+build/beta_pub/

@@ -10,6 +10,13 @@
 <script type="importmap">{ "imports": { "three": "{{THREE}}/build/three.module.js", "three/addons/": "{{THREE}}/examples/jsm/" } }</script>
 </head><body>
 <canvas id="view"></canvas><div id="hud">Loading battlefield…</div>
+<script>
+  /* if anything fails to load, say so on screen instead of sitting on "Loading" */
+  (function () { var hud = document.getElementById('hud'), errs = []; function show(m) { errs.push(String(m).slice(0, 200)); hud.textContent = 'Could not start the battlefield:\n' + errs.slice(0, 4).join('\n'); hud.style.borderColor = '#ff4a3d'; }
+    window.addEventListener('error', function (e) { show(e.message || (e.target && (e.target.src || e.target.href) ? 'failed to load ' + (e.target.src || e.target.href) : 'error')); }, true);
+    window.addEventListener('unhandledrejection', function (e) { show(e.reason && e.reason.message || e.reason); });
+    setTimeout(function () { if (!window.__beta && !errs.length) show('still loading after 20 s: the 3D library may be blocked on this network'); }, 20000); })();
+</script>
 <script src="{{SRC}}engine.js"></script><script>window.HK = window.HK || (typeof HK !== 'undefined' ? HK : null);</script>
 <script src="{{SRC}}dmg.js"></script><script src="{{SRC}}campaign.js"></script>
 <script src="{{SRC}}world/world.js"></script><script src="{{SRC}}battle/battle.js"></script>
