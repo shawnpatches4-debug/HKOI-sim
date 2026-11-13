@@ -11,9 +11,10 @@ async def main():
         await pg.goto('file://' + os.path.abspath(root) + ('#' + params if params else ''), timeout=120000)
         try: await pg.wait_for_function('window.__beta && window.__beta.scene', timeout=int(os.environ.get('WAIT', '120000')))
         except Exception as e: print('NOT READY', str(e)[:200], errs[:5]); await b.close(); return
+        for cmd in json.loads(os.environ.get('PRE', '[]')): await pg.evaluate(cmd)
         await pg.wait_for_timeout(int(os.environ.get('SETTLE', '4000')))
         if not views: await pg.screenshot(path=out, timeout=120000)
         for i, v in enumerate(views):
-            await pg.evaluate('window.__beta.view(%s)' % ','.join(str(x) for x in v)); await pg.wait_for_timeout(2500); await pg.screenshot(path=out.replace('.png', f'_{i}.png'), timeout=120000)
+            await pg.evaluate(v if isinstance(v, str) else 'window.__beta.view(%s)' % ','.join(str(x) for x in v)); await pg.wait_for_timeout(2500); await pg.screenshot(path=out.replace('.png', f'_{i}.png'), timeout=120000)
         print(json.dumps(await pg.evaluate('window.__beta.scene.stats()')), await pg.evaluate("document.getElementById('hud').textContent.split('\\n').slice(0,3).join(' | ')")); print('errors', errs[:6]); await b.close()
 asyncio.run(main())

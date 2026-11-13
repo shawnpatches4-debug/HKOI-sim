@@ -9,6 +9,8 @@ three = ('file://' + os.path.abspath(sys.argv[2])) if mode == 'local' else 'http
 for d in ['world', 'battle', 'render', 'app']:
     shutil.rmtree(os.path.join(out, d), ignore_errors=True); shutil.copytree(os.path.join(root, 'src', d), os.path.join(out, d), ignore=shutil.ignore_patterns('*.tpl.html'))
 for f in ['engine.js', 'dmg.js', 'campaign.js']: shutil.copy(os.path.join(root, 'src', f), os.path.join(out, f))
+assets = os.environ.get('HK_ASSETS')
+if mode == 'local' and assets and not os.path.exists(os.path.join(out, 'assets')): os.symlink(assets, os.path.join(out, 'assets'))
 page = tpl.replace('{{THREE}}', three).replace('{{SRC}}', '')
 if mode == 'cdn':
     # the publishing service wraps the page in its own document skeleton, so ship only the contents of head and body

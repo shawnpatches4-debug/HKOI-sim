@@ -4,6 +4,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTerrain } from './terrain.js';
 import { buildTrees, buildBuildings } from './scenery.js';
+import { Particles } from './fx.js';
 
 // light and air for each condition: sun elevation and azimuth (degrees), colours, fog density, exposure
 export const CONDITIONS = {
@@ -32,6 +33,7 @@ export class Scene3D {
     this.buildings = buildBuildings(world); sc.add(this.buildings);
     this.buildMs = Math.round(performance.now() - t0);
     this.units = new THREE.Group(); sc.add(this.units);
+    this.fx = new Particles(8000); sc.add(this.fx.mesh);
     this.focus = new THREE.Vector3(0, world.h(0, 0), 0);
     this.setCondition(opt.condition || 'day');
     this.camera.position.set(-120, world.h(0, 0) + 70, 170); this.controls.target.copy(this.focus);
@@ -43,13 +45,14 @@ export class Scene3D {
     const u = this.sky.material.uniforms; u.turbidity.value = C.turbidity; u.rayleigh.value = C.rayleigh; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82; u.sunPosition.value.copy(dir);
     this.sun.color.set(C.sun); this.sun.intensity = C.sunI; this.hemi.color.set(C.sky); this.hemi.groundColor.set(C.ground); this.hemi.intensity = C.hemiI;
     this.scene.fog.color.set(C.fog); this.scene.fog.density = C.fogD; this.renderer.toneMappingExposure = C.exposure;
+    if (this.fx) { const u2 = this.fx.mat.uniforms; u2.fogColor.value.set(C.fog); u2.fogDensity.value = C.fogD; u2.sunColor.value.set(C.sun).multiplyScalar(0.5 + C.sunI * 0.2); }
   }
   resize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   // world east/north to scene position on the ground
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
-  render() {
-    this.controls.update();
+  render(dt = 0.016) {
+    this.controls.update(); this.fx.update(dt, this.wind); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.renderer.render(this.scene, this.camera);
