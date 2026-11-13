@@ -6,8 +6,8 @@ async def main():
     out = sys.argv[1]; params = sys.argv[2] if len(sys.argv) > 2 else ''
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files'])
-        pg = await b.new_page(viewport={'width': 1280, 'height': 720})
-        errs = []; pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e)[:400])); pg.on('console', lambda m: m.type in ('error', 'warning') and errs.append(m.type + ' ' + m.text[:300]))
+        pg = await b.new_page(viewport={'width': int(os.environ.get('W', '1280')), 'height': int(os.environ.get('H', '720'))})
+        errs = []; pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(getattr(e, 'stack', e))[:900])); pg.on('console', lambda m: m.type in ('error', 'warning') and errs.append(m.type + ' ' + m.text[:300]))
         root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../build/', os.environ.get('BUILD', 'beta'), 'index.html')
         await pg.goto('file://' + os.path.abspath(root) + ('#' + params if params else ''), timeout=120000)
         await pg.wait_for_function('window.__beta && window.__beta.ready', timeout=180000)

@@ -92,7 +92,7 @@ export class Sound {
   _key(on) { if (!this.ctx || !this.on || !this.icomIn) return; const t = this.ctx.currentTime; this._burst(this.icomIn, t, { dur: 0.025, f0: 2500, f1: 1200, gain: on ? 0.25 : 0.18, type: 'bandpass', q: 3 }); }
   // who: CDR | GNR | LDR | DRV; txt: the three versions of the line [calm, tense, panic]; level 0..2 picks one
   say(who, txt, level = 0) {
-    if (!this.VI || !this.ctx || !this.on) return false; const c = this.ctx, now = c.currentTime; if (this.busyUntil - now > 1.5) return false;
+    if (!this.VI || !this.ctx || !this.on || !txt || !txt.length || txt[0] == null) return false; const c = this.ctx, now = c.currentTime; if (this.busyUntil - now > 1.5) return false;
     let hit = null; for (const lv of [level, 1, 0, 2]) { const line = txt[Math.min(lv, txt.length - 1)]; hit = this.VI.v[`${who}|${lv}|${line}`] || this._near(who, lv, line); if (hit) break; } if (!hit) return false;
     const at = Math.max(now + 0.03, this.busyUntil + 0.12); this._key(true); this.busyUntil = this._clip(hit[0], hit[1], hit[2], { when: at, rate: level === 2 ? 1.06 : 1 }) || at; return true;
   }
