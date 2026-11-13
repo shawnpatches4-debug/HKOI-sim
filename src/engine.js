@@ -849,7 +849,9 @@ function runMission(cfg, rng, lookup, rec) {
     const seg = planMove(t, th, !!panic);
     crew.acts.push({ t, kind: 'evade', why, idx: th ? th.idx : -1, stall: seg.why === 'stall' });
     const turn = ((seg.hdg - posAt(t)[2] + 540) % 360) - 180, dirTxt = seg.rev ? 'back up' : (Math.abs(turn) < 25 ? 'move out' : turn > 0 ? 'hard right' : 'hard left');
-    if (rec) {
+    if (rec && EXT) {   // battle layer drives: its own order replaces the legacy drill lines, voiced once
+      const o = cfg.ext.order; if (o && first) { ev(t, 'crew', th ? th.idx : -1, o.ev); if (o.cdr) say(t, 'CDR', ...o.cdr); if (o.drv) say(t + 0.55, 'DRV', ...o.drv); }
+    } else if (rec) {
       ev(t, 'crew', th ? th.idx : -1, seg.why === 'flee' ? `Crew panics: the driver runs straight away from ${th ? lbl(th) : 'the threat'}, along its line of fire` : seg.why === 'stall' ? 'Crew panics: the driver freezes for a moment before moving' :
         { drill: `Warning on ${th ? lbl(th) : 'a threat'}: driver moves at once and turns square to its line`, unsure: `Crew is only ${Math.round((th && th.crew ? th.crew.felt : 0) * 100)}% sure ${th ? lbl(th) : 'the threat'} will miss: driver turns square to its line and ${seg.rev ? 'reverses' : 'weaves'}`, cut: `HKOI calls the cut on ${th ? lbl(th) : 'the missile'}: driver sidesteps out of its path`, warning: 'Laser warning: driver moves off at once' }[why]);
       if (seg.why === 'stall') { say(t, 'CDR', 'Driver, move!', 'Driver! MOVE!', 'MOVE! MOVE! WHY AREN’T WE MOVING?!'); say(t + 0.6, 'DRV', 'Moving.', 'I’m trying—', 'I can’t— it won’t— hold on!'); }

@@ -195,13 +195,14 @@
         if (!launches.length) return;
         if (S.coord > 0.6) { const tof = l => l.R / HK.THREATS[l.key].speed, latest = Math.max(...launches.map(tof)); for (const l of launches) l.t0 = Math.max(0, latest - tof(l)) + (r.random() - 0.5) * 0.6 * (1.2 - S.coord); const m = Math.min(...launches.map(l => l.t0)); for (const l of launches) l.t0 -= m; }
         // pass 1: the engine tells us when the crew is warned; the driver plans from that
+        let order = null;
         const mk = (path, masks) => {
           const c = CAMP.applyState(JSON.parse(JSON.stringify(this.cfg0)), T.st);
           c.seed = this.seed * 1000 + this.volleys.length;
           c.vehicle.hull_deg = at.h;
           if (exposed === 'hull') c.vehicle.half_h *= 0.5;   // hull-down: only the turret is there to hit (approximation: the target is half as tall)
           c.enemy.fixed = launches.map((l, i) => ({ key: l.key, R: Math.max(60, l.R), brg: l.brg, t0: l.t0, id: l.u.id, uid: l.u.id, los_clear: l.los, mask: masks ? masks[i] : null }));
-          if (path) c.ext = { path };
+          if (path) { c.ext = { path }; if (order) c.ext.order = order; }
           const rec = { events: [], bursts: [], aps: [], ctx: {} };
           HK.runMission(c, new HK.RNG(HK.seedFor(c.seed, 0)), this.lookup, rec);
           return { c, rec };
@@ -218,6 +219,12 @@
           for (const p of plan.path) { if (p[0] < l.t0 + 0.5 || p[0] > th.impact) continue; const clear = W.los(l.u.e, l.u.n, l.u.spec.agl, at.e + p[1], at.n + p[2], 2.2).clear; lost = clear ? 0 : lost + 0.1; if (lost >= 1.0) return Math.max(10, (th.impact - p[0]) * v * 0.55); }
           return null;
         });
+        if (plan.cover) {   // what the commander tells the driver, in terms of the ground
+          const c = plan.cover, vg = W.veg(c.e, c.n).cls, what = W.buildingAt(c.e, c.n) || vg === 6 ? 'the buildings' : vg === 4 ? 'the wood' : vg === 5 ? 'the tree line' : vg === 3 ? 'the scrub' : 'the low ground';
+          const rel = angDiff((Math.atan2(c.e - at.e, c.n - at.n) / DEG + 360) % 360, at.h), side = Math.abs(rel) < 30 ? 'ahead' : Math.abs(rel) > 150 ? 'behind us' : rel > 0 ? 'right' : 'left', dm = Math.max(10, Math.round(c.d / 10) * 10);
+          plan.what = what; plan.side = side;
+          order = { ev: `Warning: driver makes for ${what}, ${dm} m ${side}${c.all ? '' : ' (covers some of the launchers)'}`, cdr: [`Driver, ${what}, ${side}, ${dm} metres. Go.`, `Driver, get us into ${what}! ${side === 'behind us' ? 'Back up' : side[0].toUpperCase() + side.slice(1)}! Now!`, `${what.toUpperCase()}! ${side.toUpperCase()}! GO GO GO!`], drv: ['Moving.', 'On it!', 'GOING!'] };
+        } else if (warnT != null) order = { ev: 'Warning: no cover within reach, the vehicle holds and fights from where it is', cdr: ['No cover in reach. Hold here.', 'Nothing to hide behind! Hold!', 'NOWHERE TO GO!'], drv: null };
         const res = mk(plan.path, masks), rec = res.rec;
         // a destroyed vehicle stops where it was hit
         if (rec.killed && rec.kill_t != null) { let stop = null; for (const p of plan.path) { if (p[0] >= rec.kill_t) { if (!stop) stop = p.slice(); p[1] = stop[1]; p[2] = stop[2]; p[3] = stop[3]; p[4] = 0; } } }

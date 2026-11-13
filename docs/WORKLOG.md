@@ -29,3 +29,4 @@ The legacy engine (`runMission`, one 660-line function) is not time-stepped: thr
 - Fixed: destroyed vehicle keeps position (path frozen from rec.kill_t).
 - Beta publish needs the M1 files copied server-side from the v40 artifact: files map entries {"assets/m1/<f>": {artifact: <v40 url>, path: "assets/m1/<f>"}} for m1.json and tex0..tex66.webp.
 - TODO next: silence legacy driver voice lines when cfg.ext.path is set (engine.js ~line 854/904 "driver moves at once"); effects quality; fog of war markers; per-condition looks (snow, night); other biomes' looks; ground detail; cameras/director; sound engine; rerun the 22-scenario audit of v40 when idle.
+- Beta 0.2 published (Version 3 of the beta artifact) 13 Nov.
