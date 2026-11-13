@@ -1,0 +1,8 @@
+global.window=global; const H0=require(process.argv[2]||'./engine.js'); const H=H0.HK||H0;
+const mk=(j,sp,crew)=>{const c=H.defaultConfig(); c.enemy.no_dismounts=true; c.enemy.gunner_jitter_mrad=j; c.vehicle.speed_ms=sp; c.crew.enabled=crew; return c};
+const L=H.meetLookup(mk(3,0,true));
+for(const j of [3,0.3]) for(const [nm,sp,crew] of [['halted, crew holds (no crew model)',0,false],['halted, crew reacts',0,true],['moving 8 m/s, no crew model',8,false],['moving 8 m/s, crew reacts',8,true]]){
+  let cut=0,hit=0,kill=0,gr=0,ms=0,rel=0,sd=0,other=0; const dist=[[0,0],[0,0],[0,0]]; const tg={};
+  for(let s=1;s<=1500;s++){ const c=mk(j,sp,crew); c.enemy.fixed=[{key:'kornet',R:2400,brg:-32,t0:0},{key:'kornet',R:3100,brg:4,t0:2.5},{key:'kornet',R:3600,brg:38,t0:5}]; const rec={events:[],bursts:[],aps:[],ctx:{hull:0}}; c.aps.enabled=false; H.runMission(c,new H.RNG(H.seedFor(s,0)),L,rec);
+    for(const th of rec.threats){ const sv=th.viz.sever; if(!sv||sv.smoke) continue; cut++; const e=th.viz.end; const b=sv.d<400?0:sv.d<800?1:2; dist[b][0]++; if(e.type==='hit'){hit++; dist[b][1]++; if(e.killing)kill++; for(const t of th.tags) tg[t]=(tg[t]||0)+1;} else if(e.type==='ground')gr++; else if(e.type==='miss')ms++; else other++; if(th.viz.relock)rel++; } }
+  console.log(`jit ${j} ${nm.padEnd(36)} cut ${String(cut).padStart(4)}  HIT ${(100*hit/cut).toFixed(0)}%  ground ${(100*gr/cut).toFixed(0)}%  wide ${(100*ms/cut).toFixed(0)}%  other ${(100*other/cut).toFixed(0)}%  relock ${(100*rel/cut).toFixed(0)}% | hit by cut range <400m ${dist[0][1]}/${dist[0][0]}  400-800 ${dist[1][1]}/${dist[1][0]}  >800 ${dist[2][1]}/${dist[2][0]} | ${Object.entries(tg).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>k+':'+v).join(' ')}`); }

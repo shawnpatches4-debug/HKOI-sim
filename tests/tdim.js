@@ -1,0 +1,2 @@
+global.window=global; const H0=require('./engine.js'); const H=H0.HK||H0;
+for (const j of [3,0.3,0]) for (const part of [false,true]) { const c=H.defaultConfig(); c.missions=4000; c.enemy.gunner_jitter_mrad=j; c.obs.partial=part; const L=H.meetLookup(c); const a=H.runSync(c,L); const b=a.agg||a; console.log('jitter',j,'gradual dimming',part,'survive',(100*b.P_survive).toFixed(1)+'%','no hits',(100*b.P_no_hits).toFixed(1)+'%', 'cut rate', b.sever_rate!=null?b.sever_rate:JSON.stringify(Object.fromEntries(Object.entries(b).filter(([k])=>/cut|sever/.test(k)).slice(0,4)))); }

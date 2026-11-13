@@ -1,0 +1,27 @@
+    <div class="grid2" style="margin-top:12px">
+      <div class="card">
+        <h3>Checks on this batch <span class="vchip" id="verifyChip">not run yet</span></h3>
+        <p class="cap" id="verifyStatus">Runs automatically after every batch.</p>
+        <ul class="vlist" id="verifyList"></ul>
+        <button type="button" class="btn2" id="verifyBtn">Run the checks again</button>
+      </div>
+      <div class="card">
+        <h3>Reproduce this result</h3>
+        <p class="cap">Seed, raid count, result with its margin of error, and every setting that differs from the default. Paste it into a report so anyone can run the same raids.</p>
+        <textarea id="reproText" class="mono-ta" rows="9" readonly aria-label="Seed and settings for this result"></textarea>
+        <div class="row-gap"><button type="button" class="btn2" id="reproCopy">Copy</button><span class="cap" id="reproMsg"></span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>What if an assumption is 30% worse?</h3>
+      <p class="cap">Re-runs the same enemy launches with one critical assumption degraded by 30%, then with all of them at once. The rows at the top are the assumptions this result depends on most.</p>
+      <div class="row-gap"><button type="button" class="btn2" id="stressBtn">Run the stress test</button><span class="cap" id="stressStatus">Takes a minute or two.</span></div>
+      <div class="tw"><table class="as" id="stressTable"></table></div>
+      <p class="cap" id="stressNote"></p>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>Use measured data <span class="basis meas" id="measBadge" hidden>MEASURED DATA IN THIS RUN</span></h3>
+      <p class="cap">When a chamber test, burst test or range test gives you a real number, put it here in place of the assumption. One line per value: parameter, value, source. Results made with it are labelled, and the table above shows your source.</p>
+      <textarea id="measText" class="mono-ta" rows="9" spellcheck="false" aria-label="Measured data, one value per line"></textarea>
+      <div class="row-gap"><button type="button" class="btn2" id="measApply">Use these values</button><button type="button" class="btn2" id="measClear">Back to assumptions</button><span class="cap" id="measStatus"></span></div>
+    </div>

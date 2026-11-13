@@ -1,0 +1,54 @@
+/* ---- v20 layout */
+body.ui2 .top{padding:10px 0 10px;gap:8px 18px}body.ui2 .top .ttl{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;min-width:0}body.ui2 .top h1{margin:0;font-size:22px}body.ui2 .top .ttl p{flex-basis:100%;margin:2px 0 0;max-width:72ch}
+body.ui2[data-mode=fight] .top .ttl p,body.ui2[data-mode=ref] .top .ttl p{display:none}
+.ui2-modes{margin-left:auto;flex:none;max-width:100%}.ui2-modes button{white-space:nowrap;padding-inline:14px}
+body.ui2 .top .tools{margin-left:0}
+body.ui2[data-mode=fight] .layout,body.ui2[data-mode=ref] .layout{grid-template-columns:minmax(0,1fr);margin-top:10px}
+body.ui2[data-mode=fight] .runbar,body.ui2[data-mode=fight] #headline,body.ui2[data-mode=fight] nav.tabs,body.ui2[data-mode=ref] .runbar,body.ui2[data-mode=ref] #headline{display:none}
+body.ui2[data-mode=ref] nav.tabs{margin-top:0}body.ui2 nav.tabs button[hidden]{display:none}
+/* scene and status */
+body.ui2 .sbxcard{padding:12px;gap:10px}
+body.ui2 .sbxtools{gap:8px 14px;align-items:flex-end}body.ui2 .sbxtools .ui2-setup{margin-left:auto}
+body.ui2 .sbxgrid{grid-template-columns:minmax(0,1fr) 316px;gap:12px;align-items:start}
+body.ui2 .f-left{display:flex;flex-direction:column;gap:8px;min-width:0}
+body.ui2 .sbxview{height:min(calc(100vh - 235px),58vw);min-height:360px}
+body.ui2 .cinebar{margin:0;flex-wrap:wrap;gap:8px 10px;align-items:center}
+body.ui2 .f-after{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}body.ui2 .f-after:empty{display:none}
+body.ui2 .ui2-pop{position:relative;margin-left:auto}body.ui2 .ui2-pop summary{list-style:none;cursor:pointer}body.ui2 .ui2-pop summary::-webkit-details-marker{display:none}
+body.ui2 .ui2-popb{position:absolute;right:0;bottom:calc(100% + 6px);z-index:8;width:min(300px,86vw);display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--panel);border:1px solid var(--line2);border-radius:8px;box-shadow:0 18px 40px -12px #000}
+body.ui2 .ui2-popb .tl.inl{display:flex;justify-content:space-between;align-items:center;gap:10px}body.ui2 .ui2-popb .btn{width:100%}
+body.ui2 .station{gap:8px;padding:10px;max-height:calc(100vh - 150px);overflow:auto;position:sticky;top:8px}
+body.ui2 .st-top{display:flex;flex-direction:column;gap:7px}body.ui2 .st-top .mags,body.ui2 .st-top .veh{border-top:0;padding-top:0}
+body.ui2 .st-seg{display:flex}body.ui2 .st-seg button{flex:1}
+body.ui2 .st-p{display:flex;flex-direction:column;gap:8px;min-width:0}body.ui2 .st-p[hidden]{display:none}
+body.ui2 #scope{width:min(100%,250px)}
+body.ui2 #stEnemy:not([hidden])+.st-none{display:none}
+body.ui2 .station .st-sub{margin-top:2px}
+/* lower tabs */
+body.ui2 .f-lower{margin-top:12px;padding:0;overflow:hidden}
+body.ui2 .f-tabs{display:flex;gap:2px;align-items:center;border-bottom:1px solid var(--line);padding:0 8px;overflow-x:auto;scrollbar-width:none}
+body.ui2 .f-tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:11px 13px;cursor:pointer;font:600 14px/1 var(--f-head);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+body.ui2 .f-tabs button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--radar)}body.ui2 .f-tabs button:hover{color:var(--fg)}
+body.ui2 .f-count{margin-left:auto;white-space:nowrap;padding-right:6px}
+body.ui2 .f-panel{padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}body.ui2 .f-panel[hidden]{display:none}
+body.ui2 .f-enemy{display:grid;grid-template-columns:minmax(260px,380px) minmax(0,1fr);gap:14px 20px;align-items:start}body.ui2 .f-enemy .mis-tl{grid-column:1/-1}
+body.ui2 .f-ecol{display:flex;flex-direction:column;gap:8px;min-width:0}body.ui2 .f-ecol .mis-sub:first-child{margin-top:0}
+body.ui2 .f-mission .mis-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px 14px}
+body.ui2 #sbxReview:not([hidden])+.f-none{display:none}body.ui2 #sbxReview{margin:0}
+body.ui2 .f-settings aside{position:static;max-height:none;overflow:visible;border:0;background:none;box-shadow:none;padding:0}
+body.ui2 .f-settings aside>.seg{max-width:340px}body.ui2 .f-settings #setup{columns:320px;column-gap:28px}body.ui2 .f-settings #setup>*{break-inside:avoid}
+body.ui2 .f-settings aside .advnote{max-width:70ch}body.ui2 .f-settings #resetBtn{width:auto!important}
+.ui2-switch{margin:0 0 8px}
+@media (max-width:1000px){body.ui2 .sbxgrid{grid-template-columns:minmax(0,1fr)}body.ui2 .station{position:static;max-height:none}body.ui2 .sbxview{height:min(70vh,74vw)}body.ui2 .f-enemy{grid-template-columns:minmax(0,1fr)}.ui2-modes{margin-left:0;overflow-x:auto;scrollbar-width:none}.ui2-modes button{flex:none}}
+
+body.ui2 [hidden]{display:none!important}
+body.ui2 .f-ecol>*{max-width:560px}body.ui2 .f-ecol .mis-row select{flex:1 1 140px;min-width:0}
+body.ui2 .veh-g i.v-sum{border-style:solid;color:var(--good)}
+
+.ui2-modes{display:flex!important;grid-template-columns:none!important;width:auto!important}.ui2-modes button{flex:none}
+body.ui2 #misName{background:transparent;color:var(--fg);border:1px solid var(--line2);border-radius:5px;padding:7px 9px;font:14px var(--f-body,inherit);max-width:460px}
+@media (max-width:1000px){.ui2-modes{overflow-x:auto;scrollbar-width:none;max-width:100%}}
+
+.stlog div>span:only-child{grid-column:1/-1}
+
+.gfxstat.bad{color:#e0a030;font-weight:600}

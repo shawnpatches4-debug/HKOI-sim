@@ -1,0 +1,132 @@
+  <section class="pane" id="tab-sandbox">
+    <div class="card sbxcard">
+      <div class="sbxhead">
+        <div style="min-width:0"><h3>Live sandbox <button class="i" type="button" data-help="sandbox" aria-expanded="false">i</button></h3>
+          <p class="help" data-help-body="sandbox"></p>
+          <p class="cap">Place the enemy, launch, and watch the raid play out at true scale and in real time. The beam cut, the drift and every miss come from the 3D flight physics. Change anything and the raid is re-fought with the same dice. The round, terrain, weather and crew come from the settings on the left.</p></div>
+      </div>
+      <div class="sbxtools">
+        <label class="tl"><span>Scenario</span><select id="sbxPreset"></select></label>
+        <div class="tl"><span>Protection</span><div class="mini-seg" id="sbxProt" role="group" aria-label="Protection"><button type="button" data-p="both" aria-pressed="true">HKOI + APS</button><button type="button" data-p="aps" aria-pressed="false">APS only</button><button type="button" data-p="hkoi" aria-pressed="false">HKOI only</button><button type="button" data-p="none" aria-pressed="false">None</button></div></div>
+        <label class="tl"><span>Wind from</span><select id="sbxWind"><option value="0">North</option><option value="45">North-east</option><option value="90">East</option><option value="135">South-east</option><option value="180">South</option><option value="225">South-west</option><option value="270" selected>West</option><option value="315">North-west</option></select></label>
+        <label class="tl" id="sbxFriendsL" hidden><span>Friendly vehicles with you</span><select id="sbxFriends"><option value="0">None: you are alone</option><option value="1">1 more</option><option value="2">2 more</option><option value="3">3 more (a platoon of 4)</option></select></label>
+        <label class="tl" id="sbxSkillL" hidden><span>Enemy commander</span><select id="sbxSkill"><option value="fixed">Scripted: repeats the same salvo</option><option value="adaptive" selected>Adaptive: learns from each attack</option><option value="expert">Expert: adaptive, briefed on HKOI</option></select></label>
+        <div class="tl"><span>Dice</span><div style="display:flex;gap:6px;align-items:center"><code id="sbxSeed">1</code><button class="btn sm" type="button" id="sbxDice" title="Same raid, new random draws">Roll again</button></div></div>
+      </div>
+      <div class="sbxgrid">
+        <div class="sbxview" id="sbxView">
+          <canvas id="sbxCanvas"></canvas>
+          <div class="c3scrim"></div>
+          <div class="c3labels" id="sbxLabels"></div>
+          <div class="sbxfx" aria-hidden="true"></div><div class="sbxflash" id="sbxFlash" aria-hidden="true"></div>
+          <div class="sbxfaces" id="sbxFaces" hidden><canvas id="sbxFacesCv" width="1200" height="380" aria-label="Crew cameras: faces of the four crew"></canvas></div><div class="sbxbail" id="sbxBail" aria-live="polite"></div><div class="sbxblood" id="sbxBlood" aria-hidden="true"></div><div class="sbxblack" id="sbxBlack" aria-hidden="true"><span></span></div><div class="sbxsight" id="sbxSight" hidden></div>
+          <div class="sbxenemy" id="sbxEnemy" hidden><canvas id="sbxEnNoise" width="192" height="108"></canvas><div class="en-svg"></div><div class="en-t en-tl"></div><div class="en-t en-tr"></div><div class="en-t en-bl"></div><div class="en-t en-br"></div><div class="en-t en-c"></div><div class="en-cap"></div></div>
+          <div class="sbxenemyctl" id="sbxEnemyCtl" hidden><button type="button" id="sbxEnPrev" title="Previous enemy unit" aria-label="Previous enemy unit">◀</button><select id="sbxEnSel" aria-label="Enemy unit"></select><button type="button" id="sbxEnNext" title="Next enemy unit" aria-label="Next enemy unit">▶</button></div>
+          <div class="sbxxray" id="sbxXrayPanel" hidden></div>
+          <div class="sbxsightctl sbxcabctl" id="sbxCabCtl" hidden><button type="button" data-cv="cdr" aria-pressed="true" title="Commander's seat (1)">Commander</button><button type="button" data-cv="ldr" aria-pressed="false" title="Loader's side (2)">Loader's side</button><button type="button" data-cv="cut" aria-pressed="false" title="Cutaway from above (3)">Cutaway</button><button type="button" data-cv="drv" aria-pressed="false" title="Driver's seat (4)">Driver</button><button type="button" data-cv="blk" aria-pressed="false" title="Look out through the commander's vision blocks (5)">Vision blocks</button><button type="button" data-cv="gnr" aria-pressed="false" title="Gunner's seat (6)">Gunner</button><button type="button" data-cv="hat" aria-pressed="false" title="Commander with his head out of the hatch (7)">Head out</button></div><div class="sbxcrewhud" id="sbxCrewHud" hidden></div>
+          <div class="sbxbrief" id="sbxBrief" hidden role="dialog" aria-label="Briefing"><div><span class="eyebrow">Briefing</span><h4></h4><p></p><span class="cap"></span><div class="brief-q" hidden><b>How many friendly vehicles are with you?</b><div><button type="button" class="btn sm" data-fr="0">None, I am alone</button><button type="button" class="btn sm" data-fr="1">1 more</button><button type="button" class="btn sm" data-fr="2">2 more</button><button type="button" class="btn sm" data-fr="3">3 more</button></div><span>They fan their hulls across the threat so no two share a blind arc, and a vehicle with a free gun fires at whatever is about to hit a neighbour.</span></div><button type="button" class="btn sm primary">Start (Enter)</button></div></div>
+          <div class="sbxkeys" id="sbxKeys" hidden role="dialog" aria-label="Keyboard shortcuts"><div><h4>Keyboard</h4><dl>
+            <dt>?</dt><dd>Show or hide this list</dd><dt>I</dt><dd>Pause and inspect the next threat</dd><dt>Ctrl+Z</dt><dd>Undo the last change to the enemy layout</dd>
+            <dt>1–7</dt><dd>Inside the turret: Commander, Loader’s side, Cutaway, Driver, Vision blocks, Gunner, Head out</dd>
+            <dt>Z / X</dt><dd>In a sight: zoom in / out</dd><dt>T</dt><dd>In a sight: thermal on or off</dd><dt>B</dt><dd>In a sight: white hot / black hot</dd>
+            <dt>W A S D</dt><dd>Command mode: forward, hard left, back up, hard right</dd><dt>X</dt><dd>Command mode: stop</dd><dt>Q</dt><dd>Command mode: weave</dd><dt>G</dt><dd>Command mode: fire smoke</dd><dt>H</dt><dd>Command mode: hold HKOI’s fire</dd>
+            <dt>Drag</dt><dd>Look around (inside views and sights) or orbit (outside)</dd><dt>Wheel</dt><dd>Zoom the outside camera</dd></dl><span class="cap">Click anywhere or press Esc to close.</span></div></div><div class="sbxblk" id="sbxBlk" hidden><i></i><span>COMMANDER'S VISION BLOCK · drag to look around</span></div><div class="sbxsightctl" id="sbxSightCtl" hidden><button type="button" id="sbxZoomOut" title="Zoom out (X)">−</button><b id="sbxZoomL">3×</b><button type="button" id="sbxZoomIn" title="Zoom in (Z)">+</button><button type="button" id="sbxThermal" aria-pressed="false" title="Thermal (T)">Thermal</button><button type="button" id="sbxPol" title="Polarity (B)">White hot</button></div>
+          <div class="sbxwarn" id="sbxWarn" role="status" hidden></div>
+          <div class="sbxorderflash" id="sbxOrderFlash" hidden></div>
+          <div class="sbxsubs" id="sbxSubs" aria-live="polite"></div>
+          <div class="sbxpip" id="sbxPip" hidden><span>GUN CAMERA</span><i></i></div>
+          <div class="sbxret" id="sbxReticle" hidden><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="M50,30 V44 M50,56 V70 M30,50 H44 M56,50 H70" stroke="#7ff0e6" stroke-width=".4"/><rect x="40" y="40" width="20" height="20" fill="none" stroke="#7ff0e6" stroke-width=".25"/><path d="M8,8 h8 M8,8 v8 M92,8 h-8 M92,8 v8 M8,92 h8 M8,92 v-8 M92,92 h-8 M92,92 v-8" stroke="#7ff0e6" stroke-width=".4"/></svg><span></span></div>
+          <div class="sbxinsp" id="sbxInsp" hidden><div class="in-h"><b>Inspect</b><span>drag the time slider to step through</span><button type="button" aria-label="Close inspect">×</button></div><div class="in-b"></div><canvas width="560" height="210"></canvas></div>
+          <div class="cineverdict" id="sbxVerdict" hidden></div>
+          <div class="cinehud"><span id="sbxClock">T-2.0 s</span><span id="sbxCap"></span></div>
+          <div class="sbxbusy" id="sbxBusy" hidden><b>Computing the fire-control tables</b><span>Once per round, terrain and weather. A few seconds.</span></div>
+          <p class="sbxbusy" id="sbxNoGL" hidden>This browser has 3D graphics turned off. The crew station and map still work.</p>
+        </div>
+        <div class="station">
+          <div class="st-h"><b>Crew station</b><span>What the crew can see</span></div>
+          <canvas id="scope" aria-label="Threat display: hull-up scope of what the sensors have detected"></canvas>
+          <details class="scopekey"><summary>Symbol key</summary><p><b style="color:#ff4a3d">◇</b> hostile track from radar (arrow mark = missile, V mark = drone), with track number and a leader showing its heading. <b style="color:#ffb020">◇ dashed amber</b> its guidance beam is cut. <b style="color:#ff4a3d">◇ with dot</b> launcher position, plotted by tracing the missile back. Dashed strobe to the rim = bearing-only warning: <b>L</b> laser, <b>R</b> drone radio link, <b>M</b> missile launch. <b style="color:#ffe39a">Yellow ring and line</b> HKOI is firing at it; yellow squares are rounds in flight, ✕ is a cloud burst. <b>White brackets</b> Trophy will take it; white arcs and dots by the hull are Trophy sectors and charges left. Red wedge = HKOI blind arc. <b style="color:#5cb8ff">▭</b> friendly vehicle and what it is firing at. Green ✕ = threat defeated; red ring = hit. Top is the hull front; N marks north.</p></details>
+          <div class="st-sub">Fire control</div>
+          <div id="fcList" class="fclist"></div>
+          <div id="mags" class="mags"></div>
+          <div id="stVeh" class="veh"></div>
+          <div id="stEnemy" class="veh enemy" hidden></div>
+          <div class="crewbar" id="stCrew" hidden><span class="lab">Crew</span><b id="stCrewS">CALM</b><span class="meter"><i id="stCrewM"></i></span><em id="stCrewD"></em></div>
+          <div id="stLog" class="stlog"></div>
+        </div>
+      </div>
+      <div class="cinebar">
+        <div class="cbtn"><button class="btn sm" type="button" id="sbxCmd" aria-pressed="false" title="Command the tank yourself in real time">Take command</button><button class="btn sm primary" type="button" id="sbxPlay">Launch</button><button class="btn sm" type="button" id="sbxRestart">Restart</button></div>
+        <div class="cslide"><input type="range" id="sbxSlider" min="-2" max="20" step="0.01" value="-2" aria-label="Raid time"><div class="cticks" id="sbxTicks"></div></div>
+        <select id="sbxSpeed" aria-label="Playback speed"><option value="0.25">¼× slow</option><option value="0.5">½×</option><option value="1" selected>1× real time</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+      </div>
+      <div class="sbxorders" id="sbxOrders" hidden>
+        <div class="ord-grid"><span class="lab">Driver</span><button type="button" data-ord="left"><kbd>A</kbd> Hard left</button><button type="button" data-ord="fwd"><kbd>W</kbd> Forward</button><button type="button" data-ord="right"><kbd>D</kbd> Hard right</button><button type="button" data-ord="back"><kbd>S</kbd> Reverse</button><button type="button" data-ord="weave"><kbd>Q</kbd> Weave</button><button type="button" data-ord="stop"><kbd>X</kbd> Stop</button>
+        <span class="lab">Commander</span><button type="button" data-ord="smoke" id="sbxOrdSmoke"><kbd>G</kbd> Smoke</button><button type="button" data-ord="hold" id="sbxHold" aria-pressed="false"><kbd>H</kbd> HKOI weapons hold</button></div>
+        <p class="cap" id="sbxOrdLog">No orders yet.</p>
+        <p class="note">You are the commander. The AI driver and smoke decisions are switched off: the tank does only what you order. Each order re-fights the rest of the raid from that moment with the same dice. Inside the turret, CITV and HKOI sight work well while commanding.</p>
+      </div>
+      <div class="cinebar">
+        <div class="mini-seg" id="sbxCams" role="group" aria-label="Camera"><button type="button" data-cam="cmd" aria-pressed="true">Commander</button><button type="button" data-cam="cdr" aria-pressed="false">Inside the turret</button><button type="button" data-cam="gps" aria-pressed="false">Gunner's sight</button><button type="button" data-cam="citv" aria-pressed="false">CITV</button><button type="button" data-cam="hsight" aria-pressed="false">HKOI sight</button><button type="button" data-cam="chase" aria-pressed="false">Chase missile</button><button type="button" data-cam="enemy" aria-pressed="false">Enemy gunner</button><button type="button" data-cam="top" aria-pressed="false">Overhead</button><button type="button" data-cam="platoon" aria-pressed="false" id="sbxCamPlt" hidden>Platoon</button><button type="button" data-cam="free" aria-pressed="false">Free look</button></div>
+        <label class="dskill" id="sbxDskillW" hidden>Drone pilots <select id="sbxDskill2" title="How well the enemy drone pilots fly"><option value="novice">Novice</option><option value="trained">Trained</option><option value="expert">Expert</option></select></label>
+        <label class="switch sm"><input type="checkbox" id="sbxFacesT" checked> Crew cameras</label>
+        <label class="switch sm"><input type="checkbox" id="sbxOverlay" checked> Labels and beams</label>
+        <label class="switch sm"><input type="checkbox" id="sbxPipT" checked> Gun camera inset</label>
+        <button class="btn sm" type="button" id="sbxSnd" aria-pressed="true">Sound on</button>
+        <label class="switch sm"><input type="checkbox" id="sbxVoice" checked> Crew voices</label><label class="switch sm" title="Your SOID sound pack for panic, hits, wounds and screams, mixed with the generated voices"><input type="checkbox" id="sbxPack" checked> Sound pack voices</label>
+        <label class="tl inl"><span>Time</span><select id="sbxTod" aria-label="Time of day"><option value="day">Day</option><option value="dusk">Dusk</option><option value="night">Night</option></select></label>
+        <label class="tl inl"><span>Graphics</span><select id="sbxQ" aria-label="Graphics quality"><option value="0">Low</option><option value="1">High</option><option value="2">Maximum</option></select></label>
+        <button class="btn sm" type="button" id="sbxInspBtn" aria-pressed="false" title="Pause and inspect one threat: beam status, cloud optical depth, time to impact (I)">Pause and inspect</button><button class="btn sm" type="button" id="sbxXrayBtn" hidden>X-ray the hit</button><button class="btn sm primary" type="button" id="sbxReviewBtn" hidden>Post-battle review</button><button class="btn sm primary" type="button" id="sbxNext" hidden title="Keep this tank, with its remaining ammunition, damage, wounded and tired crew, and fight another raid">Fight the next raid with this tank</button><label class="tl inl" id="sbxGapL" title="Time the crew gets to recover before the next raid"><span>Pause between raids</span><select id="sbxGapMin"><option value="2">2 min</option><option value="20" selected>20 min</option><option value="120">2 hours</option></select></label><button class="btn sm" type="button" id="sbxFresh" hidden title="Repaired, rearmed and rested">Fresh tank</button><button class="btn sm" type="button" id="sbxKeysBtn" aria-pressed="false" title="Keyboard shortcuts (?)">Keys ?</button><button class="btn sm" type="button" id="sbxCb" aria-pressed="false" title="Switch to a colour-blind-safe palette">Colour-blind palette</button><button class="btn sm" type="button" id="sbxFull" style="margin-left:auto">Full screen</button>
+      </div>
+    </div>
+    <p class="cap carrymsg" id="sbxCarryMsg" aria-live="polite"></p>
+    <div class="card sbxreview" id="sbxReview" hidden></div>
+    <div class="card sbxplan">
+      <div class="mis">
+        <div class="mis-h"><h3>Mission editor</h3><span class="cap" id="misCount"></span></div>
+        <div class="mis-row"><label class="tl grow"><span>Mission name</span><input type="text" id="misName" maxlength="60" autocomplete="off"></label></div>
+        <div class="mis-grid">
+          <label class="tl"><span>Terrain</span><select id="misTerrain"><option value="">From the settings</option><option value="open">Open desert</option><option value="mixed">Mixed farmland</option><option value="urban">Urban edge</option></select></label>
+          <label class="tl"><span>Weather</span><select id="misWeather"><option value="">From the settings</option><option value="clear">Clear</option><option value="haze">Haze</option><option value="rain">Rain</option><option value="dust">Dust</option><option value="fog">Fog</option></select></label>
+          <label class="tl"><span>Time</span><select id="misTod"><option value="day">Day</option><option value="dusk">Dusk</option><option value="night">Night</option></select></label>
+          <label class="tl"><span>Crew</span><select id="misXp"><option value="">From the settings</option><option value="green">Green</option><option value="trained">Trained</option><option value="veteran">Veteran</option></select></label>
+          <label class="tl"><span>Tank faces <em id="misHullL">0°</em></span><input type="range" id="misHull" min="-180" max="180" step="5" value="0"></label>
+          <label class="tl"><span>Tank moving <em id="misSpeedL">halted</em></span><input type="range" id="misSpeed" min="0" max="12" step="1" value="0"></label>
+          <label class="tl"><span>Vehicles</span><select id="misPlatoon"><option value="">Single tank</option><option value="wedge">Platoon of 4, wedge</option><option value="line">Platoon of 4, line abreast</option></select></label>
+          <label class="tl"><span>Tank spacing <em id="misGapL">150 m</em></span><input type="range" id="misGap" min="50" max="400" step="25" value="150"></label>
+          <label class="tl"><span>Enemy gunner jitter <em id="misJitL">3.0 mrad</em></span><input type="range" id="misJit" min="0" max="5" step="0.1" value="3"></label>
+          <label class="tl"><span>Platoon fire control</span><select id="misShare"><option value="1">Shared: tanks cover each other</option><option value="0">Each tank on its own</option></select></label>
+          <label class="tl"><span>A missile whose beam is cut</span><select id="misLoss"><option value="">Drifts and sags, amount unknown (default)</option><option value="free_fall">Falls freely, no lift (your spec sheet)</option><option value="hold_last">Holds its last course, no sag</option><option value="self_destruct">Self-destructs after 2 s blind</option></select></label>
+          <label class="tl"><span>Cut missile can re-lock as the cloud thins</span><select id="misRelock"><option value="0">No: a cut is permanent (default)</option><option value="1">Yes</option></select></label>
+          <label class="tl"><span>Enemy jamming</span><select id="misJam"><option value="0">None</option><option value="1">Radar jammed</option><option value="2">Radar jammed, camera dazzled</option></select></label>
+          <label class="tl"><span>Drone operator skill</span><select id="misDskill"><option value="novice">Novice: high, steady, easy to track</option><option value="trained">Trained: weaves, jinks under fire</option><option value="expert">Expert: low, hard breaks, feints, pop-up dive</option></select></label>
+          <label class="tl"><span>Drone manoeuvring affects results</span><select id="misDevade"><option value="1">Yes (default)</option><option value="0">No: looks only</option></select></label>
+          <label class="tl"><span>Drone jammer on the vehicle</span><select id="misDjam"><option value="0">Not fitted</option><option value="1">Fitted</option></select></label>
+          <label class="tl"><span>Enemy tank</span><select id="misDuel"><option value="">None</option><option value="1">Fights you with its main gun</option></select></label>
+          <label class="tl"><span>Enemy tank range <em id="misDuelRL">1.8 km</em></span><input type="range" id="misDuelR" min="600" max="3500" step="100" value="1800"></label>
+          <label class="tl"><span>Enemy tank bearing <em id="misDuelBL">15°</em></span><input type="range" id="misDuelB" min="-180" max="180" step="5" value="15"></label>
+          <label class="tl"><span>Enemy tank appears <em id="misDuelTL">2 s</em></span><input type="range" id="misDuelT" min="0" max="60" step="1" value="2"></label>
+        </div>
+        <div class="mis-sub">Crew by role</div>
+        <div id="crewRoles" class="crew-roles"></div>
+        <div class="mis-sub">What if</div>
+        <div class="whatif"><p class="cap">Fights the raid on screen a few hundred times with different dice, as you have set it up and again with one thing changed each time. Use it to see what actually moves the result.</p><div class="mis-row"><button class="btn sm primary" type="button" id="wiGo">Fight this raid many times</button><span class="cap" id="wiMsg" aria-live="polite"></span></div><div class="rv-tablewrap" id="wiOut"></div></div>
+        <div class="mis-sub">Place the enemy</div>
+        <label class="tl"><span>Clicking the map adds</span><select id="sbxAdd"></select></label>
+        <div id="lEdit" class="ledit"></div>
+        <ul class="mis-warn" id="misWarn" hidden></ul>
+        <div class="mis-sub">Random raid</div>
+        <div class="mis-row"><select id="misLevel" aria-label="Raid size"><option value="light">Light</option><option value="medium" selected>Medium</option><option value="heavy">Heavy</option><option value="saturation">Saturation</option></select><select id="misKind" aria-label="Raid type"><option value="atgm">Missiles</option><option value="drones">Drones</option><option value="mixed" selected>Mixed</option></select><button class="btn sm" type="button" id="misRandom">Generate</button><button class="btn sm" type="button" id="misClear">Clear map</button></div>
+        <div class="mis-sub">Library</div>
+        <div class="mis-row"><input type="text" id="misNote" placeholder="Note to save with this mission" aria-label="Note saved with this mission" maxlength="120" class="mis-note"><button class="btn sm" type="button" id="misUndo" disabled title="Undo the last change to the enemy layout (Ctrl+Z)">Undo</button><button class="btn sm" type="button" id="misSave">Save</button><select id="misLoad" aria-label="Load a saved mission"></select><button class="btn sm" type="button" id="misDelete">Delete</button><button class="btn sm" type="button" id="misShare">Share code</button><button class="btn sm" type="button" id="misImport">Import</button></div>
+        <textarea id="misCode" rows="2" hidden aria-label="Mission share code"></textarea>
+        <p class="cap" id="misMsg" aria-live="polite"></p>
+      </div>
+      <div class="mis-map">
+        <svg id="planMap" viewBox="0 0 360 360" role="img" aria-label="Map for placing enemy launchers around the vehicle"></svg>
+        <p class="note">True scale, north up. Click to add a firing post, drag to move it. The blue arrow shows the wind; rings every kilometre.</p>
+      </div>
+      <div class="mis-tl"><div class="mis-sub">Launch timeline <span class="cap">drag a diamond to change when that post fires; bars run from launch to the end of each missile, coloured by outcome</span></div><svg id="misTL" class="mis-tlsvg" viewBox="0 0 640 60" role="img" aria-label="Launch timeline"></svg></div>
+    </div>
+  </section>
+

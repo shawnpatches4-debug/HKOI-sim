@@ -1,0 +1,4 @@
+const HK = require('./engine.js'), P = x => ((x || 0) * 100).toFixed(1), N = +process.argv[2] || 500;
+for (const [n, f] of [['raid only', c => {}], ['raid + enemy tank 1.8 km', c => { c.duel.on = true; }], ['raid + enemy tank 3 km', c => { c.duel.on = true; c.duel.R = 3000; }], ['enemy tank only', c => { c.duel.on = true; c.enemy.fixed = []; }]])
+  for (const [pn, pf] of [['APS', c => { c.hkoi_enabled = false; }], ['HKOI+APS', c => {}]]) { const c = HK.defaultConfig(); c.missions = N; c.seed = 11; c.gun.burst = 6; c.obs.alpha_m2_per_g = 2.0; f(c); pf(c); const a = HK.runSync(c, HK.meetLookup(c));
+    console.log(n.padEnd(26), pn.padEnd(9), 'survive', P(a.P_survive), 'duel won', P(a.duel_won), 'our shots', (a.duel_shots || 0).toFixed(1), 'enemy shots', (a.duel_enemy_shots || 0).toFixed(1), 'enemy hits', (a.duel_enemy_hits || 0).toFixed(2), 'cut', P((a.f_cut_direct || 0) / (a.f_engaged_obs || 1))); }

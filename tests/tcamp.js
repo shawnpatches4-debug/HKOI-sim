@@ -1,0 +1,7 @@
+global.HK = require('./engine.js'); const fs = require('fs'); const DMG = new Function('HK', fs.readFileSync('./dmg.js', 'utf8') + '; return DMG;')(HK); global.DMG = DMG;
+const CAMP = new Function('HK', 'DMG', fs.readFileSync('./campaign.js', 'utf8') + '; return CAMP;')(HK, DMG);
+const N = +process.argv[2] || 200, R = 6, P = x => (x * 100).toFixed(0).padStart(3);
+for (const jit of [3, 0.3]) for (const [nm, f] of [['No protection', c => { c.hkoi_enabled = false; c.aps.enabled = false; }], ['Trophy only  ', c => { c.hkoi_enabled = false; }], ['HKOI + Trophy', c => {}]]) {
+  const c = HK.defaultConfig(); c.gun.burst = 6; c.obs.alpha_m2_per_g = 2.0; c.enemy.gunner_jitter_mrad = jit; f(c); const lk = c.hkoi_enabled ? HK.meetLookup(c) : {}; const alive = new Array(R).fill(0); let obs = 0, he = 0, aps = 0, dmg = 0, wnd = 0, na = 0;
+  for (let s = 1; s <= N; s++) { const o = CAMP.run(c, R, s, lk, {}); for (let r = 0; r < o.survived; r++) alive[r]++; if (!o.lost) { na++; obs += o.state.obs; he += o.state.he; aps += o.state.apsL + o.state.apsR; dmg += Object.values(o.state.sys).filter(v => v !== 'ok').length; wnd += Object.values(o.state.crew).filter(v => v !== 'ok').length; } }
+  console.log(`jitter ${jit}  ${nm}  alive after raid 1..${R}: ${alive.map(a => P(a / N) + '%').join(' ')}` + (na ? `  | survivors end with: Trophy ${(aps / na).toFixed(1)}/6, obscurant ${(obs / na).toFixed(0)}, HE ${(he / na).toFixed(0)}, ${(dmg / na).toFixed(1)} systems damaged, ${(wnd / na).toFixed(1)} wounded` : '')); }

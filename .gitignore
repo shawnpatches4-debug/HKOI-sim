@@ -1,0 +1,9 @@
+# third-party assets with unconfirmed licences stay out of the repository while it is public
+assets/
+*.mp3
+*.glb
+*.bank
+*.zip
+node_modules/
+*.png
+*.log
