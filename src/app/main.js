@@ -36,6 +36,7 @@ function newBattle() {
   for (const t of teams) scene.units.remove(t.group); if (volleys) volleys.dispose();
   battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, force: FORCES[set.force].force });
   teams = battle.units.map(u => { const t = new TeamView(u.type); scene.units.add(t.group); return t; });
+  scene.marks.clear(); scene.fx.n = 0;
   volleys = new VolleyView(scene, battle, scene.fx); logShown = 0; ended = false; $('log').textContent = ''; $('caption').textContent = '';
   api.battle = battle; place();
 }

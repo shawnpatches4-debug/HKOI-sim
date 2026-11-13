@@ -4,7 +4,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTerrain } from './terrain.js';
 import { buildTrees, buildBuildings } from './scenery.js';
-import { Particles } from './fx.js';
+import { Particles, GroundMarks } from './fx.js';
 import { ENV, Precipitation, GradeShader } from './env.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -40,7 +40,10 @@ export class Scene3D {
     // ground and scenery
     this.opt = opt; this.setWorld(world);
     this.units = new THREE.Group(); sc.add(this.units);
-    this.fx = new Particles(8000); sc.add(this.fx.mesh);
+    this.fx = new Particles(12000); sc.add(this.fx.mesh);
+    this.marks = new GroundMarks(); sc.add(this.marks.mesh);
+    // a few lights to throw on the scene when something explodes: each flares and dies in a fraction of a second
+    this.flares = [0, 1, 2].map(() => { const l = new THREE.PointLight('#ffc98a', 0, 220, 1.6); sc.add(l); return l; }); this.flareI = 0;
     this.precip = new Precipitation(); sc.add(this.precip.mesh);
     // film pipeline: scene -> glow on the brightest parts -> tone mapping -> grade, vignette and grain
     this.post = opt.post !== false;
@@ -80,14 +83,16 @@ export class Scene3D {
       const blob = new THREE.Mesh(new THREE.SphereGeometry(6, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(C.sun).multiplyScalar(C.sunI * 2.2) })); blob.position.copy(dir).multiplyScalar(44); es.add(blob);
       if (!this.pmrem) this.pmrem = new THREE.PMREMGenerator(this.renderer); if (this.envRT) this.envRT.dispose(); this.envRT = this.pmrem.fromScene(es, 0.04); this.scene.environment = this.envRT.texture; this.scene.environmentIntensity = C.envI == null ? 0.8 : C.envI; g.dispose(); }
     this.bloom.threshold = C.night ? 0.55 : 2.2;
-    if (this.fx) { const u2 = this.fx.mat.uniforms; u2.fogColor.value.set(C.fog); u2.fogDensity.value = C.fogD; u2.sunColor.value.set(C.sun).multiplyScalar(0.5 + C.sunI * 0.2); }
+    if (this.fx) { const u2 = this.fx.mat.uniforms; u2.fogColor.value.set(C.fog); u2.fogDensity.value = C.fogD; u2.sunColor.value.set(C.sun).lerp(new THREE.Color(C.sky), 0.4).multiplyScalar(C.night ? 0.13 : 0.5 + C.sunI * 0.2); }
   }
+  // light the surroundings for an instant (explosions, launches), and leave a scorch mark if on the ground
+  blast(p, k = 1, scorch = true) { const l = this.flares[this.flareI++ % this.flares.length]; l.position.copy(p); l.position.y += 2; l.intensity = 900 * k * (this.night ? 1 : 0.5); l.userData.decay = 7; if (scorch) this.marks.add(p.x, p.z, 2.2 * k, (x, z) => this.world.h(x, -z)); }
   resize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setSize(w, h, false); if (this.composer) this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   // world east/north to scene position on the ground
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
   render(dt = 0.016) {
-    this.fx.update(dt, this.wind); if (this.trees.userData.update) this.trees.userData.update(this.camera.position); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
+    this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset();
