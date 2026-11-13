@@ -22,6 +22,11 @@ export class TankView {
 // Models supplied for the enemy: each file is fetched once and copied for every use. If a file is missing the plain stand-in shapes stay.
 const cache = new Map();
 export function loadModel(url) { if (!cache.has(url)) cache.set(url, new Promise(res => new GLTFLoader().load(url, g => { g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; if (o.material) { const m = o.material; m.metalness = Math.min(m.metalness, 0.4); m.transparent = false; m.opacity = 1; m.alphaTest = 0; m.depthWrite = true; m.side = THREE.DoubleSide; m.needsUpdate = true; } } }); res(g.scene); }, undefined, () => res(null)))); return cache.get(url); }
+// Some supplied models come without their pictures attached: put a colour picture on each named material. tex: { materialName: url }
+const texLoader = new THREE.TextureLoader();
+export function skin(obj, tex) { obj.traverse(o => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { const u = m && tex[m.name]; if (!u || m.userData.skinned) continue; m.userData.skinned = true; const t = texLoader.load(u); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; m.map = t; m.color.set('#ffffff'); m.roughness = 0.75; m.metalness = 0.15; m.needsUpdate = true; } }); return obj; }
+// turn a long thin model (a launcher, a gun) so its length lies along the direction the figure faces
+function alongZ(obj, len, flip) { const g = fit(obj, len), b = new THREE.Box3().setFromObject(g), sz = b.getSize(new THREE.Vector3()), h = new THREE.Group(); h.add(g); const c = b.getCenter(new THREE.Vector3()); g.position.sub(c); if (sz.x >= sz.y && sz.x >= sz.z) h.rotation.y = Math.PI / 2; else if (sz.y >= sz.x && sz.y >= sz.z) h.rotation.x = Math.PI / 2; if (flip) { const w = new THREE.Group(); w.add(h); w.rotation.y = Math.PI; return w; } return h; }
 // scale and seat a model so its longest side is `len` metres, it sits on the ground and is centred
 function fit(obj, len) { const b = new THREE.Box3().setFromObject(obj), sz = b.getSize(new THREE.Vector3()), k = len / Math.max(sz.x, sz.y, sz.z), g = new THREE.Group(); obj.scale.multiplyScalar(k); const b2 = new THREE.Box3().setFromObject(obj), c = b2.getCenter(new THREE.Vector3()); obj.position.x -= c.x; obj.position.z -= c.z; obj.position.y -= b2.min.y; g.add(obj); return g; }
 
@@ -64,10 +69,11 @@ export class TeamView {
   }
   // swap the stand-in shapes for the real models once they arrive: a gunner at the launcher and a second man beside him
   async _load(kind, base) {
-    const [sol, kor] = await Promise.all([loadModel(base + 'enemy/soldier.json'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.json')]); if (!sol) return;
+    const [sol, kor, rpg] = await Promise.all([loadModel(base + 'enemy/soldier.json'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.json'), kind === 'rpg' ? loadModel(base + 'enemy/rpg7.json') : null]); if (!sol) return;
     const keep = []; const man = (pose, x, z, yaw) => { const f = cloneSkinned(sol); setPose(f, POSES[pose]); f.position.set(x, f.userData.seat, z); f.rotation.y = yaw; keep.push(f); return f; };
     const fresh = new THREE.Group();
     if (kor) { const l = fit(kor.clone(), 1.35); l.rotation.y = this.constructor.LAUNCHER_YAW; fresh.add(l); fresh.add(man('kneel', 0.3, -0.85, 0), man('prone', -1.5, -0.6, 0.12)); }
+    else if (kind === 'rpg' && rpg) { const w = alongZ(skin(rpg.clone(), { RPG7: base + 'enemy/rpg7_albedo.webp', RPG7Rocket: base + 'enemy/rpg7rocket_albedo.webp' }), 1.34, TeamView.RPG_FLIP); w.position.set(-0.26, 1.1, 0.22); w.rotation.z = TeamView.RPG_ROLL; fresh.add(w, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
     else if (kind === 'rpg') { const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 8), new THREE.MeshStandardMaterial({ color: '#3a3d33', roughness: 0.7 })); tube.rotation.x = Math.PI / 2; tube.position.set(-0.26, 1.1, 0.1); const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.4, 8), tube.material); head.rotation.x = -Math.PI / 2; head.position.set(-0.26, 1.1, 0.75); head.rotation.x = Math.PI / 2; fresh.add(tube, head, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
     else fresh.add(man('crouch', 0, 0.3, 0), man('kneel', -1.1, 0.5, 0.4));
     if (TeamView.DEBUG) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({ color: 'red' })); m.position.set(0, 0.6, 2); fresh.add(m); }
@@ -75,7 +81,7 @@ export class TeamView {
   }
   place(pos, faceDeg) { this.group.position.copy(pos); this.group.rotation.y = Math.PI - faceDeg * DEG; }
 }
-TeamView.LAUNCHER_YAW = -Math.PI / 2; TeamView.DEBUG = new URLSearchParams(location.hash.slice(1)).get('dbg') === '1';
+TeamView.LAUNCHER_YAW = -Math.PI / 2; TeamView.RPG_FLIP = false; TeamView.RPG_ROLL = 0; TeamView.DEBUG = new URLSearchParams(location.hash.slice(1)).get('dbg') === '1';
 
 export function missileMesh(drone, assetBase) {
   if (drone && assetBase) { const g = new THREE.Group(), stand = missileMesh(true); g.add(stand); loadModel(assetBase + 'enemy/fpv.json').then(m => { if (!m) return; g.remove(stand); const f = fit(m.clone(), 0.62); f.position.y = -0.1; f.rotation.y = missileMesh.DRONE_YAW; g.add(f); }); return g; }
