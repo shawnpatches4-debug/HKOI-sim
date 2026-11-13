@@ -75,4 +75,31 @@ export class Sound {
       const dop = C_SOUND / Math.max(200, C_SOUND - (dr.closing || 0)), f = v.base * dop * (1 + 0.03 * Math.sin(t * 9 + v.base)); set(v.o1.frequency, f); set(v.o2.frequency, f * 2.01); set(v.g.gain, Math.min(0.2, 5 / (12 + dr.d))); }
     for (const [id, v] of this.drones) if (!seen.has(id)) { v.g.gain.setTargetAtTime(0, t, 0.03); v.o1.stop(t + 0.2); v.o2.stop(t + 0.2); this.drones.delete(id); }
   }
+  // ------------------------------------------------------------------ voices
+  // Crew lines come from recorded clips (one sound file per crew member, cut by a time index). One voice at a time on the intercom;
+  // a line that could not start within a second and a half of its moment is dropped, never queued up behind others.
+  async loadVoices(base) {
+    if (this.VI || !base) return; this.base = base; this.bufs = {}; this.busyUntil = 0;
+    try { this.VI = await (await fetch(base + 'voice_index.json')).json(); } catch (e) { this.VI = null; return; }
+    const c = this.ctx; this.icom = c.createGain(); this.icom.gain.value = 0.9; const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 330; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3300; const sh = c.createWaveShaper(), cv = new Float32Array(257); for (let k = 0; k < 257; k++) { const x = k / 128 - 1; cv[k] = Math.tanh(x * 2.2) / Math.tanh(2.2); } sh.curve = cv; this.icomIn = hp; hp.connect(lp); lp.connect(sh); sh.connect(this.icom); this.icom.connect(this.master);
+    this.open = c.createGain(); this.open.connect(this.world);   // voices heard in the open air (enemy teams)
+    for (const [k, f] of [['cdr', 'voice_cdr'], ['gnr', 'voice_gnr'], ['ldr', 'voice_ldr'], ['drv', 'voice_drv'], ['panic', 'voice_panic'], ['screams', 'screams'], ['ru', 'voice_ru']]) fetch(base + f + '.mp3').then(r => r.ok ? r.arrayBuffer() : null).then(a => a && c.decodeAudioData(a)).then(b => { if (b) this.bufs[k] = b; }).catch(() => { });
+  }
+  _clip(key, start, dur, { dest, gain = 1, rate = 1, when = 0 } = {}) { const b = this.bufs && this.bufs[key]; if (!b || !this.on) return 0; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), t = Math.max(c.currentTime + 0.02, when); s.buffer = b; s.playbackRate.value = rate; g.gain.value = gain; s.connect(g); g.connect(dest || this.icomIn); s.start(t, start, dur); return t + dur / rate; }
+  _key(on) { if (!this.ctx || !this.on || !this.icomIn) return; const t = this.ctx.currentTime; this._burst(this.icomIn, t, { dur: 0.025, f0: 2500, f1: 1200, gain: on ? 0.25 : 0.18, type: 'bandpass', q: 3 }); }
+  // who: CDR | GNR | LDR | DRV; txt: the three versions of the line [calm, tense, panic]; level 0..2 picks one
+  say(who, txt, level = 0) {
+    if (!this.VI || !this.ctx || !this.on) return false; const c = this.ctx, now = c.currentTime; if (this.busyUntil - now > 1.5) return false;
+    let hit = null; for (const lv of [level, 1, 0, 2]) { const line = txt[Math.min(lv, txt.length - 1)]; hit = this.VI.v[`${who}|${lv}|${line}`] || this._near(who, lv, line); if (hit) break; } if (!hit) return false;
+    const at = Math.max(now + 0.03, this.busyUntil + 0.12); this._key(true); this.busyUntil = this._clip(hit[0], hit[1], hit[2], { when: at, rate: level === 2 ? 1.06 : 1 }) || at; return true;
+  }
+  // lines written by the new battle layer have no recording of their own: use the nearest recorded order
+  _near(who, lv, line) { const V = this.VI.v, sfx = lv === 0 ? '.' : lv === 1 ? '! Now!' : '!', pick = stem => V[`${who}|${lv}|${stem}${sfx}`] || V[`${who}|${lv}|${stem}!`] || V[`${who}|0|${stem}.`];
+    if (who === 'CDR' && /driver/i.test(line) || who === 'CDR' && /GO GO GO/.test(line)) return /behind|back up/i.test(line) ? pick('Driver, back up') : /left/i.test(line) ? pick('Driver, hard left') : /right/i.test(line) ? pick('Driver, hard right') : /ahead/i.test(line) ? pick('Driver, forward') : pick('Driver, move out') || V['CDR|1|Driver! MOVE!'];
+    if (who === 'CDR' && /hold|nowhere/i.test(line)) return pick('Driver, stop'); return null; }
+  // the user's sound pack: raw reactions to being hit, wounded or panicked
+  react(who, kind, delay = 0) { const L = this.VI && this.VI.p && this.VI.p[who] && this.VI.p[who][kind]; if (!L || !this.ctx) return; const c = L[Math.floor(Math.random() * L.length)], now = this.ctx.currentTime; this.busyUntil = Math.max(this.busyUntil, this._clip('panic', c[0], c[1], { when: now + delay, gain: 1.1 }) || 0); }
+  scream(kind = 'scream', delay = 0, gain = 0.9) { const L = this.VI && this.VI.s && this.VI.s[kind]; if (!L || !this.ctx) return; const c = L[Math.floor(Math.random() * L.length)]; this._clip('screams', c[0], c[1], { when: this.ctx.currentTime + delay, gain, dest: this.own }); }
+  // an enemy team's voice (Russian pack), heard in the open at the listener's position. kind: spot | fire | track | hit | kill | miss | lost | dlaunch | dspot | dhit | dlost
+  enemy(kind, delay = 0) { const L = this.VI && this.VI.r && this.VI.r[kind]; if (!L || !this.ctx) return; const now = this.ctx.currentTime; if ((this.ruUntil || 0) - now > 0.8) return; const c = L[Math.floor(Math.random() * L.length)]; this.ruUntil = this._clip('ru', c[0], c[1], { when: now + delay, gain: 1, dest: this.open }) || 0; }
 }
