@@ -191,7 +191,7 @@ function makeRaid(ctx) {
   // sandbox: launchers placed by hand
   if (en.fixed) for (const f of en.fixed) {
     const tt = THREATS[f.key]; if (!tt) continue;
-    const th = newThreat(out.length, f.key, f.t0 || 0, Math.max(50, f.R), f.brg, tt.speed); th.lid = f.id; if (f.late) th.late = f.late; if (f.tac) th.tac = f.tac; out.push(th);
+    const th = newThreat(out.length, f.key, f.t0 || 0, Math.max(50, f.R), f.brg, tt.speed); th.lid = f.id; if (f.late) th.late = f.late; if (f.tac) th.tac = f.tac; if (f.los_clear != null) th.los_fixed = f.los_clear; if (f.uid != null) th.uid = f.uid; if (f.mask != null) th.masked = f.mask; out.push(th);
     if (f.pair && tt.guidance === 'beam_rider') { const p2 = newThreat(out.length, f.key, (f.t0 || 0) + (f.pair_gap != null ? f.pair_gap : en.same_beam_gap_s), Math.max(50, f.R), f.brg, tt.speed, th.idx); p2.lid = f.id; if (f.late) p2.late = f.late; if (f.tac) p2.tac = f.tac; out.push(p2); }
   }
   for (let n = 0; n < (en.fixed ? 0 : en.raid_size); n++) {
@@ -303,6 +303,7 @@ function detect(ctx, threats) {
     if (radarOn === null) { th.tags.push('no_cue_emcon'); continue; }
     let rAcq = rad.acq_range_ref_m * Math.pow(tt.rcs / rad.rcs_ref_m2, 0.25) * Math.exp(rng.normal(0, rad.rcs_log_sigma)) * ctx.terrain.clutter * (1 - 0.5 * (cfg.enemy.jam_radar || 0));
     if (cfg.fc.ai) rAcq *= 1.1;
+    if (th.los_fixed != null) th.los_clear = th.los_fixed;   // battle layer: the terrain between the vehicle and this threat is known, so the sight line opens at this range
     const tIn = timeAt(th, Math.min(rAcq, th.R, th.los_clear));
     // cued: radar slews straight to the bearing. Uncued: found by the radar's own search once it is emitting.
     const tCued = th.cue !== null ? Math.max(th.cue + 0.15, tIn, radarOn) : Infinity;
@@ -766,7 +767,10 @@ function runMission(cfg, rng, lookup, rec) {
   const clock = brg => { const c = Math.round(mod360(brg - ctx.hull) / 30) % 12; return (c === 0 ? 12 : c) + " o'clock"; };
   // ---- the vehicle's own path once the driver moves: it turns square to the threat, reverses or weaves (east, north in metres)
   const PDT = 0.1; let path = null; const steadyWin = []; if (ctx.duel) for (const q of ctx.duel.shots) steadyWin.push([q.t - 1.2, q.t + 0.1]);   // HKOI firing windows: the gunner calls 'driver, steady' and the driver eases off
+  const EXT = cfg.ext && cfg.ext.path && cfg.ext.path.length > 1 ? cfg.ext.path : null;   // battle layer: the vehicle's movement comes from outside (driver AI on real terrain), sampled every PDT seconds
+  if (EXT) crew.evade = EXT[0][0];
   function buildPath() {
+    if (EXT) { path = EXT; return; }
     path = []; if (crew.evade === null) return;
     const plan = crew.plan.slice().sort((a, b) => a.t - b.t), tEnd = Math.max(...threats.map(o => o.impact)) + 6;
     let x = 0, n = 0, h = ctx.hull, v = 0, k = 0, seg = null;
@@ -1144,6 +1148,8 @@ function runMission(cfg, rng, lookup, rec) {
   // APS
   const aps = cfg.aps;
   const mag = { L: aps.mag_L != null ? aps.mag_L : aps.mag_per_side, R: aps.mag_R != null ? aps.mag_R : aps.mag_per_side }, last = { L: -1e9, R: -1e9 };
+  // battle layer: the vehicle got behind ground or buildings while this missile was still being guided, so it lost its guidance and came down short
+  for (const th of threats) if (th.state === 'inbound' && th.masked != null) { const short = Math.max(8, th.masked); th.state = 'missed'; th.defeated_by = 'terrain_mask'; th.tags.push('terrain_mask'); th.viz.end = { t: th.t0 + Math.max(th.R - short, 1) / th.v, type: 'ground', short, mask: true }; add('by_terrain'); if (rec) ev(th.viz.end.t, 'kill', th.idx, `${lbl(th)} loses its guidance when the vehicle drops out of the gunner's sight, and flies into the ground ${Math.round(short)} m short`); }
   for (const th of threats) if (th.state === 'inbound' && th.will_miss) {
     if (th.jitter_miss) { const jm = th.jit_miss || [3, 0], d = Math.hypot(jm[0], jm[1]); th.state = 'missed'; th.defeated_by = 'gunner_jitter'; th.tags.push('gunner_jitter'); th.viz.end = jm[1] <= -cfg.vehicle.half_h ? { t: th.t0 + Math.max(th.R - 14, 1) / th.v, type: 'ground', short: 14, jit: true } : { t: th.impact, type: 'miss', lat: Math.abs(jm[0]) < 0.6 ? 0 : jm[0], over: +jm[1].toFixed(2), miss: +d.toFixed(1), jit: true };
       if (rec) ev(th.impact, 'kill', th.idx, jm[1] <= -cfg.vehicle.half_h ? `${lbl(th)} flies into the ground short of the vehicle: the enemy gunner's aim dipped` : `${lbl(th)} misses on its own: the enemy gunner's aim wandered ${d.toFixed(1)} m off the vehicle`); continue; }

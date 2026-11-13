@@ -6,7 +6,7 @@ async def main():
         pg = await b.new_page(viewport={'width': 1440, 'height': 900})
         errs = []; pg.on('pageerror', lambda e: errs.append(str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
         await pg.add_init_script('window.__hkq = %s' % os.environ.get('HQ','1'))
-        await pg.goto('file://' + os.path.abspath('test.html'), timeout=180000)
+        await pg.goto('file://' + os.path.abspath(os.environ.get('PAGE','test.html')), timeout=180000)
         await pg.wait_for_function('window.__SB && window.__SB().rec', timeout=300000)
         pre = os.environ.get('PRE', 'fpv4')
         await pg.evaluate(f"(()=>{{const e=document.querySelector('#sbxPreset'); e.value='{pre}'; e.dispatchEvent(new Event('change'))}})()"); await pg.wait_for_timeout(3000)

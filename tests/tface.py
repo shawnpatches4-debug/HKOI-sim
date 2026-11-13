@@ -6,7 +6,7 @@ async def main():
         pg = await b.new_page(viewport={'width': 1300, 'height': 900}, device_scale_factor=2)
         errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:300])); pg.on('console', lambda m: m.type=='error' and errs.append(m.text[:300]))
         await pg.add_init_script('window.__noBrief = 1; window.__hkq = 0')
-        await pg.goto('file://' + os.path.abspath('test.html'), timeout=180000)
+        await pg.goto('file://' + os.path.abspath(os.environ.get('PAGE','test.html')), timeout=180000)
         await pg.wait_for_function('window.__SB && window.__SB().rec', timeout=300000)
         await pg.evaluate("(()=>{const e=document.querySelector('#sbxPreset'); e.value='saturation'; e.dispatchEvent(new Event('change')); document.querySelector('#sbxProt [data-p=%s]').click()})()" % os.environ.get('PROT','none')); await pg.wait_for_timeout(4000)
         await pg.evaluate("window.__SB().setSpeed(0.02)")

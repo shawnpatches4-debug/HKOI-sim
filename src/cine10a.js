@@ -100,7 +100,7 @@ const Cine = (() => {
     const pass = (m, to) => { fsq.material = m; RX.setRenderTarget(to); RX.render(fs, fc); };
     return {
       size(w, h) { for (const x of [rt, ...half, ...qtr, ...eig]) if (x) x.dispose();
-        rt = gl2 ? new THREE.WebGLMultisampleRenderTarget(w, h, { encoding: THREE.sRGBEncoding }) : new THREE.WebGLRenderTarget(w, h, { encoding: THREE.sRGBEncoding, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); if (gl2) rt.samples = 4;
+        rt = gl2 ? (THREE.WebGLMultisampleRenderTarget ? new THREE.WebGLMultisampleRenderTarget(w, h, { encoding: THREE.sRGBEncoding }) : new THREE.WebGLRenderTarget(w, h, { encoding: THREE.sRGBEncoding, samples: 4 })) : new THREE.WebGLRenderTarget(w, h, { encoding: THREE.sRGBEncoding, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); if (gl2) rt.samples = 4;
         half = [rtx(w >> 1, h >> 1), rtx(w >> 1, h >> 1)]; qtr = [rtx(w >> 2, h >> 2), rtx(w >> 2, h >> 2)]; eig = [rtx(w >> 3, h >> 3), rtx(w >> 3, h >> 3)]; },
       render(sc, cm, time) { RX.setRenderTarget(rt); RX.render(sc, cm);
         bright.uniforms.t.value = rt.texture; pass(bright, half[0]);

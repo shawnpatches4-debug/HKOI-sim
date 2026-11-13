@@ -6,7 +6,7 @@ async def main():
         pg = await b.new_page(viewport={'width': 1300, 'height': 900})
         errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:260])); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text[:260]))
         await pg.add_init_script('window.__noBrief = 1; window.__hkq = 0')
-        await pg.goto('file://' + os.path.abspath('test.html'), timeout=180000)
+        await pg.goto('file://' + os.path.abspath(os.environ.get('PAGE','test.html')), timeout=180000)
         await pg.wait_for_function('window.__SB && window.__SB().rec', timeout=300000)
         keys = await pg.evaluate("[...document.querySelectorAll('#sbxPreset option')].map(o=>o.value)")
         keys = keys[int(os.environ.get('START','0')):]
