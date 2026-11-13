@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HKOI Battlefield Beta</title>
+<style>
+  :root { --bg: #0b0f0e; --fg: #e6efe9; --accent: #39d98a; color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 12px; top: 12px; max-width: min(520px, calc(100vw - 24px)); font: 12px/1.45 ui-monospace, Menlo, monospace; background: #000a; border: 1px solid #39d98a44; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; pointer-events: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "{{THREE}}/build/three.module.js", "three/addons/": "{{THREE}}/examples/jsm/" } }</script>
+</head><body>
+<canvas id="view"></canvas><div id="hud">Loading battlefield…</div>
+<script src="{{SRC}}engine.js"></script><script>window.HK = window.HK || (typeof HK !== 'undefined' ? HK : null);</script>
+<script src="{{SRC}}dmg.js"></script><script src="{{SRC}}campaign.js"></script>
+<script src="{{SRC}}world/world.js"></script><script src="{{SRC}}battle/battle.js"></script>
+<script type="module" src="{{SRC}}app/main.js"></script>
+</body></html>
