@@ -9,7 +9,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.24';
+const VERSION = '0.25';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -21,7 +21,7 @@ const FORCES = {
   drones: { name: 'Drone hunt', note: 'Two radio FPV crews, one fibre FPV crew, one Kornet', force: [{ type: 'fpv', n: 2 }, { type: 'fpv_fiber', n: 1 }, { type: 'kornet', n: 1 }] },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
-const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert']];
+const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
 const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto' }, store.get('setup', {}));
 for (const k of ['biome', 'cond', 'force', 'skill', 'gfx']) if (q.get(k)) set[k] = q.get(k);
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';

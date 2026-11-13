@@ -97,7 +97,7 @@ export class EnemyViews {
       if (slow) {
         this.los = o.world.los(u.e, u.n, u.spec.agl, T.e, T.n, 2.2).clear;
         const top = up ? `${S.name}   ${S.mag}×   field ${S.fov}°` : 'NOT AT THE SIGHT';
-        const txt = `${u.spec.name.toUpperCase()} #${u.id + 1}   RNG ${String(Math.round(R / 10) * 10).padStart(4, '0')} m   ${u.spec.indirect ? 'DRONES' : 'ROUNDS'} ${u.ammo}\n${unitDoing(u).toUpperCase()}${up ? (this.los ? '' : '   ·   NO LINE OF SIGHT TO THE VEHICLE') : ''}`;
+        const txt = `${u.spec.name.toUpperCase()} #${u.id + 1}   RNG ${String(Math.round(R / 10) * 10).padStart(4, '0')} m   ${u.spec.indirect ? 'DRONES' : 'ROUNDS'} ${u.ammo}\n${(o.battle.intentOf ? o.battle.intentOf(u) : unitDoing(u)).toUpperCase()}${up ? (this.los ? '' : '   ·   NO LINE OF SIGHT TO THE VEHICLE') : ''}`;
         if ($('esight-sym').textContent !== top) $('esight-sym').textContent = top;
         if ($('esight-data').textContent !== txt) $('esight-data').textContent = txt;
       }
@@ -106,7 +106,7 @@ export class EnemyViews {
   }
 
   menu(o, cur) {
-    const T = o.tank, rows = o.battle.units.map(u => ({ u, name: `${u.spec.name} #${u.id + 1}`, sub: u.alive ? `${unitDoing(u)} · ${Math.round(Math.hypot(T.e - u.e, T.n - u.n) / 10) * 10} m` : 'destroyed' }));
+    const T = o.tank, rows = o.battle.units.map(u => ({ u, name: `${u.spec.name} #${u.id + 1}`, sub: u.alive ? `${o.battle.intentOf ? o.battle.intentOf(u) : unitDoing(u)} · ${Math.round(Math.hypot(T.e - u.e, T.n - u.n) / 10) * 10} m` : 'destroyed' }));
     const sig = rows.map(r => r.name + r.sub + (r.u === cur ? '*' : '')).join('|'); if (sig === this.menuSig) return; this.menuSig = sig;
     const box = $('units-list'); box.textContent = '';
     for (const r of rows) {
