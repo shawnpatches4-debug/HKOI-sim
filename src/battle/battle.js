@@ -75,14 +75,21 @@
       // Each team gets a primary firing position and two alternates, chosen for a clear shot at where the vehicle starts,
       // concealment, and a covered way out. Teams are spread so one burst of return fire cannot catch two.
       _place(force) {
-        const W = this.world, T0 = this.tank, T = this.objective ? { e: (T0.e + this.objective.e) / 2, n: (T0.n + this.objective.n) / 2 } : T0, taken = [];   /* on an advance the ambush is laid along the route */
+        // Where the ambush is laid: around the vehicle, or along its route on an advance. Every team asked for is placed: first on ground
+        // that looks onto one of those points, and if the country is too close for that (thick forest), in concealment within reach of it,
+        // from where the team will have to move to get its shot.
+        const W = this.world, T0 = this.tank, O = this.objective, taken = [], r = this.rng;
+        const anchors = O ? [0.5, 0.35, 0.65, 0.2, 0.8, 1].map(f => ({ e: T0.e + (O.e - T0.e) * f, n: T0.n + (O.n - T0.n) * f })) : [T0];
+        const apart = (s, d) => taken.every(q => Math.hypot(q.e - s.e, q.n - s.n) > d);
+        const concealed = (spec, A) => { const out = [], lo = Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 80), hi = Math.max(lo + 100, Math.min(spec.rmax * 0.8, 2200)); for (let q = 0; q < 300 && out.length < 8; q++) { const a = r.random() * 6.283, d = lo + r.random() * (hi - lo), e = A.e + Math.sin(a) * d, n = A.n + Math.cos(a) * d; if (!W.inside(e, n) || !W.passable(e, n, false)) continue; if (q < 200 && W.veg(e, n).cls < 2) continue; out.push({ e, n, d, score: 0 }); } return out; };
         for (const f of force) {
           const spec = TEAMS[f.type]; if (!spec) continue;
-          const sites = W.ambushSites(T.e, T.n, { rmin: Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length });
-          const pool = spec.indirect ? this._hiddenSites(spec) : sites;
+          let pool = []; if (spec.indirect) pool = this._hiddenSites(spec);
+          else for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; }
           for (let k = 0; k < (f.n || 1); k++) {
-            const pick = pool.find(s => taken.every(q => Math.hypot(q.e - s.e, q.n - s.n) > 350));
-            if (!pick) break;
+            let pick = pool.find(s => apart(s, 350)) || pool.find(s => apart(s, 200)) || pool.find(s => apart(s, 120));
+            if (!pick) { const extra = concealed(spec, anchors[k % anchors.length]); pick = extra.find(s => apart(s, 200)) || extra.find(s => apart(s, 80)) || extra[0]; if (pick) pool = pool.concat(extra); }
+            if (!pick) continue;
             taken.push(pick);
             const alts = pool.filter(s => { const d = Math.hypot(s.e - pick.e, s.n - pick.n); return d > 120 && d < 700; }).slice(0, 2);
             this.units.push({
@@ -91,6 +98,7 @@
             });
           }
         }
+        this.belief = { e: T0.e, n: T0.n, t: 0 };   /* the ambush was laid for this vehicle: the enemy starts out knowing roughly where it is */
       }
       // positions for crews that do not need to see the target themselves: out of sight of the vehicle, in concealment
       _hiddenSites(spec) {

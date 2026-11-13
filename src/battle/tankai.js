@@ -25,9 +25,9 @@
   // Machine guns: reach, the range inside which their fire counts as heavy, rounds used per 3 s burst, and the chance per burst of
   // knocking out a dug-in team at point-blank (falls off with range by `fall` metres). All assumed.
   const MG = {
-    m2: { name: 'Commander\'s .50', key: 'm2', rmax: 914, heavy: 900, rounds: 24, kill: 0.34, fall: 520, slew: 60, acquire: 1.5 },
-    coax: { name: 'Coax', key: 'coax', rmax: 800, heavy: 600, rounds: 40, kill: 0.42, fall: 330 },
-    m240: { name: 'Loader\'s M240', key: 'm240', rmax: 800, heavy: 600, rounds: 36, kill: 0.36, fall: 330 },
+    m2: { name: 'Commander\'s .50', key: 'm2', rmax: 914, heavy: 900, rounds: 24, kill: 0.6, fall: 750, slew: 60, acquire: 1.5 },
+    coax: { name: 'Coax', key: 'coax', rmax: 800, heavy: 600, rounds: 40, kill: 0.55, fall: 450 },
+    m240: { name: 'Loader\'s M240', key: 'm240', rmax: 800, heavy: 600, rounds: 36, kill: 0.45, fall: 450 },
   };
   const BURST = 3, PAUSE = 1, TURRET_RATE = 40, LOAD_S = 6, LOAD_S_NO_LOADER = 14, LDR_UP_S = 4, LDR_DOWN_S = 2;
   // thermal scanning: how much each condition cuts the chance of picking a team out (assumed)
@@ -70,7 +70,8 @@
     _burst(wKey, tg, opt) {
       const T = this.tank, M = MG[wKey], u = tg.u, R = tg.R, moving = (T.v || 0) > 1.5, heavy = R <= M.heavy;
       T[wKey] = Math.max(0, (T[wKey] || 0) - M.rounds); this._suppress(u, heavy, BURST);
-      const p = Math.min(0.6, M.kill * Math.exp(-R / M.fall)) * (moving ? 0.6 : 1) * (u.down && !(opt && opt.first) ? 0.6 : 1), hit = !(opt && opt.noKill) && this.rng.random() < p;
+      const open = this.world.veg(u.e, u.n).cls < 2, caught = u.state === 'moving' || u.state === 'setup';   /* a team caught moving or setting up, or lying in the open, is far easier to hit than one dug in under trees */
+      const p = Math.min(0.8, M.kill * Math.exp(-R / M.fall) * (caught ? 1.6 : 1) * (open ? 1.25 : 0.8)) * (moving ? 0.6 : 1), hit = !(opt && opt.noKill) && this.rng.random() < p;
       const rec = { t: this.t, dur: BURST, id: u.id, e: tg.k.e, n: tg.k.n, R, w: wKey, coax: wKey === 'coax', m2: wKey === 'm2', m240: wKey === 'm240', hit }; this._mg = rec; (this.mgs = this.mgs || []).push(rec);
       if (opt && opt.first) this.say(this.t, 'tank', wKey === 'm2' ? 'CDR' : wKey === 'm240' ? 'LDR' : 'GNR', `${M.name} engages ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m.`, opt.why || `located team in view inside ${M.rmax} m; ${heavy ? 'accurate fire: the team is pinned' : 'long range: harassing fire only'}`);
       if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; tg.k.done = true; this.say(this.t + BURST, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by ${M.name.toLowerCase()} fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst at this range${moving ? ', firing on the move' : ''}`); }
