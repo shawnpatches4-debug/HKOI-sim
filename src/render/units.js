@@ -32,12 +32,19 @@ export class TankView {
   }
   // The M1A2 SEPv3 with Trophy: hull and turret are separate files, the turret centred on its turning point.
   async _loadV3(base) {
-    const d = base + 'm1v3/', meta = await (await fetch(d + 'm1v3_meta.json')).json(), load = loadGLTF;
-    const [hull, tur] = await Promise.all([load(d + 'm1v3_hull.json'), load(d + 'm1v3_turret.json')]);
+    const d = base + 'm1v3/', load = loadGLTF, json = async f => { const r = await fetch(d + f); if (!r.ok) throw new Error('missing ' + f); return r.json(); };
+    // The newer set of files has the wheels as their own file (so they can turn) and the two tracks as separate pieces. If it has not been
+    // published yet, use the first set: the tracks still run and the hull still rocks, but the wheels stay fused to the hull.
+    let meta, hull, tur, wheels = null;
+    try { meta = await json('m1v3_meta2.json'); if (!meta.wheels) throw new Error('no wheels listed'); [hull, wheels, tur] = await Promise.all([load(d + 'm1v3_hull2.json'), load(d + 'm1v3_wheels.json'), load(d + 'm1v3_turret.json')]); }
+    catch (e) { wheels = null; meta = await json('m1v3_meta.json'); [hull, tur] = await Promise.all([load(d + 'm1v3_hull.json'), load(d + 'm1v3_turret.json')]); }
     const TEX = { US_1M1_ABRAMS: { map: d + 'abrams_c.webp', normal: d + 'abrams_n.webp', rough: 0.7, metal: 0.2 }, US_2Abrams_armor: { map: d + 'armor_c.webp', normal: d + 'armor_n.webp', rough: 0.75 }, US_HeavyTrack: { map: d + 'track_c.webp', rough: 0.85, metal: 0.3 }, M2: { map: d + 'm2_c.webp', rough: 0.6, metal: 0.25 }, M240L: { map: d + 'm240_c.webp', rough: 0.6, metal: 0.25 }, US_3Abrams_armor_glass: { color: '#0d1414', rough: 0.15, metal: 0.4 } };
     const mats = {}, byName = o => o.traverse(m => { if (!m.isMesh) return; const tag = (m.name + ' ' + (m.parent ? m.parent.name : '')).toLowerCase(), key = Object.keys(TEX).find(k => tag.includes(k.toLowerCase())) || (/m240/.test(tag) ? 'M240L' : /^m2|_m2|browning/.test(tag) ? 'M2' : 'US_1M1_ABRAMS'); if (key) m.material = mats[key] || (mats[key] = new THREE.MeshStandardMaterial({ name: key })); });   // the part files name each piece after its material
     const done = new Set(), prep = o => { byName(o); skin(o, TEX); o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; for (const mt of [].concat(m.material)) if (mt && !done.has(mt)) { done.add(mt); if (mt.name === 'US_1M1_ABRAMS' || mt.name === 'US_2Abrams_armor') vehicleFinish(mt); } } }); return o; };
-    const g = new THREE.Group(); g.add(prep(hull)); this.turret = new THREE.Group(); this.turret.position.fromArray(meta.pivot); this.turret.add(prep(tur)); g.add(this.turret);
+    // Two groups: the running gear (tracks and wheels), which stays on the ground, and the body (hull and turret), which rocks on its suspension.
+    const g = new THREE.Group(), gear = new THREE.Group(), body = this.body = new THREE.Group(); g.add(gear, body);
+    body.add(prep(hull)); this.turret = new THREE.Group(); this.turret.position.fromArray(meta.pivot); this.turret.add(prep(tur)); body.add(this.turret);
+    this._runningGear(gear, hull, wheels && prep(wheels), meta);
     this._station(); this.model = g; this.group.add(g); this.standIn.visible = false; this.loaded = true; this.variant = 'M1A2 SEPv3 TUSK with Trophy'; return true;
   }
   // The HKOI weapon station: a remote weapon station carrying an M230LF 30 mm chain gun, laid out after the real thing: a pedestal,
@@ -85,12 +92,65 @@ export class TankView {
   hkoiMuzzle(out, kick) { if (!this.muzzle) return null; this.group.updateWorldMatrix(true, true); if (kick) this.recoil = 0.12; return this.muzzle.getWorldPosition(out); }
   // swing the turret toward a compass bearing at traverse speed (40 degrees a second); hullDeg is the hull's heading
   aim(bearingDeg, hullDeg, dt) { if (!this.turret) return; const want = ((bearingDeg - hullDeg + 540) % 360) - 180, d = ((want - this.turretYaw + 540) % 360) - 180; this.turretYaw += Math.max(-40 * dt, Math.min(40 * dt, d)); this.turret.rotation.y = -this.turretYaw * DEG; }
+  // ---- Moving parts: tracks, wheels and suspension ----
+  // Take the tracks (and the wheels, when they came as their own file) out of the hull so they stay on the ground while the hull rocks.
+  _runningGear(gear, hull, wheels, meta) {
+    this.tracks = []; this.wheels = []; this.gauge = 1.38;                           // gauge: distance from the centre line to the middle of a track, metres
+    const tm = []; hull.updateMatrixWorld(true); hull.traverse(m => { if (m.isMesh && m.material && m.material.name === 'US_HeavyTrack') tm.push(m); });
+    for (const m of tm) { gear.attach(m); m.geometry.computeBoundingBox(); const bb = m.geometry.boundingBox, both = bb.min.x < -0.5 && bb.max.x > 0.5;
+      if (m.material.map) m.material.map.wrapS = m.material.map.wrapT = THREE.RepeatWrapping;                // so the picture of the links can slide round and round
+      this.tracks.push({ mesh: m, side: both ? 0 : bb.min.x + bb.max.x > 0 ? 1 : -1, off: 0 }); if (!both) this.gauge = Math.abs(bb.min.x + bb.max.x) / 2; }   // side: +1 left (+x), -1 right, 0 one piece holding both tracks
+    if (!wheels) return;
+    const by = {}, ms = []; for (const w of meta.wheels) by[w.name] = w; wheels.traverse(m => { if (m.isMesh) ms.push(m); });
+    for (const m of ms) { const w = by[m.name.slice(0, 8)]; if (!w) continue;                                 // pieces are named wheel_00, wheel_01, ... like the list in the meta file
+      m.geometry.translate(-w.c[0], -w.c[1], -w.c[2]); m.position.set(w.c[0], w.c[1], w.c[2]); gear.add(m);   // re-centre each wheel on its own axle so it turns about it
+      this.wheels.push({ mesh: m, perM: 1 / w.r, side: w.c[0] > 0 ? 1 : -1, a: 0 }); }                        // perM: radians turned per metre the track moves
+  }
+  // Call once per frame. dt in seconds (0 while paused); speedMps is the ground speed (give it negative when reversing; if it is positive
+  // the direction is taken from the way place() has actually moved the vehicle); yawRateDegPerSec is how fast the hull is turning, clockwise
+  // positive (leave it out and it is measured from the headings given to place()).
+  //   Tracks: the picture of the links slides along the track by the distance covered (one repeat of the picture is 0.5646 m of track).
+  //   Wheels: each turns by distance / its radius. In a turn the outer track and its wheels run faster than the inner ones.
+  //   Body: squats back when speeding up, dips when braking, leans out a little in turns, rocks back from the main gun (see kick) and
+  //   settles like a heavy vehicle on stiff springs. It is worked out in fixed steps of 1/240 s, so it looks the same at any frame rate.
+  animate(dt, speedMps = 0, yawRateDegPerSec) {
+    const A = this._anim || (this._anim = { dir: 1, fwd: 0, turn: 0, bank: 0, vf: 0, p: 0, pv: 0, r: 0, rv: 0, y: 0, yv: 0, dist: 0, kp: 0, kr: 0, ky: 0 });
+    if (!(dt > 0)) { A.fwd = 0; A.turn = 0; return; } dt = Math.min(dt, 0.25);
+    if (A.fwd > 1e-4) A.dir = 1; else if (A.fwd < -1e-4) A.dir = -1;                                           // which way place() moved the vehicle since the last call
+    const v = speedMps < 0 ? speedMps : speedMps * A.dir, yaw = (yawRateDegPerSec != null ? yawRateDegPerSec : Math.max(-60, Math.min(60, A.turn / dt))) * DEG; A.fwd = 0; A.turn = 0;
+    // tracks and wheels
+    const dL = (v + yaw * this.gauge) * dt, dR = (v - yaw * this.gauge) * dt;
+    if (this.tracks) { const T = this.tracks;
+      if (T.length === 2 && !this._trackSplit && T[0].mesh.material.map && T[0].mesh.material.map.image) { this._trackSplit = true; const m = T[1].mesh, mat = m.material.clone(); mat.map = m.material.map.clone(); mat.map.needsUpdate = true; m.material = mat; }   // a second copy of the picture (same image) so the two tracks can run at different speeds
+      for (const t of T) { const map = t.mesh.material.map; if (!map) continue; map.wrapT = THREE.RepeatWrapping; t.off = (t.off + (t.side > 0 ? dL : t.side < 0 ? dR : v * dt) / 0.5646) % 1; if (this._trackSplit || t === T[0]) map.offset.y = t.off; } }
+    if (this.wheels) for (const w of this.wheels) { w.a = (w.a + (w.side > 0 ? dL : dR) * w.perM) % (Math.PI * 2); w.mesh.rotation.x = w.a; }
+    if (!this.body) return;
+    // body on its springs
+    const h = 1 / 240, W = 7.5, Z = 0.85, lag = 0.3, kf = 1 - Math.exp(-h / lag); A.bank += dt; let n = Math.min(60, Math.floor(A.bank / h + 1e-6)); A.bank -= n * h; if (A.bank > h) A.bank = 0;
+    while (n-- > 0) {
+      A.vf += (v - A.vf) * kf; const acc = (v - A.vf) / lag;                                                   // smoothed acceleration, m/s2 (the battle changes speed in steps)
+      const pt = Math.max(-0.022, Math.min(0.03, -acc * 0.0075)), rt = Math.max(-0.014, Math.min(0.014, v * yaw * 0.004));   // where the springs want to be: nose up when speeding up, lean to the outside of a turn
+      A.pv += A.kp; A.rv += A.kr; A.yv += A.ky; A.kp = A.kr = A.ky = 0;                                         // a shot from the main gun arrives as a shove
+      A.pv += (-(A.p - pt) * W * W - A.pv * 2 * Z * W) * h; A.p += A.pv * h;
+      A.rv += (-(A.r - rt) * W * W * 1.6 - A.rv * 2 * Z * W * 1.26) * h; A.r += A.rv * h;                      // stiffer side to side
+      A.yv += (-A.y * W * W * 1.3 - A.yv * 2 * Z * W * 1.14) * h; A.y += A.yv * h;
+      A.dist += v * h; A.amp = Math.min(1, Math.abs(A.vf) / 7);
+    }
+    // a very small bounce from the ground that grows with speed (a pattern tied to distance covered, so it stops when the vehicle stops)
+    const amp = A.amp || 0, bp = amp * (Math.sin(A.dist * 1.37) * 0.0022 + Math.sin(A.dist * 0.61 + 1) * 0.0016), by = amp * (Math.sin(A.dist * 1.05 + 2) * 0.006 + Math.sin(A.dist * 2.3) * 0.003);
+    const P = A.p + bp, R = A.r + amp * Math.sin(A.dist * 0.83 + 0.5) * 0.0015, cy = 0.9;                       // the body turns about a point 0.9 m up, roughly where the suspension holds it
+    this.body.rotation.set(P, 0, R); this.body.position.set(cy * Math.sin(R), A.y + by, -cy * Math.sin(P));
+  }
+  // The main gun has fired: the body rocks away from the direction the gun points (back on its haunches when firing ahead, sideways when
+  // firing over the side) and sinks a little, then settles. strength 1 is a full-charge 120 mm round.
+  kick(strength = 1) { const A = this._anim; if (!A) return; const ty = (this.turretYaw || 0) * DEG; A.kp -= 0.3 * strength * Math.cos(ty); A.kr -= 0.2 * strength * Math.sin(ty); A.ky -= 0.2 * strength; }
   _loadOld(assetBase) {
     const stand = this.standIn;
     loadGLTF(assetBase + 'm1/m1.json').then(scene => { const g = { scene }; const done = new Set(); g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && !done.has(m) && !m.transparent) { done.add(m); vehicleFinish(m); } } }); this.model = g.scene; this.group.add(g.scene); stand.visible = false; this.loaded = true; }).catch(e => { this.failed = true; console.warn('tank model not loaded', e && e.message); });
   }
   // heading in degrees clockwise from north; the model's nose points along +z, scene north is -z
-  place(pos, headingDeg, pitch = 0, roll = 0) { this.heading = headingDeg; this.group.position.copy(pos); this.group.rotation.set(pitch, Math.PI - headingDeg * DEG, roll, 'YXZ'); }
+  place(pos, headingDeg, pitch = 0, roll = 0) { const A = this._anim, g = this.group.position; if (A && this.heading != null) { const hr = headingDeg * DEG, f = (pos.x - g.x) * Math.sin(hr) - (pos.z - g.z) * Math.cos(hr); if (Math.abs(f) < 5) { A.fwd += f; A.turn += ((headingDeg - this.heading + 540) % 360) - 180; } }   // note how far forward it moved and turned, for animate()
+    this.heading = headingDeg; this.group.position.copy(pos); this.group.rotation.set(pitch, Math.PI - headingDeg * DEG, roll, 'YXZ'); }
 }
 
 // Models supplied for the enemy: each file is fetched once and copied for every use. If a file is missing the plain stand-in shapes stay.
