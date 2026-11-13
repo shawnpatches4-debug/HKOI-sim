@@ -6,7 +6,7 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); mode = sys.a
 tpl = open(os.path.join(root, 'src/app/index.tpl.html')).read()
 out = os.path.join(root, 'build/beta' if mode == 'local' else 'build/beta_pub'); os.makedirs(out, exist_ok=True)
 three = ('file://' + os.path.abspath(sys.argv[2])) if mode == 'local' else 'https://cdn.jsdelivr.net/npm/three@0.170.0'
-for d in ['world', 'battle', 'render', 'app']:
+for d in ['world', 'battle', 'render', 'app', 'audio']:
     shutil.rmtree(os.path.join(out, d), ignore_errors=True); shutil.copytree(os.path.join(root, 'src', d), os.path.join(out, d), ignore=shutil.ignore_patterns('*.tpl.html'))
 for f in ['engine.js', 'dmg.js', 'campaign.js']: shutil.copy(os.path.join(root, 'src', f), os.path.join(out, f))
 assets = os.environ.get('HK_ASSETS')
