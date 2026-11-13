@@ -12,7 +12,7 @@ Beta 0.22 is published on the hosted page (0.21 enemy AI + movement, 0.22 sights
 
 ## In flight when this was written (check WORKLOG's last entries to see whether they were merged)
 1. (MERGED and published as beta 0.22) Enemy sight reticles per weapon + a menu to pick the unit + a new "enemy close-up" camera with the same menu (cameras.js, index.tpl.html, main.js).
-2. Tank animation: running tracks (texture scroll), turning roadwheels (need cutting out of the hull mesh with tools/lineup_split.py), suspension feel (`tank.animate(dt, speed, yawRate)`, `tank.kick()`).
+2. Tank animation: MERGED and PUBLISHED as beta 0.23 (running tracks, turning roadwheels, hull squat/dip/lean, main-gun rock: `tank.animate(dt, speed, yawRate)`, `tank.kick()`). Needs assets/m1v3/{m1v3_hull2,m1v3_wheels,m1v3_meta2}.json: these are in hkoi-assets.zip only if it was made after 15:45 CT 13 Nov (without them the tank falls back to the old hull, no turning wheels). Not yet seen by Shawn; wheels are 12-sided; pivot-turn track counter-rotation checked by numbers only.
 If the work log does not say "merged", they are NOT in `main`: do them (the task descriptions are in WORKLOG and docs/AGENT_BRIEF.md).
 
 ## Shawn's current priority order (his words, 14:50 CT)
