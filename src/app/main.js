@@ -9,7 +9,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.26';
+const VERSION = '0.27';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -21,9 +21,10 @@ const FORCES = {
   drones: { name: 'Drone hunt', note: 'Two radio FPV crews, one fibre FPV crew, one Kornet', force: [{ type: 'fpv', n: 2 }, { type: 'fpv_fiber', n: 1 }, { type: 'kornet', n: 1 }] },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
+const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
-const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto' }, store.get('setup', {}));
-for (const k of ['biome', 'cond', 'force', 'skill', 'gfx']) if (q.get(k)) set[k] = q.get(k);
+const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold' }, store.get('setup', {}));
+for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission']) if (q.get(k)) set[k] = q.get(k);
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
 
 const canvas = $('view'), hud = $('hud');
@@ -44,7 +45,7 @@ function newBattle() {
   if (!lookup) lookup = cfg0.hkoi_enabled ? HK.meetLookup(cfg0) : {};
   for (const t of teams) scene.units.remove(t.group); if (volleys) volleys.dispose();
   const pos = tankPos();
-  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
+  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
   teams = battle.units.map(u => { const t = new TeamView(u.type, ASSETS); scene.units.add(t.group); return t; });
   // enemy transport parked in dead ground behind some of the teams: seen only when the team it belongs to is
   for (const p of props) scene.units.remove(p.view.group); props.length = 0;
@@ -118,9 +119,9 @@ function drawLog() {
 }
 function checkEnd() {
   if (ended) return; const s = battle.summary(), last = battle.volleys[battle.volleys.length - 1], quiet = !last || battle.t > last.tEnd + 6;
-  const out = !s.alive ? 'lost' : (s.teamsLeft === 0 && quiet) ? 'won' : battle.t >= 900 ? 'time' : null; if (!out) return;
+  const out = !s.alive ? 'lost' : battle.over && quiet ? battle.over.result : (s.teamsLeft === 0 && quiet) ? 'won' : battle.t >= 900 ? 'time' : null; if (!out) return;
   ended = true; setTimeout(() => { if (state !== 'play') return; playing = false; state = 'result';
-    $('r-head').innerHTML = out === 'lost' ? 'VEHICLE <em style="color:var(--bad)">DESTROYED</em>' : out === 'won' ? 'AMBUSH <em>DEFEATED</em>' : 'TIME <em>EXPIRED</em>';
+    $('r-head').innerHTML = out === 'lost' ? 'VEHICLE <em style="color:var(--bad)">DESTROYED</em>' : out === 'won' ? 'AMBUSH <em>DEFEATED</em>' : out === 'objective' ? 'OBJECTIVE <em>REACHED</em>' : out === 'withdrawn' ? 'CONTACT <em style="color:var(--warn)">BROKEN</em>' : 'TIME <em>EXPIRED</em>';
     $('r-sub').textContent = `${world.biome.name}, map ${set.map}, ${CONDITIONS[set.cond].name.toLowerCase()} · ${FORCES[set.force].name}, ${set.skill} crews · ${Math.floor(battle.t / 60)} min ${Math.floor(battle.t % 60)} s`;
     const tb = $('r-table'); tb.textContent = ''; const NAMES = { HIT: 'Hit the vehicle', aps: 'Stopped by Trophy', hkoi_obs: 'Guidance cut by HKOI cloud', hkoi_cut: 'Guidance cut by HKOI cloud', counter_fire: 'Gunner driven off his missile by machine-gun fire', suppressed_aim: 'Missed: gunner\'s aim shaken by machine-gun fire', hkoi_he: 'Shot down by HKOI', terrain_mask: 'Lost behind terrain or cover', gunner_jitter: 'Enemy gunner missed', unguided_miss: 'Unguided miss', jammer: 'Jammed' };
     const rows = [['Enemy volleys', s.volleys], ['Missiles and drones launched', s.fired]].concat(Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([k, n]) => ['· ' + (NAMES[k] || k.replace(/_/g, ' ')), n])).concat([['HKOI rounds used', `${cfg0.rnd ? '' : ''}${150 - s.obs} obscurant, ${150 - s.he} HE`], ['Trophy charges left', `${s.apsL} left, ${s.apsR} right`], ['Crew', Object.entries(s.crew || {}).map(([k, x]) => `${k.toUpperCase()} ${x}`).join('  ')], ['Enemy teams destroyed by return fire', s.killedByTank], ['Enemy teams knocked out by machine guns', s.killedByMg], ['Main gun rounds left (of 10 multi-purpose)', s.main], ['Enemy teams still able to fire', s.teamsLeft]]);
@@ -134,7 +135,7 @@ function seg(id, items, key, after) { const box = $(id); box.textContent = ''; f
 function note() { $('o-note').textContent = FORCES[set.force].note + '. ' + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.'); }
 function buildTitle() {
   $('ver').textContent = VERSION;
-  seg('o-biome', BIOMES, 'biome', preview); seg('o-cond', Object.entries(CONDITIONS).map(([k, c]) => [k, c.name]), 'cond', preview); seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name]), 'force', note); seg('o-skill', SKILLS, 'skill'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note); seg('o-gfx', Object.entries(QUALITY).sort((a, b) => (b[1].auto ? 1 : 0) - (a[1].auto ? 1 : 0)).map(([k, v]) => [k, v.name]), 'gfx', () => scene.setQuality(set.gfx));
+  seg('o-biome', BIOMES, 'biome', preview); seg('o-cond', Object.entries(CONDITIONS).map(([k, c]) => [k, c.name]), 'cond', preview); seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name]), 'force', note); seg('o-skill', SKILLS, 'skill'); seg('o-mission', MISSIONS, 'mission'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note); seg('o-gfx', Object.entries(QUALITY).sort((a, b) => (b[1].auto ? 1 : 0) - (a[1].auto ? 1 : 0)).map(([k, v]) => [k, v.name]), 'gfx', () => scene.setQuality(set.gfx));
   $('o-map').value = set.map; $('o-map').onchange = () => { set.map = Math.max(1, Math.min(9999, Math.round(+$('o-map').value || 1))); store.set('setup', set); preview(); };
   $('o-rand').onclick = () => { set.map = 1 + Math.floor(Math.random() * 9999); $('o-map').value = set.map; store.set('setup', set); preview(); };
   $('go').onclick = start; note();

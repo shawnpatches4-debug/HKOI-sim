@@ -173,6 +173,121 @@
       if ((v.rec.hits || 0) > 0 && upAt(v.tEnd - 1)) p = 1 - (1 - p) * (1 - 0.5);                          /* a hit on the vehicle with a man in the hatch (assumed 50%) */
       if (p > 0 && this.rng.random() < p) { L.ok = false; L.up = false; if (T.st && T.st.crew) T.st.crew.ldr = 'wounded'; this.say(this.t, 'tank', 'CDR', 'Loader hit while up in his hatch. The commander will have to load.', `exposed during the engagement (about ${Math.round(p * 100)}% this time); the main gun now takes ${LOAD_S_NO_LOADER} s to load and the M240 is silent`); }
     },
+    // ================= the commander: mission, where to fight from, when to move =================
+    // Missions (chosen at setup): 'hold' a battle position with two alternates, 'advance' to an objective in bounds between covered
+    // positions, 'hunt' the located enemy. All three use the same judgement of ground (_scorePos).
+
+    // what the commander believes threatens him: located teams (weight 2), where recent launches came from (weight 1)
+    _threats() {
+      const T = this.tank, out = []; for (const k of T.known) if (!k.done) out.push({ e: k.e, n: k.n, w: 2 });
+      for (const vv of this.volleys.slice(-2)) for (const l of vv.launches) { if (l.u.spec.indirect) continue; const a = l.brg * DEG, R = Math.min(l.R, 2500), e = vv.at.e + Math.sin(a) * R, n = vv.at.n + Math.cos(a) * R; if (out.some(o => Math.hypot(o.e - e, o.n - n) < 80)) continue; out.push({ e, n, w: 1 }); }
+      return out;
+    },
+    // How good is this spot to fight from? Higher is better. Hull hidden from threats, turret able to see them, long open ground toward
+    // them (HKOI needs room: it is weak inside about 700 m), and no cover close by that an RPG team could use to creep up.
+    _scorePos(c, threats, look) {
+      const W = this.world; if (!W.inside(c.e, c.n) || !W.passable(c.e, c.n, true)) return -9; if (W.slope(c.e, c.n) > 0.3) return -9;
+      let s = 0, sw = 0, hid = 0, see = 0;
+      for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : 1) + (tur ? 0.6 : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
+      s = sw ? s / sw : 0.6;
+      // open ground toward the enemy (or the way we are looking when no enemy is known): how much of the first 1,000 m is in view
+      const dirs = threats.length ? threats.slice(0, 4).map(o => Math.atan2(o.e - c.e, o.n - c.n)) : look != null ? [look * DEG - 0.5, look * DEG, look * DEG + 0.5] : [0, 1.57, 3.14, 4.71];
+      let open = 0, on = 0; for (const a of dirs) for (const r of [250, 500, 750, 1000]) { on++; if (W.los(c.e, c.n, 2.6, c.e + Math.sin(a) * r, c.n + Math.cos(a) * r, 1.0).clear) open++; }
+      // cover within 300 m that would hide an RPG team
+      let rpg = 0, rn = 0; for (let a = 0; a < 6.28; a += 0.785) for (const r of [100, 200, 300]) { rn++; const e = c.e + Math.sin(a) * r, n = c.n + Math.cos(a) * r; if (W.veg(e, n).cls >= 3 || W.buildingAt(e, n)) rpg++; }
+      c.hid = hid; c.see = see; c.open = open / on; c.rpg = rpg / rn;
+      return s + 0.6 * c.open - 0.8 * c.rpg - (c.d || 0) / 400 * 0.4;
+    },
+    // Look over the ground around a point for the best positions, a few candidates per step so it never stalls a frame.
+    // Returns null while still looking, then the candidates sorted best first.
+    _search(key, centre, rMax, threats, look, extra) {
+      const T = this.tank, A = this._crew(); let Q = A.search;
+      if (!Q || Q.key !== key) { const cands = [], st = rMax > 220 ? 40 : 25; for (let de = -rMax; de <= rMax; de += st) for (let dn = -rMax; dn <= rMax; dn += st) { if (Math.hypot(de, dn) > rMax) continue; const e = centre.e + de, n = centre.n + dn; cands.push({ e, n, d: Math.hypot(e - T.e, n - T.n) }); } Q = A.search = { key, cands, i: 0 }; }
+      for (let k = 0; k < 6 && Q.i < Q.cands.length; k++, Q.i++) { const c = Q.cands[Q.i]; c.s = this._scorePos(c, threats, look); if (c.s > -9 && extra) c.s += extra(c); }
+      if (Q.i < Q.cands.length) return null;
+      A.search = null; return Q.cands.filter(c => c.s > -9).sort((a, b) => b.s - a.s);
+    },
+    // drive to a place by a route that keeps out of the threats' view where it can
+    _goTo(c, vmax, why) {
+      const T = this.tank, W = this.world, th = this._threats();
+      // exposure to the three heaviest threats, remembered per grid square so each square is only looked at once
+      const top = th.slice().sort((p, q) => q.w - p.w).slice(0, 3), memo = new Map();
+      const cost = (e, n) => { const key = Math.round(e / 50) * 100003 + Math.round(n / 50); let x = memo.get(key); if (x == null) { x = 0; for (const o of top) if (W.los(o.e, o.n, 1.3, e, n, 1.6).clear) x += 1.2 * o.w; memo.set(key, x); } return x; };
+      const route = W.path(T.e, T.n, c.e, c.n, { grid: 50, tank: true, cost: top.length ? cost : null });
+      T.route = route && route.length > 1 ? route.slice(1).concat([[c.e, c.n]]) : [[c.e, c.n]]; T.routeI = 0; T.vmax = vmax; T.mode = 'moving'; T.modeSince = this.t; T.goal = { e: c.e, n: c.n };
+      if (why) this.say(this.t, 'tank', 'CDR', why.text, why.why);
+    },
+    // which way the hull should face when halted: front to the worst threat, turned a little to show the side that still has Trophy shots
+    _facing() {
+      const T = this.tank, th = this._threats(); if (!th.length) return null; let fe = 0, fn = 0; for (const o of th) { fe += (o.e - T.e) * o.w; fn += (o.n - T.n) * o.w; }
+      let f = (Math.atan2(fe, fn) / DEG + 360) % 360; const st = T.st || {}; if (st.apsL === 0 && st.apsR > 0) f -= 30; else if (st.apsR === 0 && st.apsL > 0) f += 30; return (f + 360) % 360;
+    },
+    _mission() {
+      const T = this.tank, A = this._crew(), M = A.m || (A.m = { type: this.mission || 'hold', phase: 'start', since: 0, arrived: 0, rounds0: T.main, home: { e: T.home.e, n: T.home.n }, pos: null, cur: -1, lastVolley: -1, clearSince: null });
+      if (this.over) return; const st = T.st || {}, tg = this._targets(), th = this._threats(), moving = !!T.goal, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
+      const inView = tg.filter(q => q.los), low = st.obs != null && (st.obs <= 0 || (st.apsL || 0) + (st.apsR || 0) <= 1), careful = st.obs != null && (st.obs < 50 || st.apsL === 0 || st.apsR === 0);
+      // protection nearly gone: break contact (decision 12)
+      if (low && M.phase !== 'withdraw') { M.phase = 'withdraw'; A.search = null; this._goTo(M.home, 9, { text: `Commander breaks contact: ${st.obs <= 0 ? 'HKOI is out of obscurant' : 'Trophy is down to its last shot'}. Pulling back to the start line.`, why: 'he will not fight on without his protection' }); T.intent = 'Withdrawing: protection nearly gone'; return; }
+      if (M.phase === 'withdraw') { if (!moving) this.over = { result: 'withdrawn', text: 'The vehicle broke contact with its protection nearly gone.' }; return; }
+      if (moving) { M.clearSince = null; return; }
+      if (M.arrivedGoal !== T.modeSince) { M.arrivedGoal = T.modeSince; M.arrived = this.t; M.rounds0 = T.main; M.lastVolley = v ? v.i : -1; }
+      const here = { e: T.e, n: T.n, d: 0 }, settled = this.t - M.arrived;
+      if (M.type === 'hold') this._hold(M, tg, th, inView, settled, v);
+      else if (M.type === 'advance') this._advance(M, tg, th, inView, settled, v, careful);
+      else this._hunt(M, tg, th, inView, settled, v, careful);
+    },
+    // HOLD: a primary position and two alternates; shift after being fired on, after several rounds from one spot, or to see a team
+    _hold(M, tg, th, inView, settled, v) {
+      const T = this.tank;
+      if (!M.pos) { const r = this._search('hold', M.home, 200, th, T.h); T.intent = 'Hold: choosing a primary position and two alternates'; if (!r) return;
+        const pos = []; for (const c of r) { if (pos.every(p => Math.hypot(p.e - c.e, p.n - c.n) >= 50)) pos.push(c); if (pos.length === 3) break; } if (!pos.length) pos.push({ e: T.e, n: T.n, s: 0, hid: 0, see: 0 });
+        M.pos = pos; M.cur = 0; if (Math.hypot(pos[0].e - T.e, pos[0].n - T.n) > 15) this._goTo(pos[0], 7, { text: `Commander takes up his primary position ${Math.round(Math.hypot(pos[0].e - T.e, pos[0].n - T.n) / 5) * 5} m away, with ${pos.length - 1} alternate${pos.length === 2 ? '' : 's'} picked.`, why: 'hull-down where the ground allows, long open view, no cover close by for an RPG team' }); return; }
+      if (M.pos.length < 2 || settled < 8 || this._volleyActive()) { T.intent = `Hold: fighting from ${M.cur === 0 ? 'the primary' : 'an alternate'} position`; return; }
+      const firedOn = v && v.done && v.i > M.lastVolley, rounds = M.rounds0 - T.main >= 3, blind = tg.find(q => !q.los && !q.moving); let why = null;
+      if (firedOn) why = 'he has just been fired on here'; else if (rounds) why = 'three main gun rounds fired from this spot'; else if (blind && settled > 10) why = `${blind.u.spec.name} #${blind.u.id + 1} cannot be seen from here`;
+      if (!why) { T.intent = `Hold: fighting from ${M.cur === 0 ? 'the primary' : 'an alternate'} position`; return; }
+      let best = -1, bs = -1e9; M.pos.forEach((p, i) => { if (i === M.cur) return; p.d = Math.hypot(p.e - T.e, p.n - T.n); const s = this._scorePos(p, th, T.h) + (blind && this.world.los(p.e, p.n, 2.6, blind.k.e, blind.k.n, 1.0).clear ? 0.8 : 0); if (s > bs) { bs = s; best = i; } });
+      M.lastVolley = v ? v.i : -1; M.rounds0 = T.main; if (best < 0) return; M.cur = best; const p = M.pos[best];
+      this._goTo(p, 7, { text: `Commander shifts ${Math.round(p.d / 5) * 5} m to ${best === 0 ? 'his primary' : 'an alternate'} position: ${why}.`, why: `hull hidden from ${p.hid} of ${th.length} known threats there, turret sees ${p.see}` }); T.intent = `Hold: shifting position (${why})`;
+    },
+    // ADVANCE: bounds between covered positions toward the objective, a halt to scan at each; fight from cover when ambushed, then go on
+    _advance(M, tg, th, inView, settled, v, careful) {
+      const T = this.tank, O = this.objective, dist = Math.hypot(O.e - T.e, O.n - T.n);
+      if (dist < 60) { this.over = { result: 'objective', text: 'The vehicle reached its objective.' }; return; }
+      const contact = this.volleys.length > 0 || T.known.length > 0, fight = this._volleyActive() || inView.some(q => q.danger >= 2);
+      if (fight) { M.clearSince = null; T.intent = 'Advance halted: fighting the teams in view'; return; }
+      if (M.clearSince == null) M.clearSince = this.t; const halt = contact ? 40 : 20, quiet = this.t - M.clearSince;
+      if (settled < halt || (contact && quiet < 20)) { T.intent = `Advance: halted to scan (${Math.max(0, Math.ceil(Math.max(halt - settled, contact ? 20 - quiet : 0)))} s), ${Math.round(dist / 10) * 10} m to the objective`; return; }
+      if (careful && th.length) { T.intent = 'Advance held: protection is low, he will not cross open ground under threat'; return; }
+      const brg = brgOf(T.e, T.n, O.e, O.n), step = Math.min(contact ? 200 : 300, dist), centre = { e: T.e + Math.sin(brg * DEG) * step, n: T.n + Math.cos(brg * DEG) * step };
+      T.intent = 'Advance: picking the next covered position'; const r = dist < 150 ? [{ e: O.e, n: O.n, d: dist, hid: 0, see: 0 }] : this._search('adv:' + Math.round(T.e) + ':' + Math.round(T.n), centre, 130, th, brg, c => (dist - Math.hypot(O.e - c.e, O.n - c.n) < 100 ? -5 : 0));
+      if (!r) return; const p = r.find(c => this._drivable(T.e, T.n, c.e, c.n)) || r[0] || { e: centre.e, n: centre.n, d: step, hid: 0, see: 0 };
+      this._goTo(p, careful ? 5 : 8.3, { text: `Commander bounds ${Math.round(p.d / 10) * 10} m toward the objective to ${p.hid > 0 ? 'a hull-down' : 'the next'} position.`, why: th.length ? `hull hidden from ${p.hid} of ${th.length} known threats there; route kept out of their view where possible` : 'no enemy found yet: long open view, away from close cover' }); T.intent = 'Advance: bounding to the next position';
+    },
+    // HUNT: get a clear shot at the most dangerous located team from a covered position, never close to ground that hides RPG teams
+    _hunt(M, tg, th, inView, settled, v, careful) {
+      const T = this.tank, W = this.world, top = tg[0];
+      if (!top) { if (settled > 45 && this.belief2) { /* nothing located: nothing to hunt yet */ } T.intent = 'Hunt: scanning for the enemy'; return; }
+      if (this._volleyActive() || settled < 6) { T.intent = `Hunt: engaging ${top.u.spec.name} #${top.u.id + 1}`; return; }
+      if (top.los) { T.intent = `Hunt: ${top.u.spec.name} #${top.u.id + 1} in view at ${Math.round(top.R / 10) * 10} m, engaging from here`; return; }
+      if (careful) { T.intent = 'Hunt held: protection is low, he will not close'; return; }
+      T.intent = `Hunt: looking for a position with a shot at ${top.u.spec.name} #${top.u.id + 1}`;
+      const r = this._search('hunt:' + top.u.id + ':' + Math.round(top.k.e) + ':' + Math.round(T.e), { e: T.e, n: T.n }, 280, th, null, c => { const R = Math.hypot(top.k.e - c.e, top.k.n - c.n); return (W.los(c.e, c.n, 2.6, top.k.e, top.k.n, 1.0).clear ? 1.2 : -0.6) + (R < 300 ? -3 : 0) + (top.R - R) / 280 * 0.3; });
+      if (!r) return; const p = r.find(c => c.d > 20 && this._drivable(T.e, T.n, c.e, c.n)); if (!p) { top.k.t = this.t; T.intent = 'Hunt: no position with a shot within reach'; M.arrived = this.t; return; }
+      this._goTo(p, 7, { text: `Commander moves ${Math.round(p.d / 10) * 10} m for a shot at ${top.u.spec.name} #${top.u.id + 1}.`, why: `the most dangerous located team; hull hidden from ${p.hid} of ${th.length} known threats at the new spot` });
+    },
+    // the driver: inside an engagement follow the planned path; otherwise follow the commander's route, and face the threat when halted
+    _moveTank(dt) {
+      const T = this.tank, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
+      if (v && this.t <= v.tEnd) { const p = this.tankAt(this.t); T.e = p.e; T.n = p.n; T.h = p.h; T.v = p.v; T.goal = null; T.route = null; return; }
+      this._mission();
+      if (T.goal && T.route) {
+        let wp = T.route[T.routeI]; let dx = wp[0] - T.e, dn = wp[1] - T.n, d = Math.hypot(dx, dn); const last = T.routeI >= T.route.length - 1;
+        if (d < (last ? 2 : 12)) { if (last) { T.goal = null; T.route = null; T.v = 0; T.mode = 'overwatch'; T.modeSince = this.t; return; } T.routeI++; wp = T.route[T.routeI]; dx = wp[0] - T.e; dn = wp[1] - T.n; d = Math.hypot(dx, dn); }
+        const want = brgOf(T.e, T.n, wp[0], wp[1]), dh = angDiff(want, T.h); T.h = (T.h + clamp(dh, -35 * dt, 35 * dt) + 360) % 360;
+        const vmax = Math.abs(dh) > 50 ? 2 : Math.min(T.vmax || 7, last ? 1 + d * 0.5 : 99); T.v += clamp(vmax - T.v, -4 * dt, 2.4 * dt); T.e += Math.sin(T.h * DEG) * T.v * dt; T.n += Math.cos(T.h * DEG) * T.v * dt;
+      } else { T.v = 0; const f = this._facing(); if (f != null) { const dh = angDiff(f, T.h); if (Math.abs(dh) > 4) T.h = (T.h + clamp(dh, -20 * dt, 20 * dt) + 360) % 360; } }
+    },
     skillOf() { return this._SK[this.skill] || this._SK.trained; },
     // what the crew is doing, for the screen: [[who, text], ...]
     tankStatus() {

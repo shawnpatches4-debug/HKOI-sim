@@ -61,6 +61,9 @@
           home: { e: tk.e || 0, n: tk.n || 0 }, route: null, goal: null, mode: 'overwatch', modeSince: 0,
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
+        this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
+        // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
+        if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }
         this.units = [];
         this._place(opt.force || [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }]);
         this.say(0, 'setup', null, `Battle on ${this.world.biome.name}, map seed ${this.world.seed}. ${this.units.length} enemy teams in position.`);
@@ -72,7 +75,7 @@
       // Each team gets a primary firing position and two alternates, chosen for a clear shot at where the vehicle starts,
       // concealment, and a covered way out. Teams are spread so one burst of return fire cannot catch two.
       _place(force) {
-        const W = this.world, T = this.tank, taken = [];
+        const W = this.world, T0 = this.tank, T = this.objective ? { e: (T0.e + this.objective.e) / 2, n: (T0.n + this.objective.n) / 2 } : T0, taken = [];   /* on an advance the ambush is laid along the route */
         for (const f of force) {
           const spec = TEAMS[f.type]; if (!spec) continue;
           const sites = W.ambushSites(T.e, T.n, { rmin: Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length });
@@ -135,11 +138,14 @@
       }
       // The driver's plan for a volley: hold until the first warning plus a reaction time, then make for the nearest ground that
       // hides the vehicle from where the warnings point. Returns the path the engine will use: [[t, east, north, heading, speed], ...]
-      _drivePlan(at, warnT, observers, tEnd) {
+      _drivePlan(at, warnT, observers, tEnd, firstImpact) {
         const W = this.world, path = [], T0 = -3, PDT = 0.1; let e = 0, n = 0, h = at.h, v = at.v || 0, goal = null, reached = false;
         const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2;
         let cover = null;
-        if (warnT != null && observers.length) { const c = W.coverFrom(at.e, at.n, observers, { radius: 260, step: 24 }).filter(q => this._drivable(at.e, at.n, q.e, q.n)); cover = c.length ? c[0] : null; }
+        if (warnT != null && observers.length) { const c = W.coverFrom(at.e, at.n, observers, { radius: 260, step: 24 }).filter(q => this._drivable(at.e, at.n, q.e, q.n)); cover = c.length ? c[0] : null;
+          // Go only for cover that hides the hull from every firer AND can be reached before the first missile arrives. Otherwise hold still:
+          // HKOI gets a long clean engagement and Trophy's good side stays toward the threat (Shawn's decision 9).
+          if (cover && firstImpact != null && (!cover.all || react + 2 + cover.d / 5 > firstImpact)) { this._holdWhy = cover.all ? 'cover is too far to reach before impact' : 'no cover in reach hides the hull from every firer'; cover = null; } else this._holdWhy = null; }
         for (let t = T0; t <= tEnd + 8; t += PDT) {
           if (!goal && cover && t >= react) goal = { e: cover.e - at.e, n: cover.n - at.n };
           if (goal && !reached) {
@@ -231,7 +237,7 @@
         let why = null;
         if (ready.length >= want && exposed !== 'hull') why = `${ready.length} of ${able.length} teams have a clean shot and the vehicle is exposed`;
         else if (T.known.some(k => !k.done)) why = 'the vehicle has found one of the teams, so the leader fires now';
-        else if ((T.v || 0) > 1.5 && waited > 2) why = 'the vehicle is moving and may reach cover, so the leader fires now';
+        else if ((T.v || 0) > 1.5 && waited > S.open / 3) why = 'the vehicle is moving and may leave the kill zone, so the leader will not wait for more teams';
         else if (waited >= S.open) why = `the leader has held fire for ${Math.round(waited)} s and will not wait longer`;
         else if (ready.length >= want && waited >= S.open * 0.5) why = 'enough teams are ready; the vehicle is hull-down but the leader will not wait for better';
         if (!why) return;
@@ -303,7 +309,7 @@
         // the display gets a frame in between and the launch does not cause a visible pause.
         this._pending = () => {
         const observers = launches.map(l => ({ e: l.u.e, n: l.u.n, agl: l.u.spec.agl }));
-        const plan = this._drivePlan(at, warnT, observers, tEnd);
+        const imp = p1.rec.threats.map(th => th.impact).filter(x => x != null), plan = this._drivePlan(at, warnT, observers, tEnd, imp.length ? Math.min(...imp) : null);
         // which guided missiles lose their gunner's sight line because the vehicle got behind something
         const masks = launches.map((l, i) => {
           if (!l.u.spec.needsLos) return null;
@@ -317,7 +323,7 @@
           const rel = angDiff((Math.atan2(c.e - at.e, c.n - at.n) / DEG + 360) % 360, at.h), side = Math.abs(rel) < 30 ? 'ahead' : Math.abs(rel) > 150 ? 'behind us' : rel > 0 ? 'right' : 'left', dm = Math.max(10, Math.round(c.d / 10) * 10);
           plan.what = what; plan.side = side;
           order = { ev: `Warning: driver makes for ${what}, ${dm} m ${side}${c.all ? '' : ' (covers some of the launchers)'}`, cdr: [`Driver, ${what}, ${side}, ${dm} metres. Go.`, `Driver, get us into ${what}! ${side === 'behind us' ? 'Back up' : side[0].toUpperCase() + side.slice(1)}! Now!`, `${what.toUpperCase()}! ${side.toUpperCase()}! GO GO GO!`], drv: ['Moving.', 'On it!', 'GOING!'] };
-        } else if (warnT != null) order = { ev: 'Warning: no cover within reach, the vehicle holds and fights from where it is', cdr: ['No cover in reach. Hold here.', 'Nothing to hide behind! Hold!', 'NOWHERE TO GO!'], drv: null };
+        } else if (warnT != null) order = { ev: `Warning: the commander holds position${this._holdWhy ? ' (' + this._holdWhy + ')' : ''}: HKOI gets a clean engagement`, cdr: ['No cover in reach. Hold here.', 'Nothing to hide behind! Hold!', 'NOWHERE TO GO!'], drv: null };
         const res = mk(plan.path, masks), rec = res.rec;
         for (const th of rec.threats) { const l = launches.find(q => q.u.id === th.uid); if (l && l.jit_k > 1.15 && th.defeated_by === 'gunner_jitter') th.defeated_by = 'suppressed_aim'; }   /* a miss by a gunner under fire is credited to the counter-fire, not to ordinary unsteadiness */
         // a destroyed vehicle stops where it was hit
