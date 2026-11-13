@@ -55,7 +55,7 @@ Priorities: looks, realism, ease of use, demo mode: all four. Worst pain points:
 - Publishing: SEPARATE BETA LINK. Do not touch the live v40 artifact (https://claude.ai/artifact/UwuqtLMXFF6QTTkU7jNjXg) until Shawn says the overhaul replaces it.
 - Licences: use both sound packs everywhere (private testers).
 - Performance: best image, 30 fps fine. Load up to a minute OK, with a loading screen.
-- Tank finish matches the setting (sand / green-muddy / whitewash). HKOI = remote weapon station on the turret roof in place of CROWS, 30 mm with its own sensor ball.
+- Tank finish matches the setting (sand / green-muddy / whitewash). HKOI = remote weapon station on the turret roof beside the commander's CROWS (corrected by Shawn 13 Nov: it does not replace CROWS), 30 mm with its own sensor ball.
 - Enemy losses shown plainly. Town: no civilians, evacuated.
 - Seats: as many clickable controls as possible. Gunner sight: watch the AI gunner work (lase, range, lead, shot, fall, thermal noise). No manual firing.
 - Return fire realistic (locate first, hits likely not certain, scooting teams may be gone).
