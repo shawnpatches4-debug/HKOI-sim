@@ -9,3 +9,4 @@ node_modules/
 *.log
 build/beta/
 build/beta_pub/
+.claude/
