@@ -50,7 +50,7 @@
         this.pending = null;    // a volley being assembled by the enemy commander
         const tk = opt.tank || {};
         this.tank = {
-          e: tk.e || 0, n: tk.n || 0, h: tk.hull == null ? 0 : tk.hull, v: 0, alive: true,
+          e: tk.e || 0, n: tk.n || 0, h: tk.hull == null ? 0 : tk.hull, v: 0, alive: true, main: 10, mainReady: 0,
           home: { e: tk.e || 0, n: tk.n || 0 }, route: null, goal: null, mode: 'overwatch', modeSince: 0,
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
@@ -103,13 +103,14 @@
         for (const u of this.units) this._unit(u, dt);
         this._commander();
         this._finishVolleys();
+        this._returnFire();
       }
       run(seconds) { const end = this.t + seconds - 1e-6; while (this.t < end && this.tank.alive) this.step(); return this; }
 
       // ---------------------------------------------------------------- the vehicle
       tankAt(t) {   // where the vehicle is at battle time t, following the volley it is in (the engine fixed its path when the volley was resolved)
         const v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
-        if (v && t >= v.t0 && t <= v.tEnd && v.path) { const i = clamp(Math.round((t - v.t0 - v.path[0][0]) / 0.1), 0, v.path.length - 1), p = v.path[i]; return { e: v.at.e + p[1], n: v.at.n + p[2], h: p[3], v: p[4] }; }
+        if (v && t >= v.t0 && t <= v.tEnd && v.path) { const x = clamp((t - v.t0 - v.path[0][0]) / 0.1, 0, v.path.length - 1), i = Math.min(v.path.length - 2, Math.floor(x)), f = x - i, p = v.path[Math.max(0, i)], q = v.path[Math.min(v.path.length - 1, i + 1)], dh = ((q[3] - p[3] + 540) % 360) - 180; return { e: v.at.e + p[1] + (q[1] - p[1]) * f, n: v.at.n + p[2] + (q[2] - p[2]) * f, h: (p[3] + dh * f + 360) % 360, v: p[4] + (q[4] - p[4]) * f }; }   // between samples, so drawing is smooth
         return { e: this.tank.e, n: this.tank.n, h: this.tank.h, v: this.tank.v };
       }
       _moveTank(dt) {
@@ -247,6 +248,26 @@
         };
       }
 
+      // Return fire. Between volleys the crew engages launch sites it has located (seen on the HKOI track at launch) with the main gun:
+      // nearest first, only with a clear line of sight, one aimed multi-purpose round at a time. A team that has already moved is not
+      // there to be hit; a near miss makes a team pull out. Ten such rounds are carried.
+      _returnFire() {
+        const T = this.tank, W = this.world; if (!T.alive || T.main <= 0 || this._volleyActive() || this._pending) return;
+        if (!this._rf) {
+          let best = null; for (const k of T.known) { if (k.done) continue; const R = Math.hypot(k.e - T.e, k.n - T.n); if (R > 4200 || R < 60) continue; if (!W.los(T.e, T.n, 2.4, k.e, k.n, 1.0).clear) continue; if (!best || R < best.R) best = { k, R }; }
+          if (!best) return; const u = this.units.find(q => q.id === best.k.id), brg = (Math.atan2(best.k.e - T.e, best.k.n - T.n) / DEG + 360) % 360;
+          this._rf = { k: best.k, R: best.R, at: Math.max(this.t + 3.5 + best.R / 1000 * 1.3, T.mainReady) };
+          this.say(this.t, 'tank', 'CDR', `Commander lays the main gun on the located ${u.spec.name} site, ${(best.R / 1000).toFixed(2)} km, bearing ${Math.round(brg).toString().padStart(3, '0')}.`, 'launch site fixed by the radar track at launch; clear line of sight from here');
+          this.shots = this.shots || []; return;
+        }
+        if (this.t < this._rf.at) return;
+        const { k, R } = this._rf, u = this.units.find(q => q.id === k.id), there = u.alive && u.state !== 'moving' && Math.hypot(u.e - k.e, u.n - k.n) < 25, tof = R / 1140, p = Math.max(0.4, Math.min(0.88, 0.92 - R / 5000)), roll = this.rng.random();
+        T.main--; T.mainReady = this.t + 6; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, why;
+        if (!there) { k.done = true; u.known = false; text = `Main gun round strikes the ${u.spec.name} #${u.id + 1} launch site: nobody there.`; why = 'the team had already moved to its next position'; }
+        else if (roll < p) { hit = true; u.alive = false; u.state = 'dead'; k.done = true; this.killedByTank = (this.killedByTank || 0) + 1; text = `Main gun round on ${u.spec.name} #${u.id + 1} at ${(R / 1000).toFixed(2)} km: position destroyed.`; why = `aimed fire from a halted vehicle at a fixed, located position (about ${Math.round(p * 100)}% at this range)`; }
+        else { if (u.sites.length > 1 && u.ammo > 0) { u.site = (u.site + 1) % u.sites.length; u.state = 'moving'; u.since = this.t; k.done = true; u.known = false; } else { u.readyAt = Math.max(u.readyAt || 0, this.t + 45); if (k.shots >= 2) k.done = true; } text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team shaken${u.state === 'moving' ? ', pulls out for its next position' : ', head down'}.`; why = 'a near miss: a dug-in team is a small target at this range'; }
+        this.say(this.t + tof, 'tank', 'GNR', text, why); this.shots.push({ t: this.t, tof, from: { e: T.e, n: T.n }, to: { e: k.e + (hit || !there ? 0 : (this.rng.random() - 0.5) * 14), n: k.n + (hit || !there ? 0 : (this.rng.random() - 0.5) * 14) }, hit, there });
+      }
       // when a volley is over: carry the vehicle's state forward, let the crew locate who fired, and send the firers to their next position
       _finishVolleys() {
         const v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
@@ -265,7 +286,7 @@
       summary() {
         const T = this.tank, fired = this.volleys.reduce((s, v) => s + v.rec.threats.length, 0), hits = this.volleys.reduce((s, v) => s + (v.rec.hits || 0), 0), by = {};
         for (const v of this.volleys) for (const th of v.rec.threats) { const k = th.defeated_by || (th.viz.end.type === 'hit' ? 'HIT' : th.state); by[k] = (by[k] || 0) + 1; }
-        return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, teamsLeft: this.units.filter(u => u.alive && u.ammo > 0).length };
+        return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, teamsLeft: this.units.filter(u => u.alive && u.ammo > 0).length, main: T.main, killedByTank: this.killedByTank || 0 };
       }
     }
     return { Battle, TEAMS, SKILL };
