@@ -11,3 +11,4 @@ build/beta/
 build/beta_pub/
 .claude/
 build/beta_http/
+.cache/

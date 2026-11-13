@@ -8,7 +8,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.21';
+const VERSION = '0.22';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -91,7 +91,7 @@ function mark(i, cls, p, text) { let m = pool[i]; if (!m) { m = el('div', 'mk');
 function drawMarks() {
   let i = 0; if (state === 'play') {
     for (const m of volleys.info) { if (!m.cued && !set.spectator) continue; mark(i++, m.tracked ? 'threat tracked' : m.cued ? 'threat' : 'ghost', m.p, `${m.tt.name || m.th.key}  ${(m.range / 1000).toFixed(2)} km`); }
-    battle.units.forEach(u => { if (!u.alive) return; if (u.known) mark(i++, 'site', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} located`); else if (set.spectator && cams.mode !== 'enemy') mark(i++, 'ghost', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} #${u.id + 1} · ${u.state}`); });
+    battle.units.forEach(u => { if (!u.alive) return; if (u.known) mark(i++, 'site', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} located`); else if (set.spectator && cams.mode !== 'enemy' && !(cams.mode === 'close' && cams.unitId === u.id)) mark(i++, 'ghost', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} #${u.id + 1} · ${u.state}`); });
   }
   for (; i < pool.length; i++) pool[i].hidden = true;
 }
