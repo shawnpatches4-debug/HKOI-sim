@@ -10,10 +10,11 @@ Beta 0.20 is what Shawn last tested from the hosted page; `main` is ahead of it 
 - Views: orbit, chase, commander, gunner sight, overhead, enemy sight, missile; topographic map with viewshed and vehicle placement.
 - Sound: synthesised effects (30 mm, explosions, Trophy, launches, drones, turbine, weather, machine guns, 120 mm) and recorded crew/enemy voices. NOBODY HAS CONFIRMED BY EAR that any of it sounds right.
 
-## In flight when this was written (check WORKLOG's last entries to see whether they were merged)
-1. Enemy sight reticles per weapon + a menu to pick the unit + a new "enemy close-up" camera with the same menu (cameras.js, index.tpl.html, main.js).
-2. Tank animation: running tracks (texture scroll), turning roadwheels (need cutting out of the hull mesh with tools/lineup_split.py), suspension feel (`tank.animate(dt, speed, yawRate)`, `tank.kick()`).
-If the work log does not say "merged", they are NOT in `main`: do them (the task descriptions are in WORKLOG and docs/AGENT_BRIEF.md).
+## State after the Claude Code session of 13 Nov (beta 0.24, published, not yet confirmed by Shawn)
+Priorities 1 to 5 are all in the code and on the beta page: enemy AI and stride (0.21), enemy sight reticles to true scale + team menu + close-up camera (src/app/enemyviews.js, cameras.js), tank animation (recovered from the live page, see WORKLOG), and a rebuild of enemy weapon handling that Shawn asked for mid-session.
+Waiting on Shawn's eyes: all of the above. Known gaps are listed in the last WORKLOG entry.
+BEFORE PUBLISHING, ALWAYS compare the live page with git (Artifact read + file list): the page has been ahead of the repository once already.
+Next in his list: Trophy firing from its turret modules; main gun elevation; roof guns swinging; weapon-station detail; more parked vehicles; T-72B3 unit; and so on (below).
 
 ## Shawn's current priority order (his words, 14:50 CT)
 1. Enemy AI: better repositioning and hiding (done on main, needs his eyes).
