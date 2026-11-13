@@ -8,7 +8,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.20';
+const VERSION = '0.21';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -52,7 +52,7 @@ function newBattle() {
         const view = new PropView(kinds[k++], ASSETS), face = (a * 180 / Math.PI + 180 + (u.id * 37) % 50 - 25 + 360) % 360, hh = face * Math.PI / 180, d = 2, pitch = Math.atan2(world.h(e + Math.sin(hh) * d, n + Math.cos(hh) * d) - world.h(e - Math.sin(hh) * d, n - Math.cos(hh) * d), 2 * d);
         view.place(scene.at(e, n, 0), face, -pitch, 0); scene.units.add(view.group); props.push({ view, u, e, n }); break; } } }
   scene.marks.clear(); scene.fx.n = 0;
-  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
+  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
   api.battle = battle; place();
 }
 // the player's chosen start position for this map (none = the default at the map centre)
@@ -70,6 +70,7 @@ mapv.onPick = (e, n) => { if (!world.passable(e, n, true)) { $('map-info').textC
 function ensureWorld() { if (world.seed !== set.map || world.biomeKey !== set.biome) { world = new HKWorld.World({ seed: set.map, biome: set.biome }); scene.setWorld(world); api.world = world; } if (scene.condition !== set.cond) scene.setCondition(set.cond); setFinish(set.biome, set.cond); }
 
 // ---------------------------------------------------------------- drawing the battle state
+const prevU = []; let frameDt = 0;   // where each enemy team was one step ago; the last frame's length
 const shown = { e: 0, n: 0, h: 0 };   // where the vehicle is drawn this frame
 function place() {
   const T0 = battle.tank, lastV = battle.volleys[battle.volleys.length - 1], inVolley = lastV && tNow >= lastV.t0 && tNow <= lastV.tEnd; let P = T0;
@@ -78,7 +79,11 @@ function place() {
   const pitch = Math.atan2(w.h(T.e + fe * d, T.n + fn * d) - w.h(T.e - fe * d, T.n - fn * d), 2 * d), roll = Math.atan2(w.h(T.e + fn * 1.6, T.n - fe * 1.6) - w.h(T.e - fn * 1.6, T.n + fe * 1.6), 3.2);
   tank.place(scene.at(T.e, T.n, 0), T.h, -pitch, roll); scene.setFocus(T.e, T.n); FINISH.ground.value = w.h(T.e, T.n); shown.e = T.e; shown.n = T.n; shown.h = T.h;
   for (const p of props) p.view.group.visible = set.spectator || p.u.known;
-  battle.units.forEach((u, i) => { teams[i].group.visible = u.alive && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); teams[i].place(scene.at(u.e, u.n, 0), Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); });
+  // enemy teams: drawn between simulation steps like the vehicle, facing the way they walk when moving and the vehicle when in position
+  const fU = state === 'play' ? Math.max(0, Math.min(1, simBank / battle.dt)) : 1;
+  battle.units.forEach((u, i) => { const tv = teams[i]; tv.group.visible = u.alive && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); if (!tv.group.visible) return;
+    const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
+    tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); tv.update(frameDt * (state === 'play' && playing ? speed : 0), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', pos.distanceToSquared(scene.camera.position) < 300 * 300); });
 }
 // markers: what the vehicle's sensors hold (threats cued and tracked, launch sites located); in spectator mode every team, faintly
 const marks = $('marks'), pool = [], v3 = new THREE.Vector3();
@@ -184,7 +189,7 @@ function mainGun() {
 let simBank = 0, tNow = 0; const prevT = { e: 0, n: 0, h: 0 };   // where the vehicle was one step ago, to draw it between steps
 function advance(sec) {
   simBank = Math.min(Math.max(0, simBank) + Math.max(0, sec), 1.5); let n = 0;
-  while (simBank >= battle.dt && n++ < 20) { const T = battle.tank; prevT.e = T.e; prevT.n = T.n; prevT.h = T.h; battle.step(); if (battle._pending) break; simBank -= battle.dt; }   // a volley half worked out is finished next frame
+  while (simBank >= battle.dt && n++ < 20) { const T = battle.tank; prevT.e = T.e; prevT.n = T.n; prevT.h = T.h; for (let i = 0; i < battle.units.length; i++) { const u = battle.units[i], q = prevU[i] || (prevU[i] = [0, 0]); q[0] = u.e; q[1] = u.n; } battle.step(); if (battle._pending) break; simBank -= battle.dt; }   // a volley half worked out is finished next frame
   tNow = Math.max(0, battle.t - battle.dt + Math.min(simBank, battle.dt));
 }
 // ---------------------------------------------------------------- the frame
@@ -198,6 +203,7 @@ function frame(now) {
 }
 function frameBody(now) {
   const raw = Math.max(0, (now - last) / 1000), dt = Math.min(0.1, raw); last = now; scene.rawMs = raw * 1000;   /* raw is never negative: the first frame's clock can read earlier than the page's */ worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
+  frameDt = dt;
   const tSim = performance.now(), tCpu = tSim;
   if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) advance(dt * speed);
   if (state !== 'play') tNow = battle.t; place(); volleys.update(Math.min(tNow, battle.t), dt * (state === 'play' && playing ? speed : 0)); mainGun(); machineGuns(dt); trackDust(dt); { const c = ctx(), b = c.aim ? Math.atan2(c.aim.e - shown.e, c.aim.n - shown.n) * 180 / Math.PI : c.threatBrg != null ? c.threatBrg : shown.h; const sdt = state === 'play' && playing ? dt * speed : dt; tank.aim(b, shown.h, sdt); tank.aimStation(volleys.aimAt, sdt); } simMs = Math.max(simMs * 0.98, performance.now() - tSim);

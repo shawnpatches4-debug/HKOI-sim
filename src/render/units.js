@@ -119,16 +119,27 @@ export const POSES = {
   // lying face down on the elbows, head up, looking forward
   prone: { tip: 1.5, Spine: [0, 0.1, 1], Spine1: [0, 0.2, 1], Spine2: [0, 0.3, 1], Neck: [0, 0.75, 0.7], LeftUpLeg: [0.18, 0, -1], LeftLeg: [0.05, -0.02, -1], LeftFoot: [0.3, -0.5, -1], RightUpLeg: [-0.18, 0, -1], RightLeg: [-0.05, -0.02, -1], RightFoot: [-0.3, -0.5, -1], LeftArm: [0.55, -0.55, 0.6], LeftForeArm: [-0.45, 0, 0.9], RightArm: [-0.55, -0.55, 0.6], RightForeArm: [0.45, 0, 0.9] },
 };
+// Two halves of a stride (left foot forward, right foot forward) for walking and for running; a moving figure swings between them.
+const STRIDE = {
+  walk: [{ Spine: [0, 1, 0.1], Spine1: [0, 1, 0.12], Neck: [0, 1, 0.05], LeftUpLeg: [0.04, -1, 0.42], LeftLeg: [0, -1, 0.08], LeftFoot: [0, -0.25, 1], RightUpLeg: [-0.04, -1, -0.28], RightLeg: [0, -0.78, -0.62], RightFoot: [0, -0.85, 0.5], LeftArm: [0.22, -1, -0.28], LeftForeArm: [0.1, -0.85, 0.25], RightArm: [-0.22, -1, 0.3], RightForeArm: [-0.1, -0.55, 0.8] }],
+  run: [{ Spine: [0, 1, 0.3], Spine1: [0, 1, 0.36], Neck: [0, 1, 0.1], LeftUpLeg: [0.04, -0.8, 0.75], LeftLeg: [0, -1, -0.15], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.04, -1, -0.5], RightLeg: [0, -0.25, -1], RightFoot: [0, -1, 0.1], LeftArm: [0.22, -0.9, -0.5], LeftForeArm: [0.1, -0.2, 0.95], RightArm: [-0.22, -0.9, 0.55], RightForeArm: [-0.1, 0.25, 0.95] }],
+};
+const SIDE = k => k.startsWith('Left') ? 'Right' + k.slice(4) : k.startsWith('Right') ? 'Left' + k.slice(5) : k;
+for (const g of Object.values(STRIDE)) { const A = g[0], B = {}; for (const k in A) B[SIDE(k)] = [-A[k][0], A[k][1], A[k][2]]; g.push(B); }   // the other half is the mirror image
+// the pose a fraction f (0..1) of the way from one half-stride to the other; `keep` (optional) is a pose whose arms replace the swinging ones (carrying a weapon)
+export function stridePose(gait, f, keep) { const [A, B] = STRIDE[gait] || STRIDE.walk, o = {}; for (const k in A) { const a = A[k], b = B[k]; o[k] = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; } if (keep) for (const k of ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm']) if (keep[k]) o[k] = keep[k]; return o; }
 // Apply a pose to a figure that is not yet attached to anything (so its own frame is the world frame).
 export function setPose(fig, pose) {
   const B = {}; fig.traverse(o => { if (o.isBone) { B[o.name.replace(/^mixamorig:?/, '')] = o; if (!o.userData.rest) o.userData.rest = o.quaternion.clone(); o.quaternion.copy(o.userData.rest); } });
-  if (!B.Hips) return; fig.position.set(0, 0, 0); fig.rotation.set(0, 0, 0); fig.updateMatrixWorld(true);
+  if (!B.Hips) return; fig.position.set(0, 0, 0); fig.rotation.set(0, 0, 0); if (fig.parent) fig.parent.updateWorldMatrix(true, false); fig.updateMatrixWorld(true);
+  // the figure may already stand inside a team that has been placed and turned: directions are given in the figure's own frame, so carry them into the scene's
+  const PQ = fig.parent ? fig.parent.getWorldQuaternion(new THREE.Quaternion()) : null, PI = fig.parent ? fig.parent.matrixWorld.clone().invert() : null;
   const a = new THREE.Vector3(), b = new THREE.Vector3(), q = new THREE.Quaternion(), pq = new THREE.Quaternion(), wq = new THREE.Quaternion();
   const turnWorld = (bone, dq) => { bone.getWorldQuaternion(wq); bone.parent.getWorldQuaternion(pq); bone.quaternion.copy(pq.invert().multiply(dq.multiply(wq))); bone.updateMatrixWorld(true); };
-  if (pose.tip) turnWorld(B.Hips, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pose.tip));
-  for (const [bn, cn] of LIMBS) { const want = pose[bn], bone = B[bn], child = B[cn]; if (!want || !bone || !child) continue; bone.getWorldPosition(a); child.getWorldPosition(b); b.sub(a).normalize(); turnWorld(bone, q.setFromUnitVectors(b, new THREE.Vector3(want[0], want[1], want[2]).normalize())); }
+  if (pose.tip) { const ax = new THREE.Vector3(1, 0, 0); if (PQ) ax.applyQuaternion(PQ); turnWorld(B.Hips, new THREE.Quaternion().setFromAxisAngle(ax, pose.tip)); }
+  for (const [bn, cn] of LIMBS) { const want = pose[bn], bone = B[bn], child = B[cn]; if (!want || !bone || !child) continue; bone.getWorldPosition(a); child.getWorldPosition(b); b.sub(a).normalize(); turnWorld(bone, q.setFromUnitVectors(b, (PQ ? new THREE.Vector3(want[0], want[1], want[2]).normalize().applyQuaternion(PQ) : new THREE.Vector3(want[0], want[1], want[2]).normalize()))); }
   // seat it: the lowest joint goes to just above the ground (joints sit a few centimetres inside the body)
-  let low = 1e9; for (const k in B) { B[k].getWorldPosition(a); if (a.y < low) low = a.y; } fig.userData.seat = -low + (pose.tip ? 0.13 : 0.07);
+  let low = 1e9; for (const k in B) { B[k].getWorldPosition(a); if (PI) a.applyMatrix4(PI); if (a.y < low) low = a.y; } fig.userData.seat = -low + (pose.tip ? 0.13 : 0.07);
 }
 
 // A tank crewman: the supplied soldier with his infantry kit removed, wearing the supplied CVC helmet. Returns a group 1.8 m tall
@@ -169,14 +180,25 @@ export class TeamView {
   // swap the stand-in shapes for the real models once they arrive: a gunner at the launcher and a second man beside him
   async _load(kind, base) {
     const [sol, kor, rpg] = await Promise.all([loadModel(base + 'enemy/soldier.json'), kind === 'rpg' || kind.startsWith('fpv') ? null : loadModel(base + 'enemy/kornet.json'), kind === 'rpg' ? loadModel(base + 'enemy/rpg7.json') : null]); if (!sol) return;
-    const keep = []; const man = (pose, x, z, yaw) => { const f = cloneSkinned(sol); setPose(f, POSES[pose]); f.position.set(x, f.userData.seat, z); f.rotation.y = yaw; keep.push(f); return f; };
+    const keep = []; const man = (pose, x, z, yaw) => { const f = cloneSkinned(sol); setPose(f, POSES[pose]); f.position.set(x, f.userData.seat, z); f.rotation.y = yaw; f.userData.home = { pose, x, z, yaw }; keep.push(f); return f; };
     const fresh = new THREE.Group();
-    if (kor) { const l = fit(kor.clone(), 1.35); l.rotation.y = this.constructor.LAUNCHER_YAW; fresh.add(l); fresh.add(man('kneel', 0.3, -0.85, 0), man('prone', -1.5, -0.6, 0.12)); }
-    else if (kind === 'rpg' && rpg) { const w = alongZ(skin(rpg.clone(), { RPG7: base + 'enemy/rpg7_albedo.webp', RPG7Rocket: base + 'enemy/rpg7rocket_albedo.webp' }), 1.34, TeamView.RPG_FLIP); w.position.set(-0.26, 1.1, 0.22); w.rotation.z = TeamView.RPG_ROLL; fresh.add(w, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
+    if (kor) { const l = fit(kor.clone(), 1.35); l.rotation.y = this.constructor.LAUNCHER_YAW; fresh.add(l); this.launcher = l; fresh.add(man('kneel', 0.3, -0.85, 0), man('prone', -1.5, -0.6, 0.12)); }
+    else if (kind === 'rpg' && rpg) { const w = alongZ(skin(rpg.clone(), { RPG7: base + 'enemy/rpg7_albedo.webp', RPG7Rocket: base + 'enemy/rpg7rocket_albedo.webp' }), 1.34, TeamView.RPG_FLIP); w.position.set(-0.26, 1.1, 0.22); w.rotation.z = TeamView.RPG_ROLL; this.shoulderW = w; fresh.add(w, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
     else if (kind === 'rpg') { const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.95, 8), new THREE.MeshStandardMaterial({ color: '#3a3d33', roughness: 0.7 })); tube.rotation.x = Math.PI / 2; tube.position.set(-0.26, 1.1, 0.1); const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.4, 8), tube.material); head.rotation.x = -Math.PI / 2; head.position.set(-0.26, 1.1, 0.75); head.rotation.x = Math.PI / 2; fresh.add(tube, head, man('shoulder', 0, 0.2, 0), man('crouch', -1.3, 0.9, 0.3)); }
     else fresh.add(man('crouch', 0, 0.3, 0), man('kneel', -1.1, 0.5, 0.4));
     if (TeamView.DEBUG) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08), new THREE.MeshBasicMaterial({ color: 'red' })); m.position.set(0, 0.6, 2); fresh.add(m); }
     while (this.group.children.length) this.group.remove(this.group.children[0]); this.group.add(fresh); this.figures = keep; this.loaded = true;
+  }
+  // Bring the figures to life. mode: 'still' (at their weapon), 'down' (flat on the ground under fire), 'walk' or 'run' (moving: the gunner
+  // leads with the launcher on his shoulder, the second man follows). Called every frame; the stride is recomputed at most 30 times a second.
+  update(dt, mode, near) {
+    if (!this.figures) return; const F = this.figures, moving = mode === 'walk' || mode === 'run';
+    if (mode !== this.mode) { this.mode = mode; this.phase = 0; this.acc = 1;
+      if (!moving) { F.forEach(f => { const h = f.userData.home, p = mode === 'down' ? 'prone' : h.pose; setPose(f, POSES[p]); f.position.set(h.x, f.userData.seat, h.z); f.rotation.y = h.yaw; }); if (this.launcher) { this.launcher.position.set(0, 0, 0); this.launcher.rotation.set(0, TeamView.LAUNCHER_YAW, 0); } if (this.shoulderW) { this.shoulderW.visible = mode !== 'down'; this.shoulderW.position.set(-0.26, 1.1, 0.22); } return; }
+      if (this.launcher) { this.launcher.position.set(-0.28, 0.95, 0.15); this.launcher.rotation.set(-0.35, TeamView.LAUNCHER_YAW, 0); } if (this.shoulderW) { this.shoulderW.visible = true; this.shoulderW.position.set(-0.26, 1.42, 0.45); } }   // folded launcher carried over the right shoulder
+    if (!moving) return; const hz = mode === 'run' ? 2.7 : 1.75; this.phase += dt * hz; this.acc += dt; if (this.acc < (near ? 1 / 30 : 0.25)) return; this.acc = 0;
+    F.forEach((f, i) => { const ph = this.phase + i * 0.37, tri = Math.abs(((ph % 1) + 1) % 1 * 2 - 1), ease = tri * tri * (3 - 2 * tri), keep = (this.kind === 'rpg' && i === 0) ? POSES.shoulder : (i === 0 && this.launcher) ? { RightArm: [-0.25, -0.75, 0.5], RightForeArm: [0.15, 0.8, 0.5] } : null;
+      setPose(f, stridePose(mode, ease, keep)); f.position.set(i === 0 ? 0 : -0.7, f.userData.seat, i === 0 ? 0.4 : -1.9); f.rotation.y = 0; });
   }
   place(pos, faceDeg) { this.group.position.copy(pos); this.group.rotation.y = Math.PI - faceDeg * DEG; }
 }
