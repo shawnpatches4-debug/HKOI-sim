@@ -1,6 +1,7 @@
 // Terrain: the ground mesh and its baked colour map, built from a World.
 // Scene axes: x = east, y = up, z = south (so north is -z). One unit = one metre.
 import * as THREE from 'three';
+import { weatherise } from './env.js';
 
 // base ground colours per setting: [open ground, plough, low crop, tall crop, scrub, forest floor, built-up, road]
 export const GROUND = {
@@ -49,6 +50,7 @@ export function buildTerrain(world) {
         float g = hk_n(vWp.xz * 0.9) * 0.5 + hk_n(vWp.xz * 3.7) * 0.3 + hk_n(vWp.xz * 0.12) * 0.4;
         diffuseColor.rgb *= mix(1.0, 0.72 + 0.5 * g, 0.55 * near + 0.25); }`);
   };
+  weatherise(mat, 1);
   const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = true; mesh.name = 'terrain';
   return { mesh, map };
 }

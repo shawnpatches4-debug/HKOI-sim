@@ -1,11 +1,12 @@
 // Trees, tree lines and buildings, instanced from the World's cells.
 import * as THREE from 'three';
+import { weatherise } from './env.js';
 
 const hash = (i, j, s) => { let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 
 // one low-polygon tree: a trunk and three stacked, slightly irregular crowns. About 60 triangles.
 function treeGeometry(conifer) {
-  const parts = [], trunk = new THREE.CylinderGeometry(0.12, 0.2, 1, 5); trunk.translate(0, 0.5, 0); parts.push([trunk, new THREE.Color('#4a3b2a')]);
+  const parts = [], trunk = new THREE.CylinderGeometry(0.035, 0.06, 0.6, 5); trunk.translate(0, 0.3, 0); parts.push([trunk, new THREE.Color('#4a3b2a')]);
   if (conifer) { for (let k = 0; k < 3; k++) { const c = new THREE.ConeGeometry(0.42 - k * 0.1, 0.5, 7); c.translate(0, 0.45 + k * 0.25, 0); parts.push([c, new THREE.Color('#2f4a2c').offsetHSL(0, 0, k * 0.02)]); } }
   else { const blobs = [[0, 0.72, 0, 0.36], [0.16, 0.6, 0.1, 0.27], [-0.15, 0.62, -0.08, 0.28], [0.02, 0.9, -0.04, 0.24]]; for (const [bx, by, bz, r] of blobs) { const s = new THREE.IcosahedronGeometry(r, 0); s.translate(bx, by, bz); parts.push([s, new THREE.Color('#3f6a34').offsetHSL(0, 0, (by - 0.7) * 0.25)]); } }
   let nv = 0; for (const [g] of parts) nv += g.attributes.position.count; const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), idx = []; let o = 0;
@@ -16,7 +17,7 @@ function treeGeometry(conifer) {
 // Trees are grouped into square chunks so the graphics card can skip the ones out of view.
 export function buildTrees(world, opt = {}) {
   const group = new THREE.Group(); group.name = 'trees'; const n = world.n, c = world.cell, half = world.half, CH = opt.chunk || 32, conifer = world.biomeKey === 'forest';
-  const geoA = treeGeometry(conifer), geoB = treeGeometry(false), mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  const geoA = treeGeometry(conifer), geoB = treeGeometry(false), mat = weatherise(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), 0.55);
   const perCell = opt.perCell || 2, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), P = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), tint = new THREE.Color(); let total = 0;
   for (let cj = 0; cj < n; cj += CH) for (let ci = 0; ci < n; ci += CH) {
     const list = [];
@@ -34,7 +35,7 @@ export function buildBuildings(world) {
   const group = new THREE.Group(); group.name = 'buildings'; const B = world.buildings; if (!B.length) return group;
   const wallG = new THREE.BoxGeometry(1, 1, 1); wallG.translate(0, 0.5, 0);
   const roofG = new THREE.BufferGeometry(); { const v = new Float32Array([-0.55, 0, -0.55, 0.55, 0, -0.55, 0.55, 0, 0.55, -0.55, 0, 0.55, 0, 1, -0.55, 0, 1, 0.55]); roofG.setAttribute('position', new THREE.BufferAttribute(v, 3)); roofG.setIndex([0, 4, 1, 3, 2, 5, 0, 3, 5, 0, 5, 4, 1, 4, 5, 1, 5, 2]); roofG.computeVertexNormals(); }
-  const wallM = new THREE.MeshStandardMaterial({ roughness: 0.9 }), roofM = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true });
+  const wallM = weatherise(new THREE.MeshStandardMaterial({ roughness: 0.9 }), 0.25), roofM = weatherise(new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true }), 1.2);
   const walls = new THREE.InstancedMesh(wallG, wallM, B.length), roofs = new THREE.InstancedMesh(roofG, roofM, B.length), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), P = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
   const WALL = ['#d8d2c4', '#c9c0ae', '#b8b2a6', '#d9cdb5', '#a9a49b', '#c7b9a2'], ROOF = ['#7a4a3a', '#6b5a50', '#8a5644', '#55504c', '#7d6a58'];
   B.forEach((b, q) => { const g = world.h(b.e, b.n) - 0.3, flat = b.kind === 'block'; P.set(b.e, g, -b.n); Q.setFromAxisAngle(up, -b.rot); S.set(b.w, b.h * (flat ? 1 : 0.68), b.d); M.compose(P, Q, S); walls.setMatrixAt(q, M); c.set(WALL[q % WALL.length]).offsetHSL(0, 0, (hash(q, 1, 2) - 0.5) * 0.08); walls.setColorAt(q, c);
