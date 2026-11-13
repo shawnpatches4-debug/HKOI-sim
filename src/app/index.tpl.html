@@ -68,6 +68,10 @@
   #units-list { display: flex; flex-direction: column; gap: 4px; }
   .btn.urow { text-align: left; white-space: normal; padding: 5px 8px; } .urow b { display: block; font-weight: 600; font-size: 13px; } .urow small { display: block; color: var(--dim); font-size: 11px; } .urow:disabled { opacity: .45; cursor: default; }
   #units .keys { margin: 6px 2px 0; color: var(--dim); font-size: 11px; }
+  /* what the crew is doing: one line per crewman or weapon */
+  #crew { position: fixed; left: 12px; bottom: 14px; width: min(400px, calc(100vw - 24px)); padding: 7px 10px; font: 11.5px/1.45 var(--mono); color: var(--dim); pointer-events: none; z-index: 3; }
+  #crew div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #crew b { color: var(--accent); font-weight: 600; display: inline-block; width: 44px; }
+  @media (max-width: 1500px) { #crew { bottom: 150px; } }
   #status, #log, #bar, #caption, #hud, #errbar { z-index: 3; }
   #veil { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #060908; font: 14px var(--mono); color: var(--dim); letter-spacing: .1em; }
   [hidden] { display: none !important; }
@@ -114,6 +118,7 @@
   <div class="sym" id="esight-sym"></div><div class="data" id="esight-data"></div>
 </div>
 <div id="units" class="panel" hidden><h3>Enemy teams</h3><div id="units-list"></div><div class="keys">Keys [ and ] step through the teams</div></div>
+<div id="crew" class="panel" hidden></div>
 <div id="errbar" hidden style="position:fixed;left:12px;right:12px;bottom:150px;background:rgba(60,8,4,.94);border:1px solid #ff5a4d;color:#ffd9d4;border-radius:8px;padding:10px 12px;font:12px/1.4 ui-monospace,Menlo,monospace;user-select:text"></div>
 <div id="veil">LOADING BATTLEFIELD…</div>
 
@@ -127,7 +132,7 @@
 </script>
 <script src="engine.js"></script><script>window.HK = window.HK || (typeof HK !== 'undefined' ? HK : null);</script>
 <script src="dmg.js"></script><script src="campaign.js"></script>
-<script src="world/world.js"></script><script src="battle/battle.js"></script>
+<script src="world/world.js"></script><script src="battle/tankai.js"></script><script src="battle/battle.js"></script>
 <script type="module" src="app/main.js"></script>
 </body>
 </html>

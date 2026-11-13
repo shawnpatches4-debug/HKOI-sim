@@ -191,7 +191,7 @@ function makeRaid(ctx) {
   // sandbox: launchers placed by hand
   if (en.fixed) for (const f of en.fixed) {
     const tt = THREATS[f.key]; if (!tt) continue;
-    const th = newThreat(out.length, f.key, f.t0 || 0, Math.max(50, f.R), f.brg, tt.speed); th.lid = f.id; if (f.late) th.late = f.late; if (f.tac) th.tac = f.tac; if (f.los_clear != null) th.los_fixed = f.los_clear; if (f.uid != null) th.uid = f.uid; if (f.mask != null) th.masked = f.mask; out.push(th);
+    const th = newThreat(out.length, f.key, f.t0 || 0, Math.max(50, f.R), f.brg, tt.speed); th.lid = f.id; if (f.late) th.late = f.late; if (f.tac) th.tac = f.tac; if (f.los_clear != null) th.los_fixed = f.los_clear; if (f.uid != null) th.uid = f.uid; if (f.mask != null) th.masked = f.mask; if (f.jit_k) th.jit_k = f.jit_k; if (f.mask_by) th.mask_by = f.mask_by; out.push(th);   /* jit_k: the gunner's aim is this many times shakier (he is under fire); mask_by: why guidance was lost, if not terrain */
     if (f.pair && tt.guidance === 'beam_rider') { const p2 = newThreat(out.length, f.key, (f.t0 || 0) + (f.pair_gap != null ? f.pair_gap : en.same_beam_gap_s), Math.max(50, f.R), f.brg, tt.speed, th.idx); p2.lid = f.id; if (f.late) p2.late = f.late; if (f.tac) p2.tac = f.tac; out.push(p2); }
   }
   for (let n = 0; n < (en.fixed ? 0 : en.raid_size); n++) {
@@ -249,7 +249,7 @@ function makeRaid(ctx) {
     // unguided rockets fly wide on their own: hit chance falls with range (about 70% at 100 m, 25% at 500 m)
     if (tt.guidance === 'unguided') th.will_miss = rng.random() > Math.min(0.8, Math.max(0.2, 0.82 - th.R / 870));
     if (th.late && JHUMAN[tt.guidance] && rng.random() < 0.18) { th.will_miss = true; th.jitter_miss = true; th.jit_miss = [(rng.random() < .5 ? -1 : 1) * (3 + rng.random() * 4), 0.5]; }
-    if (JHUMAN[tt.guidance] && (cfg.enemy.gunner_jitter_mrad || 0) > 0) { th.jit = jitDraw(rng, cfg.enemy.gunner_jitter_mrad, cfg.enemy.jitter_tremor_frac == null ? 0.5 : cfg.enemy.jitter_tremor_frac); if (!jitFly(th, aspectHW(cfg, th), cfg.vehicle.half_h, cfg.vehicle.top_half_w || 1.25, cfg.vehicle.top_h || 0.9)) { th.will_miss = true; th.jitter_miss = true; } }
+    if (JHUMAN[tt.guidance] && (cfg.enemy.gunner_jitter_mrad || 0) > 0) { th.jit = jitDraw(rng, cfg.enemy.gunner_jitter_mrad * (th.jit_k || 1), cfg.enemy.jitter_tremor_frac == null ? 0.5 : cfg.enemy.jitter_tremor_frac); if (!jitFly(th, aspectHW(cfg, th), cfg.vehicle.half_h, cfg.vehicle.top_half_w || 1.25, cfg.vehicle.top_h || 0.9)) { th.will_miss = true; th.jitter_miss = true; } }
     th.los_clear = (tt.guidance === 'beam_rider' || tt.guidance === 'radio_saclos' || tt.guidance === 'unguided' || tt.guidance === 'ir') ? Infinity
       : -ctx.terrain.los_clear_m * Math.log(Math.max(rng.random(), 1e-9));
   }
@@ -1151,7 +1151,7 @@ function runMission(cfg, rng, lookup, rec) {
   const aps = cfg.aps;
   const mag = { L: aps.mag_L != null ? aps.mag_L : aps.mag_per_side, R: aps.mag_R != null ? aps.mag_R : aps.mag_per_side }, last = { L: -1e9, R: -1e9 };
   // battle layer: the vehicle got behind ground or buildings while this missile was still being guided, so it lost its guidance and came down short
-  for (const th of threats) if (th.state === 'inbound' && th.masked != null) { const short = Math.max(8, th.masked); th.state = 'missed'; th.defeated_by = 'terrain_mask'; th.tags.push('terrain_mask'); th.viz.end = { t: th.t0 + Math.max(th.R - short, 1) / th.v, type: 'ground', short, mask: true }; add('by_terrain'); if (rec) ev(th.viz.end.t, 'kill', th.idx, `${lbl(th)} loses its guidance when the vehicle drops out of the gunner's sight, and flies into the ground ${Math.round(short)} m short`); }
+  for (const th of threats) if (th.state === 'inbound' && th.masked != null) { const short = Math.max(8, th.masked); th.state = 'missed'; th.defeated_by = th.mask_by || 'terrain_mask'; th.tags.push(th.mask_by || 'terrain_mask'); th.viz.end = { t: th.t0 + Math.max(th.R - short, 1) / th.v, type: 'ground', short, mask: true }; add('by_terrain'); if (rec) ev(th.viz.end.t, 'kill', th.idx, `${lbl(th)} loses its guidance when the vehicle drops out of the gunner's sight, and flies into the ground ${Math.round(short)} m short`); }
   for (const th of threats) if (th.state === 'inbound' && th.will_miss) {
     if (th.jitter_miss) { const jm = th.jit_miss || [3, 0], d = Math.hypot(jm[0], jm[1]); th.state = 'missed'; th.defeated_by = 'gunner_jitter'; th.tags.push('gunner_jitter'); th.viz.end = jm[1] <= -cfg.vehicle.half_h ? { t: th.t0 + Math.max(th.R - 14, 1) / th.v, type: 'ground', short: 14, jit: true } : { t: th.impact, type: 'miss', lat: Math.abs(jm[0]) < 0.6 ? 0 : jm[0], over: +jm[1].toFixed(2), miss: +d.toFixed(1), jit: true };
       if (rec) ev(th.impact, 'kill', th.idx, jm[1] <= -cfg.vehicle.half_h ? `${lbl(th)} flies into the ground short of the vehicle: the enemy gunner's aim dipped` : `${lbl(th)} misses on its own: the enemy gunner's aim wandered ${d.toFixed(1)} m off the vehicle`); continue; }

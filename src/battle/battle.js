@@ -49,7 +49,7 @@
         this.rng = new HK.RNG(HK.seedFor(this.seed, 9001));
         this.cfg0 = opt.cfg || HK.defaultConfig();
         this.lookup = opt.lookup || (this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {});
-        this.skill = SKILL[opt.skill] ? opt.skill : 'trained';
+        this.skill = SKILL[opt.skill] ? opt.skill : 'trained'; this.cond = opt.cond || 'day';
         this.dt = opt.dt || 0.1;
         this.t = 0;
         this.log = [];          // { t, kind, who, text, why }
@@ -177,7 +177,7 @@
         // watching: does this team have a shot right now?
         const d = Math.hypot(T.e - u.e, T.n - u.n);
         const seen = sp.indirect ? this._spotted() : (d >= sp.rmin && d <= sp.rmax && W.los(u.e, u.n, sp.agl, T.e, T.n, 2.2).clear);
-        u.sight = seen ? u.sight + dt : 0;
+        u.sight = seen ? u.sight + dt * (this.t < (u.lightUntil || 0) ? 0.5 : 1) : 0;   /* harassing fire slows the lay */
         u.hasShot = seen && this.t >= u.readyAt && this.t >= u.suppressedUntil && u.sight >= sp.aim * S.aim;
         if (seen) { u.lastSeen = this.t; if (!sp.indirect) { const B = this.belief || (this.belief = {}); B.e = T.e; B.n = T.n; B.t = this.t; } }   /* reported on the radio net: where the vehicle was last seen */
         // A direct-fire team that has lost its view of the vehicle does not sit blind for ever. After a wait (shorter for green crews, who
@@ -290,7 +290,7 @@
           c.seed = this.seed * 1000 + this.volleys.length;
           c.vehicle.hull_deg = at.h;
           if (exposed === 'hull') c.vehicle.half_h *= 0.5;   // hull-down: only the turret is there to hit (approximation: the target is half as tall)
-          c.enemy.fixed = launches.map((l, i) => ({ key: l.key, R: Math.max(60, l.R), brg: l.brg, t0: l.t0, id: l.u.id, uid: l.u.id, los_clear: l.los, mask: masks ? masks[i] : null }));
+          c.enemy.fixed = launches.map((l, i) => ({ key: l.key, R: Math.max(60, l.R), brg: l.brg, t0: l.t0, id: l.u.id, uid: l.u.id, los_clear: l.los, mask: masks ? masks[i] : null, jit_k: masks ? l.jit_k : null, mask_by: masks ? l.mask_by : null }));
           if (path) { c.ext = { path }; if (order) c.ext.order = order; }
           const rec = { events: [], bursts: [], aps: [], ctx: {} };
           HK.runMission(c, new HK.RNG(HK.seedFor(c.seed, 0)), this.lookup, rec);
@@ -311,6 +311,7 @@
           for (const p of plan.path) { if (p[0] < l.t0 + 0.5 || p[0] > th.impact) continue; const clear = W.los(l.u.e, l.u.n, l.u.spec.agl, at.e + p[1], at.n + p[2], 2.2).clear; lost = clear ? 0 : lost + 0.1; if (lost >= 1.0) return Math.max(10, (th.impact - p[0]) * v * 0.55); }
           return null;
         });
+        if (this._counterFire) this._counterFire(launches, p1.rec, plan, at, masks);   /* machine-gun fire on launchers whose missiles are in the air */
         if (plan.cover) {   // what the commander tells the driver, in terms of the ground
           const c = plan.cover, vg = W.veg(c.e, c.n).cls, what = W.buildingAt(c.e, c.n) || vg === 6 ? 'the buildings' : vg === 4 ? 'the wood' : vg === 5 ? 'the tree line' : vg === 3 ? 'the scrub' : 'the low ground';
           const rel = angDiff((Math.atan2(c.e - at.e, c.n - at.n) / DEG + 360) % 360, at.h), side = Math.abs(rel) < 30 ? 'ahead' : Math.abs(rel) > 150 ? 'behind us' : rel > 0 ? 'right' : 'left', dm = Math.max(10, Math.round(c.d / 10) * 10);
@@ -318,6 +319,7 @@
           order = { ev: `Warning: driver makes for ${what}, ${dm} m ${side}${c.all ? '' : ' (covers some of the launchers)'}`, cdr: [`Driver, ${what}, ${side}, ${dm} metres. Go.`, `Driver, get us into ${what}! ${side === 'behind us' ? 'Back up' : side[0].toUpperCase() + side.slice(1)}! Now!`, `${what.toUpperCase()}! ${side.toUpperCase()}! GO GO GO!`], drv: ['Moving.', 'On it!', 'GOING!'] };
         } else if (warnT != null) order = { ev: 'Warning: no cover within reach, the vehicle holds and fights from where it is', cdr: ['No cover in reach. Hold here.', 'Nothing to hide behind! Hold!', 'NOWHERE TO GO!'], drv: null };
         const res = mk(plan.path, masks), rec = res.rec;
+        for (const th of rec.threats) { const l = launches.find(q => q.u.id === th.uid); if (l && l.jit_k > 1.15 && th.defeated_by === 'gunner_jitter') th.defeated_by = 'suppressed_aim'; }   /* a miss by a gunner under fire is credited to the counter-fire, not to ordinary unsteadiness */
         // a destroyed vehicle stops where it was hit
         if (rec.killed && rec.kill_t != null) { let stop = null; for (const p of plan.path) { if (p[0] >= rec.kill_t) { if (!stop) stop = p.slice(); p[1] = stop[1]; p[2] = stop[2]; p[3] = stop[3]; p[4] = 0; } } }
         const v = { i: this.volleys.length, t0: this.t, tEnd: this.t + rec.t_end, at, path: plan.path, rec, cfg: res.c, launches, exposed, plan, masks };
@@ -326,7 +328,7 @@
         this.say(this.t, 'volley', null, `${how.atWill ? 'Enemy fire' : 'Enemy ambush'} (engagement ${v.i + 1}): ${names}.`, `${v_mode}${how.why && !how.atWill ? '; ' + how.why : ''}; vehicle ${exposed === 'none' ? 'fully exposed' : exposed === 'hull' ? 'hull-down' : 'in cover'}`);
         masks.forEach((m, i) => { if (m != null) this.say(this.t + launches[i].t0 + 1, 'enemy', launches[i].u.id, `${launches[i].u.spec.name} #${launches[i].u.id + 1} loses sight of the vehicle behind cover.`, 'sight line broken'); });
         for (const e of rec.events) { this.say(this.t + e.t, 'engine', e.idx, e.text); this.log[this.log.length - 1].sub = e.kind; }
-        for (const l of launches) { l.u.state = l.u.spec.needsLos ? 'guiding' : 'firing'; l.u.since = this.t; l.u.ammo--; l.u.fired++; l.u.volley = v.i; }
+        for (const l of launches) { l.u.state = l.u.spec.needsLos ? 'guiding' : 'firing'; l.u.since = this.t; l.u.ammo--; l.u.fired++; l.u.lastShotT = this.t + l.t0; l.u.volley = v.i; }
         };
       }
 
@@ -403,6 +405,7 @@
         const p = v.path[v.path.length - 1]; T.e = v.at.e + p[1]; T.n = v.at.n + p[2]; T.h = p[3]; T.v = 0;
         if (v.plan.cover) { T.mode = 'cover'; T.modeSince = this.t; }
         if (rec.killed) { T.alive = false; this.say(this.t, 'result', null, 'Vehicle destroyed.'); return; }
+        if (this._loaderRisk) this._loaderRisk(v);
         for (const th of rec.threats) { const u = this.units.find(q => q.id === th.uid); if (!u) continue; if (th.track != null && !u.spec.indirect) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); } }
         for (const l of v.launches) { const u = l.u; u.readyAt = this.t + u.spec.reload; u.state = u.ammo > 0 ? 'hidden' : 'spent'; u.sight = 0; u.shotsHere = (u.shotsHere || 0) + 1; if (u.ammo > 0) { if (u.shotsHere >= 2) this._displace(u, 'two shots from one spot: time to move'); else if (r.random() < (1 - S.nerve) * 0.5) this._displace(u, 'nerves: leaves after one shot'); } }
         const hits = rec.hits || 0; this.say(this.t, 'result', null, `Volley ${v.i + 1} over: ${rec.threats.length} fired, ${hits} hit${hits === 1 ? '' : 's'}. HKOI rounds left ${T.st.obs} obscurant, ${T.st.he} HE; Trophy ${T.st.apsL} left, ${T.st.apsR} right.`);
@@ -414,6 +417,7 @@
         return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, teamsLeft: this.units.filter(u => u.alive && u.ammo > 0).length, main: T.main, killedByTank: this.killedByTank || 0, killedByMg: this.killedByMg || 0, coax: T.coax, m2: T.m2 };
       }
     }
+    const TA = deps.TankAI || (typeof HKTankAI !== 'undefined' ? HKTankAI : null); if (TA) TA.install(Battle, SKILL);   /* the tank crew's drills live in tankai.js */
     return { Battle, TEAMS, SKILL };
   }
 

@@ -9,7 +9,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.25';
+const VERSION = '0.26';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -33,7 +33,7 @@ function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01) return; voi
 let world = new HKWorld.World({ seed: set.map, biome: set.biome });
 const scene = new Scene3D(canvas, world, { condition: set.cond, quality: set.gfx });
 const cams = new Cameras(scene);
-const BattleAPI = HKBattle.create({ HK, CAMP, World: HKWorld });
+const BattleAPI = HKBattle.create({ HK, CAMP, World: HKWorld, TankAI: window.HKTankAI });
 const cfg0 = HK.defaultConfig(); let lookup = null;
 const ASSETS = q.get('assets') === '0' ? null : 'assets/';
 const tank = new TankView(ASSETS); scene.units.add(tank.group);
@@ -44,7 +44,7 @@ function newBattle() {
   if (!lookup) lookup = cfg0.hkoi_enabled ? HK.meetLookup(cfg0) : {};
   for (const t of teams) scene.units.remove(t.group); if (volleys) volleys.dispose();
   const pos = tankPos();
-  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
+  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
   teams = battle.units.map(u => { const t = new TeamView(u.type, ASSETS); scene.units.add(t.group); return t; });
   // enemy transport parked in dead ground behind some of the teams: seen only when the team it belongs to is
   for (const p of props) scene.units.remove(p.view.group); props.length = 0;
@@ -122,14 +122,14 @@ function checkEnd() {
   ended = true; setTimeout(() => { if (state !== 'play') return; playing = false; state = 'result';
     $('r-head').innerHTML = out === 'lost' ? 'VEHICLE <em style="color:var(--bad)">DESTROYED</em>' : out === 'won' ? 'AMBUSH <em>DEFEATED</em>' : 'TIME <em>EXPIRED</em>';
     $('r-sub').textContent = `${world.biome.name}, map ${set.map}, ${CONDITIONS[set.cond].name.toLowerCase()} · ${FORCES[set.force].name}, ${set.skill} crews · ${Math.floor(battle.t / 60)} min ${Math.floor(battle.t % 60)} s`;
-    const tb = $('r-table'); tb.textContent = ''; const NAMES = { HIT: 'Hit the vehicle', aps: 'Stopped by Trophy', hkoi_obs: 'Guidance cut by HKOI cloud', hkoi_cut: 'Guidance cut by HKOI cloud', hkoi_he: 'Shot down by HKOI', terrain_mask: 'Lost behind terrain or cover', gunner_jitter: 'Enemy gunner missed', unguided_miss: 'Unguided miss', jammer: 'Jammed' };
+    const tb = $('r-table'); tb.textContent = ''; const NAMES = { HIT: 'Hit the vehicle', aps: 'Stopped by Trophy', hkoi_obs: 'Guidance cut by HKOI cloud', hkoi_cut: 'Guidance cut by HKOI cloud', counter_fire: 'Gunner driven off his missile by machine-gun fire', suppressed_aim: 'Missed: gunner\'s aim shaken by machine-gun fire', hkoi_he: 'Shot down by HKOI', terrain_mask: 'Lost behind terrain or cover', gunner_jitter: 'Enemy gunner missed', unguided_miss: 'Unguided miss', jammer: 'Jammed' };
     const rows = [['Enemy volleys', s.volleys], ['Missiles and drones launched', s.fired]].concat(Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([k, n]) => ['· ' + (NAMES[k] || k.replace(/_/g, ' ')), n])).concat([['HKOI rounds used', `${cfg0.rnd ? '' : ''}${150 - s.obs} obscurant, ${150 - s.he} HE`], ['Trophy charges left', `${s.apsL} left, ${s.apsR} right`], ['Crew', Object.entries(s.crew || {}).map(([k, x]) => `${k.toUpperCase()} ${x}`).join('  ')], ['Enemy teams destroyed by return fire', s.killedByTank], ['Enemy teams knocked out by machine guns', s.killedByMg], ['Main gun rounds left (of 10 multi-purpose)', s.main], ['Enemy teams still able to fire', s.teamsLeft]]);
     for (const [a, b] of rows) { const tr = el('tr'); tr.append(el('td', null, a), el('td', null, String(b))); tb.append(tr); }
     show(); }, out === 'lost' ? 5000 : 2500);
 }
 
 // ---------------------------------------------------------------- screens and controls
-function show() { if (state !== 'play') { $('esight').hidden = true; $('units').hidden = true; } $('title').hidden = state !== 'title'; $('result').hidden = state !== 'result'; const p = state === 'play'; $('status').hidden = !p; $('bar').hidden = !p; $('log').hidden = !(p && showLog); hud.hidden = !showPerf; if (!p) $('caption').textContent = ''; }
+function show() { if (state !== 'play') { $('crew').hidden = true; $('esight').hidden = true; $('units').hidden = true; } $('title').hidden = state !== 'title'; $('result').hidden = state !== 'result'; const p = state === 'play'; $('status').hidden = !p; $('bar').hidden = !p; $('log').hidden = !(p && showLog); hud.hidden = !showPerf; if (!p) $('caption').textContent = ''; }
 function seg(id, items, key, after) { const box = $(id); box.textContent = ''; for (const [v, name] of items) { const b = el('button', 'btn' + (set[key] === v ? ' on' : ''), name); b.onclick = () => { set[key] = v; store.set('setup', set); seg(id, items, key, after); if (after) after(); }; box.append(b); } }
 function note() { $('o-note').textContent = FORCES[set.force].note + '. ' + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.'); }
 function buildTitle() {
@@ -174,13 +174,19 @@ let shotI = 0; const landing = [];
 let mgI = 0, mgAcc = { coax: 0, m2: 0, dust: 0 }; const mgV = new THREE.Vector3(), mgW = new THREE.Vector3();
 function machineGuns(dt) {
   const L = battle.mgs || []; if (!(state === 'play' && playing)) return; while (mgI < L.length && battle.t > L[mgI].t + L[mgI].dur) mgI++;
-  const b = L[mgI]; if (!b || battle.t < b.t) return; const tgt = scene.at(b.e, b.n, 0.5, mgW), sdt = dt * speed, quiet = speed > 2.01;
-  for (const [key, rate, heavy] of [['coax', 12, false], ['m2', 8, true]]) { if (!b[key]) continue; mgAcc[key] += sdt * rate; let n = Math.floor(mgAcc[key]); mgAcc[key] -= n; n = Math.min(n, 4);
+  const sdt = dt * speed, quiet = speed > 2.01;
+  for (let i = mgI; i < L.length && i < mgI + 6; i++) {   /* every burst going on right now: each gun has its own target */
+    const b = L[i]; if (battle.t < b.t || battle.t > b.t + b.dur) continue; const key = b.w || (b.coax ? 'coax' : 'm2'), heavy = key === 'm2', rate = heavy ? 8 : 12, tgt = scene.at(b.e, b.n, 0.5, mgW);
+    mgAcc[key] = (mgAcc[key] || 0) + sdt * rate; let n = Math.floor(mgAcc[key]); mgAcc[key] -= n; n = Math.min(n, 4);
     const m = tank.mgMuzzle(key, mgV) || scene.at(shown.e, shown.n, 2.6, mgV);
     for (let k = 0; k < n; k++) { if (!quiet) sound.mg(camDist(m), heavy); scene.fx.flash(m.x, m.y, m.z, heavy ? 0.35 : 0.22);
-      if (Math.random() < (heavy ? 0.5 : 0.25)) { const dx = tgt.x - m.x + (Math.random() - 0.5) * b.R * 0.012, dy = tgt.y - m.y + (Math.random() - 0.5) * b.R * 0.006, dz = tgt.z - m.z + (Math.random() - 0.5) * b.R * 0.012, d = Math.hypot(dx, dy, dz), v = heavy ? 880 : 840; scene.fx.add({ x: m.x, y: m.y, z: m.z, vx: dx / d * v, vy: dy / d * v, vz: dz / d * v, size: heavy ? 0.5 : 0.36, life: d / v, r: 1, g: 0.42, b: 0.16, a: 1, glow: 1, drag: 0 }); } } }
-  mgAcc.dust += sdt * 5; while (mgAcc.dust >= 1) { mgAcc.dust -= 1; scene.fx.dust(tgt.x + (Math.random() - 0.5) * 5, tgt.y, tgt.z + (Math.random() - 0.5) * 5, 0.5); }
+      if (Math.random() < (heavy ? 0.5 : 0.25)) { const dx = tgt.x - m.x + (Math.random() - 0.5) * b.R * 0.012, dy = tgt.y - m.y + (Math.random() - 0.5) * b.R * 0.006, dz = tgt.z - m.z + (Math.random() - 0.5) * b.R * 0.012, d = Math.hypot(dx, dy, dz), v = heavy ? 880 : 840; scene.fx.add({ x: m.x, y: m.y, z: m.z, vx: dx / d * v, vy: dy / d * v, vz: dz / d * v, size: heavy ? 0.5 : 0.36, life: d / v, r: 1, g: 0.42, b: 0.16, a: 1, glow: 1, drag: 0 }); } }
+    mgAcc.dust = (mgAcc.dust || 0) + sdt * 3; while (mgAcc.dust >= 1) { mgAcc.dust -= 1; scene.fx.dust(tgt.x + (Math.random() - 0.5) * 5, tgt.y, tgt.z + (Math.random() - 0.5) * 5, 0.5); } }
 }
+// what the crew is doing, one line per crewman or weapon (refreshed a few times a second)
+let crewT = 0, crewSig = '';
+function drawCrew(dt) { const box = $('crew'), on = state === 'play' && !mapOpen && cams.mode !== 'gnr' && cams.mode !== 'enemy'; if (box.hidden === on) box.hidden = !on; if (!on || !battle.tankStatus) return; crewT -= dt; if (crewT > 0) return; crewT = 0.3;
+  const rows = battle.tankStatus(), sig = rows.map(r => r.join(':')).join('|'); if (sig === crewSig) return; crewSig = sig; box.textContent = ''; for (const [who, text] of rows) { const d = el('div'); d.append(el('b', null, who), text); box.append(d); } }
 function trackDust(dt) { const T = battle.tank; if (!(state === 'play' && playing) || !T.alive || Math.abs(T.v || 0) < 1.2 || Math.random() > dt * 14 * Math.min(1, Math.abs(T.v) / 6)) return; const h = shown.h * Math.PI / 180, side = Math.random() < 0.5 ? 1.5 : -1.5, p = scene.at(shown.e - Math.sin(h) * 3.6 + Math.cos(h) * side, shown.n - Math.cos(h) * 3.6 - Math.sin(h) * side, 0.2); scene.fx.dust(p.x, p.y, p.z, set.cond === 'rain' || set.cond === 'snow' ? 0.35 : 1); }
 function mainGun() {
   const S = battle.shots || []; const live = state === 'play' && playing;
@@ -217,6 +223,7 @@ function frameBody(now) {
     if (on) { const rf = battle._rf, fl = landing[landing.length - 1], T = battle.tank, R = rf ? rf.R : fl ? Math.hypot(fl.to.e - fl.from.e, fl.to.n - fl.from.n) : null, wait = rf ? Math.max(0, rf.at - battle.t) : 0;
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
+  drawCrew(dt);
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (sound.ctx && state === 'play' && playing && speed <= 2.01) voices();
