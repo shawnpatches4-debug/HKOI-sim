@@ -232,7 +232,6 @@
         this.volleys.push(v);
         const names = launches.map(l => `${l.u.spec.name} #${l.u.id + 1} at ${(l.R / 1000).toFixed(2)} km, ${Math.round(l.brg).toString().padStart(3, '0')}`).join('; ');
         this.say(this.t, 'volley', null, `Enemy volley ${v.i + 1}: ${names}.`, `${teams.length} of the teams had a shot after ${waited.toFixed(0)} s; vehicle ${exposed === 'none' ? 'fully exposed' : exposed === 'hull' ? 'hull-down' : 'in cover'}`);
-        if (plan.cover) this.say(this.t + plan.react, 'tank', 'DRV', `Driver makes for cover ${Math.round(plan.cover.d)} m away${plan.cover.all ? '' : ' (partial)'}.`, 'warning received');
         masks.forEach((m, i) => { if (m != null) this.say(this.t + launches[i].t0 + 1, 'enemy', launches[i].u.id, `${launches[i].u.spec.name} #${launches[i].u.id + 1} loses sight of the vehicle behind cover.`, 'sight line broken'); });
         for (const e of rec.events) this.say(this.t + e.t, 'engine', e.idx, e.text);
         for (const l of launches) { l.u.state = l.u.spec.needsLos ? 'guiding' : 'firing'; l.u.since = this.t; l.u.ammo--; l.u.fired++; l.u.volley = v.i; }
