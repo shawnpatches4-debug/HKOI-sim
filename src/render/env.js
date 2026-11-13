@@ -29,6 +29,26 @@ export function weatherise(mat, amount = 1) {
   return mat;
 }
 
+// The vehicle's finish: paint colour for the theatre, and dirt that builds up from the tracks upward. One set of values, set per battle.
+export const FINISH = { tint: { value: new THREE.Color('#4a5238') }, amt: { value: 0 }, dirt: { value: new THREE.Color('#5a4a36') }, dirtAmt: { value: 0 }, ground: { value: 0 } };
+export const FINISHES = {
+  temperate: { tint: '#4c543a', amt: 0.55, dirt: '#5a4b37', dirtAmt: 0.45 },
+  desert: { tint: '#b29c74', amt: 0.85, dirt: '#bda982', dirtAmt: 0.5 },
+  mud: { tint: '#4c543a', amt: 0.55, dirt: '#3a3027', dirtAmt: 0.8 },
+  winter: { tint: '#c4c5bd', amt: 0.6, dirt: '#8b8377', dirtAmt: 0.35 },   // whitewash over the base coat
+};
+export function setFinish(biome, cond) { const f = FINISHES[cond === 'snow' ? 'winter' : cond === 'rain' ? 'mud' : biome === 'desert' ? 'desert' : 'temperate']; FINISH.tint.value.set(f.tint); FINISH.amt.value = f.amt; FINISH.dirt.value.set(f.dirt); FINISH.dirtAmt.value = f.dirtAmt; }
+// Apply to a vehicle material (after weatherise, which supplies the world position and the noise it uses).
+export function vehicleFinish(mat) {
+  weatherise(mat, 0.7); const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => { prev(sh, r); sh.uniforms.uFTint = FINISH.tint; sh.uniforms.uFAmt = FINISH.amt; sh.uniforms.uFDirt = FINISH.dirt; sh.uniforms.uFDirtAmt = FINISH.dirtAmt; sh.uniforms.uFGround = FINISH.ground;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uFTint; uniform float uFAmt; uniform vec3 uFDirt; uniform float uFDirtAmt; uniform float uFGround;').replace('#include <map_fragment>', `#include <map_fragment>
+      { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * smoothstep(0.02, 0.09, l));   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
+        float low = 1.0 - smoothstep(0.15, 1.9, vWp.y - uFGround), n = hkw_n(vWp.xz * 2.7) * 0.6 + hkw_n(vWp.xz * 9.0) * 0.4;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93)); }`); };
+  mat.customProgramCacheKey = () => 'hkfinish'; return mat;
+}
+
 // Falling rain or snow: short streaks in a box that travels with the camera, wrapped in the shader so nothing is updated on the CPU.
 export class Precipitation {
   constructor(count = 9000) {
