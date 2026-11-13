@@ -151,13 +151,20 @@
         if (!u.alive) return;
         const W = this.world, T = this.tank, S = SKILL[this.skill], sp = u.spec;
         if (u.state === 'moving') {   // displacing to the next prepared position
-          const g = u.sites[u.site], dx = g.e - u.e, dn = g.n - u.n, d = Math.hypot(dx, dn);
-          if (d < 3) { u.state = 'setup'; u.since = this.t; u.known = false; }
-          else { u.e += dx / d * sp.move * dt; u.n += dn / d * sp.move * dt; }
+          // follow the chosen route one corner at a time. In the open and in the vehicle's view the team runs; in cover it walks.
+          const goal = u.sites[u.site], wp = u.route && u.route[u.routeI] ? u.route[u.routeI] : [goal.e, goal.n], dx = wp[0] - u.e, dn = wp[1] - u.n, d = Math.hypot(dx, dn), R = Math.hypot(T.e - u.e, T.n - u.n);
+          const cover = W.veg(u.e, u.n).cls >= 2, inView = T.alive && R < 2500 && W.los(T.e, T.n, 2.6, u.e, u.n, 1.2).clear; u.inView = inView; u.gait = inView && !cover ? 'run' : 'walk'; u.spd = sp.move * (u.gait === 'run' ? 1.6 : 1);
+          if (d < 3) { if (u.route && u.routeI < u.route.length - 1) u.routeI++; else { u.state = 'setup'; u.since = this.t; u.route = null; u.spd = 0; if (!inView) u.known = false; } }
+          else { u.hdg = (Math.atan2(dx, dn) / DEG + 360) % 360; u.e += dx / d * u.spd * dt; u.n += dn / d * u.spd * dt; }
+          // a team on the move can be seen: the crew is scanning with thermal sights, and movement in the open at short range rarely goes unnoticed
+          if (inView) { const pSee = (cover ? 0.05 : 0.3) * Math.exp(-R / 800) * dt; if (!u.known && this.rng.random() < pSee) { u.known = true; this.say(this.t, 'tank', 'CDR', `Crew spots movement: ${sp.name} #${u.id + 1} ${cover ? 'in cover' : 'crossing open ground'} at ${Math.round(R / 10) * 10} m.`, 'a team in the vehicle\'s view while moving'); }
+            if (u.known) { let k = T.known.find(q => q.id === u.id); if (!k) { k = { id: u.id, e: u.e, n: u.n, t: this.t }; T.known.push(k); } k.e = u.e; k.n = u.n; k.t = this.t; k.done = false; } }
           return;
         }
         if (u.state === 'setup') { if (this.t - u.since > sp.setup) { u.state = 'hidden'; u.since = this.t; u.sight = 0; } return; }
         if (u.state === 'guiding' || u.state === 'firing') return;
+        // under fire: flat on the ground. When the fire lifts, a team that knows it has been found does not stay there.
+        const pinned = this.t < (u.suppressedUntil || 0); if (pinned) { u.down = true; u.wasPinned = true; } else if (u.down) { u.down = false; if (u.wasPinned && u.known && u.state === 'hidden') { u.wasPinned = false; if (this._displace(u, 'pinned by fire and located: staying means being hit')) return; } u.wasPinned = false; }
         if (u.ammo <= 0) { u.state = 'spent'; return; }
         // watching: does this team have a shot right now?
         const d = Math.hypot(T.e - u.e, T.n - u.n);
@@ -169,10 +176,28 @@
         // fidget; longer for experts, who expect the vehicle to come back up) it moves to whichever of its prepared positions looks onto
         // where the vehicle now is, provided someone on its side can see the vehicle to tell it so.
         if (!sp.indirect && !seen && u.state === 'hidden' && u.sites.length > 1 && this.t - Math.max(u.lastSeen || 0, u.since) > 40 + S.patience * 0.6 && this.t >= (u.nextLook || 0)) {
-          u.nextLook = this.t + 20; if (!this._spotted()) return;
-          let best = -1; for (let j = 0; j < u.sites.length; j++) { if (j === u.site) continue; const g = u.sites[j], dd = Math.hypot(T.e - g.e, T.n - g.n); if (dd < sp.rmin || dd > sp.rmax) continue; if (W.los(g.e, g.n, sp.agl, T.e, T.n, 2.2).clear) { best = j; break; } }
-          if (best >= 0) { u.site = best; u.state = 'moving'; u.since = this.t; u.known = false; this.say(this.t, 'enemy', u.id, `${sp.name} #${u.id + 1} has lost sight of the vehicle: moves to another prepared position that looks onto it.`, 'told where the vehicle is by a team that can still see it'); }
+          u.nextLook = this.t + 25; if (!this._spotted()) return;
+          this._displace(u, 'lost sight of the vehicle; told where it is by a team that can still see it');
         }
+      }
+      // Where to go next, and how to get there. Candidates are the team's own prepared positions plus other good firing points near it.
+      // A site scores for seeing the vehicle from within range, for concealment, for being well away from anywhere the vehicle has located,
+      // and against the distance to walk. The route prefers vegetation and ground the vehicle cannot see.
+      _displace(u, why, text) {
+        const W = this.world, T = this.tank, sp = u.spec; if (u.ammo <= 0) { u.state = 'spent'; return false; }
+        const key = sp.key + ':' + Math.round(T.e / 150) + ':' + Math.round(T.n / 150); this._sites = this._sites || {};
+        if (!this._sites[key] && !sp.indirect) this._sites[key] = W.ambushSites(T.e, T.n, { rmin: Math.max(sp.rmin * 1.2, 0), rmax: Math.min(sp.rmax * 0.85, 3800), agl: sp.agl, salt: this.seed * 7 + u.id });
+        const near = (this._sites[key] || []).filter(q => Math.hypot(q.e - u.e, q.n - u.n) < 450).sort((a, b) => Math.hypot(a.e - u.e, a.n - u.n) - Math.hypot(b.e - u.e, b.n - u.n)).slice(0, 10);
+        const cands = u.sites.filter((q, j) => j !== u.site).concat(near), located = T.known.filter(k => !k.done || this.t - k.t < 120); let best = null;
+        for (const c of cands) { const dMe = Math.hypot(c.e - u.e, c.n - u.n); if (dMe < 60 || dMe > 600 || !W.passable(c.e, c.n, false)) continue; const R = Math.hypot(T.e - c.e, T.n - c.n), inRange = R >= sp.rmin && R <= sp.rmax, sees = sp.indirect ? false : inRange && W.los(c.e, c.n, sp.agl, T.e, T.n, 2.2).clear;
+          const hot = located.length ? Math.min(...located.map(k => Math.hypot(k.e - c.e, k.n - c.n))) : 1e9, veg = W.veg(c.e, c.n).cls, score = (sees ? 3 : sp.indirect ? 1 : 0) + (veg >= 3 ? 1 : veg === 2 ? 0.5 : 0) + (hot > 150 ? 1 : hot > 80 ? 0 : -3) - dMe / 250 + this.rng.random() * 0.4;
+          if (!best || score > best.score) best = { c, score, sees, dMe }; }
+        if (!best) { u.state = 'hidden'; u.sight = 0; return false; }
+        const seenCost = (e, n) => { const v = W.veg(e, n).cls, R = Math.hypot(T.e - e, T.n - n); return (v >= 4 ? -0.3 : v >= 2 ? -0.15 : 0.3) + (R < 2500 && W.los(T.e, T.n, 2.6, e, n, 1.2).clear ? 2.5 : 0); };
+        const route = W.path(u.e, u.n, best.c.e, best.c.n, { grid: 30, tank: false, cost: seenCost });
+        let j = u.sites.indexOf(best.c); if (j < 0) { u.sites.push(best.c); j = u.sites.length - 1; }
+        u.site = j; u.route = route && route.length > 1 ? route.slice(1) : null; u.routeI = 0; u.state = 'moving'; u.since = this.t; u.down = false;
+        this.say(this.t, 'enemy', u.id, text || `${sp.name} #${u.id + 1} moves ${Math.round(best.dMe / 10) * 10} m to ${best.sees ? 'a position that looks onto the vehicle' : 'a covered position'}${route ? ', keeping to cover' : ''}.`, why); return true;
       }
       // can anyone on the enemy side see the vehicle (so that crews firing over a hill can be given its position)?
       _spotted() { const T = this.tank; return this.units.some(o => o.alive && !o.spec.indirect && o.state !== 'moving' && this.world.los(o.e, o.n, o.spec.agl, T.e, T.n, 2.2).clear); }
@@ -317,7 +342,7 @@
         T.main--; T.mainReady = this.t + 6; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, why;
         if (!there) { k.done = true; u.known = false; text = `Main gun round strikes the ${u.spec.name} #${u.id + 1} launch site: nobody there.`; why = 'the team had already moved to its next position'; }
         else if (roll < p) { hit = true; u.alive = false; u.state = 'dead'; k.done = true; this.killedByTank = (this.killedByTank || 0) + 1; text = `Main gun round on ${u.spec.name} #${u.id + 1} at ${(R / 1000).toFixed(2)} km: position destroyed.`; why = `aimed fire from a halted vehicle at a fixed, located position (about ${Math.round(p * 100)}% at this range)`; }
-        else { if (u.sites.length > 1 && u.ammo > 0) { u.site = (u.site + 1) % u.sites.length; u.state = 'moving'; u.since = this.t; k.done = true; u.known = false; } else { u.readyAt = Math.max(u.readyAt || 0, this.t + 45); if (k.shots >= 2) k.done = true; } text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team shaken${u.state === 'moving' ? ', pulls out for its next position' : ', head down'}.`; why = 'a near miss: a dug-in team is a small target at this range'; }
+        else { if (u.ammo > 0 && this._displace(u, 'a tank round has just landed beside it')) { k.done = true; u.known = false; } else { u.readyAt = Math.max(u.readyAt || 0, this.t + 45); if (k.shots >= 2) k.done = true; } text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team shaken${u.state === 'moving' ? ', pulls out for its next position' : ', head down'}.`; why = 'a near miss: a dug-in team is a small target at this range'; }
         this.say(this.t + tof, 'tank', 'GNR', text, why); this.shots.push({ t: this.t, tof, from: { e: T.e, n: T.n }, to: { e: k.e + (hit || !there ? 0 : (this.rng.random() - 0.5) * 14), n: k.n + (hit || !there ? 0 : (this.rng.random() - 0.5) * 14) }, hit, there });
       }
       // when a volley is over: carry the vehicle's state forward, let the crew locate who fired, and send the firers to their next position
@@ -331,7 +356,7 @@
         if (v.plan.cover) { T.mode = 'cover'; T.modeSince = this.t; }
         if (rec.killed) { T.alive = false; this.say(this.t, 'result', null, 'Vehicle destroyed.'); return; }
         for (const th of rec.threats) { const u = this.units.find(q => q.id === th.uid); if (!u) continue; if (th.track != null && !u.spec.indirect) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); } }
-        for (const l of v.launches) { const u = l.u; u.readyAt = this.t + u.spec.reload; if (u.ammo > 0 && r.random() < S.scoot && u.sites.length > 1) { u.site = (u.site + 1) % u.sites.length; u.state = 'moving'; u.since = this.t; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1} breaks down and moves to its next position.`, 'shoot and scoot'); } else { u.state = u.ammo > 0 ? 'hidden' : 'spent'; u.sight = 0; } }
+        for (const l of v.launches) { const u = l.u; u.readyAt = this.t + u.spec.reload; u.state = u.ammo > 0 ? 'hidden' : 'spent'; u.sight = 0; if (u.ammo > 0 && (u.known || r.random() < S.scoot)) this._displace(u, u.known ? 'its launch was tracked: the position is compromised' : 'shoot and scoot'); }
         const hits = rec.hits || 0; this.say(this.t, 'result', null, `Volley ${v.i + 1} over: ${rec.threats.length} fired, ${hits} hit${hits === 1 ? '' : 's'}. HKOI rounds left ${T.st.obs} obscurant, ${T.st.he} HE; Trophy ${T.st.apsL} left, ${T.st.apsR} right.`);
       }
 
