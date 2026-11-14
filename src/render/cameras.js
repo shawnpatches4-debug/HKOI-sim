@@ -22,6 +22,7 @@ export const CAMERA_MODES = [
   { key: 'troops', name: 'Enemy close-up', hint: 'Beside an enemy team: drag to look around them, wheel to zoom (spectator)', spectator: true },
   { key: 'fly', name: 'Free look', hint: 'Fly anywhere: W A S D to move, Q and E down and up, drag to look, hold Shift to go faster' },
   { key: 'missile', name: 'Missile', hint: 'Riding the latest missile or drone (spectator)', spectator: true },
+  { key: 'fpv', name: 'Drone camera', hint: 'First-person camera of an attacking drone: the pilot\'s goggle picture (spectator)', spectator: true },
 ];
 
 // Enemy sights. Magnification and true field of view (degrees across the round picture) of the optic each team looks through.
@@ -48,6 +49,7 @@ export class Cameras {
   update(dt, ctx) {
     const S = this.s, cam = S.camera, W = S.world, T = ctx.tank, tp = S.at(T.e, T.n, 0, new THREE.Vector3());
     if (this.mode === 'free') return;
+    if (this.mode === 'fpv') { this.snap = false; this.lastTank = null; this.lastUnit = null; return; }   /* the drone camera is placed by app/fpvfeed.js */
     if (this.interior && this.interior.owns(this.mode)) {   // a crew seat inside the vehicle: the interior module places the camera at that crewman's eyes
       if (this.interior.drive(this, dt)) { this.snap = false; this.lastTank = null; this.lastUnit = null; return; } }
     if (this.mode === 'fly') {   // fly anywhere: the view turns with the drag, the keys move along it; never below the ground

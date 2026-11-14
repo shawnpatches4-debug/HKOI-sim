@@ -1,10 +1,11 @@
 // The map screen: a topographic map of the battlefield with contours, woods, fields, roads and buildings; shading that shows
 // from where the vehicle can be seen; the vehicle, and whatever enemy positions the viewer is allowed to know.
+import { CommanderView } from './cdrview.js';
 const hash = (i, j, s) => { let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 const INK = { open: [226, 224, 204], field: [[232, 226, 190], [222, 228, 196], [236, 222, 184]], plough: [214, 200, 178], wood: [168, 200, 150], scrub: [204, 214, 176], built: [200, 196, 190], contour: [150, 110, 70], water: [150, 190, 220] };
 
 export class MapView {
-  constructor(canvas) { this.cv = canvas; this.x = canvas.getContext('2d'); this.scale = 0; this.cx = 0; this.cn = 0; this.shed = null; this.shedKey = ''; this.onPick = null; this.pickMode = false; this._wire(); }
+  constructor(canvas) { this.cv = canvas; this.x = canvas.getContext('2d'); this.scale = 0; this.cx = 0; this.cn = 0; this.shed = null; this.shedKey = ''; this.onPick = null; this.pickMode = false; this._wire(); this.cdr = new CommanderView(this);   /* the enemy commander's own picture (cdrview.js): its button, its list and its drawing */ }
   setWorld(world) { if (this.world === world) return; this.world = world; this.base = this._bake(world); this.shed = null; this.shedKey = ''; this.fit(); }
   fit() { const r = this.cv.getBoundingClientRect(); this.scale = Math.min(r.width, r.height) / this.world.size * 0.98; this.cx = 0; this.cn = 0; }
   // one pixel per ~4 m: land cover, hill shading from the north-west, a contour every 10 m with every fifth one heavier
@@ -33,19 +34,25 @@ export class MapView {
     x.putImageData(img, 0, 0); this.shed = { c, e, n, R, share: tot ? seen / tot : 0 }; }
   toScreen(e, n) { const r = this.cv; return [r.width / 2 + (e - this.cx) * this.k, r.height / 2 - (n - this.cn) * this.k]; }
   toWorld(sx, sy) { const r = this.cv; return [this.cx + (sx - r.width / 2) / this.k, this.cn - (sy - r.height / 2) / this.k]; }
-  // st: { tank: {e,n,h}, home: {e,n} | null, units: [{e,n,name,state,known,alive}], showAll, missiles: [{e,n}], route }
+  // st: { tank: {e,n,h}, home: {e,n} | null, units: [{e,n,name,state,known,alive}], showAll, missiles: [{e,n}], route, battle, t, dt }
+  // battle, t (battle time shown) and dt (seconds since the last frame) are only used by the commander view.
   draw(st) {
     const cv = this.cv, r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
     const x = this.x, w = this.world, k = this.k = this.scale * dpr; x.fillStyle = '#0b0f0e'; x.fillRect(0, 0, cv.width, cv.height);
     const [x0, y0] = this.toScreen(-w.half, w.half); x.imageSmoothingQuality = 'high'; x.drawImage(this.base, x0, y0, w.size * k, w.size * k);
+    const now = performance.now(), cdrOn = this.cdr.on && !this.pickMode && !!st.battle, dt = st.dt != null ? st.dt : Math.min(0.1, Math.max(0, (now - (this._last || now)) / 1000)); this._last = now;
+    if (cdrOn) { this.cdr.draw(x, { battle: st.battle, t: st.t, dt, showAll: st.showAll, tank: st.tank }, dpr); this._scale(x, k, dpr); return; }
+    if (!this.cdr.none.hidden || !this.cdr.list.hidden) { this.cdr.none.hidden = true; this.cdr.list.hidden = true; }
     if (this.shed) { const s = this.shed, [a, b] = this.toScreen(s.e - s.R, s.n + s.R); x.imageSmoothingEnabled = true; x.drawImage(s.c, a, b, 2 * s.R * k, 2 * s.R * k); }
     const dot = (e, n, col, rad, label, ring) => { const [a, b] = this.toScreen(e, n); x.beginPath(); x.arc(a, b, rad * dpr, 0, 6.283); if (ring) { x.strokeStyle = col; x.lineWidth = 2 * dpr; x.setLineDash([4 * dpr, 3 * dpr]); x.stroke(); x.setLineDash([]); } else { x.fillStyle = col; x.fill(); x.strokeStyle = '#000'; x.lineWidth = 1.2 * dpr; x.stroke(); } if (label) { x.font = `${600} ${11 * dpr}px ui-monospace, Menlo, monospace`; const tw = x.measureText(label).width; x.fillStyle = 'rgba(0,0,0,.7)'; x.fillRect(a + 9 * dpr, b - 8 * dpr, tw + 8 * dpr, 16 * dpr); x.fillStyle = col; x.fillText(label, a + 13 * dpr, b + 4 * dpr); } };
     for (const u of st.units || []) { if (!u.alive) continue; if (u.known) dot(u.e, u.n, '#ff5a4d', 6, u.name); else if (st.showAll) dot(u.e, u.n, '#ff9d8f', 6, `${u.name} · ${u.state}`, true); }
     for (const m of st.missiles || []) dot(m.e, m.n, '#ffb347', 3.5);
     if (st.tank) { const T = st.tank, [a, b] = this.toScreen(T.e, T.n), h = T.h * Math.PI / 180; x.save(); x.translate(a, b); x.rotate(h); x.fillStyle = '#39d98a'; x.strokeStyle = '#03130b'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(7 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-7 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore(); }
-    // scale bar and north arrow
-    const bar = [100, 200, 500, 1000, 2000].find(v => v * k > 90 * dpr) || 2000, bx = 18 * dpr, by = cv.height - 22 * dpr; x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(bx - 8 * dpr, by - 20 * dpr, bar * k + 16 * dpr, 30 * dpr); x.strokeStyle = '#e6efe9'; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(bx, by - 5 * dpr); x.lineTo(bx, by); x.lineTo(bx + bar * k, by); x.lineTo(bx + bar * k, by - 5 * dpr); x.stroke(); x.fillStyle = '#e6efe9'; x.font = `${11 * dpr}px ui-monospace, Menlo, monospace`; x.fillText(bar >= 1000 ? bar / 1000 + ' km' : bar + ' m', bx + 4 * dpr, by - 7 * dpr);
+    this._scale(x, k, dpr);
   }
+  // scale bar
+  _scale(x, k, dpr) { const cv = this.cv;
+    const bar = [100, 200, 500, 1000, 2000].find(v => v * k > 90 * dpr) || 2000, bx = 18 * dpr, by = cv.height - 22 * dpr; x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(bx - 8 * dpr, by - 20 * dpr, bar * k + 16 * dpr, 30 * dpr); x.strokeStyle = '#e6efe9'; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(bx, by - 5 * dpr); x.lineTo(bx, by); x.lineTo(bx + bar * k, by); x.lineTo(bx + bar * k, by - 5 * dpr); x.stroke(); x.fillStyle = '#e6efe9'; x.font = `${11 * dpr}px ui-monospace, Menlo, monospace`; x.fillText(bar >= 1000 ? bar / 1000 + ' km' : bar + ' m', bx + 4 * dpr, by - 7 * dpr); }
   _wire() { const cv = this.cv; let drag = null, moved = 0;
     cv.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(), dpr = cv.width / r.width, sx = (e.clientX - r.left) * dpr, sy = (e.clientY - r.top) * dpr, [we, wn] = this.toWorld(sx, sy), f = Math.exp(-e.deltaY * 0.0015); this.scale = Math.max(0.02, Math.min(3, this.scale * f)); this.k = this.scale * dpr; const [we2, wn2] = this.toWorld(sx, sy); this.cx += we - we2; this.cn += wn - wn2; }, { passive: false });
     cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; moved = 0; cv.setPointerCapture(e.pointerId); });
