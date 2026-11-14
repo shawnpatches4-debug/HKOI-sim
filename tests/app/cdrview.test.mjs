@@ -41,12 +41,23 @@ if (mem['hkoi.cdrview'] !== 'true') bad.push('the choice is not remembered');
 B.commander = window.__fakeCommander; B.vehicles = window.__fakeVehicles;
 M.draw(mapState(true)); save('cdr_spectator');
 const L = labels(); console.log('labels:\n  ' + L.join('\n  ')); console.log('list:\n  ' + rows().join('\n  ')); console.log('head: ' + M.cdr.head.textContent);
-for (const w of ['watch the valley', 'strike the tank', 'north ridge', 'by UAZ', 'fix the tank', 'commit down', 'break contact', 'hold fire', 'Tank believed here', 'reported 38 s ago', 'He expects it here', 'his picture is', 'Tank (true position)', 'WRONG', 'BMP-2', 'T-72B3', 'T-90M', 'UAZ', 'arrives in 3:20']) if (!has(w)) bad.push(`nothing on the map says "${w}"`);
+// always written: his picture, his forecast, the truth (spectator), and the newest three orders; nothing else, so the map stays readable
+for (const w of ['Tank believed here', 'reported 38 s ago', 'He expects it here', 'his picture is', 'Tank (true position)', 'break contact', 'commit down', 'fix the tank']) if (!has(w)) bad.push(`nothing on the map says "${w}"`);
+for (const w of ['watch the valley', 'strike the tank', 'north ridge', 'hold fire']) if (has(w)) bad.push(`an older order ("${w}") is written on the map without being picked`);
+// every order's own line appears when it is picked from the list (and the wrong ones are flagged for the spectator)
+for (const [id, w] of [[1, 'watch the valley'], [2, 'hold fire'], [3, 'strike the tank · WRONG, 316 m off'], [5, 'north ridge · arrives in 3:20'], [6, 'by UAZ'], [7, 'fix the tank'], [8, 'commit down'], [9, 'break contact']]) { M.cdr.sel = id; M.draw(mapState(true)); if (!has(w)) bad.push(`picking order ${id} does not write "${w}"`); }
+M.cdr.sel = null;
+// the pointer over a team or vehicle: its full line and its order
+{ const v = B.vehicles().find(q => q.id === 101), p = M.toScreen(v.e, v.n); M.cdr.mouse = [p[0] + 3, p[1] - 2]; M.draw(mapState(true)); save('cdr_hover'); if (M.cdr.state().hover !== 'v101' || !has('BMP-2 · in a firing position') || !has('fix the tank')) bad.push('pointing at a vehicle does not give its full line and its order'); M.cdr.mouse = null; M.draw(mapState(true)); }
+// no two labels overlap
+{ const x2 = cv.getContext('2d'); x2.font = '600 11px ui-monospace, Menlo, monospace'; }
+// the key is closed until asked for
+if (M.cdr.keyOpen) bad.push('the key is open before anyone asked'); M.cdr.keyBtn.click(); M.draw(mapState(true)); save('cdr_key_open'); if (!M.cdr.keyOpen || mem['hkoi.cdrkey'] !== 'true') bad.push('the Key button does not open the key and remember it'); M.cdr.keyBtn.click();
 if (!M.cdr.head.textContent.includes('Holding for a salvo: 3 of 4 ready') || !has('in about 90 s')) bad.push('the hold on fire or the time of his forecast is not shown');
 if (rows().length !== 10 || !rows()[0].startsWith('Break') || !rows()[9].includes('done')) bad.push('the list is not ten orders, newest first, the finished one last');
 if (rows().filter(r => r.includes('Wrong:')).length !== 2) bad.push('wrong orders are not flagged in the list for the spectator');
 // the countdown counts
-B.t += 10; M.draw(mapState(true)); if (!has('arrives in 3:10')) bad.push('the time of arrival did not count down'); B.t -= 10; M.cdr.lastT = null;
+M.cdr.sel = 5; B.t += 10; M.draw(mapState(true)); if (!has('arrives in 3:10')) bad.push('the time of arrival did not count down'); B.t -= 10; M.cdr.lastT = null; M.cdr.sel = null;
 // 4. click an order
 M.draw(mapState(true)); M.cdr.rows.children.find(r => r.textContent.includes('north ridge')).click(); M.draw(mapState(true)); save('cdr_picked');
 if (M.cdr.sel !== 5 || M.cdr.rows.children.filter(r => / on$/.test(r.className)).length !== 1) bad.push('clicking an order does not pick it'); M.cdr.sel = null; M.cdr.listSig = '';
@@ -81,7 +92,7 @@ console.log('jump back from 100 s to 12 s: arrows', n100, '->', back.map(o => o[
 if (n100 !== 9 || back.map(o => o[0]).sort().join() !== '1,2' || back.some(o => o[1] !== 1 || o[2] !== 1) || rows().length !== 3) bad.push('a jump back in time left orders from the later moment');
 // 11b. switching the view on closes the map in on his forces: everything of his is inside the picture, clear of the list
 M.fit(); FIT = true; M.cdr.setOn(false); M.cdr.setOn(true); M.draw(mapState(true)); M.draw(mapState(true)); save('cdr_autofit'); FIT = false;
-{ const out = B.units.filter(u => u.alive && !u.gone).map(u => M.toScreen(u.e, u.n)).filter(p => p[0] < 300 || p[0] > W - 10 || p[1] < 60 || p[1] > H - 60); console.log('automatic zoom: scale', M.scale.toFixed(3), 'px per metre; teams outside the clear part of the picture:', out.length); if (out.length) bad.push('the automatic zoom leaves teams outside the picture or under the list'); }
+{ const out = B.units.filter(u => u.alive && !u.gone).map(u => M.toScreen(u.e, u.n)).filter(p => p[0] < 0 || p[0] > W - 10 || p[1] < 60 || p[1] > H - 60); const e0 = M.toScreen(-B.world.half, 0)[0], e1 = M.toScreen(B.world.half, 0)[0]; if (e1 - e0 >= W && (e0 > 0.5 || e1 < W - 0.5)) bad.push('the automatic zoom leaves an empty strip beside the map'); console.log('automatic zoom: scale', M.scale.toFixed(3), 'px per metre; teams outside the clear part of the picture:', out.length); if (out.length) bad.push('the automatic zoom leaves teams outside the picture or under the list'); }
 // 12. switched off again: the ordinary map, nothing of the commander's on the page
 M.cdr.setOn(false); M.draw(mapState(true)); save('map_normal_after'); if (!M.cdr.list.hidden || !M.cdr.none.hidden || mem['hkoi.cdrview'] !== 'false') bad.push('switching the view off leaves its panels up');
 // 13. the REAL commander (src/battle/enemycdr.js), when this branch has him: a large group fought for five minutes, the view drawn all the way

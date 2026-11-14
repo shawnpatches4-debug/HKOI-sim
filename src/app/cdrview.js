@@ -21,6 +21,7 @@ const CSS = `
   .btn.cdr-row { text-align: left; white-space: normal; padding: 5px 8px; display: grid; grid-template-columns: 58px 1fr auto; gap: 2px 8px; align-items: baseline; font-size: 12px; }
   .cdr-row i { font-style: normal; font: 600 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: #ffb4aa; } .cdr-row em { font-style: normal; font: 11px var(--mono); color: var(--dim); white-space: nowrap; }
   .cdr-row.done { opacity: .5; } .cdr-row .wrong { grid-column: 2 / 4; color: #ffb020; font-size: 11px; }
+  #map-cdrkey[hidden] { display: none; }
   #cdr-none { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 20px; font-size: 15px; } #cdr-none[hidden] { display: none; }
 `;
 const KIND = { watch: 'Watch', hold_fire: 'Hold fire', strike: 'Strike', relocate: 'Move', fix: 'Fix', commit: 'Commit', break: 'Break' };
@@ -47,6 +48,7 @@ function refKey(r) {
   if (typeof r === 'object') return r.uid != null ? 'u' + r.uid : r.vid != null ? 'v' + r.vid : null;
   return +r >= 100 ? 'v' + r : 'u' + r;
 }
+const shortName = n => String(n).replace(/ (team|crew)\b/i, '').replace(' #', ' ');
 // an order in words: his own text, with the name of who it is for in front when the text does not say
 function orderText(o, who) {
   const short = String(who).replace(/ #(\d+)$/, ' $1'), t = o.text ? String(o.text) : (KIND[o.kind] || o.kind).toLowerCase();
@@ -74,6 +76,8 @@ export class CommanderView {
     this.pos = new Map();       /* 'u3' / 'v1' -> eased position { e, n } */
     this.bel = null;            /* eased believed position of the tank { e, n, r, a } */
     this.lastT = null; this.listSig = ''; this.headSig = ''; this.eta = new Map(); this.labels = [];
+    this.keyOpen = !!store.get('hkoi.cdrkey', false);   /* the key to the symbols: closed until asked for */
+    this.mouse = null; this.hover = null;               /* the team or vehicle under the pointer: its label is given in full */
     this._dom();
   }
 
@@ -84,8 +88,12 @@ export class CommanderView {
     this.host = host;
     this.btn = mk('button', 'btn', 'Commander view'); this.btn.id = 'map-cdr'; this.btn.title = 'The map as the enemy commander sees it: his teams, his orders, where he thinks the tank is and where he expects it to go';
     this.btn.onclick = () => this.setOn(!this.on);
+    this.keyBtn = mk('button', 'btn', 'Key'); this.keyBtn.id = 'map-cdrkey'; this.keyBtn.title = 'What the symbols and arrows of the commander view mean'; this.keyBtn.hidden = true;
+    this.keyBtn.onclick = () => { this.keyOpen = !this.keyOpen; store.set('hkoi.cdrkey', this.keyOpen); this._show(); };
+    this.map.cv.addEventListener('pointermove', e => { const r = this.map.cv.getBoundingClientRect(), k = this.map.cv.width / (r.width || 1); this.mouse = [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; });
+    this.map.cv.addEventListener('pointerleave', () => { this.mouse = null; });
     const top = host.querySelector('#maptop'), before = host.querySelector('#map-place') || host.querySelector('#map-fit');
-    if (top) top.insertBefore(this.btn, before && before.parentElement === top ? before : null); else host.append(this.btn);
+    { const ref = before && before.parentElement === top ? before : null; if (top) { top.insertBefore(this.btn, ref); top.insertBefore(this.keyBtn, ref); } else host.append(this.btn, this.keyBtn); }
     this.list = mk('div', 'panel'); this.list.id = 'cdr-list'; this.list.hidden = true;
     this.head = mk('div', 'cdr-head'); this.rows = mk('div'); this.rows.id = 'cdr-rows';
     this.list.append(mk('h3', '', 'Enemy commander'), this.head, mk('h3', '', 'His standing orders, newest first'), this.rows);
@@ -93,7 +101,7 @@ export class CommanderView {
     host.append(this.list, this.none); this._show();
   }
   setOn(v) { this.on = !!v; store.set('hkoi.cdrview', this.on); this.lastT = null; this.seenAt = 0; this._show(); }
-  _show() { if (!this.host) return; this.host.classList.toggle('cdr', this.on); this.btn.classList.toggle('on', this.on); if (!this.on) { this.list.hidden = true; this.none.hidden = true; } }
+  _show() { if (!this.host) return; this.host.classList.toggle('cdr', this.on); this.btn.classList.toggle('on', this.on); this.keyBtn.hidden = !this.on; this.keyBtn.classList.toggle('on', this.keyOpen); if (!this.on) { this.list.hidden = true; this.none.hidden = true; } }
 
   // the commander's record for this moment, or null
   _read(battle) { try { return battle && typeof battle.commander === 'function' ? battle.commander() || null : null; } catch (e) { return null; } }
@@ -150,25 +158,34 @@ export class CommanderView {
       const b = this.bel; b.e += (b.te - b.e) * kp; b.n += (b.tn - b.n) * kp; b.r += (b.tr - b.r) * kp; b.a += (b.ta - b.a) * kp; b.te = pic.e; b.tn = pic.n; b.tr = pic.r_m || 0; b.ta = fresh; b.age = age; } else this.bel = null;
 
     this.labels.length = 0; x.save(); x.lineCap = x.lineJoin = 'round';
+    this.hover = null; if (this.mouse) { let bd = 24 * dpr; for (const f of F) { const [a, b] = P(f.pe, f.pn), d = Math.hypot(a - this.mouse[0], b - this.mouse[1]); if (d < bd) { bd = d; this.hover = f.key; } } }
+    this.newest = new Set(plan.filter(o => !o.done).sort((p, q) => (q.t_order || 0) - (p.t_order || 0)).slice(0, 3).map(o => String(o.id)));
     this._sectors(x, C, byKey, P, dpr);
     const sel = this.sel != null && this.anim.has(String(this.sel)) ? String(this.sel) : null;
     for (const [id, a] of this.anim) if (id !== sel) this._order(x, a, C, byKey, t, P, dpr, sel ? 0.45 : 1, false, spectator);
     if (sel) this._order(x, this.anim.get(sel), C, byKey, t, P, dpr, 1, true, spectator);
     this._belief(x, C, st, t, P, dpr, spectator);   /* after the arrows, so his mark for the tank is never buried under them */
     for (const f of F) { if (f.riding && byKey.has(f.riding)) continue; const [a, b] = P(f.pe, f.pn), held = plan.some(o => !o.done && o.kind === 'hold_fire' && (o.to === 'all' ? f.key[0] === 'u' : refKey(o.to) === f.key)), riders = F.filter(q => q.riding === f.key).map(q => q.name);
-      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing && (M.k / dpr > 0.11 || !f.alive) ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
+      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held });
+      // a short tag under each symbol (dropped where it would sit on another label); the full line only for the one under the pointer
+      if (f.key === this.hover) this._label(a, b + 17 * dpr, f.name + (f.doing ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), '#ffffff', 3);
+      else if (f.alive) this._label(a, b + 17 * dpr, shortName(f.name), '#ffd9d3', 0); }
     if (!C.with && C.e != null) { const [a, b] = P(C.e, C.n); this._symbol(x, a, b, 'cdr', dpr, { dead: C.alive === false, cdr: true }); this._label(a, b + 15 * dpr, 'Commander' + (C.alive === false ? ' · killed' : C.radio === false ? ' · radio out' : ''), '#ffd9d3', 0); }
     if (lost) { const cv = this.map.cv; this._banner(x, cv.width / 2, 78 * dpr, C.alive === false ? 'Commander lost: teams act on their own' : 'Commander has lost his radio: teams act on their own', dpr); }
     for (const L of (C.intel && C.intel.lost) || []) { const [a, b] = P(L[0], L[1]), r = 5 * dpr; x.strokeStyle = 'rgba(20,20,20,.85)'; x.lineWidth = 2.2 * dpr; x.beginPath(); x.moveTo(a - r, b - r); x.lineTo(a + r, b + r); x.moveTo(a - r, b + r); x.lineTo(a + r, b - r); x.stroke(); }   /* where he knows he lost a team */
-    this._labels(x, dpr); this._legend(x, dpr, spectator); x.restore();
+    this._labels(x, dpr); if (this.keyOpen) this._legend(x, dpr, spectator); x.restore();
     this._list(C, plan, byKey, t, spectator, battle);
   }
 
   _fit(F, C, T, dpr) {
     const M = this.map, cv = M.cv, pts = F.filter(f => f.alive).map(f => [f.e, f.n]); if (C.picture) pts.push([C.picture.e, C.picture.n]); if (C.predict && C.predict.to) pts.push(C.predict.to); if (T) pts.push([T.e, T.n]); if (pts.length < 2) return;
     let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity; for (const p of pts) { e0 = Math.min(e0, p[0]); e1 = Math.max(e1, p[0]); n0 = Math.min(n0, p[1]); n1 = Math.max(n1, p[1]); }
-    const left = Math.min(340, cv.width / dpr * 0.3), wpx = cv.width / dpr - left - 60, hpx = cv.height / dpr - 70 - 270,   /* clear of the top bar, and of the key and the control bar at the bottom */ sc = Math.max(0.02, Math.min(1.2, wpx / Math.max(400, e1 - e0), hpx / Math.max(400, n1 - n0)));
-    M.scale = sc; M.k = sc * dpr; M.cx = (e0 + e1) / 2 - (left / 2) / sc; M.cn = (n0 + n1) / 2 - 100 / sc;
+    const left = Math.min(340, cv.width / dpr * 0.3), wpx = cv.width / dpr - left - 60, hpx = cv.height / dpr - 70 - 90,   /* clear of the top bar and of the control bar at the bottom */ sc = Math.max(0.02, Math.min(1.2, wpx / Math.max(400, e1 - e0), hpx / Math.max(400, n1 - n0)));
+    M.scale = sc; M.k = sc * dpr; M.cx = (e0 + e1) / 2 - (left / 2) / sc; M.cn = (n0 + n1) / 2 - 30 / sc;
+    // no empty strip beside the map: where the map is bigger than the window its edge stays at or beyond the window's edge
+    // (the list is see-through and may lie over map), and where it is smaller it sits in the middle
+    const half = M.world ? M.world.half : 4000, hw = cv.width / dpr / 2 / sc, hh = cv.height / dpr / 2 / sc;
+    M.cx = hw >= half ? 0 : Math.max(-half + hw, Math.min(half - hw, M.cx)); M.cn = hh >= half ? 0 : Math.max(-half + hh, Math.min(half - hh, M.cn));
   }
 
   // ------------------------------------------------------------------ pieces of the picture
@@ -188,7 +205,7 @@ export class CommanderView {
       // the marker: a diamond with the armour oval inside, the way a staff map marks an enemy tank
       x.beginPath(); x.moveTo(a, c - 12 * dpr); x.lineTo(a + 14 * dpr, c); x.lineTo(a, c + 12 * dpr); x.lineTo(a - 14 * dpr, c); x.closePath(); x.fillStyle = 'rgba(235,242,255,.92)'; x.fill(); x.lineWidth = 2.2 * dpr; x.stroke();
       x.beginPath(); x.ellipse(a, c, 6.5 * dpr, 3.6 * dpr, 0, 0, 6.283); x.lineWidth = 1.6 * dpr; x.stroke(); x.globalAlpha = 1;
-      this._label(a, c - 22 * dpr, `Tank believed here · ${sourceText(pic.src, b.age)}${b.r ? ' · within about ' + Math.round(b.r / 10) * 10 + ' m' : ''}`, '#cfe0ff', 1);
+      this._label(a, c - 22 * dpr, `Tank believed here · ${sourceText(pic.src, b.age)}${b.r ? ' · within about ' + Math.round(b.r / 10) * 10 + ' m' : ''}`, '#cfe0ff', 4);
     } else { const [a, c] = P(C.e != null ? C.e : 0, C.n != null ? C.n : 0); this._label(a, c - 30 * dpr, 'He has no report of the tank', '#cfe0ff', 1); }
     const pr = C.predict;
     if (pr && (pr.path && pr.path.length || pr.to)) {
@@ -196,7 +213,8 @@ export class CommanderView {
       x.globalAlpha = b ? Math.max(0.5, b.a) : 0.8; this._path(x, pts, { w: 2.6 * dpr, col: INK.believed, dash: [9 * dpr, 6 * dpr], head: 11 * dpr, dpr }); x.globalAlpha = 1;
       const end = pts[pts.length - 1];
       if (pr.r_m > 0) { x.globalAlpha = b ? Math.max(0.4, b.a * 0.8) : 0.6; x.beginPath(); x.arc(end[0], end[1], Math.max(5 * dpr, pr.r_m * M.k), 0, 6.283); x.fillStyle = 'rgba(23,70,201,.07)'; x.fill(); x.strokeStyle = INK.believed; x.lineWidth = 1.4 * dpr; x.setLineDash([3 * dpr, 5 * dpr]); x.stroke(); x.setLineDash([]); x.globalAlpha = 1; }   /* the forecast widens: how unsure he is of where it will be */
-      this._label(end[0], end[1] + 14 * dpr, (pr.kind === 'staying' ? 'He expects it to stay' : 'He expects it here') + (pr.eta_s > 0 && pr.kind !== 'staying' ? ' in about ' + ago(pr.eta_s) : '') + (pr.why ? ': ' + pr.why : ''), '#cfe0ff', 1);
+      const near = b ? Math.hypot(end[0] - P(b.e, b.n)[0], end[1] - P(b.e, b.n)[1]) < 40 * dpr : false;   /* a forecast of "stays where it is" is said in the list, not written on top of his mark for the tank */
+      if (!near) this._label(end[0], end[1] + 14 * dpr, (pr.kind === 'staying' ? 'He expects it to stay' : 'He expects it here') + (pr.eta_s > 0 && pr.kind !== 'staying' ? ' in about ' + ago(pr.eta_s) : '') + (pr.why ? ': ' + pr.why : ''), '#cfe0ff', 2);
     }
     // the truth, for the spectator only
     if (spectator && T) {
@@ -204,7 +222,7 @@ export class CommanderView {
       if (b) { const [p, q] = P(b.e, b.n), off = Math.hypot(T.e - b.e, T.n - b.n); x.strokeStyle = 'rgba(10,10,10,.75)'; x.lineWidth = 1.2 * dpr; x.setLineDash([3 * dpr, 3 * dpr]); x.beginPath(); x.moveTo(p, q); x.lineTo(a, c); x.stroke(); x.setLineDash([]); }
       x.save(); x.translate(a, c); x.rotate(h); x.fillStyle = '#39d98a'; x.strokeStyle = '#03130b'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(7 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-7 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore();
       const off = b ? Math.hypot(T.e - b.e, T.n - b.n) : null;
-      this._label(a, c + 16 * dpr, 'Tank (true position)' + (off != null ? ` · his picture is ${Math.round(off)} m off` : ''), off != null && off > Math.max(150, b.r) ? '#ffcf70' : '#c8f5dd', 2);
+      this._label(a, c + 16 * dpr, 'Tank (true position)' + (off != null ? ` · his picture is ${Math.round(off)} m off` : ''), off != null && off > Math.max(150, b.r) ? '#ffcf70' : '#c8f5dd', 5);
     }
   }
   _nameOf(ref) { const k = refKey(ref), B = this.battle; if (!k || !B) return null; if (k[0] === 'u') { const u = (B.units || []).find(q => q.id === +k.slice(1)); return u ? `${u.spec ? u.spec.name : 'Team'} #${u.id + 1}` : null; } let V = []; try { V = B.vehicles ? B.vehicles() : []; } catch (e) { V = []; } const v = V.find(q => String(q.id) === k.slice(1)); return v ? v.name || String(v.kind).toUpperCase() : null; }
@@ -216,8 +234,10 @@ export class CommanderView {
     const w0 = (picked ? 5.2 : 3.6) * dpr, D = Math.hypot(d[0] - s[0], d[1] - s[1]);
     let pts = null, mid = null; x.globalAlpha = alpha;
     if (picked) { const [p, q] = P(s[0], s[1]); x.beginPath(); x.arc(p, q, 20 * dpr, 0, 6.283); x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; x.stroke(); }
+    const mine = refKey(o.to) === this.hover && this.hover != null, loud = picked || mine || this.newest.has(String(o.id));
     if (kind === 'watch') {
-      const [p, q] = P(s[0], s[1]), sec = (C.sectors || []).find(z => refKey(z) === refKey(o.to)), mb = Math.atan2(d[0] - s[0], d[1] - s[1]) / DEG, from = sec ? sec.brg_from : mb - 20, to = sec ? sec.brg_to : mb + 20, R = Math.min((D > 50 ? D : 1500) * M.k, 260 * dpr) * a.g;
+      const [p, q] = P(s[0], s[1]), sec = (C.sectors || []).find(z => refKey(z) === refKey(o.to)); if (sec && !loud) { x.globalAlpha = 1; return; }   /* an older order to watch: the thin sector fan already shows it */
+      const mb = Math.atan2(d[0] - s[0], d[1] - s[1]) / DEG, from = sec ? sec.brg_from : mb - 20, to = sec ? sec.brg_to : mb + 20, R = Math.min((D > 50 ? D : 1500) * M.k, 260 * dpr) * a.g;
       this._fan(x, p, q, from, to, R, picked ? 'rgba(198,36,25,.26)' : 'rgba(198,36,25,.16)', INK.own, (picked ? 2.6 : 1.8) * dpr, dpr);
       const ang = (from + (((to - from) % 360 + 360) % 360) / 2) * DEG; mid = [p + Math.sin(ang) * R * 0.62, q - Math.cos(ang) * R * 0.62];
     } else if (kind === 'hold_fire') {
@@ -241,12 +261,12 @@ export class CommanderView {
       mid = this._midOf(pts);
     }
     x.globalAlpha = 1;
-    if (mid && alpha > 0.3) {
+    if (mid && alpha > 0.3 && loud) {
       const who = a.who ? a.who.name : o.to === 'all' ? 'All teams' : 'Team', left = o.t_eta != null ? o.t_eta - t : null;
       let text = orderText(o, who); if (left != null) text = text.replace(/,?\s*(about\s*)?\d+(\.\d+)?\s*(min|s|sec)\.?$/i, '');
       if (o.done) text += ' · done'; else if (left != null) text += left > 0.5 ? ` · ${o.by === 'uaz' ? 'by UAZ, ' : ''}arrives in ${mmss(left)}` : ' · arriving';
       if (spectator && o.wrong) text += ` · WRONG${o.off_m != null ? ', ' + Math.round(o.off_m) + ' m off' : ''}`;
-      this._label(mid[0], mid[1], text, spectator && o.wrong ? '#ffcf70' : picked ? '#ffffff' : '#ffe3df', picked ? 3 : 1);
+      this._label(mid[0], mid[1], text, spectator && o.wrong ? '#ffcf70' : picked || mine ? '#ffffff' : '#ffe3df', picked || mine ? 3 : 1);
     }
   }
   // the first share g (0 to 1) of a line of points, by length
@@ -295,7 +315,9 @@ export class CommanderView {
   _labels(x, dpr) {
     const L = this.labels, placed = []; L.sort((p, q) => q.rank - p.rank || p.b - q.b); x.font = `600 ${11 * dpr}px ui-monospace, Menlo, monospace`; x.textBaseline = 'middle';
     for (const l of L) { const w = x.measureText(l.text).width + 10 * dpr, h = 16 * dpr; let bx = l.a - w / 2, by = l.b - h / 2;
-      for (let k = 0; k < 8; k++) { const hit = placed.find(p => bx < p.x + p.w && bx + w > p.x && by < p.y + p.h + 1 && by + h > p.y - 1); if (!hit) break; by = hit.y + hit.h + 2 * dpr; }
+      bx = Math.max(4 * dpr, Math.min(this.map.cv.width - w - 4 * dpr, bx)); let free = false;
+      for (let k = 0; k < (l.rank === 0 ? 1 : 6); k++) { const hit = placed.find(p => bx < p.x + p.w + 2 * dpr && bx + w > p.x - 2 * dpr && by < p.y + p.h + 1 && by + h > p.y - 1); if (!hit) { free = true; break; } by = hit.y + hit.h + 2 * dpr; }
+      if (!free && l.rank < 4) { l.dropped = true; continue; }
       placed.push({ x: bx, y: by, w, h }); x.fillStyle = 'rgba(8,10,12,.78)'; x.fillRect(bx, by, w, h); x.fillStyle = l.col; x.fillText(l.text, bx + 5 * dpr, by + h / 2 + 0.5 * dpr); }
     x.textBaseline = 'alphabetic';
   }
@@ -348,5 +370,5 @@ export class CommanderView {
   }
 
   // what the eased picture holds right now (used by the tests to prove the motion is the same at any frame rate)
-  state() { const r = v => Math.round(v * 1000) / 1000; return { orders: [...this.anim].map(([id, a]) => [id, r(a.a), r(a.g), r(a.sx), r(a.sn), r(a.dx), r(a.dn)]), units: [...this.pos].map(([k, p]) => [k, r(p.e), r(p.n)]), believed: this.bel ? [r(this.bel.e), r(this.bel.n), r(this.bel.r), r(this.bel.a)] : null, labels: this.labels.map(l => l.text) }; }
+  state() { const r = v => Math.round(v * 1000) / 1000; return { orders: [...this.anim].map(([id, a]) => [id, r(a.a), r(a.g), r(a.sx), r(a.sn), r(a.dx), r(a.dn)]), units: [...this.pos].map(([k, p]) => [k, r(p.e), r(p.n)]), believed: this.bel ? [r(this.bel.e), r(this.bel.n), r(this.bel.r), r(this.bel.a)] : null, labels: this.labels.filter(l => !l.dropped).map(l => l.text), hover: this.hover }; }
 }

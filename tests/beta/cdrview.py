@@ -38,9 +38,8 @@ async def main():
             if len(c['rows']) != 10: bad.append('the list does not hold all ten orders')
             if not c['rows'] or not c['rows'][0].startswith('Break'): bad.append('the newest order is not first in the list')
             if not c['rows'] or 'done' not in c['rows'][-1]: bad.append('the finished order is not last and marked done')
-            for word in ['watch the valley', 'strike the tank', 'north ridge', 'by UAZ', 'fix the tank', 'commit down', 'break contact', 'Tank believed here', 'reported 38 s ago', 'He expects it here', 'his picture is', 'Tank (true position)', 'WRONG', 'BMP-2', 'T-72B3', 'T-90M', 'UAZ']:
+            for word in ['fix the tank', 'commit down', 'break contact', 'Tank believed here', 'reported 38 s ago', 'He expects it here', 'his picture is', 'Tank (true position)']:   # only his picture, the truth and the newest three orders are written without picking
                 if not any(word in l for l in L): bad.append('nothing on the map says "%s"' % word)
-            if not any('arrives in 3:' in l for l in L): bad.append('the move to the north ridge shows no time of arrival')
             if c['wrong'] != 2 or c['legend'] != 'none': bad.append('wrong orders are not flagged in the list, or the ordinary legend is still showing')
             await pg.screenshot(path=shot + '_cdr.png')
             # the countdown really counts: 10 s later the same order shows 10 s less
