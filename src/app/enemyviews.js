@@ -2,6 +2,7 @@
 // and the menu that picks which enemy team the "Enemy sight" and "Enemy close-up" cameras follow.
 // Sight data (magnification and field of view) lives in render/cameras.js (ENEMY_SIGHTS) because the camera needs it too.
 import { ENEMY_SIGHTS, SIGHT_RING } from '../render/cameras.js';
+import { FpvFeed, isDroneCrew } from './fpvfeed.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const MIL_PER_DEG = 6000 / 360;          // Soviet sights are graduated in 1/6000 of a circle
@@ -78,15 +79,17 @@ RETICLES.fpv_fiber = RETICLES.fpv;
 
 export class EnemyViews {
   // onPick(unit) is called when a team is chosen in the menu
-  constructor(onPick) { this.onPick = onPick; this.sig = ''; this.retSig = ''; this.menuSig = ''; this.t = 0; this.los = true; this.svg = $('esight-ret'); }
+  constructor(onPick) { this.onPick = onPick; this.sig = ''; this.retSig = ''; this.menuSig = ''; this.t = 0; this.los = true; this.svg = $('esight-ret'); this.fpv = new FpvFeed();   /* the first-person drone camera (fpvfeed.js) */ }
 
-  // Called every frame. o: { sightOn, menuOn, cams, battle, tank: {e,n}, world, dt }
+  // Called every frame. o: { sightOn, menuOn, fpvOn, cams, battle, volleys, tank: {e,n}, world, t, dt }
   update(o) {
     const sg = $('esight'), mn = $('units');
     if (sg.hidden === o.sightOn) sg.hidden = !o.sightOn;
     if (mn.hidden === o.menuOn) mn.hidden = !o.menuOn;
+    if (!o.volleys && window.__beta) o.volleys = window.__beta.volleys;
+    this.fpv.update(o, !!o.fpvOn);
     if (!o.sightOn && !o.menuOn) return;
-    const u = o.cams.unit, T = o.tank;
+    const u = o.fpvOn ? this.fpv.unit : o.cams.unit, T = o.tank;
     this.t -= o.dt; const slow = this.t <= 0; if (slow) this.t = 0.25;        /* text and sight-line checks four times a second are plenty */
     if (o.sightOn && u) {
       const R = Math.hypot(T.e - u.e, T.n - u.n), up = o.cams.sightUp, key = u.spec.key, S = ENEMY_SIGHTS[key] || ENEMY_SIGHTS.fpv;
@@ -104,16 +107,23 @@ export class EnemyViews {
     }
     if (o.menuOn && slow) this.menu(o, u);
   }
+  // switch the main view (the shell's own function, so the bar follows)
+  _view(key) { if (window.__beta && window.__beta.setView) window.__beta.setView(key); }
 
   menu(o, cur) {
-    const T = o.tank, rows = o.battle.units.map(u => ({ u, name: `${u.spec.name} #${u.id + 1}`, sub: u.alive ? `${o.battle.intentOf ? o.battle.intentOf(u) : unitDoing(u)} · ${Math.round(Math.hypot(T.e - u.e, T.n - u.n) / 10) * 10} m` : 'destroyed' }));
-    const sig = rows.map(r => r.name + r.sub + (r.u === cur ? '*' : '')).join('|'); if (sig === this.menuSig) return; this.menuSig = sig;
+    const T = o.tank, fpvOn = !!o.fpvOn, air = this.fpv._flying(o);
+    const rows = o.battle.units.map(u => ({ u, drone: isDroneCrew(u), name: `${u.spec.name} #${u.id + 1}`, sub: u.alive ? `${o.battle.intentOf ? o.battle.intentOf(u) : unitDoing(u)} · ${Math.round(Math.hypot(T.e - u.e, T.n - u.n) / 10) * 10} m` : 'destroyed' }));
+    const sig = (fpvOn ? 'F' : '') + rows.map(r => r.name + r.sub + (r.u === cur ? '*' : '') + (air.has(r.u.id) ? '^' : '')).join('|'); if (sig === this.menuSig) return; this.menuSig = sig;
     const box = $('units-list'); box.textContent = '';
     for (const r of rows) {
-      const b = document.createElement('button'); b.className = 'btn urow' + (r.u === cur ? ' on' : ''); b.disabled = !r.u.alive;
+      const b = document.createElement('button'); b.className = 'btn urow' + (r.u === cur && !(fpvOn && r.drone) ? ' on' : ''); b.disabled = !r.u.alive;
       const n = document.createElement('b'); n.textContent = r.name; const s = document.createElement('small'); s.textContent = r.sub; b.append(n, s);
-      b.onclick = () => { this.onPick(r.u); this.menuSig = ''; }; box.append(b);
+      b.onclick = () => { this.onPick(r.u); if (fpvOn) this._view('enemy'); this.menuSig = ''; }; box.append(b);
+      if (!r.drone) continue;
+      // a drone crew gets a second line: its drone's own camera
+      const d = document.createElement('button'), flying = air.has(r.u.id); d.className = 'btn urow udrone' + (fpvOn && r.u === cur ? ' on' : ''); d.style.marginLeft = '14px';
+      const dn = document.createElement('b'); dn.textContent = 'Its drone: first-person camera'; const ds = document.createElement('small'); ds.textContent = flying ? 'in the air now' : r.u.alive && r.u.ammo > 0 ? 'not launched yet' : 'none in the air'; d.append(dn, ds);
+      d.onclick = () => { this.onPick(r.u); this._view('fpv'); this.menuSig = ''; }; box.append(d);
     }
   }
 }
-

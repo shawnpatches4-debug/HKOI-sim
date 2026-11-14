@@ -145,7 +145,7 @@ function openPage(which) { pagesFrom = state; pagesOpen = true; show(); if (whic
 function tankPos() { const p = set.pos && set.pos[set.biome + ':' + set.map]; return p && world.passable(p.e, p.n, true) ? p : null; }
 // ---------------------------------------------------------------- map screen
 const mapv = new MapView($('mapcv')); let mapOpen = false, mapFrom = 'title';
-function mapState() { const T = battle.tank; return { tank: T, showAll: set.spectator, units: battle.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: state === 'play' ? volleys.info.map(m => ({ e: m.p.x, n: -m.p.z })) : [] }; }
+function mapState() { const T = battle.tank; return { tank: T, showAll: set.spectator, units: battle.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: state === 'play' ? volleys.info.map(m => ({ e: m.p.x, n: -m.p.z })) : [], battle, t: Math.min(tNow, battle.t), dt: frameDt }; }
 function openMap() { if (state === 'title' && battle.t > 0) titleBattle();   /* the map shows the start position, not where the battle behind the title has got to */ mapOpen = true; mapFrom = state; $('map').hidden = false; mapv.setWorld(world); $('map-place').hidden = $('map-reset').hidden = state !== 'title'; mapv.pickMode = false; $('map').classList.remove('pick'); $('map-place').classList.remove('on'); mapv.fit(); refreshShed(); }
 function refreshShed() { const T = battle.tank; mapv.viewshedFor(T.e, T.n); $('map-info').textContent = `${world.biome.name} · map ${set.map} · ${(mapv.shed.share * 100).toFixed(0)}% of the ground within 4.5 km can see the vehicle here`; }
 function closeMap() { mapOpen = false; $('map').hidden = true; }
@@ -320,7 +320,7 @@ const VIEW_GROUPS = [
   { key: 'out', name: 'Outside', views: [['orbit', 'Orbit'], ['chase', 'Chase'], ['top', 'Overhead'], ['fly', 'Free look']] },
   { key: 'crew', name: 'Crew views', views: [['cdr', 'Commander, head out'], ['ldr', 'Loader, head out'], ['gnr', 'Gunner sight'], ['citv', 'CITV'], ['hkoi', 'HKOI sight']] },
   { key: 'in', name: 'Inside', views: [['in_cdr', 'Commander seat'], ['in_gnr', 'Gunner seat'], ['in_ldr', 'Loader seat'], ['in_drv', 'Driver seat'], ['cut', 'Cutaway']] },
-  { key: 'enemy', name: 'Enemy', spectator: true, views: [['enemy', 'Enemy sight'], ['troops', 'Enemy close-up'], ['missile', 'Missile']] },
+  { key: 'enemy', name: 'Enemy', spectator: true, views: [['enemy', 'Enemy sight'], ['troops', 'Enemy close-up'], ['missile', 'Missile'], ['fpv', 'Drone camera']] },
 ];
 const VIEW_OF = {}; for (const g of VIEW_GROUPS) for (const [k, name] of g.views) VIEW_OF[k] = { g, name };
 const KEY_VIEWS = VIEW_GROUPS.filter(g => !g.spectator).flatMap(g => g.views.map(v => v[0])).slice(0, 9);   // keys 1 to 9
@@ -471,7 +471,7 @@ function frameBody(now) {
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   director.update(dt); xray.update();
-  if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
+  if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
   if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
