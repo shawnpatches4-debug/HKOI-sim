@@ -50,7 +50,7 @@ export class TitleShow {
       if (this.shot === MISSILE) {
         this.noMissile = flying ? 0 : this.noMissile + dt;
         if (this.noMissile > 1.2 || this.shotT > MISSILE.secs) { this.lastMissile = this.t; this._next(); }
-      } else if (flying && this.shotT > (this.t < 9 ? 7 : 2.5) && this.t - this.lastMissile > 14) this._cut(MISSILE);   /* the opening view of the vehicle is held for 7 s */
+      } else if (this.rideMissiles && flying && this.shotT > (this.t < 9 ? 7 : 2.5) && this.t - this.lastMissile > 14) this._cut(MISSILE);   /* off by default (Shawn left it to the lead: the ride showed mostly smoke trail with the vehicle out of frame); set rideMissiles = true to bring it back */   /* the opening view of the vehicle is held for 7 s */
       else if (this.shotT > this.shot.secs) this._next();
     }
     const tp = S.at(T.e, T.n, 0), k = this.shot.key;
