@@ -10,7 +10,7 @@ import { Plan } from './director_plan.js';
 
 const DEG = Math.PI / 180, SLOW = 0.25, AGAIN = 0.5, KEY = 'KeyF';
 const CSS = `
-  #dir-cap { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); max-width: min(980px, calc(100vw - 48px)); padding: 9px 20px 10px; z-index: 3;
+  #dir-cap { position: fixed; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: min(980px, calc(100vw - 48px)); padding: 9px 20px 10px; z-index: 3;
     background: linear-gradient(90deg, rgba(4, 8, 7, 0), rgba(4, 8, 7, .78) 12%, rgba(4, 8, 7, .78) 88%, rgba(4, 8, 7, 0)); border-top: 1px solid rgba(57, 217, 138, .35);
     font-size: clamp(16px, 1.75vw, 23px); font-weight: 600; letter-spacing: .01em; text-align: center; text-shadow: 0 1px 3px #000; pointer-events: none; transition: opacity .25s; }
   #dir-tag { position: fixed; right: 16px; top: 64px; z-index: 3; display: flex; gap: 6px; pointer-events: none; font: 700 12px/1 var(--mono, monospace); letter-spacing: .08em; }
@@ -24,7 +24,7 @@ export class Director {
   //   scene, cams, tank, store, el, shown {e, n, h}; battle, volleys, tNow, state, playing, mapOpen (read); speed (read and set); refresh()
   constructor(app) {
     this.app = app; this.on = !!app.store.get('director', false); this.yielded = false; this.ctrl = false; this.slow = false; this.slowSkip = false; this.saved = 1;
-    this.plan = new Plan({ HK: window.HK, DMG: window.DMG }); this.b = null; this.shot = null; this.modeSet = null; this.userMode = 'orbit'; this.capText = null; this.side = 1; this.az = 0;
+    this.plan = new Plan({ HK: typeof HK !== 'undefined' ? HK : window.HK, DMG: typeof DMG !== 'undefined' ? DMG : window.DMG });   /* the engine and the damage model are page globals, not properties of window */ this.b = null; this.shot = null; this.modeSet = null; this.userMode = 'orbit'; this.capText = null; this.side = 1; this.az = 0;
     this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.v1 = new THREE.Vector3(); this.lastP = new THREE.Vector3(); this.hasLast = false;
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     this.cap = app.el('div'); this.cap.id = 'dir-cap'; this.cap.style.opacity = 0; this.tag = app.el('div'); this.tag.id = 'dir-tag'; this.tag.hidden = true;
@@ -82,7 +82,8 @@ export class Director {
       if (s) { if (s !== this.shot) this._enter(s, t); this._drive(s, t); }
     }
     // slow motion around the decisive moment, by the page's own speed setting
-    const want = this.ctrl && !this.rp && A.playing && this.plan.slowAt(t + dt * A.speed);
+    const ahead = dt * (this.slow ? this.saved : A.speed);   /* one frame ahead at the viewer's own speed, so the window is entered on time and not left again at once */
+    const want = this.ctrl && !this.rp && A.playing && (this.plan.slowAt(t + ahead) || this.slow && this.plan.slowAt(t));
     if (this.slow) { if (A.speed !== SLOW) { this.slow = false; this.slowSkip = true; } else if (!want) { A.speed = this.saved; this.slow = false; } }
     else if (want && !this.slowSkip && A.speed > SLOW) { this.saved = A.speed; A.speed = SLOW; this.slow = true; }
     if (!want) this.slowSkip = false;
@@ -130,15 +131,15 @@ export class Director {
       const a = brg * DEG, se = Math.sin(a), sn = Math.cos(a), low = rig === 'low', back = low ? 12 : 9, out = (low ? 4.5 : 6) * this.side;
       S.at(T.e - se * back + sn * out, T.n - sn * back - se * out, low ? 1.25 : 4.2, P); S.at(T.e + se * (low ? 30 : 60), T.n + sn * (low ? 30 : 60), 0, L); L.y = S.world.h(T.e, T.n) + (low ? 4.5 : 5.5); this._set(low ? 62 : 50);
     } else if (rig === 'cloud') {
-      const a = (s.brg || 0) * DEG, se = Math.sin(a), sn = Math.cos(a), D = Math.max(55, (s.span || 0) * 0.8 + 30), ce = T.e + se * s.x, cn = T.n + sn * s.x, W = S.world;
+      const a = (s.brg || 0) * DEG, se = Math.sin(a), sn = Math.cos(a), D = Math.max(38, (s.span || 0) * 0.55 + 22), ce = T.e + se * s.x, cn = T.n + sn * s.x, W = S.world;
       const far = s.high ? -1.3 : 1; S.at(ce + sn * D * far, cn - se * D * far, s.high ? 20 : 4, P);   /* the replay looks from the other side, higher and further back */ const f = s.R ? Math.min(1, s.x / s.R) : 0, hl = s.le != null ? W.h(s.le, s.ln) + 1.3 : W.h(ce, cn) + 2, y = (W.h(T.e, T.n) + 2) * (1 - f) + hl * f;
-      L.set(ce, Math.max(W.h(ce, cn) + 2.5, y + 1), -cn); this._set(Math.max(30, Math.min(52, 2 * Math.atan(((s.span || 0) * 0.5 + 22) / D) / DEG)));
+      L.set(ce, Math.max(W.h(ce, cn) + 2.5, y + 1), -cn); this._set(Math.max(30, Math.min(52, 2 * Math.atan(((s.span || 0) * 0.5 + 14) / D) / DEG)));
     } else if (rig === 'replay') {   /* from above and to one side of the vehicle, the incoming line running across the picture */
       const a = (s.brg || 0) * DEG, se = Math.sin(a), sn = Math.cos(a); S.at(T.e - se * 9 - sn * 30 * this.side, T.n - sn * 9 + se * 30 * this.side, 15, P); S.at(T.e + se * 9, T.n + sn * 9, 2, L); this._set(48);
     } else if (rig === 'ride' || rig === 'follow') {
       const m = this._missile(s);
       if (m) { this.lastP.copy(m.p); this.hasLast = true;
-        if (rig === 'ride') { P.copy(m.p).addScaledVector(m.dir, -10); P.y += 2.4; S.at(T.e, T.n, 2, L); }
+        if (rig === 'ride') { P.copy(m.p).addScaledVector(m.dir, -16); P.y += 4.5; S.at(T.e, T.n, 2, L); }   /* behind and above it, so its flame sits low in the picture and the way ahead is clear */
         else { const a = (s.brg || 0) * DEG; P.copy(m.p); P.x += Math.cos(a) * 30; P.z += Math.sin(a) * 30; P.y += 5; L.copy(m.p); }
         const g = S.world.h(P.x, -P.z) + 1; if (P.y < g) P.y = g; this._set(rig === 'ride' ? 55 : 45);
       } else if (this.hasLast) { if (rig === 'follow') { L.copy(this.lastP); this._set(45); } }

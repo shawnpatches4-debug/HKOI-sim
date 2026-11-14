@@ -58,7 +58,7 @@ export class XRayPanel {
 
   // open on hit number i of the battle; big = in the middle of the page (debrief), otherwise the small panel at the top right
   open(battle, i, big) {
-    const DMG = window.DMG; this.list = hitsOf(battle, DMG); if (!this.list.length) return false;
+    const DMG = (typeof DMG !== 'undefined' ? DMG : window.DMG); this.list = hitsOf(battle, DMG); if (!this.list.length) return false;
     if (!this.view) { try { this.view = new XRayView(this.cv); } catch (e) { console.error(e); return false; } }
     this.box.classList.toggle('big', !!big); this.box.hidden = false; this.open_ = true; this.big = !!big; this.touched = !!big;
     this.view.setShell(this.app.tank); this.show(i);
@@ -68,7 +68,7 @@ export class XRayPanel {
   close() { this.open_ = false; this.box.hidden = true; }
   show(i) {
     const n = this.list.length; if (!n) return; this.i = i = Math.max(0, Math.min(n - 1, i)); const x = this.list[i], h = x.h, el = this.app.el;
-    this.view.setHit(h, window.DMG); this.spin = 0;
+    this.view.setHit(h, (typeof DMG !== 'undefined' ? DMG : window.DMG)); this.spin = 0;
     this.count.textContent = `Hit ${i + 1} of ${n}`; this.prev.disabled = i === 0; this.next.disabled = i === n - 1; this.prev.style.opacity = i === 0 ? 0.35 : 1; this.next.style.opacity = i === n - 1 ? 0.35 : 1;
     const R = this.read; R.textContent = ''; R.append(el('div', 'xr-title', `${WEAPON[h.key] || h.name} at ${clock(x.t)}`));
     const tb = el('table'), row = (a, b) => { const tr = el('tr'), td = el('td'); if (typeof b === 'string') td.textContent = b; else td.append(b); tr.append(el('td', null, a), td); tb.append(tr); };

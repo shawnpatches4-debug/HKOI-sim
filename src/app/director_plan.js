@@ -141,7 +141,7 @@ export class Plan {
         const first = b.rounds.filter(r => !r.extra), more = b.rounds.filter(r => r.extra), tF = t0 + b.rounds[0].t_fire, res = b.res || {};
         if (b.kind === 'obs') {
           this._cap(tF, K, 4 + 2 * bonus, `HKOI fires ${word(first.length || b.rounds.length)} obscurant round${(first.length || b.rounds.length) === 1 ? '' : 's'}`, v.i, th.idx);
-          if (more.length && first.length) this._cap(t0 + more[0].t_fire, K, 2 + 2 * bonus, `HKOI fires ${word(more.length)} more to thicken the cloud`, v.i, th.idx);
+          if (more.length && first.length) this._cap(t0 + more[0].t_fire, K, 2 + 2 * bonus, `HKOI fires ${word(more.length)} more obscurant rounds to thicken the cloud`, v.i, th.idx);
         } else this._cap(tF, K, 4 + 2 * bonus, `HKOI fires ${word(b.rounds.length)} high-explosive round${b.rounds.length === 1 ? '' : 's'} at the ${name}`, v.i, th.idx);
         this._cand(Object.assign({ a: tF - 1.0, b: tF + 1.3, known: K, pri: 6 + bonus * 0.5, min: 1.5, rig: 'gun', label: 'HKOI firing' }, id));
         if (b.kind !== 'obs' || !b.puffs || !b.puffs.length) return;
