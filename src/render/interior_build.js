@@ -138,7 +138,7 @@ export function buildInterior(labels) {
     T.lamp(ind('laser'), 0.012, 0.012, 0xffb020, 0.168, 0.048, 0.002, 0, 0, 0, true);
     ctl(T, 'tur', 'toggle', -0.165, -0.035, 'Gun select: main gun or coax (the gunner sets this)', { locked: true, label: 'MAIN / COAX', lh: 0.011 });
     ctl(T, 'tur', 'toggle', -0.085, -0.035, 'Fire control mode: normal, emergency or manual (the crew stays in normal)', { locked: true, label: 'FC MODE', lh: 0.011 });
-    ctl(T, 'tur', 'toggle', 0.0, -0.035, 'Sight magnification 3x or 10x (the gunner changes it as he lays)', { locked: true, label: 'MAG 3X / 10X', lh: 0.011 });
+    ctl(T, 'tur', 'toggle', 0.0, -0.035, 'Sight magnification 3x or 10x (the gunner changes it as he lays: watch it move)', { locked: true, key: 'mag', label: 'MAG 3X / 10X', lh: 0.011 });
     ctl(T, 'tur', 'button', 0.09, -0.035, 'Lamp test: lights every indicator for a moment', { key: 'lampTest', label: 'LAMP TEST', lh: 0.011 });
   });
   // the control handles ("Cadillacs") on their pedestal
@@ -182,7 +182,7 @@ export function buildInterior(labels) {
     [['hkRadar', 'RADAR', 0xffb020], ['hkTrack', 'TRACK', 0x30ff60], ['hkFire', 'FIRE', 0xff2a1a], ['hkArmed', 'ARMED', 0x30ff60]].forEach(([id, s, hex], i) => { const v = 0.115 - i * 0.045; T.lamp(ind(id), 0.05, 0.022, hex, 0.135, v, 0.002); T.label(s, 0.012, 0.19, v, 0.0015, 0, 0, 0, 'panel', { size: 22 }); });
     ctl(T, 'tur', 'toggle', -0.19, -0.085, 'HKOI master arm (the system is armed for the mission; the crew does not safe it in contact)', { locked: true, state: 1, label: 'MASTER ARM', lh: 0.012 });
     ctl(T, 'tur', 'knob', -0.115, -0.085, 'HKOI mode: safe, commander\'s consent, automatic (set to automatic for the mission)', { n: 3, state: 2, locked: true, label: 'SAFE-SEMI-AUTO', lh: 0.012 });
-    ctl(T, 'tur', 'toggle', -0.04, -0.085, 'HKOI radar: silent until a warning, or always on (the system decides: it stays silent to hide)', { locked: true, label: 'RADAR SIL / ON', lh: 0.012 });
+    ctl(T, 'tur', 'toggle', -0.04, -0.085, 'HKOI radar: silent until a warning, then on (the system switches it itself: watch it move)', { locked: true, key: 'radar', label: 'RADAR SIL / ON', lh: 0.012 });
     ctl(T, 'tur', 'button', 0.035, -0.085, 'HKOI display page: status, threats, rounds', { key: 'hkPage', label: 'PAGE', lh: 0.012 });
     ctl(T, 'tur', 'knob', 0.105, -0.085, 'HKOI display brightness', { n: 4, state: 2, key: 'hkBrt', label: 'BRT', lh: 0.012 });
     ctl(T, 'tur', 'toggle', 0.175, -0.085, 'HKOI warning tone in the headsets: on or off', { state: 1, key: 'hkTone', label: 'TONE', lh: 0.012 });
@@ -199,7 +199,7 @@ export function buildInterior(labels) {
     T.label('TROPHY', 0.012, 0.105, 0.05, 0.0015, 0, 0, 0, 'panel', { size: 22 }); T.lamp(ind('apsL'), 0.03, 0.016, 0x30ff60, 0.085, 0.022, 0.002); T.lamp(ind('apsR'), 0.03, 0.016, 0x30ff60, 0.125, 0.022, 0.002); T.label('L        R', 0.01, 0.105, 0.002, 0.0015, 0, 0, 0, 'panel', { size: 20 });
     ctl(T, 'tur', 'knob', -0.14, -0.055, 'Panel legend lighting', { n: 4, state: 1, key: 'backlight', label: 'PANEL LTS', lh: 0.011 });
     ctl(T, 'tur', 'toggle', -0.05, -0.055, 'Trophy active protection (armed for the mission)', { locked: true, state: 1, label: 'APS ARM', lh: 0.011 });
-    ctl(T, 'tur', 'toggle', 0.04, -0.055, 'Vision block heaters: clears mist from the glass', { key: 'heater', label: 'VB HEAT', lh: 0.011 });
+    ctl(T, 'tur', 'toggle', 0.04, -0.055, 'Vision block heaters (no effect in the simulator)', { key: 'heater', label: 'VB HEAT', lh: 0.011 });
   });
   intercom(T, 'tur', 1.172, 0.4, 0.3, -Math.PI / 2, 'Commander');
   T.label('CDR', 0.03, 1.19, 0.47, 0.62, 0, -Math.PI / 2, 0, 'stencil');
@@ -228,7 +228,7 @@ export function buildInterior(labels) {
   console_(T, -1.172, 0.26, -0.2, 0, Math.PI / 2, 0.42, 0.26, 0.07, C.olive, () => {
     T.label('TURRET NETWORK BOX', 0.018, 0, 0.1, 0.0015, 0, 0, 0, 'panel'); for (let i = 0; i < 6; i++) { T.cyl('fit', 0.017, 0.017, 0.03, C.black, -0.15 + i * 0.06, -0.07, 0.015, Math.PI / 2, 0, 0, 8); T.lamp(ind('net' + (i % 3)), 0.01, 0.01, i % 3 === 2 ? 0xffb020 : 0x30ff60, -0.15 + i * 0.06, -0.025, 0.002, 0, 0, 0, true); }
     ['UTILITY', 'GPS', 'CITV', 'HKOI', 'RADIO', 'DRIVER'].forEach((s, i) => T.label(s, 0.011, -0.15 + i * 0.06, 0.0, 0.0015, 0, 0, 0, 'panel', { size: 20 }));
-    ctl(T, 'tur', 'toggle', -0.15, 0.055, 'Circuit breaker reset, turret bus (nothing has tripped)', { locked: true, state: 1 }); ctl(T, 'tur', 'toggle', 0.15, 0.055, 'Utility outlet power: harmless', { key: 'utility' });
+    ctl(T, 'tur', 'toggle', -0.15, 0.055, 'Circuit breaker reset, turret bus (nothing has tripped)', { locked: true, state: 1 }); ctl(T, 'tur', 'toggle', 0.15, 0.055, 'Utility outlet power (no effect in the simulator)', { key: 'utility' });
   });
   for (let r = 0; r < 2; r++) console_(T, -1.172, 0.3 - r * 0.2, 0.52, 0, Math.PI / 2, 0.36, 0.17, 0.1, C.oliveD, () => {
     T.label(r ? 'RADIO  B  ·  COMPANY NET' : 'RADIO  A  ·  PLATOON NET', 0.014, -0.03, 0.066, 0.0015, 0, 0, 0, 'panel'); T.label(r ? '41.250' : '38.650', 0.03, -0.09, 0.012, 0.0015, 0, 0, 0, 'amber', { size: 40 });
@@ -314,7 +314,7 @@ export function buildInterior(labels) {
     H.box('fit', 0.2, 0.02, 0.14, C.floor, 0, HF + 0.16, DZ - 0.72, 0.9); H.box('fit', 0.04, 0.2, 0.03, C.steel, 0, HF + 0.08, DZ - 0.68, 0.5); H.box('fit', 0.09, 0.02, 0.2, C.floor, -0.28, HF + 0.1, DZ - 0.6, 0.5);
     // driver's display, right of the column
     console_(H, 0.33, HF + 0.58, DZ - 0.44, -0.45, -0.55, 0.3, 0.2, 0.08, C.olive, () => { screen(H, 'hul', 'drv', 0.2, 0.125, -0.035, 0.012); H.label('DRIVER\'S DISPLAY', 0.012, -0.035, 0.086, 0.0015, 0, 0, 0, 'panel', { size: 22 });
-      ctl(H, 'hul', 'knob', 0.115, 0.045, 'Driver\'s display brightness', { n: 4, state: 2, key: 'drvBrt', label: 'BRT', lh: 0.011 }); ctl(H, 'hul', 'button', 0.115, -0.03, 'Driver\'s display page (one page here: speed, heading, gear, engine)', { key: 'drvPage', label: 'PAGE', lh: 0.011 }); H.lamp(ind('drvWarn'), 0.05, 0.016, 0xff2a1a, -0.105, -0.075, 0.002); });
+      ctl(H, 'hul', 'knob', 0.115, 0.045, 'Driver\'s display brightness', { n: 4, state: 2, key: 'drvBrt', label: 'BRT', lh: 0.011 }); ctl(H, 'hul', 'button', 0.115, -0.03, 'Driver\'s display page (only one page here: speed, heading, gear, gun direction)', { key: 'drvPage', label: 'PAGE', lh: 0.011 }); H.lamp(ind('drvWarn'), 0.05, 0.016, 0xff2a1a, -0.105, -0.075, 0.002); });
     // master panel, left of the column
     console_(H, -0.33, HF + 0.58, DZ - 0.44, -0.45, 0.55, 0.3, 0.2, 0.08, C.olive, () => { H.label('DRIVER\'S MASTER PANEL', 0.012, 0, 0.086, 0.0015, 0, 0, 0, 'panel', { size: 22 });
       ctl(H, 'hul', 'toggle', -0.11, 0.035, 'Master power (on: the vehicle is running)', { locked: true, state: 1, label: 'MASTER', lh: 0.011 }); H.lamp(ind('drvPwr'), 0.012, 0.012, 0x30ff60, -0.11, 0.064, 0.002, 0, 0, 0, true);
@@ -323,7 +323,7 @@ export function buildInterior(labels) {
       ctl(H, 'hul', 'toggle', 0.08, 0.035, 'Tactical idle: holds engine speed up for a quick start (the driver sets it)', { locked: true, state: 1, label: 'TAC IDLE', lh: 0.011 });
       ctl(H, 'hul', 'toggle', -0.11, -0.04, 'Parking brake (the driver sets it at the halt)', { locked: true, key: 'park', label: 'PARK BRAKE', lh: 0.011 }); H.lamp(ind('drvPark'), 0.012, 0.012, 0xffb020, -0.11, -0.012, 0.002, 0, 0, 0, true);
       ctl(H, 'hul', 'knob', -0.035, -0.04, 'Panel legend lighting', { n: 4, state: 1, key: 'backlight', label: 'PANEL LTS', lh: 0.011 });
-      ctl(H, 'hul', 'toggle', 0.04, -0.04, 'Vision block wiper and washer: cosmetic here', { key: 'wiper', label: 'WIPER', lh: 0.011 });
+      ctl(H, 'hul', 'toggle', 0.04, -0.04, 'Vision block wiper and washer (no effect in the simulator)', { key: 'wiper', label: 'WIPER', lh: 0.011 });
       ctl(H, 'hul', 'toggle', 0.11, -0.04, 'Smoke generator: engine exhaust smoke (not modelled; the driver leaves it off)', { locked: true, label: 'SMOKE GEN', lh: 0.011 }); });
     for (const s of [-1, 1]) { H.box('fit', 0.03, 0.03, 0.12, C.red, s * 0.44, DRF - 0.1, DZ + 0.1); }
     H.label('FIRE EXT\n1ST SHOT', 0.035, -0.494, DRF - 0.16, DZ + 0.1, 0, Math.PI / 2, 0, 'danger'); H.label('FIRE EXT\n2ND SHOT', 0.035, 0.494, DRF - 0.16, DZ + 0.1, 0, -Math.PI / 2, 0, 'danger');

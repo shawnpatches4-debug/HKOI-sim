@@ -30,7 +30,10 @@ export class Interior {
     this.domeMode = 1; this.domeUser = false; this.hkPage = 0; this.toneOn = true; this.lampTestT = 0; this.hkFireT = 0; this.clock = 0;
     this.st = { door: 0, block: 0, hatch: 0, rec: 9, slew: 0, steer: 0, arm: 1 }; this.last = { main: null, yaw: null, hdg: null, v: 0, recoil: 0, t: null };
     this.stats = { triangles: 0, meshes: 0, sightCalls: 0, controls: 0 };
+    this.brt = { gps: 1, citv: 1, comp: 1, hkoi: 1, drv: 1 };   /* what the brightness knobs of the displays are set to */
     this.plane = new THREE.Plane(); this.ext = null; this.citvYaw = null; this.sightT = 0; this.sightN = 0; this.keys = {};
+    // PROPOSAL ONLY: crew figures are parked by the owner. They are loaded only when the page address carries crew=1 (to take pictures for him to judge).
+    this.crewOn = typeof location !== 'undefined' && new URLSearchParams((location.hash || '').slice(1)).get('crew') === '1'; this.crew = null;
     this.ui = typeof document !== 'undefined' && scene3d && scene3d.canvas ? new SeatUI(scene3d.canvas, this) : null;
     if (scene3d && scene3d.renderer) scene3d.renderer.localClippingEnabled = true;   /* the cutaway view slices the outside model with a plane */
   }
@@ -96,6 +99,7 @@ export class Interior {
       _v2.set(0, 0, 1).applyQuaternion(c.quat).transformDirection(g.matrixWorld); if (_v2.dot(d) > 0.1) continue;   /* a panel seen from behind */ const score = off / lim + t * 0.2; if (score < bd) { bd = score; best = c; } }
     return seat ? best : null;
   }
+  _crewSet(key, state) { for (const c of this.controls) if (c.key === key && c.state !== state) { c.state = state; this._poseControl(c); } }
   describe(c) { return c.name + (c.locked ? '' : ' · ' + this._stateName(c)); }
   _stateName(c) { if (c.key === 'dome') return DOME_NAME[c.state]; if (c.type === 'button') return 'push'; if (c.type === 'knob') return `${c.state + 1} of ${c.n}`; return c.state ? 'on' : 'off'; }
   // the viewer clicks a control. Returns the line to show.
@@ -108,7 +112,7 @@ export class Interior {
   _apply(c) {
     const k = c.key, U = n => this.scr[n].uniforms; if (!k) return;
     if (k === 'dome') { this.domeMode = c.state; this.domeUser = true; } else if (k === 'gpsPol') U('gps').uMode.value = c.state ? -1 : 1; else if (k === 'citvPol') U('citv').uMode.value = c.state ? -1 : 1;
-    else if (k === 'gpsBrt') U('gps').uBright.value = BRT[c.state]; else if (k === 'citvBrt') U('citv').uBright.value = BRT[c.state]; else if (k === 'compBrt') U('comp').uBright.value = BRT[c.state]; else if (k === 'hkBrt') U('hkoi').uBright.value = BRT[c.state]; else if (k === 'drvBrt') U('drv').uBright.value = BRT[c.state];
+    else if (k === 'gpsBrt') this.brt.gps = BRT[c.state]; else if (k === 'citvBrt') this.brt.citv = BRT[c.state]; else if (k === 'compBrt') this.brt.comp = BRT[c.state]; else if (k === 'hkBrt') this.brt.hkoi = BRT[c.state]; else if (k === 'drvBrt') this.brt.drv = BRT[c.state];
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
   }
   turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; const k = 0.16 / this.look.zoom; this.look.yaw = clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0); this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
@@ -136,8 +140,10 @@ export class Interior {
     const mode = this.cams ? this.cams.mode : null, seat = SEATS[mode], cut = mode === 'cut', on = !!(s && s.on && (seat || cut));
     if (!on) { if (this.active) this._leave(); return; }
     if (!this.built) this._build();
-    if (!this.active || this.mode !== mode) this._enter(mode);
+    if (!this.active || this.mode !== mode || (this.tank.turret && this.tur.parent !== this.tank.turret)) this._enter(mode);   /* also when the vehicle's model has only just arrived */
     this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
+    if (this.crewOn && !this.crewAsked && s.volleys && s.volleys.assetBase) { this.crewAsked = true; import('./interior_crew.js').then(m => m.seatCrew(this, s.volleys.assetBase)).then(list => { this.crew = list; }).catch(e => console.warn('crew figures not shown:', e && e.message)); }
+    if (this.crew) for (const c of this.crew) c.group.visible = c.key !== mode;   /* the viewer has taken that man's seat */
     const B = s.battle, T = B.tank, st = T.st || {}, info = (s.volleys && s.volleys.info) || [], A = T.ai || {}, P = this.part, L = this.last, sdt = s.playing ? dt * (s.speed || 1) : 0, D = DIM;
     const cond = CONDITIONS[s.cond] || CONDITIONS.day, night = !!cond.night;
     if (!this.domeUser) { const want = night ? 2 : 1; if (want !== this.domeMode) { this.domeMode = want; for (const c of this.controls) if (c.key === 'dome') { c.state = want; this._poseControl(c); } } }
@@ -145,6 +151,7 @@ export class Interior {
     // ---- what the battle is doing
     if (L.t != null && B.t < L.t - 0.5) { L.main = null; this.st.rec = 9; }                    /* the battle was rewound or restarted */
     const fired = L.main != null && T.main < L.main; L.main = T.main; L.t = B.t; if (fired) { this.st.rec = 0; this.head.vz += 0.5; }
+    if (L.alive === true && !T.alive) { this.head.vz -= 0.9; this.head.vx += 0.6; } L.alive = T.alive;   /* the hit that knocks the vehicle out throws the crew about */
     this.st.rec += sdt; const r = this.st.rec, recoil = r < 0.07 ? r / 0.07 : r < 0.75 ? 1 - (r - 0.07) / 0.68 : 0;   /* back fast, forward slowly */
     P.breech.position.z = P.breech.userData.home.z + 0.3 * recoil * recoil * (3 - 2 * recoil);
     const ldrUp = !!(A.ldr && A.ldr.up), loading = !T.loaded && T.main > 0 && !ldrUp && T.alive, f = loading ? clamp((T.loadT || 0) / LOAD_S, 0, 1) : 0;
@@ -186,6 +193,8 @@ export class Interior {
       for (const c of this.controls) if (c.lamp != null) I[c.lamp] = c.state ? 1 : 0;
       const dm = this.domeMode; for (const d of DOME_IDS) { set(d + 'w', dm === 1 ? 1 : 0); set(d + 'r', dm === 2 ? 1 : 0); set(d + 'b', dm === 3 ? 1 : 0); }
     }
+    // switches the crew and the systems move themselves
+    this._crewSet('park', Math.abs(v) < 0.1 ? 1 : 0); this._crewSet('mag', this.gpsMag === 10 ? 1 : 0); this._crewSet('radar', hk === 'RADAR SILENT' || hk === 'OFF' ? 0 : 1);
     // spring back the controls the crew owns, release pushed buttons
     for (const c of this.controls) { if (c.anim > 0) { c.anim = Math.max(0, c.anim - dt * 2.2); this._poseControl(c); } if (c.press > 0) { c.press -= dt; this._poseControl(c); } }
 
@@ -194,11 +203,13 @@ export class Interior {
     const LP = SHARED.uLampPos.value, LC = SHARED.uLampCol.value, LR = SHARED.uLampR.value, dome = DOME[this.domeMode], dayK = (night ? 0.05 : 0.55 + 0.25 * Math.min(1.5, cond.hemiI || 1));
     if (this._skyOf !== s.cond) { this._skyOf = s.cond; const c = new THREE.Color(cond.sky || '#ffffff'); this._sky = new THREE.Vector3(0.6 + 0.4 * c.r, 0.6 + 0.4 * c.g, 0.6 + 0.4 * c.b); } _v.copy(this._sky);
     for (let i = 0; i < NLAMP; i++) { const l = this.lamps[i]; LP[i].copy(l.p).applyMatrix4((l.g === 'tur' ? this.tur : this.hul).matrixWorld); LR[i] = l.r; }
-    for (let i = 0; i < 3; i++) { if (dome) LC[i].set(dome[0], dome[1], dome[2]); else LC[i].set(0, 0, 0); }
+    const dead = !T.alive, flick = dead ? (Math.sin(this.clock * 23) * Math.sin(this.clock * 7.3) > 0.2 ? 0.5 : 0.08) : 0;   /* knocked out: power gone, an emergency lamp flickers */
+    for (let i = 0; i < 3; i++) { if (dead) LC[i].set(1.6 * flick, 0.12 * flick, 0.08 * flick); else if (dome) LC[i].set(dome[0], dome[1], dome[2]); else LC[i].set(0, 0, 0); }
+    for (const k in this.brt) this.scr[k].uniforms.uBright.value = this.brt[k] * (dead ? 0.1 : 1);
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
     LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * 1.3); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
-    const a = dome ? 0.045 : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
+    const a = dome && !dead ? 0.045 : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
 
@@ -237,7 +248,7 @@ export class Interior {
     const rf = B._rf, aim = rf ? rf.k : null; this.gpsOn = false; if (aim) { const wantB = Math.atan2(aim.e - T.e, aim.n - T.n) / DEG; this.gpsOff = ((wantB - this.turBrg + 540) % 360) - 180; this.gpsOn = Math.abs(this.gpsOff) < 0.8; }
     this.gpsMag = aim && Math.abs(this.gpsOff) < 8 ? 10 : 3; this.citvMag = ct && this.citvOn ? 10 : 3;
     for (const k of ['gps', 'citv']) this.scr[k].uniforms.uHasLive.value = this.rt[k] && want.includes(k) ? 1 : 0;
-    this.sightT -= dt; if (!want.length || this.sightT > 0) return; this.sightT = 1 / 31;
+    this.sightT -= dt; if (!want.length || this.sightT > 0 || !T.alive) return; this.sightT = 1 / 21;   /* about twenty pictures a second in all, whatever the frame rate */
     const key = want[this.sightN++ % want.length], R = this.s.renderer, cam = this.sightCam;
     if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(320, 200, { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; }
     if (key === 'gps') { cam.position.set(0.66, DIM.RF + 0.3, -1.0).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = this.gpsMag === 10 ? 4.1 : 13.5; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }

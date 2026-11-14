@@ -1,7 +1,7 @@
 # The picture set for judging the interior: every seat, the consoles close up, the cutaway, and the live states
 # (HKOI engaging, main gun being laid, just fired, reloading). HUD hidden so the interior itself can be judged.
 # Use: BASE=http://localhost:<port>/index.html python3 tests/beta/interior_shots.py <out dir> <tag> "<hash params>" [set]
-#   set = seats | consoles | live | all (default all)
+#   set = seats | consoles | live | all (default all) | crew (proposal pictures of crew figures: needs crew=1 in the hash params)
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 HELP = """void (window.hud = v => { for (const id of ['status','log','bar','crew','caption','marks','seatcap','hud','replay']) { const e = document.getElementById(id); if (e) e.style.visibility = v ? '' : 'hidden'; } },
@@ -30,6 +30,13 @@ async def main():
             print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
         if which in ('all', 'consoles'):
             for name, js in CONSOLES: await shot('close_' + name, js)
+        if which == 'crew':   # proposal pictures only (the page must be opened with crew=1): wait for the four figures, then look at them
+            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
+            for i in range(80):
+                if await pg.evaluate('!!(__beta.interior.crew && __beta.interior.crew.length)'): break
+                await pg.wait_for_timeout(1500)
+            print('crew figures', await pg.evaluate('__beta.interior.crew ? __beta.interior.crew.length : 0'))
+            for name, js in [('crew_from_ldr', "lk('in_ldr', 10, -8, 1)"), ('crew_from_cdr', "lk('in_cdr', -20, -24, 1)"), ('crew_from_gnr', "lk('in_gnr', 150, -5, 1)"), ('crew_cut_left', "cutv(-4.6, 2.0, 2.8)"), ('crew_cut_right_high', "cutv(3.2, -3.4, 5.6)"), ('crew_cut_front', "cutv(-2.5, 5.5, 3.0)")]: await shot(name, js)
         if which in ('all', 'live'):
             # the main gun being laid on a located team, then just after the shot, then the reload seen from the loader's seat
             print('lay', await pg.evaluate('stepTo(b => !!b._rf)')); await shot('live_gnr_laying', "lk('in_gnr', 0, 0, 1.5)", 9000); await shot('live_cdr_laying', "lk('in_cdr', 30, -14, 1.3)")
