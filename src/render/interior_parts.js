@@ -19,7 +19,7 @@ export const K = { PAINT: 0.0, METAL: 0.25, RUBBER: 0.5, TREAD: 0.75, CLOTH: 1.0
 
 // values every interior material shares (one object, so one update per frame reaches them all)
 export const SHARED = {
-  uInside: { value: 1 },                                   // 1 from a seat (drawn in front of the outside model), 0 in the cutaway
+  uInside: { value: 1 }, uInsideF: { value: 1 },             // the same flag for the fragment stage                                   // 1 from a seat (drawn in front of the outside model), 0 in the cutaway
   uExpo: { value: 1 },                                     // undoes the outside exposure, so the inside looks the same in every weather
   uLampPos: { value: Array.from({ length: NLAMP }, () => new THREE.Vector3()) },
   uLampCol: { value: Array.from({ length: NLAMP }, () => new THREE.Vector3()) },
@@ -63,7 +63,7 @@ const VS = /* glsl */`
 
 const FS = /* glsl */`
   uniform vec3 uLampPos[${NLAMP}]; uniform vec3 uLampCol[${NLAMP}]; uniform float uLampR[${NLAMP}];
-  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol;
+  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol; uniform float uInsideF;
   uniform sampler2D uWear; uniform sampler2D uTread;
   #ifdef LABELS
     uniform sampler2D uAtlas;
@@ -111,7 +111,7 @@ const FS = /* glsl */`
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
     vec3 col = alb * dif * low + spc * specK * low + alb * glow;
-    if (uSmoke > 0.001) { float sd = min(length(cameraPosition - vW), 2.6); col = mix(col, uSmokeCol, 1.0 - exp(-uSmoke * sd * 1.5)); }
+    if (uSmoke > 0.001) { float sd = uInsideF > 0.5 ? min(length(cameraPosition - vW), 2.6) : 0.3; col = mix(col, uSmokeCol, 1.0 - exp(-uSmoke * sd * 1.5)); }   /* from a seat the smoke thickens with distance; in the cutaway it is a light haze over the parts (the viewer is outside it) */
     gl_FragColor = vec4(col * uExpo, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>

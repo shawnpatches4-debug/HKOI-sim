@@ -151,7 +151,7 @@ export class Interior {
   _enter(mode) {
     const tk = this.tank, tur = tk.turret || tk.group, body = tk.body || tk.group; if (this.tur.parent !== tur) tur.add(this.tur); if (this.hul.parent !== body) body.add(this.hul);
     if (tk.turret) this.hul.position.copy(tk.turret.position); else { this.hul.position.set(0, 1.617, -0.025); this.tur.position.copy(this.hul.position); }
-    const cut = mode === 'cut'; if (cut) this._near(); SHARED.uInside.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
+    const cut = mode === 'cut'; if (cut) this._near(); SHARED.uInside.value = SHARED.uInsideF.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
     this.eyeOff = this.pendingOff || null; this.pendingOff = null;
     if (this.pendingLook) { Object.assign(this.look, this.pendingLook); this.pendingLook = null; } else { this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; } this.head.z = this.head.vz = this.head.x = this.head.vx = 0; this.head.up = 0; this.mode = mode; this.active = true;
     this._marks(cut);   /* the floating map markers of the outside views would hang in front of the walls */
