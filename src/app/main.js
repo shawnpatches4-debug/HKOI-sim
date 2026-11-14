@@ -10,6 +10,7 @@ import { initPages } from './pages.js';
 import { MapView } from './mapview.js';
 import { Hud } from './hud.js';
 import { TitleShow } from './title.js';
+import { Faces } from './faces.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
@@ -29,9 +30,10 @@ const FORCES = {
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five waves']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
-const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true }, store.get('setup', {}));
+const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true, graphic: true }, store.get('setup', {}));
 if (q.get('waves')) set.waves = +q.get('waves') || 1;
-for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission', 'crew']) if (q.get(k)) set[k] = q.get(k);
+for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission']) if (q.get(k)) set[k] = q.get(k);
+if (q.get('owncrew')) set.crew = q.get('owncrew');   /* (the hash word crew=1 belongs to the interior's trial figures) */
 if (q.get('stress')) set.stress = q.get('stress') !== '0';
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
 
@@ -53,7 +55,8 @@ let battle = null, teams = [], volleys = null, state = 'title', playing = false,
 // ---------------------------------------------------------------- the display and the title screen's own state
 // Two displays, remembered: 'simple' (almost nothing on screen) and 'engineer' (everything). Key H or the bar's button switches.
 let hudMode = q.get('hud') === 'engineer' || q.get('hud') === 'simple' ? q.get('hud') : store.get('hud', 'engineer');   /* engineer is the default; a stored choice is respected */
-const hudBox = new Hud($, el, store);
+const faces = q.get('faces') === '0' || !ASSETS ? null : new Faces(ASSETS);   // crew portraits (the supplied crew models); faces=0 in the address switches them off
+const hudBox = new Hud($, el, store, faces);
 const SEATV = { in_cdr: 1, in_gnr: 1, in_ldr: 1, in_drv: 1, cut: 1 };   // views in which the display gets out of the way of the interior
 const SIGHTV = { gnr: 1, citv: 1, hkoi: 1, enemy: 1, troops: 1 };       // views through a sight, or with the enemy team menu on the left: no boxes at the left
 let setupOpen = false, pagesOpen = false, pagesFrom = 'title', lastOutside = 'orbit', barOpen = false, lastMode = '';
@@ -279,6 +282,7 @@ function buildTitle() {
   seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name, f.note]), 'force', () => { set.custom = null; store.set('setup', set); again(); });
   seg('o-skill', SKILLS, 'skill', again); seg('o-mission', MISSIONS, 'mission', again); seg('o-waves', LENGTHS, 'waves', again);
   seg('o-crew', SKILLS, 'crew', again); seg('o-stress', [[true, 'On', 'Fear, wounds and overload slow the crew and can break it'], [false, 'Off', 'The crew works like a machine: never slower, never breaks']], 'stress', again);
+  seg('o-graphic', [[true, 'Graphic', 'Blood is shown on a wounded or dead crewman'], [false, 'Mild', 'No blood: a wounded man is shown by his face and colour only']], 'graphic');
   seg('o-hud', HUDS, 'hud'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note);
   seg('o-gfx', Object.entries(QUALITY).sort((a, b) => (b[1].auto ? 1 : 0) - (a[1].auto ? 1 : 0)).map(([k, v]) => [k, v.name]), 'gfx', () => { scene.setQuality(set.gfx); note(); stillT = 0; });
   $('o-map').value = set.map; $('o-map').onchange = () => { set.map = Math.max(1, Math.min(9999, Math.round(+$('o-map').value || 1))); store.set('setup', set); again(); };
@@ -447,7 +451,7 @@ function frameBody(now) {
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   if (cams.mode !== lastMode && state === 'play') { buildBar(); show(); }   /* the view changed (a key, a button, or the camera falling back by itself): the bar and the boxes follow */
-  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
+  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: set.graphic !== false, spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
@@ -463,7 +467,7 @@ function frameBody(now) {
     if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${QUALITY[s.quality].name} graphics   ${Math.round(canvas.width)}×${Math.round(canvas.height)} (${Math.round(s.scale * 100)}% scale)\nsim ${simMs.toFixed(1)} ms   whole frame on the processor ${cpuMs.toFixed(1)} ms\nModels: tank ${tank.loaded ? (tank.variant || 'M1A2 SEPv2') : tank.failed ? 'FAILED (boxes)' : 'loading'}, enemy teams ${teams.filter(t => t.loaded).length}/${teams.length}, vehicles ${props.filter(p => p.view.loaded).length}/${props.length}\nGraphics chip: ${scene.gpu()}${scene.software ? '   << SOFTWARE DRAWING: the graphics card is not being used' : ''}\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
 }
 window.addEventListener('resize', () => scene.resize());
-const api = window.__beta = { props, get volleys() { return volleys; }, prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, interior, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state, hud: () => hudMode, setHud, setView, toTitle, titleShow,
+const api = window.__beta = { props, get volleys() { return volleys; }, prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, interior, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state, hud: () => hudMode, faces, hudBox, setHud, setView, toTitle, titleShow,
   /* the title's show, stepped by hand for tests: titleReset(seed) starts it, titleTick(dt) is one frame of dt seconds, titleInfo() says where it is */
   titleReset(seed) { demo.manual = true; demo.seed = seed; titleBattle(); }, titleTick(dt) { demo.manual = true; demoTick(dt, true); place(); volleys.update(Math.min(tNow, battle.t), dt); titleShow.side = 0.17; titleShow.update(dt, ctx(), true); }, titleAuto() { demo.manual = false; },
   titleInfo() { const c = scene.camera, T = battle.tank; return { t: +battle.t.toFixed(2), tNow: +tNow.toFixed(3), showT: +titleShow.t.toFixed(3), shot: titleShow.shot.key, live: demoLive(), seed: demo.seed, cam: [c.position.x - T.e, c.position.y, c.position.z + T.n].map(v => +v.toFixed(2)), alive: T.alive }; },

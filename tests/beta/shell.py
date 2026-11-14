@@ -8,6 +8,7 @@ from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('OUT', '/tmp')
 PARTS = set((os.environ.get('PARTS') or 'title,fps,setup,hud,seat,result').split(','))
+TAG = os.environ.get('TAG', '')   # added to the names of the pictures (for a second window size)
 
 async def main():
     async with async_playwright() as p:
@@ -50,7 +51,7 @@ async def main():
             # (riding a missile at about 300 m/s, the 0.02 s allowed in sampling time is 6 m, so that shot gets 8 m; the others 1.5 m)
             runs = {}
             for fps in (30, 60, 144, 240):
-                await ev('__beta.titleReset(7)'); samples = []
+                await ev('void (__beta.titleShow.rideMissiles = true)'); await ev('__beta.titleReset(7)'); samples = []
                 for sec in range(1, 37):
                     await ev('(() => { const n = %d, dt = 1 / %d; for (let i = 0; i < n; i++) __beta.titleTick(dt); })()' % (fps, fps))
                     if sec % 6 == 0: samples.append(await js('__beta.titleInfo()'))
@@ -66,7 +67,7 @@ async def main():
         if 'fps' in PARTS: await part(part_2)
         async def part_3():
             # pictures: a turn around the vehicle, then the first moment a missile is being ridden
-            await ev('__beta.titleReset(7)'); await ev('(() => { for (let i = 0; i < 150; i++) __beta.titleTick(1 / 30); })()'); need((await js('__beta.titleInfo()'))['shot'] == 'turn', 'the title does not open on the vehicle'); await shot('title_live')
+            await ev('void (__beta.titleShow.rideMissiles = true)'); await ev('__beta.titleReset(7)'); await ev('(() => { for (let i = 0; i < 150; i++) __beta.titleTick(1 / 30); })()'); need((await js('__beta.titleInfo()'))['shot'] == 'turn', 'the title does not open on the vehicle'); await shot('title_live')
             found = False
             for k in range(240):
                 await ev('(() => { for (let i = 0; i < 15; i++) __beta.titleTick(1 / 30); })()')
@@ -76,7 +77,7 @@ async def main():
             if found: await ev('(() => { for (let i = 0; i < 24; i++) __beta.titleTick(1 / 30); })()'); await shot('title_missile')
             need(found, 'the title show never cut to a missile in 120 s of battle')
             # the real frame loop runs the title by itself
-            await ev('__beta.titleAuto()'); t0 = (await js('__beta.titleInfo()'))
+            await ev('void (__beta.titleShow.rideMissiles = false)'); await ev('__beta.titleAuto()'); t0 = (await js('__beta.titleInfo()'))
             await pg.wait_for_timeout(9000); t1 = await js('__beta.titleInfo()')
             print('title: real loop, live', t1['live'], 't', t0['t'], '->', t1['t'], '| red bar', await ev('!document.getElementById("errbar").hidden'))
             need(not t1['live'] or t1['t'] > t0['t'], 'with the live title on, the real frame loop did not advance the battle')
@@ -99,72 +100,107 @@ async def main():
         if 'setup' in PARTS: await part(part_4)
         async def part_5():
             await pg.click('#go'); await pg.wait_for_timeout(1500)
-            need(await ev('__beta.state()') == 'play' and await ev('__beta.hud()') == 'simple', 'Play did not start the battle in the simple display')
+            need(await ev('__beta.state()') == 'play' and await ev('__beta.hud()') == 'engineer', 'Play did not start the battle in the engineer display')
             need(await ev('__beta.battle.crewOpt.quality') in ('trained', None) and await ev('__beta.battle.crewOpt.on') is True, 'the default crew is not trained with stress on')
 
         if 'hud' in PARTS or 'seat' in PARTS or 'result' in PARTS: await part(part_5)
         async def part_6():
-            # fight on until the vehicle's sensors hold a missile in the air, then freeze that moment
-            got = False
+            HUDTXT = '["threats", "engleft", "engright", "ticker", "status"].map(i => document.getElementById(i).innerText).join(" | ")'
+            OVER = '(() => { const ids = ["status", "threats", "engleft", "engright", "ticker", "bar", "subs", "logov"], R = ids.map(i => { const e = document.getElementById(i); return e.hidden ? { width: 0 } : e.getBoundingClientRect(); }), out = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = R[i], b = R[j]; if (a.width && b.width && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(ids[i] + " over " + ids[j]); } const pb = [...document.querySelectorAll("#engleft .pan, #engright .pan")].map(e => e.getBoundingClientRect().bottom), bar = document.getElementById("bar").getBoundingClientRect().top; if (Math.max(...pb) > bar) out.push("a panel runs under the bar"); return out; })()'
+            # ---- a quiet moment
+            await ev('__beta.playFor(1.5)'); await ev('__beta.setPlaying(false)')
+            for k in range(60):
+                if await ev('!__beta.faces || __beta.faces.ok || __beta.faces.failed'): break
+                await pg.wait_for_timeout(2000)
+            await pg.wait_for_timeout(5000)
+            v = await vis('status', 'threats', 'engleft', 'engright', 'ticker', 'bar', 'sline', 'gauges', 'warn', 'logov', 'crewmen', 'crew', 'defences', 'enemybox')
+            e = await js('({ hud: __beta.hud(), head: document.getElementById("threats").innerText, cls: document.getElementById("threats").className, strip: [...document.querySelectorAll("#status .chip")].map(x => x.textContent), panels: [...document.querySelectorAll(".pan h3 span")].map(x => x.textContent), men: document.querySelectorAll("#crewmen .man").length, faces: __beta.faces ? { ok: __beta.faces.ok, failed: __beta.faces.failed, ms: +__beta.faces.ms.toFixed(2), draws: __beta.faces.draws } : null, stations: [...document.querySelectorAll(".st")].map(x => x.querySelector(".sh b").textContent + " [" + x.querySelector(".tag").textContent + "] " + x.querySelector(".sl").textContent + " | " + [...x.querySelectorAll(".mag")].map(m => m.title).join(", ") + " | " + x.querySelector(".sf").textContent), bar: [...document.querySelectorAll("#bar .barrow:last-child button")].map(x => x.textContent), ticks: document.querySelectorAll("#ticker div").length, crew: document.getElementById("crewmen").innerText.replace(/\n+/g, " / ").slice(0, 500), enemy: document.getElementById("enemybox").innerText.replace(/\n+/g, " / ") })')
+            print('engineer, quiet:', v); print('  ', e)
+            need(e['hud'] == 'engineer', 'the engineer display is not the default')
+            need(v['status'] and v['threats'] and v['engleft'] and v['engright'] and v['ticker'] and v['bar'] and not v['sline'] and not v['gauges'] and not v['warn'] and not v['logov'], 'the engineer display shows the wrong boxes')
+            need('No threats' in e['head'] and e['cls'] == 'quiet', 'the headline is not quiet with nothing in the air')
+            need(len(e['strip']) == 3 and e['strip'][0].startswith('T+') and 'fps' in e['strip'][2], 'the top strip is not time, rate and frame time only')
+            need(e['panels'] == ['Crew', 'Defences', 'Weapons', 'Enemy'] and e['men'] == 4 and len(e['stations']) == 5 and all('[' in x and '[]' not in x for x in e['stations']), 'the four panels, four crew rows or five station cards are not all there')
+            need(len(e['bar']) <= 10 and e['ticks'] <= 3, 'the bar has more than ten buttons or the ticker more than three lines')
+            need(e['faces'] is None or e['faces']['ok'], 'the crew portraits did not load')
+            ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap in a quiet moment: ' + ', '.join(ov))
+            await shot('eng_quiet' + TAG, 3000)
+            # ---- one missile held by the sensors
+            got = False; await ev('__beta.setPlaying(true)')
             for k in range(900):
-                await ev('__beta.playFor(0.4)')
-                if await ev('__beta.volleys.info.some(m => m.cued && m.range > 250) || !__beta.battle.tank.alive || !!__beta.battle.over'): got = await ev('__beta.volleys.info.some(m => m.cued)'); break
+                await ev('__beta.playFor(0.3)')
+                if await ev('__beta.volleys.info.some(m => m.cued && m.range > 300) || !__beta.battle.tank.alive || !!__beta.battle.over'): got = await ev('__beta.volleys.info.some(m => m.cued)'); break
             await ev('__beta.setPlaying(false)'); await pg.wait_for_timeout(5000)
-            v = await vis('sline', 'gauges', 'warn', 'bar', 'status', 'engleft', 'engright', 'log', 'strip', 'hud'); w = await ev('document.getElementById("warn").textContent'); print('simple display: t', await ev('__beta.battle.t'), 'missile held', got, v, '|', w, '|', await ev('document.getElementById("sline").textContent'), '|', await ev('document.getElementById("gauges").textContent'))
-            need(got, 'no missile was picked up by the sensors in 6 minutes of battle')
-            need(v['sline'] and v['gauges'] and v['bar'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['log'] and not v['strip'], 'the simple display shows the wrong boxes')
-            need(not got or (v['warn'] and 'INBOUND' in w and "o'clock" in w and 'bearing' in w and 'km' in w), 'no warning with a bearing while a missile is inbound')
-            need(await ev('document.querySelectorAll("#bar .barrow:last-child button").length') <= 13, 'the simple bar has more than 13 buttons')
-            await shot('simple', 3000)
-            await pg.keyboard.press('h'); await pg.wait_for_timeout(5000)
-            v = await vis('sline', 'gauges', 'warn', 'bar', 'status', 'engleft', 'engright', 'log', 'crewmen', 'crew', 'threats')
-            e = await js('({ hud: __beta.hud(), saved: localStorage.getItem("hkoi.hud"), men: document.querySelectorAll("#crewmen div").length, crew: document.getElementById("crewmen").textContent.slice(0, 260), weapons: document.querySelectorAll("#crew div").length, threats: document.querySelectorAll("#threats div").length, thr: document.getElementById("threats").textContent.slice(0, 160), chips: [...document.querySelectorAll("#status .chip")].map(x => x.textContent), logLines: document.querySelectorAll("#log div").length, crewLines: document.querySelectorAll("#log .k-crew").length, state: __beta.battle.crewState().who.cdr })')
-            print('engineer display:', v, e)
-            need(e['hud'] == 'engineer' and e['saved'] == '"engineer"', 'key H did not switch to the engineer display and remember it')
-            need(v['status'] and v['engleft'] and v['engright'] and v['log'] and v['crewmen'] and v['crew'] and v['threats'] and not v['sline'] and not v['gauges'] and not v['warn'], 'the engineer display shows the wrong boxes')
-            need(e['men'] == 4 and e['weapons'] >= 4 and (not got or e['threats'] >= 1) and any('FRAME' in c for c in e['chips']) and e['logLines'] >= 1, 'the engineer display is missing crew states, weapons, the threat readout, frame time or the log')
-            need(e['state']['state'] in e['crew'], 'the crew box does not show the commander\'s state from battle.crewState()')
-            # boxes must not sit on top of each other
-            ov = await js('(() => { const ids = ["status", "engleft", "engright", "bar", "caption", "subs"], R = ids.map(i => document.getElementById(i).getBoundingClientRect()), out = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = R[i], b = R[j]; if (a.width && b.width && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(ids[i] + " over " + ids[j]); } return out; })()')
-            print('engineer display: overlaps', ov); need(not ov, 'engineer boxes overlap: ' + ', '.join(ov))
-            await shot('engineer', 3000)
-            # later in the fight: the crew's own lines in the log (their own style), and what was spoken as subtitles if the sound runs here
-            crew = False
-            for k in range(700):
+            h = await js('({ t: __beta.battle.t, head: document.getElementById("threats").innerText.replace(/\\n+/g, " / "), cls: document.getElementById("threats").className, rows: document.querySelectorAll("#threats .t").length, txt: %s })' % HUDTXT)
+            print('engineer, missile inbound:', got, h['t'], h['cls'], '|', h['head'])
+            need(got, 'no missile was picked up by the sensors in the battle')
+            need(not got or (h['cls'] in ('warm', 'hot') and h['rows'] >= 1 and ' km' in h['head'] and "o'clock" in h['head'] and any(w in h['head'] for w in ('HKOI', 'Trophy', 'radar', 'tracked'))), 'the headline does not give the weapon, range, bearing and what the defences are doing')
+            need(not any(w in h['txt'] for w in ('SACLOS', 'APS', 'aps_', 'cued', ' HE ', '—')), 'engine words or a long dash are showing in the engineer display: ' + h['txt'][:300])
+            ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap with a missile inbound: ' + ', '.join(ov))
+            await shot('eng_missile' + TAG, 3000)
+            # ---- folding a panel is remembered
+            await pg.click('#engright .pan:first-child h3'); await pg.wait_for_timeout(400)
+            f = await js('({ shut: document.querySelector("#engright .pan").classList.contains("shut"), body: getComputedStyle(document.getElementById("defences")).display, saved: localStorage.getItem("hkoi.panels") })'); print('  fold:', f)
+            need(f['shut'] and f['body'] == 'none' and f['saved'] and '"def":true' in f['saved'], 'a click on a panel title did not fold it and remember it')
+            await pg.click('#engright .pan:first-child h3'); await pg.wait_for_timeout(300)
+            # ---- several threats at once; a crewman shaken (from the battle if it has one by then, otherwise set by this check and said so)
+            await ev('__beta.setPlaying(true)'); n3 = 0
+            for k in range(400):
+                await ev('__beta.playFor(0.2)'); n3 = await ev('__beta.volleys.info.filter(m => m.cued).length')
+                if n3 >= 3 or await ev('!__beta.battle.tank.alive || !!__beta.battle.over || __beta.battle.t > 60'): break
+            real = await ev('Object.values(__beta.battle.crewState().who).some(m => m.state === "shaken" || m.state === "panicked")')
+            if not real: await ev('void (__beta.hudBox.fake = { ldr: { state: "shaken", stress: 0.7, why: "rocket passed 5 m away (set by the check)" } })')
+            await ev('__beta.setPlaying(false)'); await pg.wait_for_timeout(5500)
+            h = await js('({ t: __beta.battle.t, head: document.getElementById("threats").innerText.replace(/\\n+/g, " / "), stations: [...document.querySelectorAll(".st")].map(x => x.querySelector(".sh b").textContent + " [" + x.querySelector(".tag").textContent + "] " + x.querySelector(".sl").textContent + " | " + x.querySelector(".sf").textContent), crew: document.getElementById("crewmen").innerText.replace(/\\n+/g, " / ").slice(0, 700) })')
+            print('engineer, several threats:', n3, 'in the air; shaken man from the battle itself:', real, '|', h['head']); print('  stations', h['stations']); print('  crew', h['crew'])
+            need('shaken' in h['crew'] or 'panicked' in h['crew'] or 'frozen' in h['crew'], 'the crew panel does not show a shaken man')
+            ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap with several threats: ' + ', '.join(ov))
+            wr = await js('[...document.querySelectorAll(".sl, .sf, .mt .why, #ticker div")].filter(e => e.getClientRects().length > 1 || e.scrollHeight > e.clientHeight + 4).length'); need(wr == 0, 'a one-line field wraps to more lines')
+            await shot('eng_three' + TAG, 3000); await ev('void (__beta.hudBox.fake = null)')
+            # ---- later in the fight: the full log with its filters, crew lines in their own style
+            await ev('__beta.setPlaying(true)'); crew = False
+            for k in range(500):
                 await ev('__beta.playFor(0.5)')
                 if await ev('__beta.battle.log.some(l => l.kind === "crew" && l.t <= __beta.battle.t) || !__beta.battle.tank.alive || !!__beta.battle.over'): crew = await ev('__beta.battle.log.some(l => l.kind === "crew" && l.t <= __beta.battle.t)'); break
-            await pg.wait_for_timeout(5000)
-            c = await js('({ t: __beta.battle.t, crewLines: document.querySelectorAll("#log .k-crew").length, line: (document.querySelector("#log .k-crew") || {}).textContent, audio: __beta.sound.ctx ? __beta.sound.ctx.state : "not started", said: __beta.sound.icom ? __beta.sound.icom.said.length : null, subs: document.getElementById("subs").textContent, men: document.getElementById("crewmen").textContent.slice(0, 300) })')
-            print('engineer display, later:', c)
-            need(not crew or c['crewLines'] >= 1, 'crew lines are in the battle log but not in the event log box with their own style')
-            await shot('engineer_late', 2500)
-
+            await ev('__beta.setPlaying(false)'); await pg.wait_for_timeout(4500)
+            await pg.keyboard.press('l'); await pg.wait_for_timeout(700)
+            lg = await js('({ open: !document.getElementById("logov").hidden, lines: document.querySelectorAll("#log div").length, crewLines: document.querySelectorAll("#log .k-crew").length, filters: [...document.querySelectorAll("#lo-filters button")].map(x => x.textContent), ticks: [...document.querySelectorAll("#ticker div")].map(x => x.textContent.slice(0, 80)), audio: __beta.sound.ctx ? __beta.sound.ctx.state : "not started", said: __beta.sound.icom ? __beta.sound.icom.said.length : null, subs: document.getElementById("subs").textContent })')
+            print('log overlay:', lg)
+            need(lg['open'] and lg['lines'] >= 3 and lg['filters'] == ['All', 'Threats', 'Crew', 'Enemy'] and 1 <= len(lg['ticks']) <= 3, 'key L did not open the full log with its filters, or the ticker is empty')
+            need(not crew or lg['crewLines'] >= 1, 'crew lines are in the battle log but not in the log with their own style')
+            await shot('eng_log' + TAG, 2500)
+            await ev('[...document.querySelectorAll("#lo-filters button")].find(x => x.textContent === "Crew").click()'); await pg.wait_for_timeout(400)
+            fl = await js('({ shown: [...document.querySelectorAll("#log div")].filter(x => x.offsetParent).map(x => x.className), })'); need(len(fl['shown']) >= (1 if crew else 0) and all(c in ('k-crew', 'k-tank') for c in fl['shown']), 'the Crew filter shows other lines: ' + str(fl['shown'][:6]))
+            await pg.keyboard.press('Escape'); await pg.wait_for_timeout(400); need(await ev('document.getElementById("logov").hidden'), 'Esc did not close the log')
+            # ---- the simple display is one key away and is remembered
+            await pg.keyboard.press('h'); await pg.wait_for_timeout(5000)
+            v = await vis('sline', 'gauges', 'bar', 'status', 'engleft', 'engright', 'threats', 'ticker', 'facerow'); sm = await js('({ hud: __beta.hud(), saved: localStorage.getItem("hkoi.hud"), mini: [...document.querySelectorAll("#facerow .mf")].map(x => x.textContent), line: document.getElementById("sline").textContent })'); print('simple display:', v, sm)
+            need(sm['hud'] == 'simple' and sm['saved'] == '"simple"' and v['sline'] and v['gauges'] and v['bar'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['threats'] and not v['ticker'], 'key H did not switch to the simple display and remember it')
+            need(await ev('!__beta.faces || __beta.faces.failed') or (v['facerow'] and len(sm['mini']) == 4), 'the simple display does not show the four small faces')
+            await shot('simple' + TAG, 3000)
+            await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
         if 'hud' in PARTS: await part(part_6)
         async def part_7():
             if await ev('__beta.state()') != 'play': await pg.wait_for_timeout(6000); await pg.click('#r-again'); await pg.wait_for_timeout(1500)   # the fight above may have ended
             if await ev('__beta.hud()') != 'engineer': await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
             await ev('__beta.setPlaying(false)')
-            names = []
-            for g in ('Outside', 'Crew views', 'Inside', 'Enemy'):
-                await ev('[...document.querySelectorAll("#bar .barrow:last-child button")].find(x => x.textContent.startsWith(%s)).click()' % json.dumps(g)); await pg.wait_for_timeout(200)
-                names += await js('[...document.querySelectorAll("#bar .pop button")].map(x => x.textContent)')
-            print('view bar:', names)
-            need(sum(1 for n in names if 'river' in n) == 1 and 'Driver seat' in names and sum(1 for n in names if n.startswith('Loader')) == 2 and 'Commander, head out' in names and 'Loader, head out' in names and 'Commander seat' in names and 'Gunner seat' in names, 'the view bar does not hold exactly one driver view (the seat), both loader views and the head-out commander view')
-            await ev('[...document.querySelectorAll("#bar .barrow:last-child button")].find(x => x.textContent.startsWith("Inside")).click()'); await pg.wait_for_timeout(200)
-            await ev('[...document.querySelectorAll("#bar .pop button")].find(x => x.textContent === "Gunner seat").click()'); await pg.wait_for_timeout(6000)
-            v = await vis('strip', 'bar', 'status', 'engleft', 'engright', 'log', 'sline', 'gauges'); print('seat, engineer:', await ev('__beta.cams.mode'), v, '|', await ev('document.getElementById("strip").textContent'))
-            need(await ev('__beta.cams.mode') == 'in_gnr' and v['strip'] and v['bar'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['log'], 'in a seat the engineer display is not one thin strip')
+            await ev('[...document.querySelectorAll("#bar .barrow:last-child button")].find(x => x.textContent.startsWith("View")).click()'); await pg.wait_for_timeout(300)
+            names = await js('[...document.querySelectorAll("#bar .pick button")].map(x => x.textContent.replace(/[0-9]$/, ""))'); print('view picker:', names)
+            need(sum(1 for n in names if 'river' in n) == 1 and 'Driver seat' in names and sum(1 for n in names if n.startswith('Loader')) == 2 and 'Commander, head out' in names and 'Loader, head out' in names and 'Commander seat' in names and 'Gunner seat' in names, 'the view picker does not hold exactly one driver view (the seat), both loader views and the head-out commander view')
+            await shot('eng_picker' + TAG, 1500)
+            await ev('[...document.querySelectorAll("#bar .pick button")].find(x => x.textContent.startsWith("Gunner seat")).click()'); await pg.wait_for_timeout(6000)
+            v = await vis('strip', 'bar', 'status', 'engleft', 'engright', 'threats', 'ticker', 'sline', 'gauges', 'facerow'); print('seat, engineer:', await ev('__beta.cams.mode'), v, '|', await ev('document.getElementById("strip").textContent'))
+            need(await ev('__beta.cams.mode') == 'in_gnr' and v['strip'] and v['bar'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['threats'] and not v['ticker'], 'in a seat the engineer display is not one thin strip')
             need(await ev('document.getElementById("strip").getBoundingClientRect().height') < 34, 'the engineer strip in a seat is not thin')
-            await shot('seat_engineer', 3500)
+            await shot('seat_engineer' + TAG, 3500)
             await pg.keyboard.press('h'); await pg.wait_for_timeout(5000)
-            v = await vis('strip', 'bar', 'status', 'engleft', 'engright', 'log', 'sline', 'gauges'); bt = await js('[...document.querySelectorAll("#bar button")].map(x => x.textContent)'); print('seat, simple:', v, bt)
-            need(not v['strip'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['log'] and not v['sline'] and not v['gauges'] and v['bar'] and 'Back outside' in bt and len(bt) <= 5, 'in a seat the simple display does not get out of the way')
-            await shot('seat_simple', 3500)
+            v = await vis('strip', 'bar', 'status', 'engleft', 'engright', 'threats', 'sline', 'gauges'); bt = await js('[...document.querySelectorAll("#bar button")].map(x => x.textContent)'); print('seat, simple:', v, bt)
+            need(not v['strip'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['threats'] and not v['sline'] and not v['gauges'] and v['bar'] and 'Back outside' in bt and len(bt) <= 5, 'in a seat the simple display does not get out of the way')
+            await shot('seat_simple' + TAG, 3500)
             await pg.keyboard.press('Escape'); await pg.wait_for_timeout(1500); need(await ev('__beta.cams.mode') == 'orbit', 'Esc did not leave the seat')
             await pg.keyboard.press('2'); await pg.wait_for_timeout(800); need(await ev('__beta.cams.mode') == 'chase', 'key 2 did not pick the chase view')
-            await ev('__beta.setView("in_cdr")'); await shot('seat_cdr_simple', 6000); await ev('__beta.setView("cut")'); await shot('cutaway_simple', 6000); await ev('__beta.setView("orbit")')
+            await ev('__beta.setView("orbit")'); await pg.keyboard.press('h'); await pg.wait_for_timeout(500)
             need(await ev('document.getElementById("errbar").hidden'), 'the red error bar came up in the seat views: ' + (await ev('document.getElementById("errbar").textContent'))[:200])
-
         if 'seat' in PARTS: await part(part_7)
         async def part_8():
             await ev('__beta.setPlaying(true)'); await ev('__beta.runTo(1800)')
