@@ -35,13 +35,19 @@
     inbound: 0.07,        // a missile, rocket or drone is seen coming (radar or laser warning, or the HKOI track)
     inAir: 0.005,         // per second, for each seen threat still in the air (the wait)
     near: 0.10,           // a round that misses: this much for one that passes at 0 m, falling to nothing at nearM
-    trophy: 0.04,         // Trophy fires (a bang on the turret roof)
+    trophy: 0.08,         // Trophy fires: a bang on the turret roof and a warhead defeated a few metres away (was 0.04 until 14 Nov 2026: too small for a missile stopped that close)
     trophyHatch: 0.10,    // ... for a man with his head out of the hatch on that occasion (instead of the 0.04)
-    hit: 0.20,            // any hit on the vehicle, armour held or not
-    through: 0.15,        // added when the damage report says the plate was holed
-    selfWounded: 0.25,    // the man himself is wounded
-    mateWounded: 0.12,    // another crewman is wounded
-    mateDown: 0.20,       // another crewman is killed or cannot go on
+    hit: 0.20,            // any hit on the vehicle, armour held or not: the jolt
+    // The shock of a hit that gets INSIDE (14 Nov 2026, after Shawn's report of a veteran crew left "steady" by a Konkurs through the
+    // hull side into a fuel cell: the jolt was then 0.20 + 0.15 for the hole, times the veteran gain 0.55 = +0.17, not enough to leave
+    // "steady"). These four are scaled by QUALITY.shock, not QUALITY.gain: experience damps the routine fright of a fight much more
+    // than the fright of a jet through the hull or a fire inside, which few men have ever lived through.
+    through: 0.30,        // added for all four when the damage report says the plate was holed (was 0.15)
+    nearEntry: 0.20,      // more for a man close to where the jet came in: all of it within ENTRY.fullM, none beyond ENTRY.noneM
+    fire: 0.25,           // more for all four when the hit starts a fire inside (fuel cell, hull ammunition, engine, bustle ammunition)
+    selfWounded: 0.30,    // the man himself is wounded (was 0.25)
+    mateWounded: 0.15,    // another crewman is wounded: screams on the intercom (was 0.12)
+    mateDown: 0.30,       // another crewman is killed or cannot go on (was 0.20)
     sides: 0.08,          // fired on from two directions more than 90 degrees apart within 45 s
     trophyEmpty: 0.10,    // Trophy has no shots left on one side (once per side)
     hkoiEmpty: 0.12,      // HKOI has no obscurant rounds left (once), or no HE rounds left (once)
@@ -65,6 +71,17 @@
     fatiguePerMin: 0.03,  // for each minute spent under fire without a lull ...
     fatigueMax: 0.15,     // ... up to this much; a quiet spell pays it back second for second
   };
+  // How near the entry point a man must be to get RISE.nearEntry (metres, seat to the point where the jet came through).
+  const ENTRY = { fullM: 1.0, noneM: 3.5 };
+  // A fire inside. While it burns nobody's stress can fall below `floor` (just over the "shaken" line, so every crew level is at least
+  // shaken), and the resting level is raised by `rest`. It burns until the extinguishers have put it out (outS) or the crew leaves.
+  // The M1's automatic fire suppression fires within a fraction of a second in the crew compartment; the times below are how long
+  // until the fire is out AND the crew believes it: alarm off, smoke thinning, a second bottle if it flares again. Assumptions.
+  const FIRE = {
+    floor: 0.62, rest: 0.25,
+    outS: { hull: 8, engine: 20, ammo: 15 },   // fuel cell or hull rack / engine compartment (the driver pulls the second shot) / bustle ammunition burning behind the blast doors
+    where: { hull: 'fire in the hull', engine: 'fire in the engine compartment', ammo: 'the bustle ammunition is burning' },
+  };
   const TIMING = {
     nearM: 15,            // a miss inside this many metres counts as a near miss
     contactS: 20,         // the crew counts itself "under fire" for this long after the last threat ended
@@ -75,7 +92,8 @@
     driftUpS: 20,         // seconds for stress below the resting level to climb to it
   };
   // The tank crew's level (setting opt.crewQuality; default trained), in the manner of the enemy SKILL table in battle.js.
-  //   gain    multiplies every rise in stress
+  //   gain    multiplies every rise in stress (except the shock of a hit that gets inside: see shock)
+  //   shock   multiplies RISE.through, nearEntry, fire and the three wound jolts (14 Nov 2026; a veteran feels 0.8 of a trained man's)
   //   calm    seconds for stress above the resting level to fall by about two thirds when nothing is happening
   //   rest    resting level
   //   freeze  chance that a man who reaches "panicked" stops doing his job for a spell (4 to 10 s)
@@ -84,10 +102,10 @@
   //   flinch  chance that a shaken commander will not hold still for HKOI when the drill says hold (doubled if panicked)
   //   bail    chance the crew abandons a vehicle that can still fight, each time the breaking point is reached (see BAIL)
   const QUALITY = {
-    green: { gain: 1.4, calm: 45, rest: 0.12, freeze: 0.60, stall: 0.45, flinch: 0.50, bail: 0.40 },
-    trained: { gain: 1.0, calm: 28, rest: 0.08, freeze: 0.20, stall: 0.25, flinch: 0.25, bail: 0.10 },   /* freeze was 0.30 in the first run; lowered once so that a trained man freezing stays rare (the brief asks for that). Nothing else was adjusted after seeing results. */
-    expert: { gain: 0.75, calm: 20, rest: 0.05, freeze: 0.15, stall: 0.12, flinch: 0.10, bail: 0.04 },
-    veteran: { gain: 0.55, calm: 14, rest: 0.03, freeze: 0.06, stall: 0.05, flinch: 0.04, bail: 0.01 },
+    green: { gain: 1.4, shock: 1.2, calm: 45, rest: 0.12, freeze: 0.60, stall: 0.45, flinch: 0.50, bail: 0.40 },
+    trained: { gain: 1.0, shock: 1.0, calm: 28, rest: 0.08, freeze: 0.20, stall: 0.25, flinch: 0.25, bail: 0.10 },   /* freeze was 0.30 in the first run; lowered once so that a trained man freezing stays rare (the brief asks for that). Nothing else was adjusted after seeing results. */
+    expert: { gain: 0.75, shock: 0.9, calm: 20, rest: 0.05, freeze: 0.15, stall: 0.12, flinch: 0.10, bail: 0.04 },
+    veteran: { gain: 0.55, shock: 0.8, calm: 14, rest: 0.03, freeze: 0.06, stall: 0.05, flinch: 0.04, bail: 0.01 },
   };
   // How strongly each seat feels the same event: the commander sees the whole picture; the loader sees nothing and hears everything.
   const SEAT = { cdr: 0.9, gnr: 1.0, ldr: 1.15, drv: 1.1 };
@@ -148,6 +166,9 @@
   const sideOf = rel => { const a = ((rel % 360) + 360) % 360; return a < 45 || a >= 315 ? 'the front' : a < 135 ? 'the right' : a < 225 ? 'the rear' : 'the left'; };
   const angDiff = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
   const OFF = Object.freeze({ on: false });
+  // does a hit that got through start a fire inside, and where (the damage model's components)? null if not
+  const fireOf = h => { const hit = id => (h.comps || []).some(c => c.id === id && c.state !== 'spared');
+    return hit('ammo') ? 'ammo' : hit('engine') || hit('trans') ? 'engine' : hit('fuel_l') || hit('fuel_r') || hit('hull_ammo') ? 'hull' : null; };
 
   function install(Battle, deps) {
     deps = deps || {};
@@ -169,8 +190,8 @@
           air: [],              /* seen threats in the air: { a, b, brg } battle times */
           dirs: [],             /* where recent fire came from: { t, brg } */
           nv: 0, ne: 0, lastFire: -1e9, lastSides: -1e9, underFire: 0, buttoned: false, quietSince: 0, breakAt: null, breakWhy: '',
-          pen: 0, abandoned: false, flags: {}, wasLoaded: true,
-          stats: { lay: { n: 0, add: 0 }, handover: { n: 0, add: 0 }, react: { n: 0, add: 0, noDriver: 0 }, load: { n: 0, add: 0 }, freezes: 0, stalls: 0, flinches: 0, holds: 0, buttonUps: 0, nearBail: 0, bail: 0, events: [] },
+          pen: 0, abandoned: false, flags: {}, wasLoaded: true, fire: null,
+          stats: { lay: { n: 0, add: 0 }, handover: { n: 0, add: 0 }, react: { n: 0, add: 0, noDriver: 0 }, load: { n: 0, add: 0 }, freezes: 0, stalls: 0, flinches: 0, holds: 0, buttonUps: 0, nearBail: 0, bail: 0, fires: 0, events: [] },
         };
         return C;
       },
@@ -195,24 +216,24 @@
         this.say(t, 'crew', who ? TAG[who] : null, text, why);
       },
       // a jolt (d > 0) or a relief (d < 0) for one man
-      _crewBump(C, role, d, why) {
+      _crewBump(C, role, d, why, shock) {
         const m = C.m[role]; if (m.status === 'down') return;
         if (d > 0) {
-          d *= C.Q.gain * SEAT[role] * (m.status === 'wounded' ? WOUND.gain : 1);
+          d *= (shock ? C.Q.shock : C.Q.gain) * SEAT[role] * (m.status === 'wounded' ? WOUND.gain : 1);
           if (role !== 'cdr') d *= LEAD[this._crewLeadState(C)].gain;
           if (why && d >= 0.02) { m.why = why; m.whyT = this.t; }
         }
         m.s = clamp(m.s + d, 0, 1);
       },
-      _crewAll(C, d, why) { for (const r of ROLES) this._crewBump(C, r, d, why); },
+      _crewAll(C, d, why, shock) { for (const r of ROLES) this._crewBump(C, r, d, why, shock); },
       _crewLater(C, t, fn) { C.q.push({ t, fn }); },
       // a crewman is hurt
       _crewWound(C, role, killed, how) {
         const m = C.m[role]; if (m.status === 'down') return;
         const down = killed || m.status === 'wounded' || how === 'hatch' || C.rng.random() < WOUND.downShare;
         m.status = down ? 'down' : 'wounded'; if (down) { m.dead = !!killed; m.busy = killed ? 'killed' : 'out of action'; }
-        for (const r of ROLES) if (r !== role) this._crewBump(C, r, down ? RISE.mateDown : RISE.mateWounded, `${NAME[role].toLowerCase()} ${killed ? 'killed' : down ? 'badly wounded' : 'wounded'}`);
-        if (!down) this._crewBump(C, role, RISE.selfWounded, 'wounded');
+        for (const r of ROLES) if (r !== role) this._crewBump(C, r, down ? RISE.mateDown : RISE.mateWounded, `${NAME[role].toLowerCase()} ${killed ? 'killed' : down ? 'badly wounded' : 'wounded'}`, true);
+        if (!down) this._crewBump(C, role, RISE.selfWounded, 'wounded', true);
         const sub = !down ? `he stays at his post: drills ${WOUND.slow} times slower, aim ${WOUND.aim} times wider`
           : role === 'gnr' ? `the commander takes over the main gun (${WOUND.cdrOnGun} times slower) and the .50 falls silent`
             : role === 'ldr' ? 'another man loads: 14 s a round instead of 6 s, and the M240 is silent'
@@ -256,14 +277,36 @@
         const D = dmg(); let rep = null; try { rep = D && rec.hits ? D.report(rec, v.cfg) : null; } catch (e) { rep = null; }
         const hits = rep || (rec.threats || []).filter(th => th.viz && th.viz.end && th.viz.end.type === 'hit').map(th => ({ t: th.viz.end.t, zoneName: 'vehicle', penetrated: false, crew: {} }));
         for (const h of hits) if (h.t < tKill && !h.killing) this._crewLater(C, t0 + h.t, () => {
-          C.lastFire = this.t; const plate = String(h.zoneName || 'vehicle').toLowerCase();
-          this._crewAll(C, RISE.hit + (h.penetrated ? RISE.through : 0), `hit on the ${plate}, ${h.penetrated ? 'through the armour' : 'armour held'}`);
-          if (h.penetrated) C.pen++;
+          C.lastFire = this.t; const plate = String(h.zoneName || 'vehicle').toLowerCase(), fire = h.penetrated ? fireOf(h) : null;
+          const why = `hit on the ${plate}, ${h.penetrated ? 'through the armour' : 'armour held'}${fire ? '; ' + FIRE.where[fire] : ''}`;
+          this._crewAll(C, RISE.hit, why);   /* the jolt: every hit */
+          if (h.penetrated) {   /* the shock: a hit that gets inside (QUALITY.shock), most for the men nearest the hole */
+            C.pen++; const near = this._crewNear(h);
+            for (const r of ROLES) this._crewBump(C, r, RISE.through + RISE.nearEntry * near[r] + (fire ? RISE.fire : 0), why, true);
+            if (fire) this._crewFire(C, fire, plate);
+          }
           for (const r of ROLES) if (h.crew && h.crew[r] && h.crew[r] !== 'ok') this._crewWound(C, r, h.crew[r] === 'killed', 'hit');
           this._crewButton(C, `hit on the ${plate}`);
           if (C.breakAt == null) { C.breakAt = this.t + BAIL.afterS; C.breakWhy = `hit on the ${plate}${h.penetrated ? ', through the armour' : ''}`; }
         });
         C.q.sort((a, b) => a.t - b.t);
+      },
+      // how near each seat is to the point where the jet came in: 1 within ENTRY.fullM, 0 beyond ENTRY.noneM (the seat positions of
+      // the damage model, turret seats turned with the turret as it was at the hit)
+      _crewNear(h) {
+        const D = dmg(), out = { cdr: 0, gnr: 0, ldr: 0, drv: 0 }; if (!D || !D.COMPS || !h.entry) return out;
+        for (const c of D.COMPS) if (c.crew && out[c.id] != null) {
+          const p = c.turret && D.rot ? D.rot(c.p, -(h.turA || 0)) : c.p, d = Math.hypot(p[0] - h.entry[0], p[1] - h.entry[1], p[2] - h.entry[2]);
+          out[c.id] = clamp((ENTRY.noneM - d) / (ENTRY.noneM - ENTRY.fullM), 0, 1);
+        }
+        return out;
+      },
+      // a fire inside starts (or flares again): it holds every man at least shaken until it is out
+      _crewFire(C, where, plate) {
+        const until = this.t + FIRE.outS[where];
+        if (C.fire && C.fire.until > this.t) { C.fire.until = Math.max(C.fire.until, until); return; }
+        C.fire = { where, since: this.t, until }; C.stats.fires++;
+        this._crewNote(C, null, 'fire', `Fire inside: ${FIRE.where[where]}. The extinguishers fire.`, `hit on the ${plate}; every man is held at least shaken until it is out (about ${FIRE.outS[where]} s)`, { where });
       },
       _crewButton(C, why) {
         if (C.buttoned || C.abandoned) return; C.buttoned = true; C.stats.buttonUps++;
@@ -302,14 +345,17 @@
         C.underFire = Math.max(0, C.underFire + (contact ? dt : -dt)); if (contact) C.quietSince = t;
         const fatigue = Math.min(REST.fatigueMax, REST.fatiguePerMin * C.underFire / 60);
         let hurt = 0, down = 0; for (const r of ROLES) { if (C.m[r].status === 'wounded') hurt++; else if (C.m[r].status === 'down') down++; }
-        const restAll = Q.rest + (F.apsL ? REST.trophyEmpty : 0) + (F.apsR ? REST.trophyEmpty : 0) + (F.obs ? REST.hkoiEmpty : 0) + hurt * REST.wounded + down * REST.down + fatigue;
+        if (C.fire && t >= C.fire.until) { const f = C.fire; C.fire = null; this._crewNote(C, null, 'fire_out', 'Fire out.', `${FIRE.where[f.where]} put out after ${Math.round(t - f.since)} s`, { where: f.where }); }
+        const burning = !!C.fire;
+        const restAll = (burning ? FIRE.rest : 0) + Q.rest + (F.apsL ? REST.trophyEmpty : 0) + (F.apsR ? REST.trophyEmpty : 0) + (F.obs ? REST.hkoiEmpty : 0) + hurt * REST.wounded + down * REST.down + fatigue;
         const lead = LEAD[this._crewLeadState(C)], calmK = (contact ? TIMING.calmInContact : lull ? TIMING.calmInLull : 1);
         for (const r of ROLES) {
           const m = C.m[r]; if (m.status === 'down') continue;
           if (inAir) this._crewBump(C, r, RISE.inAir * inAir * dt, inAir > 1 && t - m.whyT > 4 ? `${inAir} threats in the air at once` : null);
-          const rest = Math.min(0.5, restAll + (m.status === 'wounded' ? REST.selfWounded - REST.wounded : 0));
+          const rest = Math.min(burning ? 0.75 : 0.5, restAll + (m.status === 'wounded' ? REST.selfWounded - REST.wounded : 0));
           if (m.s > rest) m.s = rest + (m.s - rest) * Math.exp(-dt * calmK * (r === 'cdr' ? 1 : lead.calm) / Q.calm);
           else m.s = rest + (m.s - rest) * Math.exp(-dt / TIMING.driftUpS);
+          if (burning && m.s < FIRE.floor) m.s = FIRE.floor;   /* nobody is calm in a burning vehicle */
           if (fatigue >= 0.05 && m.s <= rest + 0.01 && t - m.whyT > 30) { m.why = `${Math.round(C.underFire / 60)} min under fire without a lull`; m.whyT = t; }
           if (m.s > m.peak) m.peak = m.s;
           // state, and what happens when a man reaches the far end
@@ -432,7 +478,8 @@
           who[r] = { name: NAME[r], stress: m ? +m.s.toFixed(3) : 0, state, stress_level: lv, why: m ? m.why : null, busy: m ? m.busy : null, status: m ? m.status : 'ok' };
           if (lv > level) level = lv;
         }
-        return { on: !!C.on, quality: C.on ? C.quality : null, buttoned: !!C.buttoned, abandoned: !!C.abandoned, level, who };
+        const fire = C.on && C.fire ? { where: C.fire.where, since: C.fire.since, until: C.fire.until } : null;
+        return { on: !!C.on, quality: C.on ? C.quality : null, buttoned: !!C.buttoned, abandoned: !!C.abandoned, fire, level, who };
       },
       // rows for the crew box, in the same form as tankStatus(): [[who, text], ...]
       crewStatus() {
@@ -452,12 +499,12 @@
         return { on: true, quality: C.quality, abandoned: C.abandoned, who,
           lay: { n: S.lay.n, meanAddS: +mean(S.lay).toFixed(3) }, load: { n: S.load.n, meanAddS: +mean(S.load).toFixed(3), totalAddS: +S.load.add.toFixed(2) },
           handover: { n: S.handover.n, meanAddS: +mean(S.handover).toFixed(3) }, react: { n: S.react.n, meanAddS: +mean(S.react).toFixed(3), noDriver: S.react.noDriver },
-          freezes: S.freezes, stalls: S.stalls, flinches: S.flinches, holds: S.holds, buttonUps: S.buttonUps, nearBail: S.nearBail, bail: S.bail, events: S.events.slice() };
+          fires: S.fires, freezes: S.freezes, stalls: S.stalls, flinches: S.flinches, holds: S.holds, buttonUps: S.buttonUps, nearBail: S.nearBail, bail: S.bail, events: S.events.slice() };
       },
     };
     Object.assign(Battle.prototype, methods);
   }
 
-  const api = { install, STATE, STATES, VOICE, RISE, FALL, REST, TIMING, QUALITY, SEAT, LEAD, EFFECT, WOUND, PANIC, BUTTON, BAIL, ROLES, NAME };
+  const api = { install, fireOf, ENTRY, FIRE, STATE, STATES, VOICE, RISE, FALL, REST, TIMING, QUALITY, SEAT, LEAD, EFFECT, WOUND, PANIC, BUTTON, BAIL, ROLES, NAME };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.HKCrew = api;
 })(typeof window !== 'undefined' ? window : globalThis);
