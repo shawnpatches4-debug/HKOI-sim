@@ -73,16 +73,18 @@ if os.path.exists(os.path.join(D, 'bed_drone_orbit.wav')):
     need(close > far_in * 1.05 and away < far_in, 'drone motor: %.0f Hz far off and closing, %.0f Hz in the last seconds, %.0f Hz going away' % (far_in, close, away))
     need(lv(28, 30) > lv(8, 10) + 10, 'drone level: %.0f dB at 850 m, %.0f dB as it arrives' % (lv(8, 10), lv(28, 30)))
 # ---- intercom logs
+REL = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../tools/audio/crew_release.json')))['e']
+takes = lambda who, ev: len(REL.get(who, {}).get(ev, []))
 for p in sorted(glob.glob(os.path.join(D, '*.json'))):
     j = json.load(open(p)); S = j.get('said', []); name = os.path.basename(p)[:-5]
     if not S: continue
     over = sum(1 for a, b in zip(S, S[1:]) if b['t'] < a['end'] - 1e-3); last = {}; rep = 0
     for s in S:
         k = s['who'] + '.' + s['ev']
-        if last.get(k) == s['clip'] and name != 'talk_every_clip': rep += 1
+        if last.get(k) == s['clip'] and name != 'talk_every_clip' and takes(s['who'], s['ev']) > 1: rep += 1   # a line with one take only has no alternative
         last[k] = s['clip']
     multi = name != 'talk_every_clip'
-    need(over == 0 and (rep == 0 or not multi), '%s: %d lines, %d overlapping, %d repeats of the same take running, %d dropped as stale or cut' % (name, len(S), over, rep, len(j.get('dropped', []))))
+    need(over == 0 and (rep == 0 or not multi), '%s: %d lines, %d overlapping, %d repeats of a take where another exists, %d dropped as stale or cut' % (name, len(S), over, rep, len(j.get('dropped', []))))
 j = os.path.join(D, 'talk_start_and_cut.json')
 if os.path.exists(j):
     S = json.load(open(j))['said']; cut = [s for s in S if s.get('cut')]; hit = next((s for s in S if s['ev'] == 'hit'), None)

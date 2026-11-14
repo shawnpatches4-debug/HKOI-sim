@@ -14,7 +14,7 @@
 
 // Playback speed per speaker. ASSUMPTION: measurements could not separate distinct voice actors in the pack (it may be
 // one or two people), so each crewman is played a few percent slower or faster to help tell them apart. 1 = untouched.
-export const VOICE_RATE = { CDR: 1.0, GNR: 0.97, LDR: 1.04, DRV: 0.94, ANY: 1.0, HQ: 1.0 };
+export const VOICE_RATE = { CDR: 1.0, GNR: 0.975, LDR: 1.03, DRV: 0.955, ANY: 1.0, HQ: 1.0 };
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -65,12 +65,13 @@ export class Intercom {
   // Ask for a line. pri: 0 routine (reports), 1 normal, 2 urgent, 3 warning or casualty. ttl: seconds it may wait before it is stale.
   // delay: seconds before it may start. group: lines that belong together (when one is cut or dropped, the rest go too).
   // Returns false when the pack has no such line (the caller then knows the crewman stays silent).
-  request(who, ev, { level = 1, pri = 1, ttl = 1.5, delay = 0, group = null, gap = null } = {}) {
+  // needs: 'WHO.event' of the line this one answers (a driver's "Roger" is only said if the order was in fact spoken).
+  request(who, ev, { level = 1, pri = 1, ttl = 1.5, delay = 0, group = null, gap = null, needs = null } = {}) {
     if (!this.takes(who, ev)) return false;
     const now = this.ctx.currentTime, key = who + '.' + ev;
     if (this.lastAsk[key] != null && now - this.lastAsk[key] < 4) return true;   /* just asked for: once is enough */
     this.lastAsk[key] = now;
-    this.queue.push({ who, ev, level, pri, due: now + delay, dead: now + delay + ttl, group, gap, asked: now });
+    this.queue.push({ who, ev, level, pri, due: now + delay, dead: now + delay + ttl, group, gap, needs, asked: now });
     return true;
   }
   flush(note = 'flushed') { for (const q of this.queue) this.dropped.push({ who: q.who, ev: q.ev, why: note }); this.queue.length = 0; if (this.cur) this._cut(this.ctx.currentTime); }
@@ -85,7 +86,14 @@ export class Intercom {
       this.queue.splice(i, 1); this.dropped.push({ who: q.who, ev: q.ev, why: 'stale' }); this._dropGroup(q.group, 'stale group');
     }
     let best = null;
-    for (const q of this.queue) if (q.due <= now && (!best || q.pri > best.pri || (q.pri === best.pri && q.asked < best.asked))) best = q;
+    for (let i = this.queue.length - 1; i >= 0; i--) {   /* an answer waits for the line it answers; if that line was never spoken, the answer goes too */
+      const q = this.queue[i]; if (!q.needs) continue;
+      const waiting = (this.cur && this.cur.who + '.' + this.cur.ev === q.needs) || this.queue.some(x => x.who + '.' + x.ev === q.needs);
+      if (waiting) { q.hold = true; continue; }
+      q.hold = false;
+      if (!this.said.some(x => x.who + '.' + x.ev === q.needs && !x.cut && now - x.end < 8)) { this.queue.splice(i, 1); this.dropped.push({ who: q.who, ev: q.ev, why: 'the line it answers was not spoken' }); }
+    }
+    for (const q of this.queue) if (q.due <= now && !q.hold && (!best || q.pri > best.pri || (q.pri === best.pri && q.asked < best.asked))) best = q;
     if (!best) return;
     if (this.cur) { if (best.pri - this.cur.pri >= 2) { this._dropGroup(this.cur.group, 'cut'); this._cut(now); } return; }   /* the new line starts on a later frame, after a breath */
     if (now < this.freeAt && best.pri < 2) return;

@@ -38,12 +38,13 @@ function writeWav(file, buf) {
 
 // One render. setup(sound) runs before time starts; acts = [[seconds, sound => ...]]; state(t) = what update() is given
 // each thirtieth of a second (null: update is not called, so no continuous layer sounds).
-async function render(name, seconds, { setup, acts = [], state = null, voices = false, seed = 1, solo = null } = {}) {
+async function render(name, seconds, { setup, prepare, acts = [], state = null, voices = false, seed = 1, solo = null } = {}) {
   seedRandom(seed);
   const ctx = new WA.OfflineAudioContext(2, Math.ceil(seconds * SR), SR), sound = new Sound();
   sound._get = readFile; sound.start(ctx);
   if (voices) await sound.loadVoices(ASSETS.replace(/\/?$/, '/'));
   if (solo) for (const b of BUSES) if (b !== solo) sound.mix.setBus(b, 0);
+  if (prepare) await prepare(sound);
   if (setup) setup(sound);
   if (process.env.RAW) { sound.mix.sum.disconnect(); sound.mix.sum.connect(ctx.destination); }   /* RAW=1: skip the limiter, to see how hard it would have to work */
   const list = acts.slice().sort((a, b) => a[0] - b[0]); let k = 0, refused = 0;   /* the offline context refuses a few pause points; that frame's update is simply skipped */
@@ -105,13 +106,13 @@ async function talk() {
     [0.5, x => x.cue('GNR', 'contact', 2)], [2.2, x => x.cue('GNR', 'range_1200', 1)], [4.6, x => x.cue('LDR', 'up', 1)],
     [6.2, x => { x.cue('GNR', 'ontheway', 1, { pri: 2, ttl: 0.7 }); x.gun120(3); }], [8.0, x => x.cue('CDR', 'reengage_doubt', 1)],
     [11.0, x => x.cue('LDR', 'up', 1)], [12.5, x => { x.cue('GNR', 'ontheway', 1, { pri: 2, ttl: 0.7 }); x.gun120(3); }],
-    [14.2, x => { x.cue('GNR', 'target', 1); x.cue('CDR', 'cease', 1, { ttl: 3.5 }); }], [17.0, x => { x.cue('CDR', 'moveout', 1); x.cue('DRV', 'ack_fwd', 1, { delay: 0.9, ttl: 5 }); }],
+    [14.2, x => { x.cue('GNR', 'target', 1); x.cue('CDR', 'cease', 1, { ttl: 3.5 }); }], [17.0, x => { x.cue('CDR', 'moveout', 1, { ttl: 2.5 }); x.cue('DRV', 'ack_fwd', 1, { delay: 0.9, ttl: 6, needs: 'CDR.moveout' }); }],
   ] }); save('talk_engagement', s);
   // the same exchange with no gun, for the speech recogniser
   s = await render('talk_engagement_clean', 22, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: [
     [0.5, x => x.cue('GNR', 'contact', 2)], [2.2, x => x.cue('GNR', 'range_1200', 1)], [4.6, x => x.cue('LDR', 'up', 1)], [6.2, x => x.cue('GNR', 'ontheway', 1, { pri: 2, ttl: 0.7 })], [8.0, x => x.cue('CDR', 'reengage_doubt', 1)],
     [11.0, x => x.cue('LDR', 'up', 1)], [12.5, x => x.cue('GNR', 'ontheway', 1, { pri: 2, ttl: 0.7 })], [14.2, x => { x.cue('GNR', 'target', 1); x.cue('CDR', 'cease', 1, { ttl: 3.5 }); }],
-    [17.0, x => { x.cue('CDR', 'moveout', 1); x.cue('DRV', 'ack_fwd', 1, { delay: 0.9, ttl: 5 }); }],
+    [17.0, x => { x.cue('CDR', 'moveout', 1, { ttl: 2.5 }); x.cue('DRV', 'ack_fwd', 1, { delay: 0.9, ttl: 6, needs: 'CDR.moveout' }); }],
   ] }); save('talk_engagement_clean', s);
   // mission start: the radio net, then the crew report; a hit cuts into a second report
   s = await render('talk_start_and_cut', 40, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: [
@@ -127,7 +128,7 @@ async function talk() {
   // every clip of the release list once, one a second and a half apart, for the speech recogniser (crew2_index.json)
   const idx = JSON.parse(fs.readFileSync(path.join(ASSETS, 'crew2_index.json'), 'utf8')), all = [];
   for (const who in idx.e) for (const ev in idx.e[who]) idx.e[who][ev].forEach((x, i) => all.push([who, ev, i, x]));
-  let tt = 0.3; const plan = all.map(a => { const at = tt; tt += a[3][2] / 0.94 + 0.9; return [at, a]; });
+  let tt = 0.3; const plan = all.map(a => { const at = tt; tt += a[3][2] / 0.95 + 0.9; return [at, a]; });
   s = await render('talk_every_clip', tt + 1, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: plan.map(([at, a]) => [at, x => { x.icom.lastAsk = {}; const L = x.icom.index.e[a[0]][a[1]]; x.icom.lastClip[a[0] + '.' + a[1]] = []; const keep = L.slice(); L.length = 0; L.push(keep[a[2]]); x.cue(a[0], a[1], keep[a[2]][3], { ttl: 0.5 }); x.icom.update(); L.length = 0; keep.forEach(k => L.push(k)); }]) });
   save('talk_every_clip', s);
 }
@@ -175,5 +176,14 @@ async function compare() {
   fs.writeFileSync(path.join(OUT, 'node_compare.json'), JSON.stringify({ said: s.icom.said, dropped: s.icom.dropped }, null, 1));
 }
 
-const scenes = { fx, beds, talk, battle, compare };
+// recordings in place of synthesis: any sound file stands in for a recording here (a strip of the loader's voice as the
+// "30 mm" and as the "wind"): the point is that the slot list is honoured and the distance treatment still applies
+async function slots() {
+  const manifest = { slots: { gun30_out: [{ file: 'crew2_ldr.mp3', start: 0, len: 0.5 }], wind_loop: [{ file: 'crew2_any.mp3', gain: 0.5 }], aps_out: [{ file: 'no_such_file.mp3' }] } };
+  const prepare = async s => { const n = await s.mix.loadSlots(manifest, ASSETS.replace(/\/?$/, '/'), readFile); s._swapBeds(); console.log('slots with a recording:', n, '(gun30_out', s.mix.has('gun30_out'), ', wind_loop', s.mix.has('wind_loop'), ', aps_out with a missing file', s.mix.has('aps_out'), ')'); };
+  await render('slot_gun30_300m', 4, { prepare, setup: seat('out'), acts: [[0.1, x => x.gun30(300)], [2.5, x => x.aps(10)]] });
+  await render('slot_wind_loop', 4, { prepare, state: () => ({ view: 'orbit', cond: 'day', alive: false, speed: 0, drones: [], talking: false }) });
+}
+
+const scenes = { fx, beds, talk, battle, compare, slots };
 for (const name of want.length ? want : Object.keys(scenes)) { const t0 = Date.now(); await scenes[name](); console.log('scene', name, 'rendered in', ((Date.now() - t0) / 1000).toFixed(1), 's'); }

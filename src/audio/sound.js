@@ -200,7 +200,7 @@ export class Sound {
   // longer for the net; opt.low: routine talk. Returns false when the pack has no such line.
   cue(who, ev, level = 1, opt = {}) {
     if (!this._live() || !this.icom) return false;
-    return this.icom.request(who, ev, { level, pri: opt.pri != null ? opt.pri : opt.low ? 0 : 1, ttl: opt.ttl != null ? opt.ttl : opt.queue ? 8 : 1.5, delay: opt.delay || 0, group: opt.group || null });
+    return this.icom.request(who, ev, { level, pri: opt.pri != null ? opt.pri : opt.low ? 0 : 1, ttl: opt.ttl != null ? opt.ttl : opt.queue ? 8 : 1.5, delay: opt.delay || 0, group: opt.group || null, needs: opt.needs || null });
   }
   // A line in the engine's wording: lines = [calm, tense, panic] (or just one); level picks one. The crewman says the pack's
   // line for it when there is one that is true of it; otherwise he says nothing (no machine speech any more).

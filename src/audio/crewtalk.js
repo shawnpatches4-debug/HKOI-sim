@@ -69,7 +69,7 @@ export class CrewTalk {
   constructor(net, fx) { this.net = net; this.fx = fx || {}; this.reset(null); }
   reset(battle) {
     this.battle = battle; this.evN = 0; this.pending = []; this.volleyI = new Map(); this.lastT = -1;
-    this.lastOrder = null; this.lastReport = -1e9; this.reportOpen = -1e9; this.started = false; this.dead = false;
+    this.lastOrder = null; this.lastOrderEv = null; this.lastReport = -1e9; this.reportOpen = -1e9; this.started = false; this.dead = false;
     this.loaded = null; this.rfKey = null; this.ldrUp = null; this.coaxSaid = null; this.moving = null;
     this.miss = new Map(); this.lastHit = -1e9; this.lastContact = -1e9; this.lastEnemyCall = -1e9; this.later = []; this.smoked = new Set();
     this.trace = [];   // what was asked for: [sim time, who, event, heard or 'silent'] (tests, and the list of silent events)
@@ -88,7 +88,7 @@ export class CrewTalk {
   // now: a real-time clock in seconds (the sound clock). opts: { mission }
   update(b, now, opts = {}) {
     if (!b) return;
-    if (b !== this.battle || b.t < this.lastT - 0.5) this.reset(b);
+    if (b !== this.battle || b.t < this.lastT - 0.5) { const first = !this.battle; this.reset(b); if (!first && this.net.flush) this.net.flush('another battle, or time wound back'); }
     const t = b.t, jumped = t - this.lastT > 3; this.lastT = t;   /* a jump in time (skipping ahead): say nothing about what was skipped */
     if (this.dead) { this.fx.warn && this.fx.warn(false, false); return; }
     const T = b.tank, lvl = this.stress(b, now);
@@ -145,14 +145,15 @@ export class CrewTalk {
     const m = engineLine(r.who, r.text, this.lastOrder), lvl = r.lvl || 0;
     if (!m) { this._silent(t, r.who, 'engine: ' + r.text); return; }
     if (m.cue === 'smoke') { if (!this.smoked.has(v)) { this.smoked.add(v); this.fx.smoke && this.fx.smoke(); this.trace.push([+t.toFixed(2), r.who, 'smoke dischargers (no voice)', 'cue']); } return; }
-    if (m.order) this.lastOrder = m.order;
+    if (m.order) { this.lastOrder = m.order; this.lastOrderEv = m.ev; }
     if (m.report) {   /* "X's good": part of a crew report. Not after every single engagement. */
       if (now > this.reportOpen) { if (now - this.lastReport < REPORT_EVERY) return; this.lastReport = now; this.reportOpen = now + 9; }
       this._ask(t, r.who, m.ev, { level: lvl, pri: 0, ttl: 10, group: 'report' + v.i });
       if (r.who === 'DRV') this._ask(t, 'CDR', b.tank.mode === 'moving' ? 'oscar_mike' : 'redcon', { level: lvl, pri: 0, ttl: 12, group: 'report' + v.i });
       return;
     }
-    this._ask(t, r.who, m.ev, { level: lvl, pri: m.pri, ttl: m.ttl });
+    const needs = r.who === 'DRV' && this.lastOrderEv ? 'CDR.' + this.lastOrderEv : null;   /* the driver answers an order: only if it was spoken */
+    this._ask(t, r.who, m.ev, { level: lvl, pri: m.pri, ttl: needs ? 5 : m.ttl, needs });
   }
 
   _event(b, e, stale, now, lvl, opts) {
@@ -191,9 +192,9 @@ export class CrewTalk {
       case 'tank_move': {
         if (stale) break;
         const brg = (Math.atan2(e.to[0] - T.e, e.to[1] - T.n) * 180 / Math.PI + 360) % 360, ahead = Math.abs(angDiff(brg, T.h || 0)) < 60;
-        this.lastOrder = ahead ? 'fwd' : 'any';
-        this._ask(t, 'CDR', ahead && Math.random() < 0.5 ? 'drv_fwd' : 'moveout', { level: Math.min(1, lvl), pri: 1, ttl: 2.5 });
-        this._ask(t, 'DRV', ahead ? 'ack_fwd' : 'onmove', { level: lvl, pri: 1, ttl: 3, delay: 0.9 });
+        const order = ahead && Math.random() < 0.5 ? 'drv_fwd' : 'moveout';
+        this.lastOrder = ahead ? 'fwd' : 'any'; this.lastOrderEv = order;
+        if (this._ask(t, 'CDR', order, { level: Math.min(1, lvl), pri: 1, ttl: 2.5 })) this._ask(t, 'DRV', ahead ? 'ack_fwd' : 'onmove', { level: lvl, pri: 1, ttl: 6, delay: 0.9, needs: 'CDR.' + order });
         break;
       }
       case 'drone_launch': if (!stale && e.R < 3500 && this.fx.blip) { this.fx.blip('rf'); this.trace.push([+t.toFixed(2), 'SYS', 'drone control link tone (no voice)', 'cue']); } break;
