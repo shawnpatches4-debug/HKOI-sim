@@ -142,15 +142,17 @@ measurable difference. Code: `src/battle/enemycdr.js` (commander and the teams' 
   pick off one at a time. Nothing he did changed how the shots were grouped.
 
 ### What the commander now decides (only from his teams' reports, the sound of the gun, and what his teams see happen)
-1. **The opening.** He holds the whole ambush until three missile launchers are laid (all of them if he has fewer), from two
+1. **The opening.** He holds the whole ambush until every missile launcher that has the tank in sight is laid, from two
    bearings 40 degrees apart when his ground offers that. He lets go at once if a team comes under fire or is lost (the ambush is
    blown), and in any case after 40 / 60 / 75 s (trained / expert / veteran) (A).
 2. **Salvo fire.** After the opening, missile launchers fire by salvo, not singly: three ready, or two after half his wait, or
    whoever is ready when the wait runs out (25 / 40 / 45 s) (A). Rocket teams and tank guns are not held.
    Between the first and the second salvo the missile teams that fired stay and reload where they are (60 s at most) instead of
    scooting after one shot, unless they are shot at: Trophy has eight rounds and the first salvo uses most of them (A).
-3. **Arrival together.** Launches are timed so the missiles arrive together, by the ranges he believes, to within his crews'
-   timing error (2 / 1 / 0.5 s) (A). A drone arriving with the salvo is given 1.5 s lead so Trophy and the airburst rounds are
+3. **Arrival together (expert and veteran only).** Launches are timed so the missiles arrive together, by the ranges he believes,
+   to within his crews' timing error (1 / 0.5 s) (A). A trained commander does not try it: measured with a 2 s error it did the
+   enemy no good (the near launchers' wait warns the tank, and the arrivals are still too ragged to beat Trophy's 0.6 s between
+   shots); his launchers fire together on the signal. A drone arriving with the salvo is given 1.5 s lead so Trophy and the airburst rounds are
    spent on it first (A); with a drone due inside his wait, the salvo waits for it.
 4. **Counting Trophy.** His teams see Trophy fire. He counts its shots by quarter of the compass; after four toward one quarter he
    takes that side to be empty and lets a launcher there fire at once. He can be wrong (the tank turns): a fifth shot from that

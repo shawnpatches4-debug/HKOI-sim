@@ -13,7 +13,7 @@ const ROWS = [
   ['Prepared defence, hold, 1 wave', HEAVY, 'hold', 1], ['Prepared defence, advance, 1 wave', HEAVY, 'advance', 1], ['Prepared defence, hunt, 1 wave', HEAVY, 'hunt', 1], ['Prepared defence, hold, 3 waves', HEAVY, 'hold', 3],
   ['Sprawling defence, hold, 1 wave', EnemyVeh.FORCES.sprawling_defence.force, 'hold', 1], ['Sprawling defence, advance, 1 wave', EnemyVeh.FORCES.sprawling_defence.force, 'advance', 1],
   ['Armoured counter-attack, hold, 1 wave', EnemyVeh.FORCES.armoured_counter.force, 'hold', 1],
-].filter((r, i) => !QUICK || i === 0 || i === 1 || i === 4);
+].filter((r, i) => !QUICK || i === 0 || i === 1 || i === 3 || i === 4);
 const angDiff = (a, b) => ((a - b + 540) % 360) - 180, avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0, med = a => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
 function run(force, mission, waves, commander, i) {
   const b = new Battle.Battle({ cfg, lookup, biome: BIOMES[i % 4], mapSeed: 3 + (i % 5) * 2, seed: 900 + i, skill, mission, waves, force, commander });

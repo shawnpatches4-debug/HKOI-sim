@@ -57,7 +57,7 @@
 
   const CSK = {
     green: { delay: 12, err: 90, think: 30, pass: 15, strike: 0, open: 0, tot: 0 },
-    trained: { delay: 7, err: 50, think: 20, pass: 8, strike: 25, open: 40, tot: 2 },
+    trained: { delay: 7, err: 50, think: 20, pass: 8, strike: 25, open: 40, tot: 0 },
     expert: { delay: 4, err: 30, think: 12, pass: 5, strike: 40, open: 60, tot: 1 },
     veteran: { delay: 3, err: 20, think: 10, pass: 4, strike: 45, open: 75, tot: 0.5 },
   };
@@ -322,7 +322,7 @@
     // ================================================================ fire control
     // Called while the battle layer gathers the teams that are ready to fire (every step, cheap: no sight lines).
     // First the teams' own rule (a team whose last missile was blinded waits for a partner), then the commander's:
-    //   before the first shot   he holds the whole ambush until three missile launchers are laid (all of them if he has fewer), from
+    //   before the first shot   he holds the whole ambush until every missile launcher that has the tank in sight is laid, from
     //                           two bearings 40 degrees apart when his ground offers that; he lets go at once if a team comes under fire
     //                           or is lost, and in any case after his patience runs out (40 / 60 / 75 s trained / expert / veteran);
     //   after it                missile launchers fire by salvo, not singly: three ready, or two after half his wait, or whoever is
@@ -341,7 +341,7 @@
       for (let i = this.waveFrom || 0; i < this.units.length; i++) { const u = this.units[i]; if (u.alive && !u.gone && MISSILE[u.spec.key] && u.ammo > 0 && u.state !== 'moving' && u.state !== 'setup' && u.lastSeen != null && this.t - u.lastSeen < 20) { live++; lb.push(brgOf(p.e, p.n, u.e, u.n)); } }
       for (const v of this.vehs || []) if (v.wave === C.wave && v.alive && !v.gone && v.kind === 'bmp2' && v.msl > 0 && v.canFire && v.sees) { live++; lb.push(brgOf(p.e, p.n, v.e, v.n)); }
       const spreadOf = a => { let s = 0; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) s = Math.max(s, Math.abs(angDiff(a[i], a[j]))); return s; };
-      const mb = msl.map(u => brgOf(p.e, p.n, u.e, u.n)), spread = spreadOf(mb), want = Math.max(1, Math.min(SALVO, live));
+      const mb = msl.map(u => brgOf(p.e, p.n, u.e, u.n)), spread = spreadOf(mb), want = Math.max(1, this.opened ? Math.min(SALVO, live) : live);   /* the opening waits for every launcher that has the tank in sight; later salvos for three */
       const hold = (all) => { for (let i = ready.length - 1; i >= 0; i--) if (all || MISSILE[ready[i].spec.key]) { ready.splice(i, 1); C.st.heldSec += this.dt; } };
       const go = (text, why, n) => { F.state = 'free'; F.since = this.t; F.until = null; C.st.salvos++; C.st.salvoN += n; if (n >= 2 && spread >= SEP) C.st.salvoTwo++; this._cdrOrder('all', 'strike', text, { by: 'own', why, quiet: C.st.salvos > 2 }); };
       if (!this.opened) {
@@ -382,7 +382,10 @@
       else { C.st.salvos++; C.st.salvoN += msl.length; if (msl.length >= 2 && spread >= SEP) C.st.salvoTwo++; }   /* nothing was held: no order needed */
     },
     // Called as an engagement is put together: the commander times the launches so the missiles ARRIVE together (a far launcher
-    // fires first, a near one waits), to within his crews' timing error (2 / 1 / 0.5 s), using the ranges he believes. Without a
+    // fires first, a near one waits), to within his crews' timing error (expert 1 s, veteran 0.5 s), using the ranges he believes. A trained commander does NOT
+    // try it: measured with a 2 s timing error it did the enemy no good (200 battles: M1 lost 30% with it against 34% without),
+    // because the near launchers' wait gives the tank's crew time to pop smoke and move while the arrivals are still too ragged
+    // to beat Trophy's 0.6 s between shots. His launchers fire together on the signal, as trained crews always did. Without a
     // commander, expert and veteran crews do the same among themselves to within 1.5 / 1 s (TSK.tot); trained and green crews do not. A drone
     // arriving with the salvo is given a lead of 1.5 s so that Trophy and HKOI's airburst are spent on it first.
     _cdrTot(teams) {
