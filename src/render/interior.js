@@ -369,7 +369,7 @@ export class Interior {
     const pv = this.mgPivot; if (!pv) { this.mgFiring = false; return; }
     const mg = B._mg, U = this.st.ldrU, firing = !!(mg && mg.m240 && B.t >= mg.t && B.t <= mg.t + (mg.dur || 3)), recent = !!(mg && mg.m240 && B.t >= mg.t && B.t < mg.t + (mg.dur || 3) + 4); this.mgFiring = firing;
     let want = 0; if (recent && U > 0.8) want = clamp((((Math.atan2(mg.e - T.e, mg.n - T.n) / DEG - (this.turBrg || 0) + 540) % 360) - 180), -110, 110);
-    this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, sdt); pv.rotation.y = -this.st.mgYaw * DEG;
+    { const bdt = this.mgT != null ? clamp(B.t - this.mgT, 0, 1.5) : 0; this.mgT = B.t; this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, bdt); } pv.rotation.y = -this.st.mgYaw * DEG;
     this.mgMesh.position.copy(this.mgHome); if (firing && U > 0.97) this.mgMesh.position.z -= 0.012 * (Math.sin(B.t * 75) > 0.2 ? 1 : 0);                         /* recoil of each round */
     pv.updateWorldMatrix(true, false); this.mgGripT.copy(this.mgGrip).applyMatrix4(pv.matrixWorld); this.tur.worldToLocal(this.mgGripT); (this.mgPivT || (this.mgPivT = new THREE.Vector3())).setFromMatrixPosition(pv.matrixWorld); this.tur.worldToLocal(this.mgPivT);
   }
