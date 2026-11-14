@@ -7,6 +7,8 @@ import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { Interior } from '../render/interior.js';
 import { EnemyViews } from './enemyviews.js';
 import { initPages } from './pages.js';
+import { Director } from './director.js';
+import { XRayPanel } from './xraypanel.js';
 import { MapView } from './mapview.js';
 import { Hud } from './hud.js';
 import { TitleShow } from './title.js';
@@ -320,6 +322,7 @@ function buildBar() {
   if (eng) { g.append(btn('Log', showLog ? 'on' : '', 'The event log', () => { showLog = !showLog; store.set('log', showLog); buildBar(); show(); }));
     g.append(btn('FPS', showPerf ? 'on' : '', 'Frame rate and scene load in full', () => { showPerf = !showPerf; store.set('perf', showPerf); buildBar(); show(); })); }
   g = grp(); g.append(btn(eng ? 'Display: engineer' : 'Display: simple', eng ? 'on' : '', 'Simple shows almost nothing; engineer shows everything (H)', () => setHud(eng ? 'simple' : 'engineer')));
+  if (!slim) g.append(director.button());   /* film director on or off (key F) */
   if (!slim) g.append(btn('Menu', '', 'Back to the title screen', toTitle));
 }
 $('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
@@ -406,6 +409,9 @@ function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length
 const hkV = new THREE.Vector3();
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
+// the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
+const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
+const director = new Director(film), xray = new XRayPanel(film);
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
 function frame(now) {
@@ -427,6 +433,7 @@ function frameBody(now) {
   hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
+  director.update(dt); xray.update();
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
