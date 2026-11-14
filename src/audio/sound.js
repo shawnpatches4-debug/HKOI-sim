@@ -90,6 +90,11 @@ export class Sound {
   //       rate (simulation speed), drones: [{ id, d }], battle, talking, mission }
   update(dt, st) {
     if (!this.ctx || !this.mix) return; st = st || {};
+    // The work below runs about 30 times a second however fast the picture is drawn (240 frames a second would otherwise
+    // flood the audio engine with parameter changes). The intercom queue is looked at on every call: it is cheap.
+    this.acc = (this.acc || 0) + (dt > 0 ? dt : 0);
+    if (this.acc < 0.032 && this.prev) { this.icom.update(); return; }
+    dt = Math.min(this.acc, 0.25); this.acc = 0;
     const c = this.ctx, M = this.mix, B = this.bed, t = c.currentTime, set = (p, v, tc = 0.12) => p.setTargetAtTime(v, t, tc);
     const seat = st.view != null ? (SEATS[st.view] || 'out') : st.inside ? 'in' : 'out';
     this.seat = seat; this.inside = seat === 'in'; this.lite = (st.rate || 1) > 2.01; this.camDist = st.camDist || 0;
@@ -98,9 +103,9 @@ export class Sound {
     // --- crew talk
     if (st.battle && st.talking && !this.lite) this.talk.update(st.battle, t, { mission: st.mission });
     this.icom.update();
-    const lw = this.warnL && heard && st.talking ? 0.022 : 0;   /* the beeper's gain swings between 0 and twice this, 7 times a second */
+    const lw = this.warnL && heard && st.talking ? 0.035 : 0;   /* the beeper's gain swings between 0 and twice this, 7 times a second */
     set(B.lwr.g.gain, lw, 0.01); set(B.lwrLfo.g.gain, lw, 0.01);
-    set(B.rwr.g.gain, this.warnR && !this.warnL && heard && st.talking ? 0.035 : 0, 0.03);
+    set(B.rwr.g.gain, this.warnR && !this.warnL && heard && st.talking ? 0.055 : 0, 0.03);
     set(B.icomFloor.g.gain, heard ? 0.006 : 0);
     // --- weather
     const cond = st.cond || 'day', rainy = cond === 'rain', windy = cond === 'snow' || cond === 'fog' ? 0.5 : rainy ? 0.9 : cond === 'night' ? 0.35 : 0.6;
@@ -119,8 +124,8 @@ export class Sound {
     set(B.rush.g.gain, run * (inH ? 0.1 + 0.1 * thr : hatch ? 0.05 + 0.05 * thr : 0)); set(B.rush.fl.frequency, 420 + 520 * thr);
     set(B.rushOut.g.gain, run * (inH ? 0 : (0.16 + 0.3 * thr) * near)); set(B.rushOut.fl.frequency, 700 + 900 * thr);
     set(B.roarOut.g.gain, run * (inH ? 0 : (0.1 + 0.3 * thr) * near));
-    const wf = 1750 + 1500 * thr;
-    set(B.whine.o.frequency, wf); set(B.whine2.o.frequency, wf * 1.507); set(B.whine.g.gain, run * (inH ? 0.006 + 0.008 * thr : 0)); set(B.whine2.g.gain, run * (inH ? 0.002 + 0.004 * thr : 0));
+    const wf = (1750 + 1500 * thr) * (1 + 0.004 * Math.sin(t * 5.3) + 0.003 * Math.sin(t * 13.1));   /* never a dead-steady tone */
+    set(B.whine.o.frequency, wf, 0.05); set(B.whine2.o.frequency, wf * 1.507, 0.05); set(B.whine.g.gain, run * (inH ? 0.003 + 0.005 * thr : 0)); set(B.whine2.g.gain, run * (inH ? 0.001 + 0.002 * thr : 0));
     set(B.whineOut.o.frequency, wf); set(B.whineOut.g.gain, run * (inH ? 0 : (0.004 + 0.012 * thr) * near));
     set(B.hum.o.frequency, 52 + 34 * thr); set(B.hum.g.gain, run * (inH ? 0.1 + 0.06 * thr : hatch ? 0.04 : 0));
     if (B.rush.swapped) B.rush.src.playbackRate.setTargetAtTime(0.8 + 0.5 * thr, t, 0.2);

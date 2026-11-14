@@ -113,10 +113,10 @@ async def main():
         for x in bad: print('   WRONG %-34s got: %-50s expected: %s' % (x[0], x[2], x[3])); fails.append('event case: ' + x[0])
         # 5. every call from every seat, normal speed and 4x
         r = json.loads(await ev("""JSON.stringify((() => { const s = __beta.sound, out = [], base = { cond: 'rain', biome: 'forest', speed: 6, heading: 10, turret: 40, alive: true, camDist: 20, drones: [{ id: 'x', d: 300 }], talking: false };
-          for (const rate of [1, 4]) for (const view of ['orbit', 'chase', 'cdr', 'gnr', 'citv', 'hkoi', 'drv', 'ldr', 'top', 'enemy', 'troops', 'fly', 'missile']) { try { s.update(0.016, Object.assign({}, base, { view, rate }));
+          for (const rate of [1, 4]) for (const view of ['orbit', 'chase', 'cdr', 'gnr', 'citv', 'hkoi', 'drv', 'ldr', 'top', 'enemy', 'troops', 'fly', 'missile']) { try { s.update(0.05, Object.assign({}, base, { view, rate }));
             s.gun30(15); s.gun120(15); s.mg(15, true); s.mg(15, false); s.aps(10); s.explosion(40, 1.5); s.explosion(900, 0.8); s.airburst(60, 0.5); s.launch(800, true); s.launch(300, false); s.whoosh(0.5, 0.4); s.smoke(10); s.crackThump(600); s.blip('rf');
             s.say('CDR', ['Fire!'], 1); s.say('CDR', ['Target! Cease fire!'], 1); s.cue('GNR', 'ready', 0); s.react('CDR', 'hit', 0.1); s.react('GNR', 'panic', 0.1); s.scream('scream', 0.1); s.enemy('fire', 0.1); out.push([view, rate, s.seat]); } catch (e) { out.push([view, rate, 'ERROR ' + (e.stack || e)]); } }
-          s.hit(false); s.icom.flush('test'); s.update(0.016, Object.assign({}, base, { view: 'gnr', rate: 1, drones: [] })); return out; })())"""))
+          s.hit(false); s.icom.flush('test'); s.update(0.05, Object.assign({}, base, { view: 'gnr', rate: 1, drones: [] })); return out; })())"""))
         seats = {x[0]: x[2] for x in r}; bad = [x for x in r if str(x[2]).startswith('ERROR')]
         print('5. every sound call from 13 views at 1x and 4x: %d errors. Seats: %s' % (len(bad), json.dumps(seats)))
         for x in bad: fails.append('sound call threw in view %s: %s' % (x[0], x[2][:300]))

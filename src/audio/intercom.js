@@ -27,7 +27,7 @@ export class Intercom {
     this.listening = false;
     this.out = c.createGain(); this.out.gain.value = 0; this.out.connect(mix.bus.voices.direct);
     this.crew = this._chain({ lo: 300, hi: 3300, peakF: 1900, peakDb: 5, drive: 1.5, level: 0.65 });
-    this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 3.5, level: 0.55 });
+    this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 2.4, level: 0.6 });
     // the hiss of an open line: only while somebody is keyed
     this.hiss = mix.bed('voices', { direct: true, color: 'white', type: 'bandpass', f: 2100, q: 0.5 });
     this.hiss.g.disconnect(); this.hiss.g.connect(this.out);

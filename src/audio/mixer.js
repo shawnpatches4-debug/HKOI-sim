@@ -127,7 +127,7 @@ export class Mixer {
   deafen(seconds, depth = 0.12) {
     const t = this.ctx.currentTime, g = this.shock.gain, e = this.earGain.gain;
     g.cancelScheduledValues(t); g.setValueAtTime(depth, t); g.linearRampToValueAtTime(1, t + seconds);
-    e.cancelScheduledValues(t); e.setValueAtTime(0.0001, t); e.exponentialRampToValueAtTime(0.05, t + 0.06); e.exponentialRampToValueAtTime(0.0001, t + seconds * 1.15);
+    e.cancelScheduledValues(t); e.setValueAtTime(0.0001, t); e.exponentialRampToValueAtTime(0.05, t + 0.06); e.exponentialRampToValueAtTime(0.0001, t + seconds * 1.15); e.setValueAtTime(0, t + seconds * 1.15 + 0.01);
   }
 
   // ---------------------------------------------------------------- distance
