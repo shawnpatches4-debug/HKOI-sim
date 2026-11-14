@@ -82,17 +82,24 @@ def synth(text, sid, pace):
     key = hashlib.md5(('%d|%.2f|%s' % (sid, pace, text)).encode()).hexdigest()[:16]; p = os.path.join(CACHE, key + '.wav')
     if not os.path.exists(p): a = tts.generate(text, sid=sid, speed=pace); sf.write(p, np.array(a.samples, dtype=np.float32), a.sample_rate)
     return V.trim(V.load(p))
-def make(who, text, lv, sid):
+import pickle
+def make(who, text, lv, sid, gentle=False):
+    # the finished line is kept on disk (keyed by everything that shapes it), so a rebuild only makes what changed
+    key = hashlib.md5(json.dumps([who, text, lv, sid, gentle, V.ROLES[who], made['pace'], round(REF[(who, lv)]['f0'], 1), 'v2']).encode()).hexdigest()[:16]; cp = os.path.join(CACHE, 'made_' + key + '.pkl')
+    if os.path.exists(cp): return pickle.load(open(cp, 'rb'))
+    r = make1(who, text, lv, sid, gentle); pickle.dump(r, open(cp, 'wb')); return r
+def make1(who, text, lv, sid, gentle):
     raw = synth(text, sid, made['pace'][lv]); ref = REF[(who, lv)]
     y = V.trim(V.revoice(raw, who)); f0 = V.measure(y)['f0']
-    extra = float(np.clip(12 * np.log2(ref['f0'] / f0), -2, 6)) if f0 > 0 else 0.0
+    extra = float(np.clip(12 * np.log2(ref['f0'] / f0), -2, 2 if gentle else 6)) if f0 > 0 else 0.0   # gentle: the second try for a line the recogniser could not read
     y = V.trim(V.revoice(raw, who, extra_semi=extra))
-    if lv == 2: y = V.run_ffmpeg(y, 'highshelf=f=1400:g=5,volume=2.2,asoftclip=type=tanh,volume=0.6')      # the push of a raised voice: brighter, a little driven
+    if gentle: y = V.run_ffmpeg(y, 'highshelf=f=1600:g=%.1f' % (1.5 * lv)) if lv else y
+    elif lv == 2: y = V.run_ffmpeg(y, 'highshelf=f=1400:g=5,volume=2.2,asoftclip=type=tanh,volume=0.6')      # the push of a raised voice: brighter, a little driven
     elif lv == 1: y = V.run_ffmpeg(y, 'highshelf=f=1600:g=2.5')
     y = V.match_eq(y, ref['ltas']); y = y + np.random.default_rng(len(text)).normal(0, 10 ** (-66 / 20), len(y))   # the pack's colour, and a floor that is not digital silence
     y = V.level(V.trim(y)); m = V.measure(V.on_intercom(y))
     z = {k: (m[k] - ref['mean'][k]) / ref['sd'][k] for k in V.KEYS} if m['f0'] > 0 else {k: 9.0 for k in V.KEYS}
-    got = hear(y); return dict(a=y, m=m, z=z, zmax=float(max(abs(v) for v in z.values())), heard=got, ok=read_ok(text, got), sid=sid, extra=round(extra, 2))
+    got = hear(y); return dict(a=y, m=m, z=z, zmax=float(max(abs(v) for v in z.values())), heard=got, ok=read_ok(text, got), sid=sid, extra=round(extra, 2), gentle=gentle)
 report = []; nid = 20000
 def drop_in(who, ev, lv):
     if not DROP: return None
@@ -111,12 +118,14 @@ for who, events in made['lines'].items():
                 real = drop_in(who, ev, lv)
                 if real is not None: add(who, ev, real, lv, nid, shown, 'recorded'); continue
                 best = None
-                for sid in made['voices'][who]:
-                    r = make(who, text, lv, sid)
-                    if best is None or (r['ok'], -r['zmax']) > (best['ok'], -best['zmax']): best = r
-                    if r['ok'] and r['zmax'] < 2.5: break
+                for gentle in (False, True):
+                    for sid in made['voices'][who]:
+                        r = make(who, text, lv, sid, gentle)
+                        if best is None or (r['ok'], -r['zmax']) > (best['ok'], -best['zmax']): best = r
+                        if r['ok'] and r['zmax'] < 2.5: break
+                    if best['ok']: break
                 row = dict(who=who, ev=ev, level=lv, text=shown, how='synth', voice=best['sid'], heard=best['heard'], read=bool(best['ok']), zmax=round(best['zmax'], 2), worst=max(best['z'], key=lambda k: abs(best['z'][k])),
-                           f0=round(best['m']['f0']), f0_ref=round(REF[(who, lv)]['f0']), extra_semi=best['extra'], kept=bool(best['ok']))
+                           f0=round(best['m']['f0']), f0_ref=round(REF[(who, lv)]['f0']), extra_semi=best['extra'], gentle=bool(best.get('gentle')), kept=bool(best['ok']))
                 report.append(row); print('%s %-4s %-13s %d  z %.1f (%s)  pitch %3d / real %3d  heard: %s' % ('KEEP' if row['kept'] else 'DROP', who, ev, lv, row['zmax'], row['worst'], row['f0'], row['f0_ref'], best['heard'][:50]), flush=True)
                 if best['ok']: add(who, ev, best['a'], lv, nid, shown, 'synth')
 for (who, ev), L in lines.items():

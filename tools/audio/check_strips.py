@@ -17,7 +17,7 @@ I = json.load(open(os.path.join(A, PRE + '_index.json'))); bad = 0; n = 0; loud 
 bufs = {k: load(f) for k, f in I['strips'].items()}
 for who, E in I['e'].items():
     for ev, L in E.items():
-        for key, t, d, lvl, clip, line in L:
+        for key, t, d, lvl, clip, line in [x[:6] for x in L]:   # a seventh field (how a line was made) may follow
             n += 1; b = bufs[key]; a, z = int(t * SR), int((t + d) * SR)
             if z > len(b) or d <= 0.1: print('outside its strip or too short:', who, ev, clip); bad += 1; continue
             sp = speech(b[a:z]); gap = db(b[z + int(0.04 * SR): z + int(0.11 * SR)]); loud.append(sp)

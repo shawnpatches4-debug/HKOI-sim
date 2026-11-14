@@ -17,8 +17,8 @@ SR = 44100
 ROLES = {
     'CDR': dict(semi=-1.4, formant=0.965, pace=1.00, eq='lowshelf=f=180:g=2,equalizer=f=2500:t=q:w=1.2:g=1.5'),
     'GNR': dict(semi=0.0, formant=1.045, pace=1.03, eq='highshelf=f=3000:g=2,equalizer=f=1100:t=q:w=1.0:g=-1.5'),
-    'LDR': dict(semi=+4.5, formant=1.085, pace=1.06, eq='lowshelf=f=220:g=-3,equalizer=f=3200:t=q:w=1.2:g=2.5'),
-    'DRV': dict(semi=-4.2, formant=0.92, pace=0.96, eq='lowshelf=f=160:g=3,highshelf=f=3200:g=-3'),
+    'LDR': dict(semi=+3.2, formant=1.065, pace=1.06, eq='lowshelf=f=220:g=-3,equalizer=f=3200:t=q:w=1.2:g=2.5'),
+    'DRV': dict(semi=-3.2, formant=0.94, pace=0.96, eq='lowshelf=f=160:g=2.5,highshelf=f=3400:g=-1'),
     'HQ': None,    # the radio net keeps the pack's own voice
 }
 

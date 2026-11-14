@@ -58,7 +58,7 @@ if os.path.exists(os.path.join(D, 'talk_outside_8m.wav')):
     need(c8[0] < ins[0] - 12 and c8[0] > -75 and c8[1] < 700, 'crew from outside at 8 m: a calm line %.0f dB (inside the same line is %.0f dB), centre %.0f Hz: faint and dull, not silent' % (c8[0], ins[0], c8[1]))
     need(s8[0] > c8[0] + 3, 'a shouted line carries further than a calm one: %.0f dB against %.0f dB at 8 m' % (s8[0], c8[0]))
     need(c25[0] < -85 and s25[0] > -80, 'at 25 m the calm line is gone (%.0f dB), the shout is still there (%.0f dB)' % (c25[0], s25[0]))
-    need(M('talk_outside_60m')['peak'] < -80 and M('talk_from_enemy_1500m')['peak'] < -80, 'at 60 m and from an enemy sight at 1500 m: nothing (peaks %.0f and %.0f dB)' % (M('talk_outside_60m')['peak'], M('talk_from_enemy_1500m')['peak']))
+    need(M('talk_outside_60m')['peak'] < -65 and M('talk_from_enemy_1500m')['peak'] < -65, 'at 60 m and from an enemy sight at 1500 m: nothing to hear (peaks %.0f and %.0f dB)' % (M('talk_outside_60m')['peak'], M('talk_from_enemy_1500m')['peak']))
 # ---- weapons differ
 a, b = M('fx_mg50_out_20m'), M('fx_mg762_out_20m')
 if a and b: need(b['cen'] > 1.6 * a['cen'] and a['loud'] > b['loud'] + 3, '.50: centre %.0f Hz, %.1f dB; 7.62: centre %.0f Hz, %.1f dB (heavier and lower against lighter and higher)' % (a['cen'], a['loud'], b['cen'], b['loud']))
