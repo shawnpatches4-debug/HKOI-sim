@@ -7,7 +7,7 @@ import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('OUT', '/tmp')
-PARTS = set((os.environ.get('PARTS') or 'title,fps,setup,hud,seat,result').split(','))
+PARTS = set((os.environ.get('PARTS') or 'title,fps,setup,hud,log,seat,result').split(','))
 TAG = os.environ.get('TAG', '')   # added to the names of the pictures (for a second window size)
 
 async def main():
@@ -103,7 +103,7 @@ async def main():
             need(await ev('__beta.state()') == 'play' and await ev('__beta.hud()') == 'engineer', 'Play did not start the battle in the engineer display')
             need(await ev('__beta.battle.crewOpt.quality') in ('trained', None) and await ev('__beta.battle.crewOpt.on') is True, 'the default crew is not trained with stress on')
 
-        if 'hud' in PARTS or 'seat' in PARTS or 'result' in PARTS: await part(part_5)
+        if PARTS & {'hud', 'log', 'seat', 'result'}: await part(part_5)
         async def part_6():
             HUDTXT = '["threats", "engleft", "engright", "ticker", "status"].map(i => document.getElementById(i).innerText).join(" | ")'
             OVER = '(() => { const ids = ["status", "threats", "engleft", "engright", "ticker", "bar", "subs", "logov"], R = ids.map(i => { const e = document.getElementById(i); return e.hidden ? { width: 0 } : e.getBoundingClientRect(); }), out = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = R[i], b = R[j]; if (a.width && b.width && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(ids[i] + " over " + ids[j]); } const pb = [...document.querySelectorAll("#engleft .pan, #engright .pan")].map(e => e.getBoundingClientRect().bottom), bar = document.getElementById("bar").getBoundingClientRect().top; if (Math.max(...pb) > bar) out.push("a panel runs under the bar"); return out; })()'
@@ -155,8 +155,10 @@ async def main():
             print('engineer, several threats:', n3, 'in the air; shaken man from the battle itself:', real, '|', h['head']); print('  stations', h['stations']); print('  crew', h['crew'])
             need('shaken' in h['crew'] or 'panicked' in h['crew'] or 'frozen' in h['crew'], 'the crew panel does not show a shaken man')
             ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap with several threats: ' + ', '.join(ov))
-            wr = await js('[...document.querySelectorAll(".sl, .sf, .mt .why, #ticker div")].filter(e => e.getClientRects().length > 1 || e.scrollHeight > e.clientHeight + 4).length'); need(wr == 0, 'a one-line field wraps to more lines')
+            wr = await js('[...document.querySelectorAll("#threats .do, .sl, .sf, .r .m, .mt .do, .mt .fx, .mt .why")].filter(e => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 2)).map(e => e.textContent.slice(0, 50))'); print('  cut-off texts', wr); need(len(wr) == 0, 'a line that explains what is happening is cut off: ' + ' | '.join(wr[:4]))
             await shot('eng_three' + TAG, 3000); await ev('void (__beta.hudBox.fake = null)')
+        if 'hud' in PARTS: await part(part_6)
+        async def part_6b():
             # ---- later in the fight: the full log with its filters, crew lines in their own style
             await ev('__beta.setPlaying(true)'); crew = False
             for k in range(500):
@@ -179,7 +181,7 @@ async def main():
             need(await ev('!__beta.faces || __beta.faces.failed') or (v['facerow'] and len(sm['mini']) == 4), 'the simple display does not show the four small faces')
             await shot('simple' + TAG, 3000)
             await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
-        if 'hud' in PARTS: await part(part_6)
+        if 'log' in PARTS: await part(part_6b)
         async def part_7():
             if await ev('__beta.state()') != 'play': await pg.wait_for_timeout(6000); await pg.click('#r-again'); await pg.wait_for_timeout(1500)   # the fight above may have ended
             if await ev('__beta.hud()') != 'engineer': await pg.keyboard.press('h'); await pg.wait_for_timeout(600)

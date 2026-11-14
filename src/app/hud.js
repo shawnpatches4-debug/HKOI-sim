@@ -242,7 +242,7 @@ export class Hud {
     for (const u of B.units) { if (!u.alive) { dead++; continue; } if (u.gone || !u.known) continue; known++; const d = Math.hypot(u.e - T.e, u.n - T.n); if (d < nd) { nd = d; near = u; } }
     this.put(n.group.mid, sum.waves > 1 ? `${sum.wave} of ${sum.waves}` + (B.waveAt != null ? ', beaten: lull' : '') : 'one group', 'm');
     this.put(n.teams.mid, `${known} located, ${dead} destroyed` + (s.spectator ? `, ${B.units.filter(u => u.alive && !u.gone).length} alive` : ''), 'm');
-    this.put(n.near.mid, near ? `${near.spec.name}, ${Math.round(nd / 10) * 10} m, ${brg3(Math.atan2(near.e - T.e, near.n - T.n) * 180 / Math.PI)}°` : 'none located', 'm');
+    this.put(n.near.mid, near ? `${near.spec.name}, ${Math.round(nd / 10) * 10} m, bearing ${brg3(Math.atan2(near.e - T.e, near.n - T.n) * 180 / Math.PI)}°` : 'none located', 'm');
     this.put(n.fired.mid, `${sum.fired} at us, ${sum.hits} hit${sum.hits === 1 ? '' : 's'}`, 'm' + (sum.hits ? ' bad' : ''));
   }
   // inside a seat the engineer display shrinks to one line

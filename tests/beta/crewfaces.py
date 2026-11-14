@@ -61,7 +61,7 @@ async def main():
                     for i, (label, im) in enumerate(part): sheet.paste(im.resize((1280, 400), Image.LANCZOS), (150, 400 * i)); d.text((6, 400 * i + 190), label, fill=(230, 239, 233))
                     path = os.path.join(OUT, 'faces_%s_%d.png' % (name, k // per + 1)); sheet.save(path); print('saved', path)
             await strips(STATES, 'states')
-            await strips([('%s %+.1f' % (c, v), {}, {c: v}) for c, v in CHANNELS], 'channels')
+            if os.environ.get('CHANNELS') == '1': await strips([('%s %+.1f' % (c, v), {}, {c: v}) for c, v in CHANNELS], 'channels')   # every single channel at full strength: only when asked for (it takes two minutes)
             # the same two seconds of a shaken man going to steady, stepped at four frame rates: the channels must agree
             res = {}
             for fps in (30, 60, 144, 240):
