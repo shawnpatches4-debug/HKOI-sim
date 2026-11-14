@@ -1,3 +1,17 @@
+# STATE AT 12:30 UTC 14 Nov 2026 (read this first; written before Shawn went to sleep)
+Shawn's orders in force: ONE full release, NO publish before it ("dont send me a playable version untill the full release"); progress pictures welcome; free rein, no need to ask permission; honest numbers.
+Branch claude/loving-newton-czylil holds everything merged so far (pushed): graphics, shell first pass, interior through the loader's climb, director + X-ray second pass (final), sound second pass, enemy vehicles battle logic + drawing, numbers screens, stress test, crew stress.
+Helper branches NOT yet merged (git worktrees under .claude/worktrees/, branch worktree-agent-<id>); before any merge `git ls-tree -r --name-only <branch> | grep -c '^\.cache$'` must print 0:
+- a6317d67f072c9c13 shell third pass (smaller panels, drop-down bar, distinctive faces: commander and gunner still look alike, weapons box incl. sabot).
+- afd3cb6297e3a4e79 sound third pass (four crew voices, made lines, faint crew outside).
+- a8f1783fd0b453374 commander view on the map + first-person drone camera (owns mapview.js, enemyviews.js; new optional commander() fields: picture.r_m, predict.kind/r_m/eta_s/path, fire, intel).
+- a6076b9f9c7e61095 enemy AI second pass (commander controls the opening, salvo timing, belief spread, route prediction; option enemyAI 'classic'; needs before/after tables at 200 battles a row for Shawn, honest either way).
+- a1ca56b1deb21a340 interior fixes (merged through 68a1c58). OPEN FAULT: loader's periscope picture mostly black in the new build (see scratchpad int/e3); suspect scenery/tank part in front of the head or the tone-mapping line in screenMaterial (src/render/interior_parts.js). Periscopes are Shawn's top open request: he wants pictures.
+After each merge: node tests/battle/battle.test.js, node --check on copies of src/app/main.js and pages.js, node tests/motion/harness.mjs check, node tests/app/director.test.mjs, bash tests/interior/run.sh, commit, push.
+Then: bash tools/dev.sh check, tests/beta/pages.py, shell.py, sound.py, replay.py, director.py on the merged build (one headless browser at a time, tools/run_test.sh; a page load takes about 4 minutes in software); fix the 'missile inbound' banner staying up after the tank is destroyed; retake the interior killing-hit picture (stretched crew figure); WORKLOG; Notion R&D Log entry; compare the live page's file list; bash tools/dev.sh pub; publish to the "HKOI Battlefield Beta" artifact (every file of build/beta_pub except assets/crew... NOTE the original crew models in assets/crew ARE now used in the seats by Shawn's later order, so check what the build needs before leaving them out).
+Unverified by anyone: sound (never heard), motion at real frame rates, performance on a real graphics card.
+Shawn's open questions are listed in the last WORKLOG entries and in the chat: UAZ hard-top, enemy tank paint, turret throw height, BMP-2M tubes, X-ray blood strength, fog-of-war launch shot, three Abrams endings (he said no for now).
+
 # Hand-off: where the project stands (13 Nov 2026, about 15:15 CT)
 
 ## What exists on `main`
