@@ -46,7 +46,7 @@ async def main():
             T3 = [('drv_forward', "lk('in_drv', 0, 0, 1)"), ('drv_tbar_close', "lk('in_drv', 0, -14, 1.9)"), ('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])")]
             T3 += [(f'port{i}_{d}', f"(__beta.interior.setCupolaHatch(0, true), lk('in_cdr', {i * 45 + 8 if i < 4 else i * 45 + 8 - 360}, 20, 1))") for i, d in enumerate(['front', 'right_front', 'right', 'right_rear', 'rear', 'left_rear', 'left', 'left_front'])]
             T3 += [('hatch_open_protected', "(__beta.interior.setCupolaHatch(1, true), __beta.interior.cupUser = true, lk('in_cdr', 8, 34, 1))"), ('hatch_open', "(__beta.interior.setCupolaHatch(2, true), lk('in_cdr', 8, 44, 1))"), ('cdr_forward', "(__beta.interior.setCupolaHatch(0, true), lk('in_cdr', 0, 0, 1))"),
-                   ('cdr_hkoi_close', "lk('in_cdr', 82, -10, 2.4)"), ('cdr_hkoi_crew_page', "(__beta.interior.hkPage = 2, lk('in_cdr', 82, -10, 2.4))"), ('gnr_forward', "(__beta.interior.hkPage = 0, lk('in_gnr', 0, 0, 1))"), ('gnr_left', "lk('in_gnr', -70, 0, 1)"), ('gnr_aux_sight', "lk('in_gnr', -33, 25, 2.6)"),
+                   ('cdr_hkoi_close', "lk('in_cdr', 74, -6, 2.2)"), ('cdr_hkoi_crew_page', "(__beta.interior.hkPage = 2, lk('in_cdr', 74, -6, 2.2))"), ('gnr_forward', "(__beta.interior.hkPage = 0, lk('in_gnr', 0, 0, 1))"), ('gnr_left', "lk('in_gnr', -70, 0, 1)"), ('gnr_aux_sight', "lk('in_gnr', -33, 25, 2.6)"),
                    ('ldr_forward', "lk('in_ldr', 0, 0, 1)"), ('ldr_periscope', "lk('in_ldr', -46, 29, 2.2)"), ('cut_left', "cutv(-5.2, 2.4, 3.0)"), ('cut_above', "cutv(-0.6, -1.5, 8.5)")]
             for name, js in T3: await shot('third_' + name, js)
             await pg.evaluate("void (lk('in_drv', 0, -6, 1.3), __beta.setPlaying(true))")
@@ -59,6 +59,11 @@ async def main():
             print('lay', await pg.evaluate('stepTo(b => !!b._rf)'), await pg.evaluate('__beta.tank.turretYaw')); await pg.wait_for_timeout(6000); print('turret', await pg.evaluate('__beta.tank.turretYaw'))
             for name, js in CU: await shot('cut_turned_' + name, js)
             await shot('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])"); await shot('drv_forward', "lk('in_drv', 0, 0, 1)")
+            await shot('gnr_left_breech', "lk('in_gnr', -70, 0, 1)")
+            # the T-bar at work: run the battle on until the vehicle is under way, then stills from the driver's seat with the clock running
+            print('moving', await pg.evaluate('stepTo(b => Math.abs(b.tank.v || 0) > 2)')); await pg.evaluate("void (lk('in_drv', 0, 0, 1), __beta.setPlaying(true))")
+            for i in range(4): await pg.wait_for_timeout(4000); print('drive', await pg.evaluate('JSON.stringify({t: +__beta.battle.t.toFixed(1), v: +(__beta.battle.tank.v || 0).toFixed(1), steer: +__beta.interior.st.steer.toFixed(2), throttle: +__beta.interior.st.thr.toFixed(2), gear: +__beta.interior.st.gear.toFixed(2)})')); await pg.screenshot(path=os.path.join(out, f'{tag}_drv_moving_{i}.png'), timeout=180000)
+            await pg.evaluate('void __beta.setPlaying(false)')
         if which in ('full', 'everything'):
             for name, js in full(): await shot('full_' + name, js, 3600)
             # the T-bar, twist grip and gear selector while the vehicle moves and turns: a short run of stills from the driver's seat

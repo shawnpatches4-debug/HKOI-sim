@@ -237,8 +237,9 @@ export class Interior {
     if (cut) { const lc = _v.copy(this.s.camera.position); this.hul.worldToLocal(lc); const el = Math.atan2(lc.y - 0.2, Math.hypot(lc.x, lc.z)) / DEG;
       if (this.cutTop ? el < 46 : el > 56) this.cutTop = !this.cutTop; if (!this.cutSide || lc.x * this.cutSide < -0.35) this.cutSide = lc.x >= 0 ? 1 : -1;
       const n = _v2, p = _v; if (this.cutTop) { n.set(0, 1, 0); p.set(0, DIM.RF - 0.12, 0); } else { n.set(this.cutSide, 0, 0); p.set(this.cutSide * 0.22, 0, 0); }
-      p.applyMatrix4(this.hul.matrixWorld); n.transformDirection(this.hul.matrixWorld); const d0 = n.dot(p); SHARED.uClip.value.set(n.x, n.y, n.z, -d0); this.plane.normal.copy(n).negate(); this.plane.constant = d0; }
+      p.applyMatrix4(this.hul.matrixWorld); n.transformDirection(this.hul.matrixWorld);  const d0 = n.dot(p); SHARED.uClip.value.set(n.x, n.y, n.z, -d0); this.plane.normal.copy(n).negate(); this.plane.constant = d0; }
 
+    { const lids = !(cut && this.cutTop); if (P.hatch.visible !== lids) P.hatch.visible = P.cupHatch.visible = lids; }   /* with the roof lifted off, the two hatch lids go with it */
     // ---- displays
     this._sights(dt, s, seat, cut); this._draw(dt, s, hk, info);
   }
