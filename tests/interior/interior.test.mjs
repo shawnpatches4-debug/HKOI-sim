@@ -35,7 +35,7 @@ function script(R, t) {
   if (!T.loaded && t >= 6) { T.loadT = Math.min(6, t - 6); if (T.loadT >= 6) { T.loaded = true; T.loadT = 0; } }
   B.va = t > 14 && t < 24; V.info = B.va ? [{ tt: { short: 'Kornet' }, range: 2400 - (t - 14) * 200, brg: 134, cued: t > 15, tracked: t > 16 }, { tt: { short: 'FPV' }, range: 900, brg: 350, drone: true }] : [];
   V.aimAt = t > 17 && t < 20 ? new THREE.Vector3(300, 20, -400) : null; tank.recoil = t > 18 && t < 19 ? 0.12 * ((t * 7) % 1) : 0;
-  T.ai.ldr.up = t > 42 && t < 48; T.alive = t < 55;
+  T.ai.ldr.up = t > 42 && t < 48; T.ai.ldr.upAt = t > 48 ? [[42, 48]] : t > 42 ? [[42, 1e9]] : []; T.alive = t < 55;
 }
 // the crew: bone trees read straight from the model files (no drawing needed to test how they move)
 const fs = await import('node:fs'), ASSETS = process.env.HK_ASSETS || '';

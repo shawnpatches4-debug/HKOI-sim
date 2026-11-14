@@ -121,9 +121,9 @@ async def main():
         if which == 'ldrup':   # the loader opening his hatch, climbing up, firing his machine gun and coming down
             real = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(b.tank.ai && b.tank.ai.ldr && b.tank.ai.ldr.up) && b.tank.alive && n++ < 3000) __beta.runTo(b.t + 0.1); return !!(b.tank.ai && b.tank.ai.ldr && b.tank.ai.ldr.up) && b.tank.alive ? +b.t.toFixed(1) : null; })()")
             print('loader goes up at', real); tagk = 'real' if real is not None else 'staged'
-            if real is None: await pg.evaluate("void (window.forceUp = true, (() => { const L = __beta.battle.tank.ai.ldr; Object.defineProperty(L, 'up', { get: () => window.forceUp, set() {}, configurable: true }); })())")
+            if real is None: await pg.evaluate("void (window.forceUp = true, (() => { const L = __beta.battle.tank.ai.ldr; Object.defineProperty(L, 'up', { get: () => window.forceUp, set() {}, configurable: true }); L.upAt = [[__beta.battle.t, 1e9]]; })())")
             await pg.evaluate("void (window.T0 = __beta.battle.t, window.fire = () => { const b = __beta.battle, T = b.tank, a = ((T.h || 0) + 30) * Math.PI / 180; b._mg = { t: b.t - 0.3, dur: 3, m240: true, e: T.e + Math.sin(a) * 400, n: T.n + Math.cos(a) * 400, R: 400 }; })")
-            UP = [0.05, 0.3, 0.55, 0.8, 1.05, 1.35, 1.6, 1.9, 2.2, 2.6, 3.1, 3.9]
+            UP = [0.05, 0.35, 0.6, 0.85, 1.1, 1.4, 1.7, 2.0, 2.3, 2.75, 3.3, 4.1]
             for i, dtt in enumerate(UP):
                 await shot(f'ldr_{tagk}_first_person_{i:02d}_{dtt}s', f"(__beta.runTo(T0 + {dtt}), lk('in_ldr', 0, 0, 1))")
                 if i in (3, 6, 9, 11): await shot(f'ldr_{tagk}_from_cdr_{i:02d}_{dtt}s', "lk('in_cdr', -78, 6, 1)"); await shot(f'ldr_{tagk}_from_gnr_{i:02d}_{dtt}s', "lk('in_gnr', -120, 22, 1)"); await shot(f'ldr_{tagk}_outside_{i:02d}_{dtt}s', "outv(5.0, 3.4, 215)")
@@ -131,7 +131,7 @@ async def main():
             staged_fire = await pg.evaluate("(() => { const b = __beta.battle; if (!(b._mg && b._mg.m240 && b.t < b._mg.t + 3)) { fire(); return true; } return false; })()"); print('burst staged:', staged_fire)
             await shot(f'ldr_{tagk}_firing_first_person', "(__beta.runTo(__beta.battle.t + 0.5), lk('in_ldr', 0, 0, 1))"); await shot(f'ldr_{tagk}_firing_from_cdr', "lk('in_cdr', -78, 6, 1)"); await shot(f'ldr_{tagk}_firing_outside', "outv(5.0, 3.4, 215)"); await shot(f'ldr_{tagk}_firing_outside_front', "outv(6.0, 2.6, 330)")
             print('firing', await pg.evaluate('JSON.stringify({firing: __beta.interior.mgFiring, mgYaw: +__beta.interior.st.mgYaw.toFixed(1), pivot: !!__beta.interior.mgPivot})'))
-            if real is None: await pg.evaluate("void (window.forceUp = false, window.T1 = __beta.battle.t)")
+            if real is None: await pg.evaluate("void (window.forceUp = false, window.T1 = __beta.battle.t, __beta.battle.tank.ai.ldr.upAt[__beta.battle.tank.ai.ldr.upAt.length - 1][1] = __beta.battle.t)")
             else: print('comes down at', await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (b.tank.ai.ldr.up && b.tank.alive && n++ < 3000) __beta.runTo(b.t + 0.1); window.T1 = b.t; return +b.t.toFixed(1); })()"))
             for i, dtt in enumerate([0.3, 0.7, 1.1, 1.5, 2.0]): await shot(f'ldr_{tagk}_down_first_person_{i}_{dtt}s', f"(__beta.runTo(T1 + {dtt}), lk('in_ldr', 0, 0, 1))")
             await shot(f'ldr_{tagk}_down_from_cdr', "lk('in_cdr', -78, 6, 1)")

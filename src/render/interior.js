@@ -206,8 +206,13 @@ export class Interior {
     // the loader going up to his machine gun and coming down: one number U on the battle clock (0 at his station, 1 standing behind the gun).
     // The battle gives him 4 s to get up before he may fire and 2 s to get down before he may load: the act is fitted inside those.
     { const hurt = (this.fxS && this.fxS.blood.ldr === 'killed') || !!(cs0 && cs0.on && cs0.who.ldr.status !== 'ok' && cs0.who.ldr.status !== 'wounded'), lu = ldrUp && T.alive && !hurt;   /* a loader who is down is not standing in his hatch: he drops back inside */ if (lu !== L.lu) { L.lu = lu; L.luT = B.t; L.luU = this.st.ldrU; } if (B.t < L.luT) { L.luT = B.t; L.luU = lu ? 0 : this.st.ldrU; }
-      this.st.ldrU = lu ? clamp(L.luU + (B.t - L.luT) / 3.8, 0, 1) : clamp(L.luU - (B.t - L.luT) / 1.9, 0, 1); }
-    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.13) / 0.25), cs0 && cs0.abandoned ? 1 : 0); P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
+      // The battle keeps the spells he is up as [time up, time down] and allows 4 s to get up and 2 s to get down: U is read straight off
+      // those times, so a replay or a rewind shows the same climb. (Without that list, the same act is timed from when the change was seen.)
+      const spells = A.ldr && A.ldr.upAt; let u = lu ? clamp(L.luU + (B.t - L.luT) / 4, 0, 1) : clamp(L.luU - (B.t - L.luT) / 2, 0, 1);
+      if (spells && !hurt) { u = 0; for (const sp of spells) { if (B.t < sp[0]) continue; const top = Math.min(1, (Math.min(B.t, sp[1]) - sp[0]) / 4), v = B.t < sp[1] ? top : top * clamp(1 - (B.t - sp[1]) / 2, 0, 1); if (v > u) u = v; } }
+      else if (hurt) u = Math.max(0, this.st.ldrU - (sdt || 0) / 1.2);
+      this.st.ldrU = u; }
+    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.1) / 0.2), cs0 && cs0.abandoned ? 1 : 0); P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
     this._mg(B, T, sdt || 0);
     // the handles follow the turret, the T-bar follows the steering
     const yaw = this.tank.turretYaw || 0, hdg = s.shown ? s.shown.h : T.h, v = T.v || 0;
