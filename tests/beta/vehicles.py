@@ -5,7 +5,8 @@
 #   - no fault in the vehicle drawing and nothing on the page's red error bar,
 #   - a rewind puts a blown-off turret back and a jump forward shows a settled wreck.
 # Env: QUICK=1 pictures only (no frame-rate, rewind or loop checks), SHOTS=comma list of picture names to take (default all), W, H, WAITMS (per picture, default 3500), NOFPS=1 skips the frame-rate check.
-import asyncio, os, sys, json
+import asyncio, os, sys, json, time
+T0 = time.time()
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=high&spectator=1&play=1&biome=desert&force=light&seed=3&speed=1'
 HERE = os.path.dirname(os.path.abspath(__file__)); FAKE = open(os.path.join(HERE, 'vehicles_fake.js')).read()
@@ -16,7 +17,7 @@ SETUP = """void (() => {
   const uid = B.units.length ? B.units[0].id : 1, F = window.__vehFake({ e: B.tank.e, n: B.tank.n }, uid);
   window.__vt = 0; window.__F = F; B.vehicles = () => F(Math.ceil(window.__vt * 10 - 1e-6) / 10);
   const orig = V.update.bind(V); V.update = (bt, o) => orig(bt, Object.assign({}, o, { t: window.__vt, bt: Math.ceil(window.__vt * 10 - 1e-6) / 10, all: true }));   /* the test's own clock (the real battle stays paused) */
-  window.__go = (to, fps = 60) => { while (window.__vt < to - 1e-9) { window.__vt = Math.min(to, window.__vt + 1 / fps); V.update(B, { teams: b.teams() }); b.scene.fx.update(1 / fps); } return window.__vt; };
+  window.__go = (to, fps = 60) => { while (window.__vt < to - 1e-9) { window.__vt = Math.min(to, window.__vt + 1 / fps); V.update(B, { teams: b.teams() }); b.scene.fx.step(1 / fps); } return window.__vt; };   /* (the effects clock is stepped by hand too: the page only steps it while the battle plays) */
   window.__jump = to => { window.__vt = to; V.update(B, { teams: b.teams() }); };
   /* look at slot i from `back` metres towards the tank, `side` metres along the row, `h` metres up */
   window.__cam = (i, back, side, h) => { const D = Math.PI / 180, p = F.slot(i), be = Math.sin(F.brg * D), bn = Math.cos(F.brg * D); b.view(p[0] - be * back + bn * side, p[1] - bn * back - be * side, 0, h, p[0], p[1]); };
@@ -27,6 +28,7 @@ SHOTS = [
     (4.0, 'drive_uaz', '__cam(0, 24, 9, 2.2)'), (4.0, 'drive_bmp', '__cam(1, 28, 10, 2.6)'), (4.0, 'drive_t72', '__cam(2, 30, 11, 2.8)'), (4.0, 'drive_t90', '__cam(3, 30, -11, 2.8)'),
     (9.5, 'close_uaz', '__cam(8, 7, 4.5, 1.7)'), (9.5, 'close_bmp', '__cam(4, 10, 7, 2.3)'), (9.5, 'close_t72', '__cam(5, 11, 8, 2.6)'), (9.5, 'close_t90', '__cam(9, 11, -8, 2.6)'), (9.5, 'rear_t72', '__cam(5, -10, 7, 3.2)'),
     (9.5, 'aboard_uaz', '__cam(0, 7, 4.5, 1.7)'), (9.5, 't72_800', '__cam(5, 800, 0, 5)'),
+    (9.5, 't72_800_sight', 'void (__cam(5, 800, 0, 5), __beta.scene.camera.fov = 4, __beta.scene.camera.updateProjectionMatrix())'), (9.5, 'row_800_sight', 'void (__cam(4.5, 800, 0, 5), __beta.scene.camera.fov = 14, __beta.scene.camera.updateProjectionMatrix())'),
     (9.5, 'row_800', '__cam(4.5, 800, 0, 6)'), (9.5, 'row_250', '__cam(4.5, 250, 0, 8)'),
     (10.5, 'fire_bmp30', '__cam(1, 14, 9, 2.4)'), (11.03, 'fire_t72', '__cam(2, 16, 12, 2.8)'), (11.2, 'fire_t72_b', '__cam(2, 16, 12, 2.8)'),
     (12.9, 'uaz_dismount_a', '__cam(0, 6, 5, 1.7)'), (13.6, 'uaz_dismount_b', '__cam(0, 6, 5, 1.7)'), (14.8, 'uaz_dismount_c', '__cam(0, 6, 5, 1.7)'),
@@ -76,7 +78,7 @@ async def main():
             st = await pg.evaluate('__beta.scene.vehicles.status()')
             if st['ready'] == st['vehicles'] and st['vehicles'] > 0: break
             await pg.wait_for_timeout(500)
-        print('MODELS', json.dumps(st), errs[:4])
+        print('%3d s' % (time.time() - T0), 'MODELS', json.dumps(st), errs[:4])
         QUICK = os.environ.get('QUICK')
         if not os.environ.get('NOFPS') and not QUICK:
             r = await pg.evaluate(FPS); print('FRAME RATES', json.dumps(r)); await pg.evaluate('__jump(0)')
@@ -85,7 +87,7 @@ async def main():
         for s, name, cam in sorted(SHOTS, key=lambda x: x[0]):
             if ONLY and not any(name.startswith(o) for o in ONLY): continue
             await pg.evaluate('__go(%s)' % s); await pg.evaluate(cam); await pg.wait_for_timeout(WAIT)
-            await pg.screenshot(path=os.path.join(OUT, 'veh_%s.png' % name), timeout=120000); print(name, json.dumps(await pg.evaluate(CHECK)))
+            await pg.screenshot(path=os.path.join(OUT, 'veh_%s.png' % name), timeout=120000); print('%3d s' % (time.time() - T0), name, json.dumps(await pg.evaluate(CHECK)))
         if os.environ.get('COST'):
             # what one vehicle of each kind costs: the frame with only that vehicle, close up and far off, against the frame with none
             await pg.evaluate("void (window.__only = 0, __beta.battle.vehicles = () => window.__F(9.5).filter(v => v.id === window.__only), __jump(9.5))")
