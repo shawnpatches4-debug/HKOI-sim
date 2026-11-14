@@ -124,6 +124,8 @@ export class Interior {
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
   }
   turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
+  // for tests and pictures: point the head (degrees from the seat's own forward) and set the zoom; survives a change of seat made in the same breath
+  setLook(yaw, pitch, zoom = 1) { this.look.yaw = yaw; this.look.pitch = pitch; this.look.zoom = zoom; this.pendingLook = { yaw, pitch, zoom }; }
   zoomBy(d) { this.look.zoom = clamp(this.look.zoom * Math.exp(-d * 0.0012), 1, 3.4); }
 
   // ---------------------------------------------------------------- entering and leaving
@@ -131,7 +133,7 @@ export class Interior {
     const tk = this.tank, tur = tk.turret || tk.group, body = tk.body || tk.group; if (this.tur.parent !== tur) tur.add(this.tur); if (this.hul.parent !== body) body.add(this.hul);
     if (tk.turret) this.hul.position.copy(tk.turret.position); else { this.hul.position.set(0, 1.617, -0.025); this.tur.position.copy(this.hul.position); }
     const cut = mode === 'cut'; if (cut) this._near(); SHARED.uInside.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
-    this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; this.head.z = this.head.vz = this.head.x = this.head.vx = 0; this.head.up = 0; this.mode = mode; this.active = true;
+    if (this.pendingLook) { Object.assign(this.look, this.pendingLook); this.pendingLook = null; } else { this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; } this.head.z = this.head.vz = this.head.x = this.head.vx = 0; this.head.up = 0; this.mode = mode; this.active = true;
     this._marks(cut);   /* the floating map markers of the outside views would hang in front of the walls */
     if (this.ui && !cut) this.ui.show(`${SEATS[mode].name}'s seat · drag to look around, wheel to lean in, click a switch. The crew runs the vehicle; your clicks only change harmless things.`, 6500);
   }
@@ -149,7 +151,7 @@ export class Interior {
     if (!on) { if (this.active) this._leave(); return; }
     if (!this.built) this._build();
     if (!this.active || this.mode !== mode || (this.tank.turret && this.tur.parent !== this.tank.turret)) this._enter(mode);   /* also when the vehicle's model has only just arrived */
-    this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
+    this.pendingLook = null; this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
     if (this.crewOn && !this.crewAsked && s.volleys && s.volleys.assetBase) { this.crewAsked = true; import('./interior_crew.js').then(m => m.seatCrew(this, s.volleys.assetBase)).then(list => { this.crew = list; }).catch(e => console.warn('crew figures not shown:', e && e.message)); }
     if (this.crew) for (const c of this.crew) c.group.visible = c.key !== mode;   /* the viewer has taken that man's seat */
     const B = s.battle, T = B.tank, st = T.st || {}, info = (s.volleys && s.volleys.info) || [], A = T.ai || {}, P = this.part, L = this.last, sdt = s.playing ? dt * (s.speed || 1) : 0, D = DIM;
