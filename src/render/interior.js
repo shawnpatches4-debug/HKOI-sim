@@ -285,7 +285,7 @@ export class Interior {
     const brace = info.some(m => m.range < (m.drone ? 150 : 400)) ? 1 : 0, flinch = clamp(FX.shake, 0, 1), KEY = { gnr: 'in_gnr', cdr: 'in_cdr', ldr: 'in_ldr', drv: 'in_drv' };
     const grip = (part, x, y, z, out) => { part.updateMatrix(); _v.set(x, y, z).applyMatrix4(part.matrix); if (part.parent && part.parent !== this.tur && part.parent !== this.hul) { part.parent.updateMatrix(); _v.applyMatrix4(part.parent.matrix); } out[0] = _v.x; out[1] = _v.y; out[2] = _v.z; };
     for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
-      M.on = !gone; M.bodyOnly = this.mode === KEY[r]; M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
+      M.on = !gone; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff; M.noArms = M.bodyOnly && (r === 'cdr' || r === 'ldr');   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
       M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
       M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; }
     if (this.cupHatch >= 1 && men.cdr.state === 'steady') men.cdr.head[1] += SEATS.in_cdr.up * 0.75;   /* looking out through the ports when the hatch is up */

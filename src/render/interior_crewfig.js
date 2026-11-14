@@ -76,7 +76,7 @@ export class CrewFigures {
         for (const sd of [-1, 1]) { _c.copy(_a).addScaledVector(J.side, sd * 0.1); _c.y -= 0.01; this._ball(g, 'dark', _c, 0.03, 0.045, 0.045); }   /* ear cups */
         _c.copy(_a).addScaledVector(J.fwd, 0.085).addScaledVector(J.side, -0.05); _c.y -= 0.05; this._ball(g, 'dark', _c, 0.012, 0.012, 0.02);   /* microphone */
         if (M.blood) { _c.copy(J.chest).addScaledVector(J.fwd, 0.085).addScaledVector(J.side, 0.03); this._ball(g, 'blood', _c, 0.09, 0.12, 0.05); if (M.blood === 'killed') { _c.copy(J.hip).addScaledVector(J.fwd, 0.08); this._ball(g, 'blood', _c, 0.13, 0.08, 0.08); _c.copy(_a).addScaledVector(J.side, -0.06); this._ball(g, 'blood', _c, 0.07, 0.09, 0.08); } } }
-      for (let i = 0; i < 2; i++) { if (body) this._ball(g, 'cov', J.sh[i], 0.062); this._limb(g, 'cov', J.sh[i], J.el[i], 0.052); this._ball(g, 'cov', J.el[i], 0.048); this._limb(g, 'cov', J.el[i], J.ha[i], 0.043); this._ball(g, 'dark', J.ha[i], 0.046, 0.04, 0.05);
+      for (let i = 0; i < 2; i++) { if (body) this._ball(g, 'cov', J.sh[i], 0.062); if (!M.noArms) { if (body) this._limb(g, 'cov', J.sh[i], J.el[i], 0.052); this._ball(g, 'cov', J.el[i], 0.048); this._limb(g, 'cov', J.el[i], J.ha[i], 0.043); this._ball(g, 'dark', J.ha[i], 0.046, 0.04, 0.05); }
         this._limb(g, 'cov', J.hp[i], J.kn[i], 0.078); this._ball(g, 'cov', J.kn[i], 0.066); this._limb(g, 'cov', J.kn[i], J.ft[i], 0.058); _c.copy(J.ft[i]).addScaledVector(J.fwd, 0.07); _c.y -= 0.02; this._ball(g, 'dark', _c, 0.05, 0.045, 0.12); }
     }
     for (const k in this.mesh) { const m = this.mesh[k]; m.visible = m.count > 0; if (m.count) m.instanceMatrix.needsUpdate = true; }
