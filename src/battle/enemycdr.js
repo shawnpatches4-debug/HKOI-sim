@@ -43,7 +43,7 @@
 // and all stand within 40 degrees of each other, one that has a truck is sent 75 degrees round to a flank; one relocation order per review and never more than half the missile teams on
 // the move; a team is not moved again within 120 s; tanks in reserve are committed when the ambush is open and either the picture
 // is fresh (under 25 s) with the tank's gun heard or his teams firing, or two minutes have passed, or nobody has had a shot for
-// 90 s; he breaks contact when the share of teams and vehicles still able to fight falls to the crews' own breaking point plus 15
+// 90 s; he breaks contact when the share of teams and vehicles still able to fight falls to the crews' own breaking point plus 5
 // points, a tank counting as three teams and a BMP as two (an ordered withdrawal comes a little before a rout); his radio is lost 30% of the time when his vehicle is struck and
 // survives, and is silent while his team is pinned; his picture counts as "wrong" when it is more than 150 m from the truth.
 (function (root) {
@@ -188,9 +188,9 @@
       const later = (run) => { C.queue.push({ at: this.t + K.pass, run }); };
       const armed = M.teams.concat(M.vehs), wt = u => (u.veh ? u.K.weight : 1), sumW = a => a.reduce((x, u) => x + wt(u), 0), all = this.units.slice(this.waveFrom || 0).concat((this.vehs || []).filter(v => v.wave === C.wave && v.K.armed)), able = armed.filter(u => u.ammo > 0), nAll = sumW(all), nAble = sumW(able);
       // ---- break contact
-      if (this.opened && all.length >= 2 && able.length > 0 && able.length < all.length && nAble / nAll <= S.breakAt + 0.15 && !this._volleyActive() && !this._pending && !C.breaking) {
+      if (this.opened && all.length >= 2 && able.length > 0 && able.length < all.length && nAble / nAll <= S.breakAt + 0.05 && !this._volleyActive() && !this._pending && !C.breaking) {
         C.breaking = true;
-        later(() => { if (this._volleyActive() || this._pending) { C.breaking = false; return; } this._cdrOrder('all', 'break', `break contact: ${able.length} of ${all.length} teams and vehicles can still fight`, { by: 'own', off: ctx.off, wrong: false, why: 'an ordered withdrawal before the group is destroyed' });
+        later(() => { if (this._volleyActive() || this._pending) { C.breaking = false; return; } this._cdrOrder('all', 'break', `break contact: ${Math.round(100 * nAble / nAll)}% of the group's strength is left (${able.length} of ${all.length} teams and vehicles)`, { by: 'own', off: ctx.off, wrong: false, why: 'an ordered withdrawal before the group is destroyed' });
           for (const u of this._cdrMembers(C).teams) { u.gone = true; u.known = false; } for (const v of this._cdrMembers(C).vehs) v.gone = true; for (const k of T.known) k.done = true; });
         return;
       }

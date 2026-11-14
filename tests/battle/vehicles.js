@@ -31,6 +31,8 @@ function fight(opt, maxT, timing) {
   }
   finite(b.vehicles(), 'vehicles'); finite(b.commander(), 'commander'); finite(b.commanderAt(b.t / 2), 'commanderAt'); finite(b.vehReport(), 'vehReport'); finite(b.cdrReport(), 'cdrReport'); finite(b.summary(), 'summary');
   for (const u of b.units) { finite([u.e, u.n], 'unit'); b.intentOf(u); }
+  if (b.tank.known.some(k => k.id >= 100)) throw new Error('a vehicle got onto the list of located TEAMS');
+  for (const v of b.vehs || []) if (v.team && v.team.mounted && (!v.alive || !v.team.alive)) throw new Error('a team is still marked as riding in a lost vehicle');
   return { b, n, worst, total, result: !b.tank.alive ? 'lost' : b.over ? b.over.result : 'time' };
 }
 

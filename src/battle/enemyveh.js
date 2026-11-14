@@ -302,7 +302,8 @@
       const R = Math.hypot(T.e - v.e, T.n - v.n);
       if (this.t >= v.losAt) { v.losAt = this.t + 0.5; v.sees = T.alive && R <= this._vehSight(v) && W.los(v.e, v.n, K.agl, T.e, T.n, 2.2).clear; }
       if (v.sees) { v.lastSeen = this.t; const B = this.belief || (this.belief = {}); B.e = T.e; B.n = T.n; B.t = this.t;
-        const want = brgOf(v.e, v.n, T.e, T.n), d = angDiff(want, v.tur); v.tur = (v.tur + clamp(d, -K.turret * dt, K.turret * dt) + 360) % 360; v.onTarget = Math.abs(d) < 2; }
+        const want = brgOf(v.e, v.n, T.e, T.n), d = angDiff(want, v.tur); v.tur = (v.tur + clamp(d, -K.turret * dt, K.turret * dt) + 360) % 360; v.onTarget = Math.abs(d) < 2;
+        if (v.mobile) { const dh = angDiff(want, v.hull); if (Math.abs(dh) > 3) v.hull = (v.hull + clamp(dh, -K.turn * 0.5 * dt, K.turn * 0.5 * dt) + 360) % 360; } }   /* halted with the tank in sight, it turns its front to it */
       else v.onTarget = false;
       const stunned = this.t < v.suppressedUntil;
       v.sight = v.sees && !stunned ? v.sight + dt : 0;
@@ -479,10 +480,10 @@
         if (!u.veh || !isTank(u)) { out.push(u); continue; }
         const R = Math.hypot(T.e - u.e, T.n - u.n), moving = (T.v || 0) > 1.5, df = W.defilade(u.e, u.n, u.K.agl, T.e, T.n);
         const p = clamp((0.75 - R / 6000 - (moving ? 0.15 : 0)) * (df === 'hull' ? 0.6 : 1) * (HITK[this.skill] || 1) * u.K.hitK * (u.sightsHit ? 0.5 : 1), 0.05, 0.92);
-        X.stat.shots[u.kind] = (X.stat.shots[u.kind] || 0) + 1; u.shotsHere++;
+        X.stat.shots[u.kind] = (X.stat.shots[u.kind] || 0) + 1;
         this._vehFlash(u);
         if (X.rng.random() < p) { u.stat.gunHit++; u.lastShot = { t: this.t, weapon: '125mm', at: [T.e, T.n], dur: 0, hit: true }; out.push(u); continue; }
-        u.ammo--; u.fired++; u.lastShotT = this.t; u.readyAt = this.t + u.spec.reload; u.sight = u.spec.aim * SKILL[this.skill].aim * 0.5; u.hasShot = false;
+        u.shotsHere++; u.ammo--; u.fired++; u.lastShotT = this.t; u.readyAt = this.t + u.spec.reload; u.sight = u.spec.aim * SKILL[this.skill].aim * 0.5; u.hasShot = false;
         const tof = R / 1700; u.lastShot = { t: this.t, weapon: '125mm', at: [T.e, T.n], dur: 0, hit: false };
         this.ev(this.t, 'veh_shot', { vid: u.id, weapon: '125mm', at: [Math.round(T.e), Math.round(T.n)], dur: 0, hit: false });
         this.say(this.t + tof, 'enemy', u.id, `${u.K.name} #${u.id + 1} fires its main gun from ${km(R)}: the round cracks past, a miss.`, `about ${Math.round(p * 100)}% to hit ${moving ? 'a moving' : df === 'hull' ? 'a hull-down' : 'a halted'} vehicle at this range`);
@@ -643,7 +644,7 @@
       if (v.team && v.team.alive && v.team.mounted && (effect !== 'none' || !v.alive)) {
         const u = v.team, pLost = h.by === 'm2' ? (v.burning ? 0.6 : 0.35) : 0.85;
         if (X.rng.random() < pLost) { u.alive = false; u.state = 'dead'; u.mounted = false; this.ev(t, 'team_lost', { uid: u.id, by: h.by === 'm2' ? 'm2' : 'main' }); this.say(t, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} is lost with its vehicle.`, `riders in a ${v.K.name} struck by ${h.by === 'm2' ? '.50 fire' : 'a tank round'}: about ${Math.round(pLost * 100)}%`); if (h.by === 'm2') this.killedByMg = (this.killedByMg || 0) + 1; else this.killedByTank = (this.killedByTank || 0) + 1; }
-        else { u.suppressedUntil = Math.max(u.suppressedUntil || 0, t + 20); }
+        else { u.suppressedUntil = Math.max(u.suppressedUntil || 0, t + 20); if (!v.alive || !v.mobile) u.mounted = false; }   /* the survivors are out of it and pinned beside it */
       }
       if (v.alive && v.mobile && v.K.armed && effect !== 'catastrophic' && S.adapt >= 1 && v.state !== 'moving') {
         if (!v.canFire) { v.gone = true; this.say(t, 'enemy', v.id, `${h.name} cannot fire and pulls out.`, 'a vehicle that cannot shoot is only a target'); }
