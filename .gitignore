@@ -12,3 +12,4 @@ build/beta_pub/
 .claude/
 .cache
 build/beta_http/
+__pycache__/
