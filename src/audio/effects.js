@@ -160,6 +160,17 @@ export const Effects = {
     M.noise(v.in, v.t + 0.15, { dur: 2.6, attack: 0.2, hold: 0.8, type: 'bandpass', f0: 5200, f1: 2600, q: 0.8, gain: 0.07 * k });   /* a line venting */
     this._rattle(v.t + 0.1, 2.5);
   },
+  // A fire inside: the automatic fire suppression bottles discharge (a valve bang, then the roar of gas for about a second and a
+  // half), heard close inside; from outside only a dull thump and a short hiss. where: 'hull' | 'ammo' | 'engine' (the engine bay is
+  // behind a bulkhead: duller inside). Synthesised (slot 'extinguisher_in' takes a recording). ASSUMED sizes; nobody has listened.
+  extinguisher(where = 'hull') {
+    if (!this._live() || this.lite) return; const M = this.mix, out = this.seat === 'out', far = where === 'engine' || where === 'ammo';
+    const v = out ? M.voice('explosions', { far: M.far(Math.max(3, this.camDist || 10), 0.5), cut: 700, delay: 0.25 }) : M.voice('explosions', { direct: true, cabin: 0.6, cut: far ? 1800 : 0, delay: 0.25 });
+    if (!out && M.sample('extinguisher_in', v)) return;
+    M.tone(v.in, v.t, { f0: 160, f1: 60, dur: 0.12, gain: 0.5 }); M.noise(v.in, v.t, { dur: 0.02, attack: 0.0005, type: 'bandpass', f0: 1800, q: 1.5, gain: 0.6 });   /* the valve */
+    M.noise(v.in, v.t + 0.03, { dur: 1.6, attack: 0.03, hold: 0.7, type: 'bandpass', f0: 3800, f1: 1600, q: 0.6, gain: 0.32 });   /* the gas roaring out */
+    M.noise(v.in, v.t + 0.03, { dur: 1.2, attack: 0.05, hold: 0.4, color: 'pink', f0: 900, f1: 400, gain: 0.18 });
+  },
   // Something burst close by without striking (a near miss, heard inside): a dull thud through the hull, grit on the armour
   nearMiss(strength = 0.22) {
     if (!this._live()) return; const M = this.mix, v = M.voice('explosions', { direct: true, cabin: 0.5 }), k = Math.min(1, strength / 0.22);

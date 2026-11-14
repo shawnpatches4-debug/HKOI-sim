@@ -184,3 +184,37 @@ when the reporting team is dead, pinned or moving, and everything stops when he 
 - Expert and veteran crews firing together time their launches so the missiles arrive together, to within 1.5 / 1 s (A): the far
   launcher fires first. (Before, they launched together and the missiles arrived spread out by range.) Trained and green crews do not.
 - Unchanged: choice of firing position, the Kornet band of 2 to 5 km, shoot-and-scoot odds by crew level, suppression, morale.
+
+## Tank crew stress: how a hit frightens the crew (14 Nov 2026, after Shawn's report)
+Shawn's report: a Konkurs went through the hull side (front) into a fuel cell and started a fire; the veteran crew stayed "steady".
+Measured (`node tests/battle/crew_hit.js green trained veteran`, seed 26, the same hit): the old jolt was 0.20 for any hit + 0.15
+for a hole = 0.35, times the veteran gain 0.55 and the seat and leadership factors (about 0.8 to 1.0): +0.17 to +0.19. From his resting
+0.17 the commander reached 0.34 (the "strained" line is 0.35) and was back to 0.21 ten seconds later. There was no fire in the model.
+
+What a hit does now (src/battle/crew.js; every figure is an assumption by Claude, none from trials or from Shawn) (A):
+| Event | Rise for a trained man (before seat and leadership factors) | Scaled by |
+|---|---|---|
+| Any hit, armour held or not (the jolt) | 0.20 | gain: green 1.4, trained 1.0, expert 0.75, veteran 0.55 |
+| Trophy fires (a warhead defeated a few metres away) | 0.08 (was 0.04); a loader up in his hatch 0.10 | gain |
+| The hit gets through the armour | +0.30 for all four (was 0.15) | shock: green 1.2, trained 1.0, expert 0.9, veteran 0.8 |
+| ... for a man near the hole | up to +0.20 more: all of it within 1 m of the entry point, none beyond 3.5 m (seat positions of the damage model) | shock |
+| ... and it starts a fire inside (fuel cell, hull rack, engine or transmission, bustle ammunition) | +0.25 more for all four | shock |
+| The man himself wounded / a crewmate wounded / a crewmate killed or out of action | 0.30 / 0.15 / 0.30 (were 0.25 / 0.12 / 0.20) | shock |
+Why a separate "shock" scale: experience damps the routine fright of a fight (warnings, near misses, Trophy) a great deal, but much
+less the fright of a jet through the hull or a fire inside, which few men have lived through. Veterans still feel less and calm down
+fastest (calm-down time 14 s against 28 s trained and 45 s green, unchanged), and still freeze least (6% of the times they reach
+"panicked", unchanged).
+A fire inside burns until the extinguishers have put it out and the crew believes it: 8 s for the hull (fuel cell, hull rack), 20 s
+for the engine compartment (the driver pulls the second shot), 15 s for the bustle ammunition. While it burns nobody's stress can fall
+below 0.62 (just over the "shaken" line 0.60) and the resting level is 0.25 higher, so EVERY crew level is at least shaken until the
+fire is out (or the crew bails out). The log says "Fire inside: ..." and "Fire out."; `crewState().fire` gives { where, since, until }.
+Nothing else changed: the state lines, the effects of each state, freezing, stalls, flinching, buttoning up and bailing out are as
+before. With `crewStress: false` the battle is exactly the battle from before the model (tests/battle/crew.js part 1).
+
+Measured, the same hit (Konkurs, hull side front, fuel cell, fire; nobody wounded), stress of commander / gunner / loader / driver:
+| Crew | Before the hit | 1 s after | 10 s after | 40 s after | Before this change, 1 s after |
+|---|---|---|---|---|---|
+| Veteran | 0.23 0.23 0.30 0.26 (steady) | 0.77 0.82 0.93 0.89 (shaken, shaken, panicked, panicked) | 0.60 0.66 0.76 0.73 (shaken) | about 0.19 (steady) | 0.34 0.34 0.47 0.38 (steady, steady, strained, strained) |
+| Green | already 0.88 to 1.00 (panicked) | 1.00 all four | 0.96 | 0.60 to 0.67 (shaken) | 1.00 all four |
+A hole without a fire (an RPG through the hull rear, nobody hurt), veteran: 0.18 before, 0.55 to 0.70 one second after (strained,
+the loader shaken), back to steady after about 30 s. A hit the armour held (turret front), veteran: +0.07 to +0.08 (a jolt).

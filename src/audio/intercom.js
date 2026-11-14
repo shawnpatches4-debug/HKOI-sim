@@ -17,6 +17,8 @@
 export const VOICE_RATE = { CDR: 1.0, GNR: 0.975, LDR: 1.03, DRV: 0.955, ANY: 1.0, HQ: 1.0 };
 
 const rnd = (a, b) => a + Math.random() * (b - a);
+// how much a frightened man's delivery is pushed at stress 1 (see Intercom._start): speed, level, and the tremble from "shaken" up
+export const STRESS = { rate: 0.06, gain: 0.41, tremble: 0.25, breakFrom: 0.38 };   /* gain 0.41 = +3 dB; breakFrom 0.38 = stress 0.60, the "shaken" line */
 
 export class Intercom {
   constructor(mix) {
@@ -57,6 +59,9 @@ export class Intercom {
       try { const a = await get(base + name); if (a) { const j = JSON.parse(new TextDecoder().decode(a)); if (j && j.e && j.strips) { idx = j; break; } } } catch (e) { /* try the next */ }
     }
     if (!idx) return; this.index = idx;
+    /* the overlay of hit calls (tools/audio/build_panic.py: the pack's fire calls and each man's scream, in the crew4 voices) */
+    if (idx.revoiced) try { const a = await get(base + 'crewpanic_index.json'), o = a ? JSON.parse(new TextDecoder().decode(a)) : null;
+      if (o && o.e && o.strips) { Object.assign(idx.strips, o.strips); for (const w in o.e) { const E = idx.e[w] || (idx.e[w] = {}); for (const ev in o.e[w]) E[ev] = (E[ev] || []).concat(o.e[w][ev]); } } } catch (e) { /* no overlay: those lines stay silent */ }
     await Promise.all(Object.keys(idx.strips).map(async k => {
       try { const a = await get(base + idx.strips[k]); if (a) this.bufs[k] = await this.ctx.decodeAudioData(a); } catch (e) { /* that speaker stays silent */ }
     }));
@@ -78,12 +83,13 @@ export class Intercom {
   // delay: seconds before it may start. group: lines that belong together (when one is cut or dropped, the rest go too).
   // Returns false when the pack has no such line (the caller then knows the crewman stays silent).
   // needs: 'WHO.event' of the line this one answers (a driver's "Roger" is only said if the order was in fact spoken).
-  request(who, ev, { level = 1, pri = 1, ttl = 1.5, delay = 0, group = null, gap = null, needs = null } = {}) {
+  // stress: the man's own stress 0..1 (src/battle/crew.js); above "strained" his delivery is pushed (see _start).
+  request(who, ev, { level = 1, pri = 1, ttl = 1.5, delay = 0, group = null, gap = null, needs = null, stress = 0 } = {}) {
     if (!this.takes(who, ev)) return false;
     const now = this.ctx.currentTime, key = who + '.' + ev;
     if (this.lastAsk[key] != null && now - this.lastAsk[key] < 4) return true;   /* just asked for: once is enough */
     this.lastAsk[key] = now;
-    this.queue.push({ who, ev, level, pri, due: now + delay, dead: now + delay + ttl, group, gap, needs, asked: now });
+    this.queue.push({ who, ev, level, pri, due: now + delay, dead: now + delay + ttl, group, gap, needs, asked: now, stress });
     return true;
   }
   flush(note = 'flushed') { for (const q of this.queue) this.dropped.push({ who: q.who, ev: q.ev, why: note }); this.queue.length = 0; if (this.cur) this._cut(this.ctx.currentTime); }
@@ -123,11 +129,16 @@ export class Intercom {
   }
   _start(q, now) {
     const c = this.ctx, x = this._pick(q.who, q.ev, q.level), net = q.who === 'HQ' ? this.radio : this.crew, isRadio = q.who === 'HQ';
-    const rate = this.index.revoiced ? 1 : VOICE_RATE[q.who] || 1,   /* re-voiced strips already differ per man */
+    // Stress in the delivery, on top of the take chosen for his level. k: 0 at "strained" (0.35) and below, 1 at stress 1.
+    // ASSUMPTIONS (nobody has listened): a frightened man talks faster and higher (up to +6% speed, which also raises the pitch about
+    // one semitone), louder (up to +3 dB) and his voice breaks (a 7 to 11 Hz tremble in level, up to +-25%, from "shaken" up).
+    const k = Math.max(0, Math.min(1, ((q.stress || 0) - 0.35) / 0.65)), push = q.who === 'HQ' ? 0 : k;
+    const rate = (this.index.revoiced ? 1 : VOICE_RATE[q.who] || 1) * (1 + STRESS.rate * push),   /* re-voiced strips already differ per man */
       t0 = now + 0.02, tClip = t0 + 0.07, len = x[2] / rate, tEnd = tClip + len;
     const line = c.createGain(); line.gain.value = 1; line.connect(net.in);
-    const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.bufs[x[0]]; s.playbackRate.value = rate; g.gain.value = rnd(0.9, 1.1);
+    const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.bufs[x[0]]; s.playbackRate.value = rate; g.gain.value = rnd(0.9, 1.1) * (1 + STRESS.gain * push);
     s.connect(g); g.connect(line); if (!isRadio) g.connect(this.leakIn); s.start(tClip, x[1], x[2]);
+    if (push > STRESS.breakFrom) { const lfo = c.createOscillator(), d = c.createGain(); lfo.frequency.value = rnd(7, 11); d.gain.value = STRESS.tremble * (push - STRESS.breakFrom) / (1 - STRESS.breakFrom) * g.gain.value; lfo.connect(d); d.connect(g.gain); lfo.start(tClip); lfo.stop(tClip + len + 0.1); }
     this._click(line, t0, isRadio ? 0.5 : 0.35, isRadio);                         /* key down */
     if (isRadio) this.mix.noise(line, tEnd + 0.03, { dur: 0.09, attack: 0.004, hold: 0.05, type: 'bandpass', f0: 1700, q: 0.4, gain: 0.5 });   /* squelch tail */
     else this._click(line, tEnd + 0.05, 0.25, false);                             /* key up */
@@ -135,7 +146,7 @@ export class Intercom {
     h.cancelScheduledValues(t0); h.setValueAtTime(0, t0); h.linearRampToValueAtTime(hv, t0 + 0.02); h.setValueAtTime(hv, tOff); h.linearRampToValueAtTime(0, tOff + 0.04);
     const end = tEnd + (isRadio ? 0.2 : 0.1);
     this.cur = { who: q.who, ev: q.ev, pri: q.pri, level: q.level, group: q.group, line, src: s, end, gapAfter: q.gap != null ? q.gap : rnd(0.22, 0.5) };
-    this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], made: x[6] || '', pri: q.pri, level: q.level, waited: +(now - q.asked).toFixed(2) });
+    this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], made: x[6] || '', pri: q.pri, level: q.level, stress: +(q.stress || 0).toFixed(2), waited: +(now - q.asked).toFixed(2) });
     if (this.said.length > 400) this.said.splice(0, 100);
   }
   // somebody more important keys his microphone: the speaker is cut off in mid-word

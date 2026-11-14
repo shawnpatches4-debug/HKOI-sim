@@ -39,7 +39,7 @@ export class Sound {
     if (!ctx) { const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext); if (!AC) return; ctx = new AC(); }
     this.ctx = ctx; this.mix = new Mixer(ctx, this.vol); this.mix.setVolume(this.vol, this.on);
     this.icom = new Intercom(this.mix);
-    this.talk = new CrewTalk(this.icom, { warn: (l, r) => this._warn(l, r), blip: k => this.blip(k), smoke: () => this.smoke(this.camDist || 0) });
+    this.talk = new CrewTalk(this.icom, { warn: (l, r) => this._warn(l, r), blip: k => this.blip(k), smoke: () => this.smoke(this.camDist || 0), extinguisher: w => this.extinguisher(w) });
     this._beds();
   }
   setOn(v) { this.on = v; if (this.mix) this.mix.setVolume(this.vol, v); }
