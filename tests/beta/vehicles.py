@@ -86,6 +86,16 @@ async def main():
             if ONLY and not any(name.startswith(o) for o in ONLY): continue
             await pg.evaluate('__go(%s)' % s); await pg.evaluate(cam); await pg.wait_for_timeout(WAIT)
             await pg.screenshot(path=os.path.join(OUT, 'veh_%s.png' % name), timeout=120000); print(name, json.dumps(await pg.evaluate(CHECK)))
+        if os.environ.get('COST'):
+            # what one vehicle of each kind costs: the frame with only that vehicle, close up and far off, against the frame with none
+            await pg.evaluate("void (window.__only = 0, __beta.battle.vehicles = () => window.__F(9.5).filter(v => v.id === window.__only), __jump(9.5))")
+            async def stats(only, i, back):
+                await pg.evaluate('void (window.__only = %d, __jump(9.5), __cam(%s, %s, 3, 2.5))' % (only, i, back)); await pg.wait_for_timeout(WAIT); await pg.evaluate('__jump(9.5)'); await pg.wait_for_timeout(WAIT); return await pg.evaluate('(() => { const s = __beta.scene.stats(); return [s.calls, s.triangles]; })()')
+            for name, vid, i in [('UAZ-469', 109, 8), ('BMP-2', 105, 4), ('T-72B3', 106, 5), ('T-90M', 110, 9)]:
+                row = []
+                for back in (12, 2000):
+                    base = await stats(0, i, back); one = await stats(vid, i, back); row.append('%s m: +%d draw calls, +%d triangles (frame %d calls, %d triangles)' % (back, one[0] - base[0], one[1] - base[1], one[0], one[1]))
+                print('COST', name, ' | '.join(row))
         if QUICK: print('QUICK', json.dumps(await pg.evaluate(CHECK)), errs[:5]); await b.close(); return
         # rewind and jump: the state must come from the data and the time alone
         rw = await pg.evaluate("""(() => { const V = __beta.scene.vehicles, w = V.view(106), out = {}; __go(Math.max(window.__vt, 26)); out.offY = +w.turret.position.y.toFixed(2); out.offX = +w.turret.position.x.toFixed(2);

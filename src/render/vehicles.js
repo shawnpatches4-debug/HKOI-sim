@@ -111,6 +111,7 @@ export class VehicleView {
     if (this.turret) { this.turret0 = this.turret.position.clone(); this.gun0 = this.gun ? this.gun.position.clone() : null; }
     this.ready = true; this.lod = -1; this.scorch = -1; this.th = null;
   }
+  hide() { if (this.group.visible) this.group.visible = false; if (this.loose) this.loose.visible = false; }
   dispose() { this.gone = true; this.o.scene.units.remove(this.group); if (this.loose) this.o.loose.remove(this.loose); }
   // where a point of the vehicle is in the world. p: [x, y, z] in the vehicle's frame (x = its left, z = its nose)
   _world(p, out) { return out.set(p[0], p[1], p[2]).applyMatrix4(this.group.matrixWorld); }
@@ -449,14 +450,16 @@ export class Vehicles {
   _update(battle, o) {
     const list = battle && typeof battle.vehicles === 'function' ? battle.vehicles() : null;
     if (battle !== this._battle) { this.reset(); this._battle = battle; }
-    if (!list || !list.length) { this._t = -1; return; }
+    if (!list || !list.length) { this._t = -1; for (const w of this.views.values()) w.hide(); return; }
     const sc = this.scene, C = this.C, t = o.t != null ? o.t : battle.t, snap = this._t < 0 || t < this._t - 1e-6 || t > this._t + 2.5;
     C.t = t; C.bt = o.bt != null ? o.bt : Math.max(t, battle.t); C.dt = snap ? 0 : t - this._t; C.snap = snap; C.all = !!o.all; C.fx = sc.fx; C.fovK = sc.camera.fov / 40; C.q = QF[sc.quality] || 0.85; C.thermal = sc.thermal || 0;
     C.units = battle.units; C.tank.e = battle.tank.e; C.tank.n = battle.tank.n; C.tank.h = battle.tank.h || 0; this._t = t;
     sc.camera.updateMatrixWorld(); this._frustum.setFromProjectionMatrix(this._pm.multiplyMatrices(sc.camera.projectionMatrix, sc.camera.matrixWorldInverse));
     if (snap) { this.todo.length = 0; this._evI = (battle.events || []).length; }
     while (this.todo.length && this.todo[0].t <= t) this.todo.shift().fn();
-    for (const v of list) { let w = this.views.get(v.id); if (!w) { w = new VehicleView(this, v); this.views.set(v.id, w); } w.update(v, C); }
+    this._n = (this._n || 0) + 1;
+    for (const v of list) { let w = this.views.get(v.id); if (!w) { w = new VehicleView(this, v); this.views.set(v.id, w); } w.seen = this._n; w.update(v, C); }
+    if (this.views.size > list.length) for (const w of this.views.values()) if (w.seen !== this._n) w.hide();   /* no longer in the list: not drawn */
     // a team that is aboard (or getting in or out, or thrown from the wreck) is drawn here, not by its own team view
     if (o.teams && battle.units) for (const v of list) if (v.riders && v.riders.length) { const w = this.views.get(v.id); for (const r of v.riders) if (w.owns(r.uid) || r.mounted) { const i = battle.units.findIndex(u => u.id === r.uid), tv = i >= 0 && o.teams[i]; if (tv && tv.group.visible) tv.group.visible = false; } }
     this._tankSparks(battle, C);
