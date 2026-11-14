@@ -68,6 +68,12 @@ export class Interior {
       if (d.pos) g.position.fromArray(d.pos); if (d.quat) g.quaternion.copy(d.quat); if (d.rx) g.rotation.x = d.rx; if (d.out) g.userData.out = true; if (d.hole) g.userData.hole = true; g.userData.home = g.position.clone(); g.userData.q0 = g.quaternion.clone(); P[key] = g; }
     for (const [key, d] of Object.entries(B.moving)) if (P[key]) (d.parent ? P[d.parent] : G[d.g]).add(P[key]);
     P.round.visible = false;
+    // seen from outside in daylight the commander's lid, its post and the cupola's upper ring are lit like the outside model (the interior's own
+    // material is lit by its lamps, and a lid swung back away from them read as a black disc). The plane that never cuts: as on the outside model.
+    this.outMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.15 }); this.outMat.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e7)];
+    this.outMat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#ifdef USE_COLOR_ALPHA\n diffuseColor.rgb *= vColor.rgb;\n#endif'); };   /* the 4th number of each point's colour is the interior's kind of surface, not an opacity */
+    this.outMat.customProgramCacheKey = () => 'cab-out';
+    this.cupMeshes = []; for (const k of ['cupHatch', 'cupPost', 'cupHole']) for (const c of P[k].children) if (c.isMesh && c.material === M.fit) this.cupMeshes.push(c); this.cupStd = false;
     // dirty glass in the vision blocks (the world is seen through it)
     { const k = new Kit(labels), g = B.moving.glass; for (let i = 0; i < 8; i++) { const a = i * 45 * DEG; k.plane('g', 0.21, g.h, [0xffffff, 0], g.c[0] + Math.sin(a) * g.R, g.y, g.c[1] - Math.cos(a) * g.R, 0, -a + Math.PI, 0); } const m = k.mesh('g', M.glass); m.renderOrder = 50; this.tur.add(m); meshes++; tris += 16;
       const k2 = new Kit(labels), d = B.moving.dglass; for (const x of d.xs) k2.plane('g', d.w, d.h, [0xffffff, 0], x, d.y, d.z); const m2 = k2.mesh('g', M.glass); m2.renderOrder = 50; this.hul.add(m2); meshes++; tris += 6; }
@@ -321,6 +327,7 @@ export class Interior {
     // ---- displays
     { const bx = SEATS[mode] && !cut ? (this.headOut ? (mode === 'in_ldr' ? 'hatch' : null) : mode) : mode === 'outside' && this.st.hatch > 0.02 ? 'hatch' : null; this._box(bx);
       this._cap(bx && bx !== 'hatch' ? 'hide' : !cut && this.st.cup1 + this.st.cup2 > 0.01 ? 'cut' : 'whole'); }   /* the outside model's own closed commander's lid: left out inside the seat box, cut away while the hatch is open */
+    { const std = (mode === 'outside' || this.headOut) && !(mode === 'in_cdr' && this._cupK(1) < 0.5); if (std !== this.cupStd) { this.cupStd = std; for (const c of this.cupMeshes) c.material = std ? this.outMat : this.mat.fit; } }   /* (from his own eye in the gap the lid's underside keeps the interior's lighting) */
     this._sights(dt, s, seat, cut); if (mode === 'outside' || (this.headOut && mode !== 'in_cdr')) {   /* the commander up in his cupola still sees the inside of it below him, lit by its own lamps and the daylight */ this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
