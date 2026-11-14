@@ -72,15 +72,15 @@
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 3,
-   "fired": 6,
+   "volleys": 2,
+   "fired": 5,
    "hits": 0,
    "by": {
-    "hkoi_cut": 2,
+    "hkoi_cut": 1,
     "gunner_jitter": 1,
     "aps": 3
    },
-   "obs": 105,
+   "obs": 126,
    "he": 150,
    "apsL": 3,
    "apsR": 2,
@@ -93,14 +93,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 13,
+   "main": 14,
    "killedByTank": 2,
    "killedByMg": 1,
    "coax": 2400,
    "m2": 552
   },
-  "log": 105,
-  "events": 42,
+  "log": 82,
+  "events": 37,
   "over": "won",
   "last": "Enemy breaks contact: 2 of 5 teams still able to fight, and they pull out."
  },
@@ -114,10 +114,10 @@
    "by": {
     "aps": 1,
     "unguided_miss": 1,
-    "hkoi_cut": 2,
-    "gunner_jitter": 2
+    "hkoi_cut": 3,
+    "gunner_jitter": 1
    },
-   "obs": 114,
+   "obs": 113,
    "he": 150,
    "apsL": 4,
    "apsR": 3,
@@ -129,17 +129,17 @@
    },
    "wave": 2,
    "waves": 2,
-   "teamsLeft": 2,
-   "main": 5,
-   "killedByTank": 1,
+   "teamsLeft": 0,
+   "main": 12,
+   "killedByTank": 2,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 480
   },
-  "log": 138,
-  "events": 62,
-  "over": null,
-  "last": "Gunner lays on Konkurs team #9, 1.99 km, bearing 262: it can fire on us."
+  "log": 117,
+  "events": 53,
+  "over": "won",
+  "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
  },
  {
   "summary": {
@@ -289,10 +289,10 @@
    "fired": 4,
    "hits": 0,
    "by": {
-    "hkoi_cut": 2,
-    "gunner_jitter": 2
+    "gunner_jitter": 3,
+    "hkoi_cut": 1
    },
-   "obs": 129,
+   "obs": 119,
    "he": 150,
    "apsL": 4,
    "apsR": 4,
@@ -306,30 +306,30 @@
    "waves": 1,
    "teamsLeft": 0,
    "main": 15,
-   "killedByTank": 2,
+   "killedByTank": 1,
    "killedByMg": 1,
    "coax": 2360,
    "m2": 576
   },
-  "log": 70,
-  "events": 28,
+  "log": 74,
+  "events": 27,
   "over": "won",
-  "last": "Enemy breaks contact: 2 of 5 teams still able to fight, and they pull out."
+  "last": "Enemy breaks contact: 3 of 5 teams still able to fight, and they pull out."
  },
  {
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 4,
+   "volleys": 3,
    "fired": 9,
    "hits": 0,
    "by": {
     "unguided_miss": 3,
-    "gunner_jitter": 4,
+    "gunner_jitter": 3,
     "aps": 1,
-    "hkoi_cut": 1
+    "hkoi_cut": 2
    },
-   "obs": 99,
+   "obs": 92,
    "he": 150,
    "apsL": 3,
    "apsR": 4,
@@ -342,14 +342,14 @@
    "wave": 2,
    "waves": 2,
    "teamsLeft": 0,
-   "main": 7,
-   "killedByTank": 1,
+   "main": 13,
+   "killedByTank": 2,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 552
   },
-  "log": 164,
-  "events": 67,
+  "log": 137,
+  "events": 55,
   "over": "won",
   "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
  },
@@ -429,8 +429,7 @@
    "fired": 4,
    "hits": 2,
    "by": {
-    "hkoi_cut": 1,
-    "gunner_jitter": 1,
+    "hkoi_cut": 2,
     "HIT": 2
    },
    "obs": 146,
@@ -450,9 +449,9 @@
    "killedByTank": 0,
    "killedByMg": 1,
    "coax": 2360,
-   "m2": 504
+   "m2": 528
   },
-  "log": 52,
+  "log": 54,
   "events": 27,
   "over": null,
   "last": "Vehicle destroyed."
@@ -516,14 +515,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 7,
+   "main": 8,
    "killedByTank": 3,
    "killedByMg": 1,
    "coax": 2400,
    "m2": 576
   },
-  "log": 75,
-  "events": 37,
+  "log": 78,
+  "events": 40,
   "over": "won",
   "last": "Enemy breaks contact: 1 of 5 teams still able to fight, and they pull out."
  },
@@ -535,32 +534,33 @@
    "fired": 7,
    "hits": 0,
    "by": {
-    "aps": 2,
+    "hkoi_cut": 1,
+    "aps": 1,
     "unguided_miss": 2,
     "hkoi_he": 3
    },
-   "obs": 144,
+   "obs": 141,
    "he": 126,
-   "apsL": 2,
+   "apsL": 3,
    "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
-    "ldr": "ok",
+    "ldr": "wounded",
     "drv": "ok"
    },
    "wave": 1,
    "waves": 2,
-   "teamsLeft": 3,
-   "main": 15,
-   "killedByTank": 1,
+   "teamsLeft": 4,
+   "main": 12,
+   "killedByTank": 0,
    "killedByMg": 3,
-   "coax": 2320,
-   "m2": 528
+   "coax": 2360,
+   "m2": 480
   },
-  "log": 123,
-  "events": 41,
+  "log": 128,
+  "events": 48,
   "over": null,
-  "last": "Volley 4 over: 1 fired, 0 hits. HKOI rounds left 144 obscurant, 126 HE; Trophy 2 left, 4 right."
+  "last": "Gunner picks up a heat signature: Konkurs team #1 at 2510 m in the open."
  }
 ]
