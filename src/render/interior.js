@@ -321,7 +321,8 @@ export class Interior {
     this._sights(dt, s, seat, cut); if (mode === 'outside' || this.headOut) { this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
-  _cupPose() { const h = this.part.cupHatch; h.position.y = h.userData.home.y + 0.1 * Math.max(this.st.cup1, Math.min(1, this.st.cup2 * 3)); h.rotation.y = -2.5 * sm((this.st.cup2 - 0.3) / 0.7); }   /* up its post first, then swung aside round it */
+  _cupPose() { const h = this.part && this.part.cupHatch; if (!h) return;   /* not built yet: the pose is applied when it is */
+    h.position.y = h.userData.home.y + 0.1 * Math.max(this.st.cup1, Math.min(1, this.st.cup2 * 3)); h.rotation.y = -2.5 * sm((this.st.cup2 - 0.3) / 0.7); }   /* up its post first, then swung aside round it */
   setCupolaHatch(state, now) { this.cupHatch = state; for (const c of this.controls || []) if (c.key === 'cdrHatch') c.state = state; if (now) { this.st.cup1 = state === 1 ? 1 : 0; this.st.cup2 = state === 2 ? 1 : 0; this._cupPose(); } }
   // What each crewman is doing this moment, handed to the figures: where his head and hands are, how he is bearing up (from the battle's
   // crew model), whether he is hurt (the damage reports), whether a hit is about to land.
