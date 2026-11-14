@@ -7,6 +7,7 @@
 // It only reads the battle; it changes nothing in it. Boxes are rewritten only when their text changes.
 
 const ROLE = { CDR: 'Commander', GNR: 'Gunner', LDR: 'Loader', DRV: 'Driver' };
+const WEAPON = { kornet: 'Kornet missile', saclos: 'Konkurs missile', rpg: 'RPG rocket', sal: 'Laser-guided missile', fpv: 'FPV drone', fpv_fiber: 'Fibre FPV drone' };
 const STATE_CLASS = { steady: 's0', strained: 's1', shaken: 's2', panicked: 's3' };
 const clock = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 const brg3 = d => String(Math.round(((d % 360) + 360) % 360) % 360).padStart(3, '0');
@@ -69,7 +70,7 @@ export class Hud {
       if (!r) { r = { R: m.range, t: now, v: 0 }; this.rate.set(m.th, r); }
       else if (now - r.t > 0.25) { r.v = (r.R - m.range) / (now - r.t); r.R = m.range; r.t = now; }
       if (r.v > 5) tti = m.range / r.v;
-      out.push({ name: (m.tt && (m.tt.short || m.tt.name)) || (m.th && m.th.key) || 'threat', range: m.range, brg, hour: Math.round(rel / 30) % 12 || 12, cued: m.cued, tracked: m.tracked, drone: m.drone, tti });
+      out.push({ name: (m.th && WEAPON[m.th.key]) || (m.tt && (m.tt.short || m.tt.name)) || (m.drone ? 'Drone' : 'Missile'), range: m.range, brg, hour: Math.round(rel / 30) % 12 || 12, cued: m.cued, tracked: m.tracked, drone: m.drone, tti });
     }
     return out.sort((a, b) => a.range - b.range);
   }
@@ -133,7 +134,7 @@ export class Hud {
     else for (const [r, m] of Object.entries(crew.who)) {
       const down = m.status === 'down';
       rows.push([r.toUpperCase(), down ? (m.busy || 'out of action') : `${m.state} ${Math.round(m.stress * 100)}%`, down ? 'down' : STATE_CLASS[m.state] || 's0',
-        down ? '' : (m.status === 'wounded' ? ' · wounded' : '') + (m.busy ? ' · ' + m.busy : '') + (m.state !== 'steady' && m.why ? ' · ' + m.why : '')]);
+        down ? '' : (m.status === 'wounded' ? ' · wounded' : '') + (m.busy ? ' · ' + m.busy : '') + (m.why ? ' · ' + m.why : '')]);
     }
     const head = 'Crew' + (crew.on ? ` · ${crew.quality}` + (crew.abandoned ? ' · has left the vehicle' : crew.buttoned ? ' · buttoned up' : ' · hatches open') : '');
     this._put('crewmen', head + rows.map(r => r.join(':')).join('|'), box => {

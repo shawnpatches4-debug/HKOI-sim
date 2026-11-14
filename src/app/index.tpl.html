@@ -11,7 +11,7 @@
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }   /* no backdrop blur: blurring live 3D behind every panel costs a great deal each frame */
   #hud { position: fixed; left: 12px; top: 12px; font: 11px/1.45 var(--mono); padding: 6px 9px; white-space: pre-wrap; pointer-events: none; color: var(--dim); max-width: min(420px, calc(100vw - 24px)); }
   /* status strip */
-  #status { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); pointer-events: none; }
+  #status { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; pointer-events: none; }
   .chip { padding: 5px 10px; font: 12px/1.2 var(--mono); letter-spacing: .04em; white-space: nowrap; }
   .chip b { color: var(--accent); font-weight: 600; } .chip.warn b { color: var(--warn); } .chip.bad b { color: var(--bad); }
   /* caption */

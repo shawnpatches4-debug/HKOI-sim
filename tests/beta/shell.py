@@ -47,6 +47,7 @@ async def main():
         if 'title' in PARTS: await part(part_1)
         async def part_2():
             # the title's show stepped by hand at four frame rates: the battle and the camera must come out the same
+            # (riding a missile at about 300 m/s, the 0.02 s allowed in sampling time is 6 m, so that shot gets 8 m; the others 1.5 m)
             runs = {}
             for fps in (30, 60, 144, 240):
                 await ev('__beta.titleReset(7)'); samples = []
@@ -58,14 +59,14 @@ async def main():
             for fps, sm in runs.items():
                 for a, r in zip(sm, ref):
                     d = max(abs(x - y) for x, y in zip(a['cam'], r['cam']))
-                    need(a['shot'] == r['shot'] and abs(a['t'] - r['t']) <= 0.21 and abs(a['showT'] - r['showT']) < 0.02 and d < 1.5, 'title show differs at %d fps: %s %.1f s cam off by %.2f m (60 fps: %s %.1f s)' % (fps, a['shot'], a['t'], d, r['shot'], r['t']))
+                    need(a['shot'] == r['shot'] and abs(a['t'] - r['t']) <= 0.21 and abs(a['showT'] - r['showT']) < 0.02 and d < (8 if a['shot'] == 'missile' else 1.5), 'title show differs at %d fps: %s %.1f s cam off by %.2f m (60 fps: %s %.1f s)' % (fps, a['shot'], a['t'], d, r['shot'], r['t']))
             need(len(set(s['shot'] for s in ref)) >= 2, 'the title show never changed its camera angle in 36 s')
             need(ref[-1]['t'] > 30, 'the battle behind the title did not advance')
 
         if 'fps' in PARTS: await part(part_2)
         async def part_3():
             # pictures: a turn around the vehicle, then the first moment a missile is being ridden
-            await ev('__beta.titleReset(7)'); await ev('(() => { for (let i = 0; i < 240; i++) __beta.titleTick(1 / 30); })()'); await shot('title_live')
+            await ev('__beta.titleReset(7)'); await ev('(() => { for (let i = 0; i < 150; i++) __beta.titleTick(1 / 30); })()'); need((await js('__beta.titleInfo()'))['shot'] == 'turn', 'the title does not open on the vehicle'); await shot('title_live')
             found = False
             for k in range(240):
                 await ev('(() => { for (let i = 0; i < 15; i++) __beta.titleTick(1 / 30); })()')
@@ -146,7 +147,7 @@ async def main():
             await shot('seat_engineer', 3500)
             await pg.keyboard.press('h'); await pg.wait_for_timeout(5000)
             v = await vis('strip', 'bar', 'status', 'engleft', 'engright', 'log', 'sline', 'gauges'); bt = await js('[...document.querySelectorAll("#bar button")].map(x => x.textContent)'); print('seat, simple:', v, bt)
-            need(not v['strip'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['log'] and not v['sline'] and not v['gauges'] and v['bar'] and 'Leave seat' in bt and len(bt) <= 5, 'in a seat the simple display does not get out of the way')
+            need(not v['strip'] and not v['status'] and not v['engleft'] and not v['engright'] and not v['log'] and not v['sline'] and not v['gauges'] and v['bar'] and 'Back outside' in bt and len(bt) <= 5, 'in a seat the simple display does not get out of the way')
             await shot('seat_simple', 3500)
             await pg.keyboard.press('Escape'); await pg.wait_for_timeout(1500); need(await ev('__beta.cams.mode') == 'orbit', 'Esc did not leave the seat')
             await pg.keyboard.press('2'); await pg.wait_for_timeout(800); need(await ev('__beta.cams.mode') == 'chase', 'key 2 did not pick the chase view')

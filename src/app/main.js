@@ -186,7 +186,7 @@ function drawStatus() {
   const crew = s.crew || {}, down = Object.values(crew).filter(x => x !== 'ok').length; st.append(chip('CREW', down ? `${4 - down}/4` : '4/4', down ? 'bad' : ''), chip('INCOMING', `${s.fired} fired · ${s.hits} hit`, s.hits ? 'bad' : ''));
   if (s.waves > 1) st.append(chip('ENEMY GROUP', battle.waveAt != null ? `${s.wave} of ${s.waves} beaten · lull` : `${s.wave} of ${s.waves}`, battle.waveAt != null ? '' : 'warn'));
   if (!s.alive) st.append(chip('VEHICLE', 'DESTROYED', 'bad'));
-  st.append(chip('FRAME', `${cpuMs.toFixed(1)} ms · ${fps} fps`, fps && fps < 30 ? 'warn' : ''));
+  st.append(chip('FRAME', fps ? `${(1000 / fps).toFixed(1)} ms · ${fps} fps` : '-', fps && fps < 30 ? 'warn' : ''));
 }
 function drawLog() {
   const due = battle.log.filter(l => l.t <= battle.t); if (due.length === logShown) return; due.sort((a, b) => a.t - b.t);
@@ -236,7 +236,7 @@ function show() {
   hud.hidden = !(showPerf && (p ? eng && !seat : q.get('perf') === '1'));
   lastMode = cams.mode; stillT = 0;
 }
-function setHud(mode) { hudMode = mode === 'engineer' ? 'engineer' : 'simple'; store.set('hud', hudMode); hudBox.sig = {}; hudBox.tSlow = hudBox.tFast = 0; if (state === 'play') { buildBar(); drawStatus(); } show(); if ($('o-hud').childElementCount) seg('o-hud', HUDS, 'hud'); }
+function setHud(mode) { hudMode = mode === 'engineer' ? 'engineer' : 'simple'; store.set('hud', hudMode); if (hudMode === 'simple') barOpen = null; hudBox.sig = {}; hudBox.tSlow = hudBox.tFast = 0; if (state === 'play') { buildBar(); drawStatus(); } show(); if ($('o-hud').childElementCount) seg('o-hud', HUDS, 'hud'); }
 function seg(id, items, key, after) { const box = $(id); box.textContent = ''; const cur = key === 'hud' ? hudMode : set[key]; for (const [v, name, tip] of items) { const b = el('button', 'btn' + (cur === v ? ' on' : ''), name); if (tip) b.title = tip; b.onclick = () => { if (key === 'hud') { setHud(v); return; } set[key] = v; store.set('setup', set); seg(id, items, key, after); if (after) after(); }; box.append(b); } }
 const HUDS = [['simple', 'Simple', 'Almost nothing on screen: a status line, two gauges, a warning when something is inbound'], ['engineer', 'Engineer', 'Everything: crew states and reasons, weapons, every threat in the air, the event log, frame time']];
 const nameOf = (list, k) => (list.find(x => x[0] === k) || ['', String(k)])[1];
@@ -302,8 +302,8 @@ function buildBar() {
   let g = grp(); g.append(btn(playing ? 'Pause' : 'Play', '', 'Space bar', () => { playing = !playing; buildBar(); }));
   if (!slim) for (const sp of [0.25, 1, 2, 4]) g.append(btn(sp === 0.25 ? '¼×' : sp + '×', speed === sp ? 'on' : '', 'Time rate', () => { speed = sp; buildBar(); }));
   g = grp(); for (const vg of VIEW_GROUPS) { if (slim && vg.key !== 'in') continue; const mine = cur && cur.g === vg; g.append(btn(mine ? `${vg.name}: ${cur.name}` : vg.name, (vg.spectator ? 'spec' : '') + (mine ? ' on' : '') + (barOpen === vg.key ? ' open' : ''), 'Choose a view', () => { barOpen = barOpen === vg.key ? null : vg.key; buildBar(); })); }
-  if (seat) g.append(btn('Leave seat', '', 'Back outside (Esc)', () => setView(lastOutside)));
-  g = grp();
+  if (seat) g.append(btn('Back outside', '', 'Leave the inside view (Esc)', () => setView(lastOutside)));
+  if (!slim || SENSOR[cams.mode] || cams.mode === 'gnr') g = grp();
   if (SENSOR[cams.mode] || cams.mode === 'gnr') g.append(btn('Thermal: ' + (wantThermal() === 1 ? 'white hot' : wantThermal() === -1 ? 'black hot' : 'off'), 'on', 'Thermal picture for this sight (T)', cycleThermal));
   if (!slim) { g.append(btn('Map', '', 'Topographic map (M)', openMap));
     g.append(btn('Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); }
@@ -414,7 +414,7 @@ function frameBody(now) {
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   if (cams.mode !== lastMode && state === 'play') { buildBar(); show(); }   /* the view changed (a key, a button, or the camera falling back by itself): the bar and the boxes follow */
-  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, spectator: set.spectator, sound, frameMs: cpuMs });
+  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
