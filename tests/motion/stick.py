@@ -17,7 +17,7 @@ def proj(p, c):
 c0 = F[0]['map']
 for i, f in enumerate(F):
     ox, oy = (i % cols) * W, (i // cols) * Hh; c = ([f['figs'][fig][0][0], f['map'][1], f['figs'][fig][0][2]] if fig is not None else f['map']) if follow else c0; s = W / span
-    P = lambda p: (ox + W / 2 + proj(p, c)[0] * s, oy + Hh * 0.8 - proj(p, c)[1] * s)
+    P = lambda p: (ox + W / 2 + proj(p, c)[0] * s, oy + Hh * (0.5 if view == 'top' else 0.8) - proj(p, c)[1] * s)
     dr.rectangle([ox, oy, ox + W - 1, oy + Hh - 1], outline='#cccccc')
     if view != 'top':
         g = [P(p) for p in d['ground'] if abs(p[0] - c[0]) < span / 2]

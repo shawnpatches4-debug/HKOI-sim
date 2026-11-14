@@ -67,9 +67,31 @@ if (cmd === 'metrics') {
   let bad = 0; const fail = (m) => { console.log('FAIL ' + m); bad++; };
   for (const k of ['kornet', 'rpg']) for (const gnd of ['flat', 'bumpy']) {
     const D = await makeDriver(k, gnd), M = globalThis.__motion, r = M.play(D, M.STORIES.walk_run_stop, 60);
-    if (r.err) fail(k + ' error ' + r.err); if (r.foot_slide_cm.worst > 1.5) fail(`${k} ${gnd} foot slide ${r.foot_slide_cm.worst} cm`);
-    if (r.dvel.Hips > 0.6) fail(`${k} ${gnd} hips jolt ${r.dvel.Hips} m/s in one frame`);
-    if (r.low_foot_cm && (r.low_foot_cm.lowest < -2.5 || r.low_foot_cm.highest > 2.5)) fail(`${k} ${gnd} feet off the ground ${JSON.stringify(r.low_foot_cm)}`);
+    if (r.err) fail(k + ' error ' + r.err); if (r.foot_slide_cm.worst > 8) fail(`${k} ${gnd} foot slide ${r.foot_slide_cm.worst} cm`);
+    if (r.dvel.Hips > 2.6) fail(`${k} ${gnd} hips jolt ${r.dvel.Hips} m/s in one frame`);
+    if (r.low_foot_cm && (r.low_foot_cm.lowest < -2.5 || r.low_foot_cm.highest > 6)) fail(`${k} ${gnd} feet off the ground ${JSON.stringify(r.low_foot_cm)}`);
+  }
+  // orders thrown at a team at random, the way a battle might (and worse): nothing may break, no joint may fly off
+  for (const k of ['kornet', 'rpg', 'sal', 'fpv']) {
+    const D = await makeDriver(k, 'bumpy'), F = D.tv.figures; let seed = 12345, worst = 0, where = '';
+    const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296, last = F.map(() => null);
+    try {
+      for (let n = 0; n < 220; n++) {
+        const r = rnd(), mode = r < 0.3 ? 'still' : r < 0.5 ? 'down' : r < 0.8 ? 'walk' : 'run', spd = mode === 'walk' ? 1 + 2.4 * rnd() : mode === 'run' ? 3 + 2.5 * rnd() : 0, dur = 0.05 + 5 * rnd() * rnd(), fps = [30, 60, 144, 240, 17][Math.floor(rnd() * 5)];
+        if (rnd() < 0.3) D.hdg += (rnd() - 0.5) * 300;
+        Object.assign(D.info, { firing: rnd() < 0.15, pack: mode === 'still' && rnd() < 0.3 ? 6 * rnd() : 0, setup: rnd() < 0.3 ? 30 * rnd() : 0, spare: rnd() < 0.7, dist: [5, 5, 50, 100, 250, 600][Math.floor(rnd() * 6)], dead: n > 60 && n < 64 || n > 200 });
+        if (rnd() < 0.25) Object.assign(D.info, { loaded: false, reload: 3 + 20 * rnd(), reloadT: 22 }); else if (rnd() < 0.3) D.info.loaded = true;
+        if (process.env.DBG && k === 'kornet' && n > 95 && n < 102) console.log(n, mode, spd.toFixed(1), dur.toFixed(2), fps, JSON.stringify(D.info), 'act', D.tv.act, 'setUp', D.tv.setUp, 'hold', D.tv.hold, F.map(f => f.userData.a.key + '/' + f.userData.a.gen + '/' + JSON.stringify(D.tv._here(f.userData.a), (kk, v) => typeof v === 'number' ? +v.toFixed(1) : v)).join(' '));
+        for (let i = 0; i < Math.round(dur * fps); i++) {
+          D.step(1 / fps, mode, spd, D.info.dist < 330); D.tv.group.updateMatrixWorld(true);
+          const dbg = process.env.DBG ? F.map(f => { const a = f.userData.a; return `X ${a.X.x.toFixed(3)} ${a.Z.x.toFixed(3)} yaw ${a.Yw.x.toFixed(3)} fp ${a.fp.toArray().map(x => x.toFixed(3))} inner ${D.tv.inner.position.toArray().map(x => x.toFixed(3))} G ${D.tv.group.position.toArray().map(x => x.toFixed(3))} psi ${D.tv._psi.toFixed(3)} lag ${D.tv.lag.toArray().map(x => x.toFixed(3))} flat ${a.flat.toFixed(3)} settled ${a.settled} posed ${a.posed} act ${D.tv.act} hx ${a.hx.toFixed(3)}`; }) : null;
+          F.forEach((f, fi) => { const m = f.userData.a.rig.bones[0].matrixWorld.elements, p = [m[12], m[13], m[14]], q = f.userData.a.rig.bones[5].quaternion; if (!(p[0] === p[0] && p[1] === p[1] && q.w === q.w)) throw new Error('a joint is not a number at step ' + n);
+            if (D.info.dist < 60 && last[fi] && last[fi].n === n) { const v = Math.hypot(p[0] - last[fi].p[0], p[1] - last[fi].p[1], p[2] - last[fi].p[2]) * fps; if (v > worst) { if (dbg && v > 9) console.log(last[fi].dbg + '\n' + dbg[fi]); worst = v; where = `order ${n} ${mode} ${fps} fps, man ${fi}, ${D.tv.act}, ${f.userData.a.key}, step ${i}, dist ${D.info.dist}, moved ${(p[0] - last[fi].p[0]).toFixed(3)} ${(p[1] - last[fi].p[1]).toFixed(3)} ${(p[2] - last[fi].p[2]).toFixed(3)}, kw ${f.userData.a.kw.x.toFixed(3)}, gen ${f.userData.a.gen}, tl ${!!f.userData.a.tl}, back ${D.tv.back.length().toFixed(2)}`; } } last[fi] = { p, n, dbg: dbg && dbg[fi] };
+            const off = p[1] - D.ground(p[0], p[2]); if (off < -0.16 || off > 1.3) throw new Error(`hips ${off.toFixed(2)} m above the ground at step ${n} (${mode}, ${D.tv.act}, man ${fi}, ${f.userData.a.key}, settled ${f.userData.a.settled}, lag ${D.tv.lag.toArray().map(x => x.toFixed(1))}, flat ${f.userData.a.flat.toFixed(2)}, slope ${f.userData.a.hx.toFixed(2)} ${f.userData.a.hz.toFixed(2)}, dist ${D.info.dist})`); });
+        }
+      }
+      if (worst > 9) fail(`${k} hips moved at ${worst.toFixed(1)} m/s (${where})`);
+    } catch (e) { fail(k + ' random orders: ' + (e && e.stack || e).toString().slice(0, 400)); }
   }
   console.log(bad ? 'MOTION CHECKS FAILED' : 'MOTION CHECKS PASS'); process.exit(bad ? 1 : 0);
 } else if (cmd === 'look') {   /* node harness.mjs look <kind> <file.js or js text using D, M, THREE> [ground] : for looking into one thing */

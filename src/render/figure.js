@@ -199,11 +199,13 @@ export const stiff = half => 2 * Math.LN2 / Math.max(half, 1e-4);
 // s = { x, v }. The goal went from g0 to g1 during dt. lead = 0: trail a moving goal (it eases off the mark and eases to a stop);
 // lead = 1: keep up with a moving goal (no trailing once up to speed).
 export function chase(s, g0, g1, y, dt, lead = 0) {
+  if (Math.abs(g1 - g0) > 0.03 + 12 * dt) g0 = g1;        /* a goal that leapt is a new goal, not a moving one */
   const gv = (g1 - g0) / dt, lag = (1 - lead) * 2 * gv / y, e0 = s.x - g0 + lag, v0 = s.v - gv, j = v0 + e0 * y, ex = Math.exp(-y * dt);
   s.x = ex * (e0 + j * dt) - lag + g1; s.v = ex * (v0 - j * y * dt) + gv;
 }
 // the same for an angle (radians), taking the short way round
 export function chaseAngle(s, g0, g1, y, dt, lead = 0) {
+  if (Math.abs(wrapPi(g1 - g0)) > 0.1 + 12 * dt) g0 = g1;
   const d = wrapPi(g1 - g0), gv = d / dt, lag = (1 - lead) * 2 * gv / y, e0 = wrapPi(s.x - g0) + lag, v0 = s.v - gv, j = v0 + e0 * y, ex = Math.exp(-y * dt);
   s.x = g0 + d + ex * (e0 + j * dt) - lag; s.v = ex * (v0 - j * y * dt) + gv;
 }
@@ -266,8 +268,8 @@ export function stepGait(g, rig, mx, mz, dyaw, dt) {
   const v = g.v, ux = v > 0.05 ? g.vx / v : 0, uz = v > 0.05 ? g.vz / v : 1;
   const along = Math.max(0, mx * ux + mz * uz);
   let dph = along / g.L + dt * 0.9 * (1 - sat(v / 0.4)) * (g.feet[0].on && g.feet[1].on && offCentre(g, rig) < 0.06 ? 0 : 1);     /* nearly stopped: finish the step in hand, then stand */
-  // a foot left too far behind (he set off faster than his stride had reckoned with) is picked up at once
-  for (let k = 0; k < 2; k++) { const f = g.feet[k], p0 = frac(g.ph + k * 0.5); if (f.on && p0 < g.beta && Math.hypot(f.x - (k ? -1 : 1) * rig.hipW, f.z - rig.hipZ) > 0.5 * rig.leg && f.x * ux + f.z * uz < 0) dph = Math.max(dph, Math.min(g.beta - p0 + 1e-3, dt * 5)); }
+  // a foot left too far behind (he set off faster than his stride had reckoned with), or out of reach, or crossed over in a turn, is picked up at once
+  for (let k = 0; k < 2; k++) { const f = g.feet[k], p0 = frac(g.ph + k * 0.5); const side = k ? -1 : 1, out = Math.hypot(f.x - side * rig.hipW, f.z - rig.hipZ); if (f.on && p0 < g.beta && ((out > 0.5 * rig.leg && f.x * ux + f.z * uz < 0) || out > 0.62 * rig.leg || f.x * side < -0.12)) dph = Math.max(dph, Math.min(g.beta - p0 + 1e-3, dt * 5)); }
   const n = Math.min(16, Math.max(1, Math.ceil(dph / 0.1)));   /* long steps of time are taken in pieces so no step of the feet is skipped */
   for (let k = 0; k < n; k++) gaitPiece(g, rig, mx / n, mz / n, dyaw / n, dph / n, ux, uz);
 }
