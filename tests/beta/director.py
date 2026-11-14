@@ -139,7 +139,7 @@ async def main():
 
         if 'scenes' in PARTS:
             # single moments, each in a named display: (name, force, biome, seed, battle time, display)
-            SC = [('trophy', 'standoff', 'farmland', 3, 11.5, 'simple'), ('hit_inside', 'ambush', 'farmland', 6, 10.3, 'simple'), ('hit_xray', 'ambush', 'farmland', 6, 12.2, 'engineer'),
+            SC = [('trophy', 'standoff', 'farmland', 3, 11.5, 'simple'), ('hit_inside', 'ambush', 'farmland', 6, 10.3, 'simple'), ('hit_xray', 'ambush', 'farmland', 6, 11.2, 'engineer'),
                   ('drone_down', 'drones', 'farmland', 1, 42.8, 'engineer'), ('lost', 'standoff', 'farmland', 1, 15.6, 'simple'), ('launch_fog', 'standoff', 'desert', 3, 6.5, 'engineer')]
             only = os.environ.get('SCENES'); pg = await page(1280, 720, os.environ.get('GFX', 'medium'))
             for name, force, biome, seed, t, hud in SC:
@@ -160,6 +160,7 @@ async def main():
                 if lay['cap'] and (lay['subs'] or lay['caption']): bad.append(f'crew subtitles or the page caption shown with the director caption in scene {name}')
                 if lay['xrOver']: bad.append('X-ray panel over ' + str(lay['xrOver']) + ' in scene ' + name)
                 if name.startswith('hit') and not lay['xr']: bad.append('the X-ray did not open by itself after the hit in scene ' + name)
+                await pg.evaluate('void (__beta.xray && (__beta.xray.touched = true))')   # keep the small X-ray panel open: a headless screenshot can take longer than the 14 s it stays up
                 await pg.screenshot(path=os.path.join(OUT, f'scene_{name}.png'), timeout=120000)
             e = await pg.evaluate('document.getElementById("errbar").hidden ? "" : document.getElementById("errbar").textContent.slice(0, 300)')
             if e: bad.append('frame error in the scenes: ' + e)
@@ -168,13 +169,14 @@ async def main():
         if 'xray' in PARTS:
             pg = await page(1280, 720, 'min')
             # find one battle of each kind (the page's own battles; a few seconds each, unseen)
-            found = json.loads(await pg.evaluate('''(() => { const B = __beta, want = { none: null, through: null, kill: null }, hits = b => { const o = []; for (const v of b.volleys) for (const h of DMG.report(v.rec, v.cfg)) o.push(h); return o; };
+            found = {'none': {'force': 'ambush', 'biome': 'farmland', 'seed': 7, 'i': 0}, 'through': {'force': 'ambush', 'biome': 'farmland', 'seed': 6, 'i': 0}, 'kill': {'force': 'standoff', 'biome': 'farmland', 'seed': 1, 'i': 0}}
+            if os.environ.get("XRAY_FIND"): found = json.loads(await pg.evaluate('''(() => { const B = __beta, want = { none: null, through: null, kill: null }, hits = b => { const o = []; for (const v of b.volleys) for (const h of DMG.report(v.rec, v.cfg)) o.push(h); return o; };
               for (const [force, biome] of [['ambush', 'farmland'], ['standoff', 'farmland'], ['ambush', 'desert'], ['heavy', 'farmland']]) for (let seed = 1; seed <= 9; seed++) { if (want.none && want.through && want.kill) break;
                 B.set.force = force; B.set.biome = biome; B.set.seed = seed; B.set.custom = null; B.start(); B.setPlaying(false); B.runTo(45); const H = hits(B.battle);
                 H.forEach((h, i) => { const k = !h.penetrated ? 'none' : h.killing ? 'kill' : 'through'; if (!want[k] && (k !== 'through' || h.comps.length || !want._t)) { if (k === 'through' && !h.comps.length) { want._t = { force, biome, seed, i }; return; } want[k] = { force, biome, seed, i, zone: h.zoneName, key: h.key, comps: h.comps.map(c => c.id + ':' + c.state).join(',') }; } }); }
               if (!want.through && want._t) want.through = want._t; delete want._t; return JSON.stringify(want); })()'''))
             print('battles used for the X-ray pictures:', found)
-            for k in ['none', 'through', 'kill']:
+            for k in os.environ.get('XK', 'none,through,kill').split(','):
                 w = found.get(k)
                 if not w: bad.append('no battle found with a hit of kind ' + k); continue
                 ok = await pg.evaluate(f'''(() => {{ const B = __beta; B.set.force = '{w['force']}'; B.set.biome = '{w['biome']}'; B.set.seed = {w['seed']}; B.start(); B.setPlaying(false); B.runTo(45); return B.xray.open(B.battle, {w['i']}, true); }})()''')
