@@ -55,7 +55,7 @@ let battle = null, teams = [], volleys = null, state = 'title', playing = false,
 let hudMode = q.get('hud') === 'engineer' || q.get('hud') === 'simple' ? q.get('hud') : store.get('hud', 'simple');
 const hudBox = new Hud($, el);
 const SEATV = { in_cdr: 1, in_gnr: 1, in_ldr: 1, in_drv: 1, cut: 1 };   // views in which the display gets out of the way of the interior
-const SIGHTV = { gnr: 1, citv: 1, hkoi: 1, enemy: 1 };                  // views through a sight: no boxes over the picture
+const SIGHTV = { gnr: 1, citv: 1, hkoi: 1, enemy: 1, troops: 1 };       // views through a sight, or with the enemy team menu on the left: no boxes at the left
 let setupOpen = false, pagesOpen = false, pagesFrom = 'title', lastOutside = 'orbit', barOpen = null, lastMode = '';
 // The battle behind the title screen. It is a real battle with the current setup, on its own seeds, fought at normal speed and
 // started again a few seconds after it ends. On Minimum graphics, or when the browser draws without a graphics card, it is a
@@ -231,7 +231,7 @@ function show() {
   const p = state === 'play', eng = hudMode === 'engineer', seat = p && !!SEATV[cams.mode];
   if (!p) { $('tsight').hidden = true; $('dsight').hidden = true; $('replay').hidden = true; $('esight').hidden = true; $('units').hidden = true; $('caption').textContent = ''; $('subs').style.opacity = 0; }
   $('title').hidden = state !== 'title' || pagesOpen; $('setup').hidden = !(state === 'title' && setupOpen && !pagesOpen); $('result').hidden = state !== 'result' || pagesOpen;
-  document.body.classList.toggle('setup-open', state === 'title' && setupOpen); document.body.classList.toggle('in-seat', seat);
+  document.body.classList.toggle('setup-open', state === 'title' && setupOpen); document.body.classList.toggle('in-seat', seat); document.body.classList.toggle('hud-eng', p && eng);
   $('status').hidden = !(p && eng && !seat); $('bar').hidden = !p; $('log').hidden = !(p && eng && showLog && !seat);
   hud.hidden = !(showPerf && (p ? eng && !seat : q.get('perf') === '1'));
   lastMode = cams.mode; stillT = 0;
@@ -243,7 +243,7 @@ const nameOf = (list, k) => (list.find(x => x[0] === k) || ['', String(k)])[1];
 // the setup in one sentence (title screen), and the note under the setup panel's heading
 function note() {
   const F = forceOf(), c = crewOf(), sum = $('t-sum'); sum.textContent = '';
-  const parts = [`${nameOf(BIOMES, set.biome)}, map ${set.map}`, CONDITIONS[set.cond] ? CONDITIONS[set.cond].name : set.cond, set.custom ? `Ladder: ${set.custom.name}` : F.name, `${nameOf(SKILLS, set.skill)} enemy crews`, nameOf(MISSIONS, set.mission), nameOf(LENGTHS, set.waves), `Your crew: ${c.quality}${c.stress ? '' : ', stress off'}`];
+  const parts = [`${nameOf(BIOMES, set.biome)}, map ${set.map}`, CONDITIONS[set.cond] ? CONDITIONS[set.cond].name : set.cond, set.custom ? `Ladder: ${set.custom.name}` : F.name, `${nameOf(SKILLS, set.skill)} enemy crews`, nameOf(MISSIONS, set.mission), LENGTHS.some(x => x[0] === set.waves) ? nameOf(LENGTHS, set.waves) : `${set.waves} waves`, `Your crew: ${c.quality}${c.stress ? '' : ', stress off'}`];
   parts.forEach((t, i) => { if (i) sum.append(' · '); sum.append(i === 2 ? el('b', null, t) : t); });
   $('s-note').textContent = (set.custom ? `Ladder raid "${set.custom.name}": ${set.custom.note} Ladder raids always use a trained crew with stress on. Pick an enemy force to leave the ladder. ` : F.note + '. ') + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.');
   const live = $('t-live'), on = demoLive() || state === 'title' && (demo.forced === '1' || demo.forced !== '0' && scene.quality !== 'min' && !scene.software); live.className = on ? '' : 'still'; live.textContent = ''; live.append(el('i'), on ? 'LIVE: a battle with this setup is being fought behind the menu' : 'Still picture (Minimum graphics): the battle starts when you press Play');

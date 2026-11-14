@@ -27,13 +27,16 @@ async def main():
         TOP = '(id => { const e = document.getElementById(id), r = e.getBoundingClientRect(), t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!t && (t === e || e.contains(t)); })'
         async def vis(*ids): return {i: await ev('%s(%s)' % (VIS, json.dumps(i))) for i in ids}
 
+        async def part(f):
+            try: await f()
+            except Exception as e: bad.append('the check itself stopped: ' + str(e)[:300]); print('  STOPPED:', str(e)[:600])
         await pg.goto(os.environ['BASE'] + '#' + os.environ.get('HASH', 'gfx=low&speed=1&map=3&seed=1&demo=1'), timeout=120000)
         for i in range(160):
             if await ev('!!(window.__beta && window.__beta.ready)'): break
             await pg.wait_for_timeout(1500)
         await ev('localStorage.clear()')
 
-        if 'title' in PARTS:
+        async def part_1():
             v = await vis('title', 'go', 'o-ladder', 'o-numbers', 'o-setup', 'setup', 'bar', 'status', 'sline')
             top = [await ev('%s(%s)' % (TOP, json.dumps(i))) for i in ('go', 'o-ladder', 'o-numbers', 'o-setup')]
             print('title:', await ev('__beta.state()'), v, 'clickable', top, '| version', await ev('document.getElementById("ver").textContent'), '|', await ev('document.getElementById("t-sum").textContent'))
@@ -41,7 +44,8 @@ async def main():
             need(not v['setup'] and not v['bar'] and not v['status'] and not v['sline'], 'the setup panel or battle boxes are showing on the title screen')
             need(await ev('document.querySelectorAll("#title button").length') <= 5, 'the title screen has more than five buttons')
 
-        if 'fps' in PARTS:
+        if 'title' in PARTS: await part(part_1)
+        async def part_2():
             # the title's show stepped by hand at four frame rates: the battle and the camera must come out the same
             runs = {}
             for fps in (30, 60, 144, 240):
@@ -58,7 +62,8 @@ async def main():
             need(len(set(s['shot'] for s in ref)) >= 2, 'the title show never changed its camera angle in 36 s')
             need(ref[-1]['t'] > 30, 'the battle behind the title did not advance')
 
-        if 'title' in PARTS:
+        if 'fps' in PARTS: await part(part_2)
+        async def part_3():
             # pictures: a turn around the vehicle, then the first moment a missile is being ridden
             await ev('__beta.titleReset(7)'); await ev('(() => { for (let i = 0; i < 240; i++) __beta.titleTick(1 / 30); })()'); await shot('title_live')
             found = False
@@ -76,7 +81,8 @@ async def main():
             need(not t1['live'] or t1['t'] > t0['t'], 'with the live title on, the real frame loop did not advance the battle')
             need(await ev('document.getElementById("errbar").hidden'), 'the red error bar is showing on the title screen')
 
-        if 'setup' in PARTS:
+        if 'title' in PARTS: await part(part_3)
+        async def part_4():
             await pg.click('#o-setup'); await pg.wait_for_timeout(500)
             v = await vis('setup', 't-main'); n = await js('({ crew: document.querySelectorAll("#o-crew button").length, stress: document.querySelectorAll("#o-stress button").length, hud: document.querySelectorAll("#o-hud button").length, ground: document.querySelectorAll("#o-biome button").length, cond: document.querySelectorAll("#o-cond button").length, force: document.querySelectorAll("#o-force button").length, skill: document.querySelectorAll("#o-skill button").length, waves: document.querySelectorAll("#o-waves button").length, mission: document.querySelectorAll("#o-mission button").length, fits: document.querySelector("#setup .card").getBoundingClientRect().bottom <= innerHeight })')
             print('setup:', v, n)
@@ -89,12 +95,14 @@ async def main():
             await ev('[...document.querySelectorAll("#o-crew button")].find(x => x.textContent === "Trained").click()'); await ev('[...document.querySelectorAll("#o-stress button")].find(x => x.textContent === "On").click()'); await pg.wait_for_timeout(600)
             await pg.click('#s-done'); await pg.wait_for_timeout(400); need(not (await vis('setup'))['setup'] and (await vis('go'))['go'], 'Done did not close the setup panel')
 
-        if 'hud' in PARTS or 'seat' in PARTS or 'result' in PARTS:
+        if 'setup' in PARTS: await part(part_4)
+        async def part_5():
             await pg.click('#go'); await pg.wait_for_timeout(1500)
             need(await ev('__beta.state()') == 'play' and await ev('__beta.hud()') == 'simple', 'Play did not start the battle in the simple display')
             need(await ev('__beta.battle.crewOpt.quality') in ('trained', None) and await ev('__beta.battle.crewOpt.on') is True, 'the default crew is not trained with stress on')
 
-        if 'hud' in PARTS:
+        if 'hud' in PARTS or 'seat' in PARTS or 'result' in PARTS: await part(part_5)
+        async def part_6():
             # fight on until the vehicle's sensors hold a missile in the air, then freeze that moment
             got = False
             for k in range(900):
@@ -120,7 +128,8 @@ async def main():
             print('engineer display: overlaps', ov); need(not ov, 'engineer boxes overlap: ' + ', '.join(ov))
             await shot('engineer', 3000)
 
-        if 'seat' in PARTS:
+        if 'hud' in PARTS: await part(part_6)
+        async def part_7():
             if await ev('__beta.hud()') != 'engineer': await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
             await ev('__beta.setPlaying(false)')
             names = []
@@ -144,7 +153,8 @@ async def main():
             await ev('__beta.setView("in_cdr")'); await shot('seat_cdr_simple', 6000); await ev('__beta.setView("cut")'); await shot('cutaway_simple', 6000); await ev('__beta.setView("orbit")')
             need(await ev('document.getElementById("errbar").hidden'), 'the red error bar came up in the seat views: ' + (await ev('document.getElementById("errbar").textContent'))[:200])
 
-        if 'result' in PARTS:
+        if 'seat' in PARTS: await part(part_7)
+        async def part_8():
             await ev('__beta.setPlaying(true)'); await ev('__beta.runTo(1800)')
             for i in range(120):
                 if await ev('__beta.state() === "result"'): break
@@ -171,5 +181,6 @@ async def main():
             await ev('[...document.querySelectorAll("#bar button")].find(x => x.textContent === "Menu").click()'); await pg.wait_for_timeout(800)
             need(await ev('document.getElementById("errbar").hidden'), 'the red error bar is showing: ' + (await ev('document.getElementById("errbar").textContent'))[:200])
 
+        if 'result' in PARTS: await part(part_8)
         print('console errors', errs[:6]); print('SHELL CHECK ' + ('PASSED' if not bad and not errs else 'FAILED: ' + '; '.join(bad + errs[:2]))); await b.close()
 asyncio.run(main())
