@@ -105,7 +105,7 @@ export class Hud {
     this._show('gauges', on && simple && !s.seat);
     this._show('engleft', panels);
     this._show('engright', panels);
-    this._show('threats', on && !simple && !s.seat);
+    this._show('threats', on && !simple && !s.seat && !s.enemy);
     this._show('strip', on && !simple && s.seat);
     this._show('facerow', on && (simple || s.seat) && !!this.faces && !this.faces.failed);
     document.body.classList.toggle('faces-on', on && (simple || s.seat) && !!this.faces && !this.faces.failed);
@@ -119,7 +119,7 @@ export class Hud {
     if (this.tFast <= 0) {
       this.tFast = 0.12;
       const list = this.threatList(s);
-      if (simple) this.warning(list); else { this._show('warn', false); if (!s.seat) this.headline(list); }
+      if (simple) this.warning(list); else { this._show('warn', false); if (!s.seat && !s.enemy) this.headline(list); }
     }
     if (this.tSlow > 0) return;
     this.tSlow = 0.3;
