@@ -6,6 +6,7 @@
 | assets/enemy/soldier.glb | Russian soldier, rigged (mixamorig skeleton) | Shawn, 13 Nov 2026 | archive "russian-soldier"; author and licence to be confirmed |
 | assets/enemy/fpv.glb | FPV strike drone | Shawn, 13 Nov 2026 | archive "fpv-drone"; file names suggest a commercial game origin. NOT in the repository until confirmed |
 | assets/m1/* | M1A2 SEPv2 with Trophy | Shawn | not in the repository while it is public |
+| models_src/t72_s, models_src/t90_s | T-72B3 and T-90 line-up packs, unprocessed originals | Shawn, 14 Nov 2026 | IN the repository at his explicit direction while it was public; author and licence to be confirmed |
 
 Processing: textures resized to 1024 and stored as WebP; the drone simplified to 30% of its triangles (tools: FBX2glTF, trimesh, gltf-transform).
 Rejected: "m1a1-abrams-main-battle-tank" (game-mod model, token interior, lower detail than the current exterior).
