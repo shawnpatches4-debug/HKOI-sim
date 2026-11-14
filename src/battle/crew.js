@@ -85,7 +85,7 @@
   //   bail    chance the crew abandons a vehicle that can still fight, each time the breaking point is reached (see BAIL)
   const QUALITY = {
     green: { gain: 1.4, calm: 45, rest: 0.12, freeze: 0.60, stall: 0.45, flinch: 0.50, bail: 0.40 },
-    trained: { gain: 1.0, calm: 28, rest: 0.08, freeze: 0.30, stall: 0.25, flinch: 0.25, bail: 0.10 },
+    trained: { gain: 1.0, calm: 28, rest: 0.08, freeze: 0.20, stall: 0.25, flinch: 0.25, bail: 0.10 },   /* freeze was 0.30 in the first run; lowered once so that a trained man freezing stays rare (the brief asks for that). Nothing else was adjusted after seeing results. */
     expert: { gain: 0.75, calm: 20, rest: 0.05, freeze: 0.15, stall: 0.12, flinch: 0.10, bail: 0.04 },
     veteran: { gain: 0.55, calm: 14, rest: 0.03, freeze: 0.06, stall: 0.05, flinch: 0.04, bail: 0.01 },
   };
@@ -433,6 +433,13 @@
           if (lv > level) level = lv;
         }
         return { on: !!C.on, quality: C.on ? C.quality : null, buttoned: !!C.buttoned, abandoned: !!C.abandoned, level, who };
+      },
+      // rows for the crew box, in the same form as tankStatus(): [[who, text], ...]
+      crewStatus() {
+        const s = this.crewState(); if (!s.on) return [];
+        const rows = [['CREW', `${s.quality}${s.abandoned ? ' · has left the vehicle' : s.buttoned ? ' · buttoned up' : ''}`]];
+        for (const r of ROLES) { const m = s.who[r]; rows.push([TAG[r], m.status === 'down' ? (m.busy || 'out of action') : `${m.state} ${Math.round(m.stress * 100)}%${m.status === 'wounded' ? ' · wounded' : ''}${m.busy ? ' · ' + m.busy : ''}${m.state !== 'steady' && m.why ? ' · ' + m.why : ''}`]); }
+        return rows;
       },
       // voice level for a speaker tag as used in the battle log ('CDR', 'GNR', 'LDR', 'DRV'); 0 when the model is off
       crewVoiceLevel(tag) { const C = this._crewInit(); if (!C.on) return 0; const r = String(tag || '').toLowerCase(), m = C.m[r]; return m && m.status !== 'down' ? VOICE[STATES[m.st]] : 0; },
