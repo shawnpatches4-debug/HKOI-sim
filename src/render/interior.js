@@ -334,7 +334,7 @@ export class Interior {
     const brace = info.some(m => m.range < (m.drone ? 150 : 400)) ? 1 : 0, flinch = clamp(FX.shake, 0, 1), KEY = { gnr: 'in_gnr', cdr: 'in_cdr', ldr: 'in_ldr', drv: 'in_drv' };
     const grip = (part, x, y, z, out) => { part.updateMatrix(); _v.set(x, y, z).applyMatrix4(part.matrix); if (part.parent && part.parent !== this.tur && part.parent !== this.hul) { part.parent.updateMatrix(); _v.applyMatrix4(part.parent.matrix); } out[0] = _v.x; out[1] = _v.y; out[2] = _v.z; };
     for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
-      M.on = !gone && (this.mode !== 'outside' || (r === 'ldr' && this.st.ldrU > 0.45) || (r === 'cdr' && this.st.cup2 > 0.5)); M.up = 0; M.firing = false; M.aim = 0; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
+      M.face = null; M.on = !gone && (this.mode !== 'outside' || (r === 'ldr' && this.st.ldrU > 0.45) || (r === 'cdr' && this.st.cup2 > 0.5)); M.up = 0; M.firing = false; M.aim = 0; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
       M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
       M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; M.rise = 0; }
     if (this.cupHatch >= 1 && men.cdr.status === 'ok' && men.cdr.state !== 'panicked') { men.cdr.head[1] += SEATS.in_cdr.up * 0.75 * Math.max(this.st.cup1, this.st.cup2) + 0.5 * this.st.cup2; men.cdr.rise = this.st.cup2; }   /* up at the ports when the hatch is raised; head and shoulders out when it is open */
@@ -345,42 +345,61 @@ export class Interior {
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
     if (this.st.ldrU > 0.004) {   // the climb, acted: reach for the lid's handle, push it open, hands to the rim, up through the opening, onto the gun
       const M = men.ldr, U = this.st.ldrU, H = M.hands, hx = DIM.HAT[0], hz = DIM.HAT[1], hr = DIM.HATR; this._ldrHead(U, _v); M.head[0] = _v.x; M.head[1] = _v.y; M.head[2] = _v.z; M.up = U; M.rise = sm((U - 0.42) / 0.3); M.load = -1;
-      const a = sm((U - 0.02) / 0.1), b = sm((U - 0.3) / 0.1), c = sm((U - 0.8) / 0.14); P.hatch.updateMatrix(); M.firing = this.mgFiring && U > 0.97; M.aim = -this.st.mgYaw * DEG * 0.6;
+      const a = sm((U - 0.02) / 0.1), b = sm((U - 0.3) / 0.1), c = sm((U - 0.8) / 0.14); P.hatch.updateMatrix(); M.firing = this.mgFiring && U > 0.97; M.aim = 0; M.face = 50 + ((this.mgHandT ? this.st.mgYaw : 0) - 50) * sm((U - 0.45) / 0.3);   /* his body turns from the breech to his gun as he comes up, then with the gun */
       for (let i = 0; i < 2; i++) { const sx = i ? 1 : -1, sh = M.firing ? 0.005 * Math.sin(s.battle.t * 75 + i) : 0;
         _v.set(sx * 0.09, -0.05, -hr - 0.08).applyMatrix4(P.hatch.matrix);                                                    /* the handle under the lid, wherever the lid is */
         let x = H[i][0] + (_v.x - H[i][0]) * a, y = H[i][1] + (_v.y - H[i][1]) * a, z = H[i][2] + (_v.z - H[i][2]) * a;
         const rx = hx + sx * 0.23, ry = DIM.RF + 0.09, rz = hz - 0.2; x += (rx - x) * b; y += (ry - y) * b; z += (rz - z) * b;                          /* the rim, to pull himself up and to lean on */
-        if (this.mgGripT) { x += (this.mgGripT.x + sx * 0.045 - x) * c; y += (this.mgGripT.y - 0.03 + sh - y) * c; z += (this.mgGripT.z + sh - z) * c; }   /* the machine gun's grips */
+        if (this.mgHandT) { const g = this.mgHandT[i]; x += (g.x - x) * c; y += (g.y + sh - y) * c; z += (g.z + sh - z) * c; }   /* the machine gun: left hand on the feed cover, right hand on the pistol grip */
         H[i][0] = x; H[i][1] = y; H[i][2] = z; } }
     if (gone) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); }   /* bailed out: hatches open, seats empty */
     this.crewFig.update(men, s.battle.t, sdt); this.stats.crewTriangles = this.crewFig.triCount(); this.stats.crewReady = this.crewFig.ready; this.stats.crewFailed = this.crewFig.failed;
   }
   // where the loader's head is at each moment of his climb (interior frame): at his station, then up through the middle of the opening
   // with a little bob of effort, to standing behind his gun
-  _ldrHead(U, out) { const e = SEATS.in_ldr.eye, k = sm((U - 0.4) / 0.36), g = this.mgGripT, p = this.mgPivT; let tx = DIM.HAT[0] - 0.02, ty = DIM.RF + 0.5, tz = DIM.HAT[1] + 0.2;
-    if (g && p && this.mgPivot) { let dx = g.x - p.x, dz = g.z - p.z; const d = Math.hypot(dx, dz); if (d > 0.05) { dx /= d; dz /= d; } else { dx = 0; dz = 1; } tx = g.x + dx * 0.3; tz = g.z + dz * 0.3; ty = Math.max(DIM.RF + 0.42, g.y + 0.2); }   /* behind the grips, along the gun's own line, wherever the outside model carries the gun */
+  _ldrHead(U, out) { const e = SEATS.in_ldr.eye, k = sm((U - 0.4) / 0.36), g = this.mgEyeT; let tx = DIM.HAT[0] - 0.02, ty = DIM.RF + 0.62, tz = DIM.HAT[1] - 0.1;
+    if (g) { tx = g.x; ty = g.y; tz = g.z; }   /* standing behind his gun: 0.32 m behind the pistol grip and 0.2 m above the bore, wherever the gun is turned */
     return out.set(e[0] + (tx - e[0]) * k, e[1] + (ty - e[1]) * k + 0.018 * Math.sin(k * Math.PI * 2) * (1 - k), e[2] + (tz - e[2]) * k); }
-  // The loader's machine gun on the outside model: found by name, hung on a pivot at its mount so that it can be traversed, shaken as it fires.
+  // The loader's machine gun on the outside model, found by name and measured from its own points (it lies along the turret's +z: the
+  // muzzle is its front end, the butt its back end). It is hung on a ring round the loader's hatch (the skate mount: it traverses round
+  // the hatch, and the man standing in the hatch turns with it) and on a cradle under the receiver that elevates it.
+  _mgSetup(tk) {
+    this.mgPivot = null; let mesh = null; tk.turret.traverse(o => { if (!mesh && o.isMesh && /m240/i.test(o.name)) mesh = o; }); const pa = mesh && mesh.geometry && mesh.geometry.attributes.position; if (!pa) return;
+    tk.turret.updateWorldMatrix(true, true); this.tur.updateWorldMatrix(true, false); const toT = new THREE.Matrix4().copy(tk.turret.matrixWorld).invert().multiply(mesh.matrixWorld), p = new THREE.Vector3(), P = new Float32Array(pa.count * 3);
+    let z0 = 1e9, z1 = -1e9; for (let i = 0; i < pa.count; i++) { p.fromBufferAttribute(pa, i).applyMatrix4(toT); P[i * 3] = p.x; P[i * 3 + 1] = p.y; P[i * 3 + 2] = p.z; if (p.z < z0) z0 = p.z; if (p.z > z1) z1 = p.z; }
+    const mean = (lo, hi) => { const m = new THREE.Vector3(); let n = 0; for (let i = 0; i < pa.count; i++) { const z = P[i * 3 + 2]; if (z >= lo && z <= hi) { m.x += P[i * 3]; m.y += P[i * 3 + 1]; m.z += z; n++; } } return n ? m.multiplyScalar(1 / n) : null; };
+    const muz = mean(z1 - 0.03, z1 + 1); if (!muz) return; const len = z1 - z0, bx = muz.x, by = muz.y;   /* the bore: the muzzle's centre, carried straight back */
+    const hc = this.tur.localToWorld(new THREE.Vector3(DIM.HAT[0], 0, DIM.HAT[1])); tk.turret.worldToLocal(hc);   /* the hatch centre, in the turret's frame */
+    const ring = new THREE.Group(); ring.name = 'm240-ring'; ring.position.set(hc.x, by - 0.3, hc.z); tk.turret.add(ring);
+    const tr = new THREE.Vector3(bx, by - 0.07, z0 + 0.32 * len), cr = new THREE.Group(); cr.name = 'm240-cradle'; cr.position.copy(tr).sub(ring.position); ring.add(cr); ring.updateWorldMatrix(true, true); cr.attach(mesh);   /* the cradle: under the receiver, where the model has its mount */
+    const loc = (x, y, z) => new THREE.Vector3(x, y, z).sub(tr), tip = new THREE.Object3D(); tip.name = 'm240-muzzle'; tip.position.copy(loc(bx, by, z1 + 0.02)); cr.add(tip); tk.m240Tip = tip;
+    this.mgPivot = ring; this.mgCradle = cr; this.mgMesh = mesh; this.mgHome = mesh.position.clone(); this.mgPitch = 0;
+    this.mgL = { hands: [loc(bx + 0.035, by + 0.05, z0 + 0.35 * len), loc(bx - 0.005, by - 0.11, z0 + 0.25 * len)], grip: loc(bx, by, z0 + 0.25 * len) };   /* left hand on the feed cover, right hand on the pistol grip (measured: the grip hangs under the receiver a quarter of the gun's length from the butt) */
+    this.mgHandT = [new THREE.Vector3(), new THREE.Vector3()]; this.mgEyeT = new THREE.Vector3(); this.mgM = new THREE.Matrix4();
+  }
   _mg(B, T, sdt) {
     const tk = this.tank; if (!tk.turret) return;
-    if (this.mgPivot === undefined) { this.mgPivot = null; let mesh = null; tk.turret.traverse(o => { if (!mesh && o.isMesh && /m240/i.test(o.name)) mesh = o; });
-      if (mesh && mesh.geometry) { tk.turret.updateWorldMatrix(true, true); mesh.geometry.computeBoundingBox(); const box = mesh.geometry.boundingBox.clone().applyMatrix4(_m.copy(tk.turret.matrixWorld).invert().multiply(mesh.matrixWorld)), c = box.getCenter(new THREE.Vector3());
-        const pv = new THREE.Group(); pv.name = 'm240-pivot'; pv.position.set(c.x, box.min.y, c.z); tk.turret.add(pv); pv.updateWorldMatrix(true, false); pv.attach(mesh); this.mgPivot = pv; this.mgMesh = mesh; this.mgHome = mesh.position.clone(); this.mgGrip = new THREE.Vector3(0, c.y - box.min.y, box.min.z - c.z + 0.05); this.mgGripT = new THREE.Vector3(); } }
+    if (this.mgPivot === undefined) this._mgSetup(tk);
     const pv = this.mgPivot; if (!pv) { this.mgFiring = false; return; }
-    const mg = B._mg, U = this.st.ldrU, firing = !!(mg && mg.m240 && B.t >= mg.t && B.t <= mg.t + (mg.dur || 3)), recent = !!(mg && mg.m240 && B.t >= mg.t && B.t < mg.t + (mg.dur || 3) + 4); this.mgFiring = firing;
-    let want = 0; if (recent && U > 0.8) want = clamp((((Math.atan2(mg.e - T.e, mg.n - T.n) / DEG - (this.turBrg || 0) + 540) % 360) - 180), -110, 110);
-    { const bdt = this.mgT != null ? clamp(B.t - this.mgT, 0, 1.5) : 0; this.mgT = B.t; this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, bdt); } pv.rotation.y = -this.st.mgYaw * DEG;
-    this.mgMesh.position.copy(this.mgHome); if (firing && U > 0.97) this.mgMesh.position.z -= 0.012 * (Math.sin(B.t * 75) > 0.2 ? 1 : 0);                         /* recoil of each round */
-    pv.updateWorldMatrix(true, false); this.mgGripT.copy(this.mgGrip).applyMatrix4(pv.matrixWorld); this.tur.worldToLocal(this.mgGripT); (this.mgPivT || (this.mgPivT = new THREE.Vector3())).setFromMatrixPosition(pv.matrixWorld); this.tur.worldToLocal(this.mgPivT);
+    let mg = null; { const Ls = B.mgs || []; for (let i = Ls.length - 1; i >= 0 && i >= Ls.length - 12; i--) if (Ls[i] && Ls[i].m240) { mg = Ls[i]; break; } if (!mg && B._mg && B._mg.m240) mg = B._mg; }   /* his latest burst (the battle's latest burst may be another gun's) */
+    const U = this.st.ldrU, firing = !!(mg && B.t >= mg.t && B.t <= mg.t + (mg.dur || 3)), recent = !!(mg && B.t >= mg.t && B.t < mg.t + (mg.dur || 3) + 4); this.mgFiring = firing;
+    let want = 0, wantP = 0; if (recent && U > 0.8) { want = clamp((((Math.atan2(mg.e - T.e, mg.n - T.n) / DEG - (this.turBrg || 0) + 540) % 360) - 180), -110, 110);
+      const W = this.s && this.s.world, R = Math.max(5, Math.hypot(mg.e - T.e, mg.n - T.n)); if (W && W.h && tk.m240Tip) { tk.m240Tip.getWorldPosition(_on); const th = W.h(mg.e, mg.n) + 0.6; if (Number.isFinite(th)) wantP = clamp(Math.atan2(th - _on.y, R) / DEG, -10, 35); } }   /* laid on the target: along the ground, a little down */
+    { const bdt = this.mgT != null ? clamp(B.t - this.mgT, 0, 1.5) : 0; this.mgT = B.t; this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, bdt); this.mgPitch = ease(this.mgPitch, wantP, 3.5, bdt); }
+    pv.rotation.y = -this.st.mgYaw * DEG; this.mgCradle.rotation.x = -this.mgPitch * DEG;
+    this.mgMesh.position.copy(this.mgHome); if (firing && U > 0.97) this.mgMesh.position.z -= 0.012 * (Math.sin(B.t * 75) > 0.2 ? 1 : 0);   /* recoil of each round */
+    pv.updateWorldMatrix(true, true); this.tur.updateWorldMatrix(true, false); const M = this.mgM.copy(this.tur.matrixWorld).invert().multiply(this.mgCradle.matrixWorld);   /* the gun's frame, in the interior's frame */
+    for (let i = 0; i < 2; i++) this.mgHandT[i].copy(this.mgL.hands[i]).applyMatrix4(M);
+    _on.copy(this.mgL.grip).applyMatrix4(this.mgCradle.matrix); _on.y += 0.2; _on.z -= 0.32; this.mgEyeT.copy(_on).applyMatrix4(pv.matrixWorld); this.tur.worldToLocal(this.mgEyeT);   /* his eye: level, along the gun's bearing, whatever its elevation */
   }
-  _mgRest() { if (this.mgPivot) { this.mgPivot.rotation.y = 0; this.mgMesh.position.copy(this.mgHome); this.st.mgYaw = 0; } }
+  _mgRest() { if (this.mgPivot) { this.mgPivot.rotation.y = 0; this.mgCradle.rotation.x = 0; this.mgMesh.position.copy(this.mgHome); this.st.mgYaw = 0; this.mgPitch = 0; } }
   // in an outside view only the hatch lids, the dark of the open hatchways and the men who are up are left showing
   _outsideOnly() { const lo = this.st.hatch > 0.25, co = this.st.cup2 > 0.25 || this.st.cup1 > 0.25; for (const g of [this.tur, this.hul]) for (const c of g.children) { if (c.userData.crew) continue; c.visible = !!c.userData.out && (!c.userData.hole || (c === this.part.ldrHole ? lo : co)) && (c === this.part.hatch || c === this.part.ldrHole ? this.st.hatch > 0.01 : !!this.cupUser); } }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
     let yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch; const U = cams.mode === 'in_ldr' ? this.st.ldrU : 0, upK = sm((U - 0.6) / 0.3);
-    if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + (10 - S.pitch0) * 0 + (-6 - S.pitch0) * upK * 0 - 9 * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun */
+    if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + ((this.mgPitch || 0) - 8 - S.pitch0) * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun, a few degrees below its line */
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
     _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
@@ -477,7 +496,7 @@ export class Interior {
       this.boxed = list; }
     else if (!on && this.boxed) { for (const x of this.boxed) { x.m.clippingPlanes = x.cp || null; x.m.clipIntersection = !!x.ci; x.m.needsUpdate = true; } this.boxed = null; }
     if (!on) return; const drv = mode === 'in_drv', G = drv ? this.hul : this.tur, lo = drv ? [-0.8, -1.4, -5.2] : [-1.3, -1.3, -1.3], hi = drv ? [0.8, -0.2, DIM.DZ + 0.95] : [1.3, DIM.RF + 0.8, 1.75];
-    if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; this._ldrHead(1, _on); lo[0] = Math.min(hx, _on.x) - r; lo[1] = DIM.RF - 0.3; lo[2] = Math.min(hz, _on.z) - r; hi[0] = Math.max(hx, _on.x) + r; hi[1] = DIM.RF + 0.3; hi[2] = Math.max(hz, _on.z) + r; }
+    if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; lo[0] = hx - r; lo[1] = DIM.RF - 0.3; lo[2] = hz - r; hi[0] = hx + r; hi[1] = DIM.RF + 0.3; hi[2] = hz + r; }   /* only the hatchway itself: the loader stands in it, his gun's ring is round it */
     for (let i = 0; i < 6; i++) { const ax = i >> 1, sg = i & 1 ? 1 : -1; _v2.set(0, 0, 0).setComponent(ax, sg); _v.set(0, 0, 0).setComponent(ax, sg > 0 ? hi[ax] : lo[ax]); _v.applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); this.boxPl[i].setFromNormalAndCoplanarPoint(_v2, _v); }
   }
 }

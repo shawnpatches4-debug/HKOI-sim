@@ -100,7 +100,7 @@ const FS = /* glsl */`
     vec3 v = normalize(cameraPosition - vW);
     float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb;
     #ifdef CMAP
-      if (uNearCut > 0.0 && (vC.r < 0.5 || distance(cameraPosition, vW) < uNearCut)) discard;   /* the viewer's own body: only his arms and hands are drawn */
+      if (uNearCut > 0.0 && (vC.r < 0.5 || distance(cameraPosition, vW) < uNearCut)) discard; if (uNearCut < 0.0 && distance(cameraPosition, vW) < -uNearCut) discard;   /* head out of a hatch: his whole body below him, only his own head left out */   /* the viewer's own body: only his arms and hands are drawn */
       alb = uTint;
       #ifdef HASMAP
         alb *= texture2D(uCMap, vUv).rgb * 1.5;

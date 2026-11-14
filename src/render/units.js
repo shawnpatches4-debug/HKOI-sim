@@ -89,7 +89,7 @@ export class TankView {
     const d = ((wy - this.rwsY + 540) % 360) - 180; this.rwsY += Math.max(-90 * dt, Math.min(90 * dt, d)); this.rwsP += Math.max(-60 * dt, Math.min(60 * dt, wp - this.rwsP)); this.rwsYaw.rotation.y = -this.rwsY * DEG; this.rwsPitch.rotation.x = -this.rwsP * DEG;
     this.recoil = Math.max(0, this.recoil - dt * 1.4); this.rwsSlide.position.z = -this.recoil; }
   // where the coaxial machine gun (beside the main gun) and the commander's .50 are in the scene
-  mgMuzzle(which, out) { if (!this.turret) return null; this.group.updateWorldMatrix(true, true); if (which === 'm240') out.set(0.78, 1.3, 0.55); else out.set(which === 'coax' ? -0.32 : -0.75, which === 'coax' ? 0.48 : 1.38, which === 'coax' ? 2.1 : 1.1); return this.turret.localToWorld(out); }   /* m240: the loader's hatch, left of the turret roof (place assumed) */
+  mgMuzzle(which, out) { if (!this.turret) return null; this.group.updateWorldMatrix(true, true); if (which === 'm240' && this.m240Tip) return this.m240Tip.getWorldPosition(out); if (which === 'm240') out.set(0.72, 0.99, 0.65); else out.set(which === 'coax' ? -0.32 : -0.75, which === 'coax' ? 0.48 : 1.38, which === 'coax' ? 2.1 : 1.1); return this.turret.localToWorld(out); }   /* m240: the muzzle of the loader's gun as the interior has turned it (m240Tip, set by interior.js), else where the model carries it */
   // where the 30 mm muzzle is in the scene right now; kick = true when a round has just left
   hkoiMuzzle(out, kick) { if (!this.muzzle) return null; this.group.updateWorldMatrix(true, true); if (kick) this.recoil = 0.12; return this.muzzle.getWorldPosition(out); }
   // swing the turret toward a compass bearing at traverse speed (40 degrees a second); hullDeg is the hull's heading
