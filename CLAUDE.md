@@ -5,7 +5,7 @@ weapon station (HKOI) and Trophy against missile teams and drones, in the browse
 He is not a programmer: explain in plain words, lead with what changed and what you could not verify.
 
 ## Start here
-1. Read `docs/HANDOFF.md` (current state and next tasks), then the last ~20 entries of `docs/WORKLOG.md`, then skim `docs/OVERHAUL_SPEC.md` (everything he asked for).
+1. Read `docs/HANDOFF.md` (current state and next tasks), then the last ~20 entries of `docs/WORKLOG.md`, then skim `docs/OVERHAUL_SPEC.md` (everything he asked for), `docs/AI_SPEC.md` (his AI decisions) and `docs/LESSONS_FROM_V40.md` (what the old simulator teaches about this one).
 2. `bash tools/setup.sh` once per fresh workspace. If `assets/` is empty, ask Shawn for `hkoi-assets.zip` and unzip it into `./assets` first.
 3. `bash tools/dev.sh check` must pass before you call anything done.
 
