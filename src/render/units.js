@@ -761,7 +761,19 @@ export function missileMesh(drone, assetBase) {
   if (drone && assetBase) { const g = new THREE.Group(), stand = missileMesh(true); g.add(stand); loadModel(assetBase + 'enemy/fpv.json').then(m => { if (!m) return; g.remove(stand); const f = fit(m.clone(), 0.62); f.position.y = -0.1; f.rotation.y = missileMesh.DRONE_YAW; g.add(f); }); return g; }
   const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: drone ? '#1c1e20' : '#55594f', roughness: 0.6, metalness: 0.3 });
   if (drone) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.3), m); g.add(b); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.01, 10), new THREE.MeshBasicMaterial({ color: '#aab3b7', transparent: true, opacity: 0.3 })); r.position.set(x * 0.17, 0.04, z * 0.17); g.add(r); } const w = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.02, 0.45, 8), new THREE.MeshStandardMaterial({ color: '#4d5638' })); w.rotation.x = Math.PI / 2; w.position.set(0, -0.07, 0.08); g.add(w); g.scale.setScalar(2.2); }
-  else { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 1.2, 10), m); b.rotation.x = Math.PI / 2; const n = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.25, 10), m); n.rotation.x = Math.PI / 2; n.position.z = 0.72; g.add(b, n); const glow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd9a0' })); glow.position.z = -0.7; g.add(glow); g.scale.setScalar(1.6); }
+  else {
+    // a missile: body, nose, four fins, and the motor: a flame out of the back and a soft glow that can be seen from far off.
+    // userData.flame and userData.glow let the view of the engagement flicker them and switch them off when the motor has burnt out.
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 1.2, 10), m); b.rotation.x = Math.PI / 2;
+    const n = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.25, 10), m); n.rotation.x = Math.PI / 2; n.position.z = 0.72; g.add(b, n);
+    for (let k = 0; k < 4; k++) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.2, 0.22), m); f.position.set(Math.cos(k * Math.PI / 2) * 0.13, Math.sin(k * Math.PI / 2) * 0.13, -0.48); f.rotation.z = k * Math.PI / 2 + Math.PI / 2; g.add(f); }
+    const flame = new THREE.Group(); flame.position.z = -0.6;
+    const hot = new THREE.MeshBasicMaterial({ color: new THREE.Color(9, 6, 3), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }), outer = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.4, 0.4), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.9, 8, 1, true), hot); c1.rotation.x = -Math.PI / 2; c1.position.z = -0.45;
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.11, 1.7, 8, 1, true), outer); c2.rotation.x = -Math.PI / 2; c2.position.z = -0.85; flame.add(c1, c2); g.add(flame);
+    if (!missileMesh.glowTex) { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,225,170,.85)'); gr.addColorStop(0.45, 'rgba(255,150,60,.25)'); gr.addColorStop(1, 'rgba(255,120,40,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); missileMesh.glowTex = new THREE.CanvasTexture(c); }
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: missileMesh.glowTex, color: new THREE.Color(5, 4, 3), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); glow.position.z = -0.75; g.add(glow);
+    g.userData.flame = flame; g.userData.glow = glow; g.scale.setScalar(1.6); }
   return g;
 }
 
