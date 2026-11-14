@@ -103,6 +103,8 @@ export function buildInterior(labels) {
   // rail; on the loader's side an open frame he reaches over; a plate across the back.
   const GW = 0.36;
   T.box('fit', 0.02, 0.34, 1.26, C.creamD, GW, GY - 0.21, 0.16); T.box('fit', 0.03, 0.03, 1.26, C.black, GW, GY - 0.03, 0.16);
+  for (const y of [GY - 0.1, GY - 0.32]) T.box('fit', 0.008, 0.022, 1.2, C.cream, GW + 0.012, y, 0.16); for (let i = 0; i < 7; i++) T.cyl('fit', 0.007, 0.007, 0.006, C.steel, GW + 0.012, GY - 0.065, -0.4 + i * 0.19, 0, 0, Math.PI / 2, 6);   /* pressed ribs and a row of bolts */
+  T.label('RECOIL GUARD', 0.03, GW + 0.0115, GY - 0.27, -0.2, 0, Math.PI / 2, 0, 'stencil'); T.label('STAND CLEAR WHEN GUN IS ARMED', 0.022, GW + 0.0115, GY - 0.27, 0.48, 0, Math.PI / 2, 0, 'stencil', { color: '#8a1a12' });
   for (const y of [GY - 0.36, GY - 0.03]) T.box('fit', 0.03, 0.03, 1.26, C.black, -GW, y, 0.16); for (const z of [-0.45, 0.16, 0.77]) T.box('fit', 0.03, 0.3, 0.03, C.black, -GW, GY - 0.195, z);
   T.box('fit', GW * 2, 0.02, 1.26, C.blackP, 0, GY - 0.39, 0.16); T.box('fit', GW * 2 + 0.02, 0.36, 0.02, C.creamD, 0, GY - 0.2, 0.8);
   T.label('CAUTION\nRECOIL PATH', 0.07, 0, GY - 0.16, 0.788, 0, Math.PI, 0, 'warn'); T.label('KEEP CLEAR OF BREECH', 0.035, GW + 0.012, GY - 0.2, 0.3, 0, Math.PI / 2, 0, 'warn');
@@ -193,7 +195,7 @@ export function buildInterior(labels) {
     [['hkRadar', 'RADAR', 0xffb020], ['hkTrack', 'TRACK', 0x30ff60], ['hkFire', 'FIRE', 0xff2a1a], ['hkArmed', 'ARMED', 0x30ff60]].forEach(([id, s, hex], i) => { const v = 0.115 - i * 0.045; T.lamp(ind(id), 0.05, 0.022, hex, 0.135, v, 0.002); T.label(s, 0.012, 0.19, v, 0.0015, 0, 0, 0, 'panel', { size: 22 }); });
     ctl(T, 'tur', 'toggle', -0.19, -0.085, 'HKOI master arm (the system is armed for the mission; the crew does not safe it in contact)', { locked: true, state: 1, label: 'MASTER ARM', lh: 0.012 });
     ctl(T, 'tur', 'knob', -0.115, -0.085, 'HKOI mode: safe, commander\'s consent, automatic (set to automatic for the mission)', { n: 3, state: 2, locked: true, label: 'SAFE-SEMI-AUTO', lh: 0.012 });
-    ctl(T, 'tur', 'toggle', -0.04, -0.085, 'HKOI radar: silent until a warning, then on (the system switches it itself: watch it move)', { locked: true, key: 'radar', label: 'RADAR SIL / ON', lh: 0.012 });
+    ctl(T, 'tur', 'toggle', -0.04, -0.085, 'HKOI radar: scans all the time (the system runs it; the switch shows it on)', { locked: true, key: 'radar', state: 1, label: 'RADAR OFF / ON', lh: 0.012 });
     ctl(T, 'tur', 'button', 0.035, -0.085, 'HKOI display page: status, threats, rounds', { key: 'hkPage', label: 'PAGE', lh: 0.012 });
     ctl(T, 'tur', 'knob', 0.105, -0.085, 'HKOI display brightness', { n: 4, state: 2, key: 'hkBrt', label: 'BRT', lh: 0.012 });
     ctl(T, 'tur', 'toggle', 0.175, -0.085, 'HKOI warning tone in the headsets: on or off', { state: 1, key: 'hkTone', label: 'TONE', lh: 0.012 });
@@ -223,7 +225,8 @@ export function buildInterior(labels) {
     T.cyl('shell', R + 0.02, R + 0.02, yb - y0, C.cream, CX, (y0 + yb) / 2, CZ, 0, 0, 0, 32, true); T.cyl('shell', R + 0.02, R + 0.02, 0.07, C.cream, CX, yt + 0.035, CZ, 0, 0, 0, 32, true);
     T.ring('fit', R + 0.02, 0.022, C.steel, CX, RF, CZ, Math.PI / 2, 0, 0, 32);
     for (let i = 0; i < 8; i++) { const a = (i * 45 + 22.5) * Math.PI / 180, px = CX + Math.sin(a) * R, pz = CZ - Math.cos(a) * R;
-      T.box('shell', 0.115, yt - yb + 0.004, 0.05, C.blackP, px, (yb + yt) / 2, pz, 0, -a, 0);                                   /* post between two ports */
+      T.box('shell', 0.115, yt - yb + 0.004, 0.05, C.creamD, px, (yb + yt) / 2, pz, 0, -a, 0);                                   /* housing between two ports: painted, with a black frame either side and four bolts */
+      T.push(px - Math.sin(a) * 0.026, (yb + yt) / 2, pz + Math.cos(a) * 0.026, 0, -a, 0); for (const sx of [-1, 1]) { T.box('fit', 0.012, yt - yb, 0.012, C.black, sx * 0.052, 0, 0.004); for (const sy of [-1, 1]) T.cyl('fit', 0.0055, 0.0055, 0.006, C.steel, sx * 0.028, sy * 0.045, 0.002, Math.PI / 2, 0, 0, 6); } T.box('fit', 0.05, 0.03, 0.004, C.blackP, 0, 0, 0.001); T.pop();
       const b = i * 45 * Math.PI / 180, bx = CX + Math.sin(b) * (R - 0.012), bz = CZ - Math.cos(b) * (R - 0.012);
       T.box('fit', 0.2, 0.018, 0.04, C.rubber, bx, yt - 0.003, bz, 0, -b, 0); T.box('fit', 0.2, 0.014, 0.05, C.black, bx, yb + 0.004, bz, 0, -b, 0);
       T.push(bx, (yb + yt) / 2, bz, 0, -b, 0); ctl(T, 'tur', 'spot', 0, 0, `Observation port: looks out to the ${DIRS[i]} of the turret`, { r: 0.075 }); T.pop(); }
@@ -279,6 +282,8 @@ export function buildInterior(labels) {
   T.tag = 'cables';
   for (let i = 0; i < 4; i++) { const p = []; for (let k = 0; k <= 7; k++) p.push([-1.18, RF - 0.06 - i * 0.03 + Math.sin(k * 1.7 + i) * 0.008, -0.7 + k * 0.24]); T.tube('fit', p, 0.007 + (i % 2) * 0.003, i % 3 ? C.black : C.gunm); }
   for (let i = 0; i < 3; i++) { const p = []; for (let k = 0; k <= 7; k++) p.push([1.18, RF - 0.05 - i * 0.03 + Math.sin(k * 1.3 + i) * 0.008, -0.7 + k * 0.24]); T.tube('fit', p, 0.008, C.black); }
+  for (const z of [-0.5, 0.0, 0.5, 0.92]) { T.box('fit', 0.012, 0.1, 0.022, C.steel, -1.187, RF - 0.088, z); T.box('fit', 0.012, 0.1, 0.022, C.steel, 1.187, RF - 0.08, z); }   /* clamps holding the cable runs to the walls */
+  T.label('TURRET MAY TURN WITHOUT WARNING', 0.024, -0.62, 0.3, -1.347, 0, 0, 0, 'stencil', { color: '#8a1a12' }); T.label('CHECK HATCHES BEFORE TRAVERSE', 0.02, -1.196, 0.2, 0.86, 0, Math.PI / 2, 0, 'stencil');
   T.tube('fit', [[1.17, RF - 0.07, -0.5], [1.14, 0.3, -0.62], [1.1, 0.19, -0.74]], 0.008, C.black); T.tube('fit', [[1.17, RF - 0.06, 0.1], [1.15, 0.36, 0.1], [1.12, 0.28, 0.1]], 0.008, C.black); T.tube('fit', [[0.66, 0.4, -0.24], [0.74, 0.47, -0.5], [0.78, RFF + 0.02, -0.9]], 0.008, C.black);
   T.tube('fit', [[-0.78, FL + 0.04, -0.42], [-0.9, -0.45, -0.4], [-0.96, -0.1, -0.4], [-1.1, 0.14, -0.52], [-0.98, RFF - 0.06, -1.12]], 0.03, C.rubber, 7);
   for (const [x, z] of [[-0.25, -0.45], [0.5, 0.9], [-1.0, 0.75]]) T.geo('fit', new THREE.TorusGeometry(0.055, 0.011, 6, 10, Math.PI), C.yellow, x, RF - 0.012, z, Math.PI, 0, 0);
@@ -337,13 +342,17 @@ export function buildInterior(labels) {
     H.ring('fit', 0.3, 0.022, C.steel, 0, DRF - 0.005, DZ + 0.42, Math.PI / 2, 0, 0, 24); H.cyl('fit', 0.012, 0.012, 0.2, C.yellow, 0.18, DRF - 0.05, DZ + 0.42, Math.PI / 2, 0, 0, 8); H.label('HATCH', 0.014, 0.18, DRF - 0.004, DZ + 0.6, Math.PI / 2, 0, 0, 'plate', { size: 22 });
     // reclined seat with headrest
     H.box('fit', 0.44, 0.07, 0.46, C.cloth, 0, HF + 0.2, DZ + 0.42, 0.18); H.box('fit', 0.44, 0.66, 0.07, C.cloth, 0, HF + 0.42, DZ + 0.92, -0.95); H.box('fit', 0.22, 0.14, 0.07, C.cloth, 0, DRF - 0.33, DZ + 1.22, -0.8); H.box('fit', 0.3, 0.14, 0.5, C.creamD, 0, HF + 0.07, DZ + 0.5);
-    // the control box under the vision blocks. The T-bar hangs from it within reach of his hands, as in the real vehicle: it turns
-    // to steer, the right handgrip twists as the throttle, and the gear selector sits on its centre.
-    H.box('fit', 0.14, 0.08, 0.09, C.black, 0, yb - 0.055, zb + 0.06); H.cyl('fit', 0.02, 0.024, 0.1, C.steel, 0, yb - 0.135, zb + 0.105, 0.6, 0, 0, 10);
-    moving.tbar = { g: 'hul', build: k => { k.box('p', 0.34, 0.04, 0.05, C.black, 0, 0, 0); k.cyl('p', 0.023, 0.023, 0.11, C.rubber, -0.225, 0, 0, 0, 0, Math.PI / 2, 10); k.box('p', 0.08, 0.03, 0.07, C.gunm, 0, 0.034, 0); k.label('R   N   D   L', 0.011, 0, 0.0505, 0.022, -Math.PI / 2, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.2, zb + 0.14], rx: 0.3 };
-    moving.throttle = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.025, 0.025, 0.11, C.rubber, 0, 0, 0, 0, 0, Math.PI / 2, 12); k.box('p', 0.03, 0.008, 0.012, C.white, 0, 0.026, 0); k.cyl('p', 0.03, 0.03, 0.012, C.steel, -0.061, 0, 0, 0, 0, Math.PI / 2, 12); }, pos: [0.225, 0, 0] };
-    moving.gear = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.006, 0.006, 0.05, C.steel, 0, 0.025, 0, 0, 0, 0, 6); k.ball('p', 0.012, C.red, 0, 0.055, 0); }, pos: [0, 0.05, -0.012] };
-    H.label('T-BAR: TURN TO STEER  ·  TWIST RIGHT GRIP FOR POWER', 0.011, 0, yb - 0.055, zb + 0.1055, 0, 0, 0, 'plate', { size: 22 });
+    // the T-bar: a yoke hanging on a slim stem from a small box tucked up under the vision blocks, with two motorcycle-style handgrips at
+    // hand height in front of his chest. It turns to steer; the right grip twists as the throttle; the gear selector sits on its hub.
+    H.box('fit', 0.09, 0.03, 0.06, C.blackP, 0, yb - 0.028, zb + 0.05); H.cyl('fit', 0.012, 0.012, 0.21, C.steel, 0, yb - 0.125, zb + 0.118, 0.66, 0, 0, 8);
+    moving.tbar = { g: 'hul', build: k => {
+      k.cyl('p', 0.028, 0.028, 0.04, C.gunm, 0, 0, 0, Math.PI / 2, 0, 0, 12); k.cyl('p', 0.02, 0.02, 0.006, C.black, 0, 0, 0.022, Math.PI / 2, 0, 0, 12);
+      for (const sd of [-1, 1]) { k.cyl('p', 0.0105, 0.0105, 0.15, C.steel, sd * 0.098, -0.013, 0, 0, 0, -sd * (Math.PI / 2 + 0.16), 8); k.box('p', 0.02, 0.02, 0.026, C.gunm, sd * 0.165, -0.024, 0); k.cyl('p', 0.004, 0.004, 0.09, C.steel, sd * 0.2, -0.03, -0.03, 0, 0, -sd * (Math.PI / 2 + 0.1), 6); }   /* arms, lever perches and brake levers */
+      k.cyl('p', 0.019, 0.019, 0.105, C.rubber, -0.225, -0.036, 0, 0, 0, Math.PI / 2 + 0.16, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, -0.185 - i * 0.02, -0.0296 - i * 0.0032, 0, 0, 0, Math.PI / 2 + 0.16, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, -0.2795, -0.0448, 0, 0, 0, Math.PI / 2 + 0.16, 10);
+      k.label('R  N  D', 0.009, 0, -0.012, 0.0256, 0, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.215, zb + 0.19] };
+    moving.throttle = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.019, 0.019, 0.105, C.rubber, 0, 0, 0, 0, 0, 0, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, 0, -0.04 + i * 0.02, 0, 0, 0, 0, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, 0, 0.055, 0, 0, 0, 0, 10); k.box('p', 0.006, 0.09, 0.008, C.white, 0, 0, 0.0195); k.cyl('p', 0.024, 0.024, 0.012, C.steel, 0, -0.058, 0, 0, 0, 0, 10); }, pos: [0.225, -0.036, 0] };
+    moving.gear = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.004, 0.004, 0.034, C.steel, 0, 0.017, 0, 0, 0, 0, 6); k.ball('p', 0.008, C.red, 0, 0.037, 0); }, pos: [0, 0.006, 0.027] };
+    H.push(0, yb - 0.215, zb + 0.215); ctl(H, 'hul', 'spot', 0, 0, 'T-bar: turn it to steer, twist the right grip for power, gear selector on the hub (the driver works it: watch it move)', { locked: true, r: 0.09 }); H.pop();
     for (const [i, x] of [[0, -0.31], [1, 0], [2, 0.31]]) { H.push(x, (yb + DRF) / 2, zb + 0.05); ctl(H, 'hul', 'spot', 0, 0, `Driver's vision block: looks out ${['to the left front', 'straight ahead', 'to the right front'][i]}`, { r: 0.09 }); H.pop(); }
     // pedals
     H.box('fit', 0.2, 0.02, 0.14, C.floor, 0, HF + 0.16, DZ - 0.72, 0.9); H.box('fit', 0.04, 0.2, 0.03, C.steel, 0, HF + 0.08, DZ - 0.68, 0.5); H.box('fit', 0.09, 0.02, 0.2, C.floor, -0.28, HF + 0.1, DZ - 0.6, 0.5);

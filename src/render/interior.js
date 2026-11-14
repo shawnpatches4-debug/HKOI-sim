@@ -29,7 +29,7 @@ export class Interior {
     this.warnTone = false;       // the same, while the HKOI tone switch is on (a flag for the sound module; nothing plays it yet)
     this.intercomVol = 0.75;     // what the intercom volume knobs are set to, 0 to 1 (a value for the sound module)
     this.look = { yaw: 0, pitch: 0, zoom: 1 }; this.head = { z: 0, vz: 0, x: 0, vx: 0, up: 0 };
-    this.cupHatch = 0;           // commander's hatch: 0 closed, 1 open-protected, 2 open (the viewer's choice; the battle has no state for it)
+    this.cupHatch = 0; this.cupUser = false;   // commander's hatch: 0 closed, 1 open-protected, 2 open. It follows the crew (closed when they are closed down, open-protected otherwise) until the viewer moves its handle
     this.domeMode = 1; this.domeUser = false; this.hkPage = 0; this.toneOn = true; this.lampTestT = 0; this.hkFireT = 0; this.clock = 0;
     this.st = { door: 0, block: 0, hatch: 0, rec: 9, slew: 0, steer: 0, arm: 1, cup1: 0, cup2: 0, thr: 0, gear: 0 }; this.last = { main: null, yaw: null, hdg: null, v: 0, recoil: 0, t: null };
     this.stats = { triangles: 0, meshes: 0, sightCalls: 0, controls: 0 };
@@ -118,7 +118,7 @@ export class Interior {
   }
   _apply(c) {
     const k = c.key, U = n => this.scr[n].uniforms; if (!k) return;
-    if (k === 'cdrHatch') { this.cupHatch = c.state; return; }
+    if (k === 'cdrHatch') { this.cupHatch = c.state; this.cupUser = true; return; }   /* from now on the viewer's choice stands */
     if (k === 'dome') { this.domeMode = c.state; this.domeUser = true; } else if (k === 'gpsPol') U('gps').uMode.value = c.state ? -1 : 1; else if (k === 'citvPol') U('citv').uMode.value = c.state ? -1 : 1;
     else if (k === 'gpsBrt') this.brt.gps = BRT[c.state]; else if (k === 'citvBrt') this.brt.citv = BRT[c.state]; else if (k === 'compBrt') this.brt.comp = BRT[c.state]; else if (k === 'hkBrt') this.brt.hkoi = BRT[c.state]; else if (k === 'drvBrt') this.brt.drv = BRT[c.state];
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
@@ -179,9 +179,9 @@ export class Interior {
     const yaw = this.tank.turretYaw || 0, hdg = s.shown ? s.shown.h : T.h, v = T.v || 0;
     if (L.yaw != null && dt > 1e-4) { const rate = clamp((((yaw - L.yaw + 540) % 360) - 180) / dt / 40, -1, 1); this.st.slew = ease(this.st.slew, rate, 10, dt); const tr = clamp((((hdg - L.hdg + 540) % 360) - 180) / dt / 25, -1, 1); this.st.steer = ease(this.st.steer, s.playing ? tr : 0, 6, dt); }
     L.yaw = yaw; L.hdg = hdg; const acc = dt > 1e-4 && s.playing ? clamp((v - L.v) / Math.max(dt * (s.speed || 1), 1e-3), -4, 4) : 0; L.v = v;
-    P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(0.3, 0, 0); P.tbar.rotateY(-this.st.steer * 0.55);   /* the T-bar turns about its stem */
-    this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.x = -this.st.thr * 1.2;   /* twist grip: more power, more twist */
-    this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.x = -this.st.gear * 0.5;
+    P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(-0.25, 0, -this.st.steer * 0.6);   /* the T-bar turns like handlebars, seen from his eye as a roll */
+    this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.set(0, 0, -(Math.PI / 2 + 0.16)); P.throttle.rotateY(-this.st.thr * 1.3);   /* twist grip: more power, more twist */
+    this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.z = -this.st.gear * 0.6;
     this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose();
     // head: leans against acceleration and jolts with the main gun
     { const H = this.head; let left = Math.min(dt, 0.1); while (left > 1e-5) { const h = Math.min(left, 1 / 120); H.vz += (-90 * H.z - 13 * H.vz + acc * 0.9) * h; H.z = clamp(H.z + H.vz * h, -0.06, 0.06); H.vx += (-90 * H.x - 13 * H.vx - this.st.steer * Math.abs(v) * 0.5) * h; H.x = clamp(H.x + H.vx * h, -0.04, 0.04); left -= h; } }
@@ -189,16 +189,19 @@ export class Interior {
     // ---- the HKOI station, as its panel shows it
     const rc = this.tank.recoil || 0; if (rc > L.recoil + 1e-4) this.hkFireT = 0.8; L.recoil = rc; this.hkFireT = Math.max(0, this.hkFireT - dt);
     const active = !!(B._volleyActive && B._volleyActive()), inbound = info.length > 0;
-    const hk = !T.alive ? 'OFF' : this.hkFireT > 0 ? 'FIRING' : s.volleys && s.volleys.aimAt ? 'LAYING' : info.some(m => m.tracked) ? 'TRACKING' : info.some(m => m.cued) ? 'CUED' : active && inbound ? 'SEARCH' : 'RADAR SILENT';
+    const nTrk = info.filter(m => m.tracked).length; this.hkTracks = nTrk;
+    const hk = !T.alive ? 'OFF' : this.hkFireT > 0 ? 'FIRING' : s.volleys && s.volleys.aimAt ? 'LAYING' : nTrk ? 'TRACKING' : info.some(m => m.cued) ? 'CUED' : 'SEARCH';   /* the radar scans all the time: with nothing found it is searching */
     this.hkState = hk; this.warning = T.alive && active && inbound; this.warnTone = this.warning && this.toneOn;
 
+    // the crew's own state (four times a second): shown on the HKOI panel's crew page; the commander's hatch follows whether the crew is closed down
+    this.crewT = (this.crewT || 0) - dt; if (this.crewT <= 0) { this.crewT = 0.25; this.crewS = B.crewState ? B.crewState() : null; if (!this.cupUser && this.crewS && this.crewS.on) { const want = this.crewS.buttoned ? 0 : 1; if (want !== this.cupHatch) this.setCupolaHatch(want); } }
     // ---- indicator lights
     const I = SHARED.uInd.value, blink = (this.clock * 2.2) % 1 < 0.55 ? 1 : 0, set = (n, val) => { if (IND[n] != null) I[IND[n]] = val; }, rf = B._rf, wait = rf ? rf.at - B.t : 0;
     this.lampTestT = Math.max(0, this.lampTestT - dt);
     if (this.lampTestT > 0) I.fill(1); else {
       I.fill(0); const w = this.warning ? blink : 0; set('gnrWarn', w); set('cdrWarn', w); set('ldrWarn', w); set('drvWarn', w);
       set('ammo2', 1); set('gunReady', T.loaded && T.main > 0 && T.alive ? 1 : 0); set('laser', rf && wait > 0 && wait < 3 ? blink : 0.15);
-      set('hkRadar', hk === 'RADAR SILENT' || hk === 'OFF' ? 0 : 1); set('hkTrack', hk === 'TRACKING' || hk === 'LAYING' || hk === 'FIRING' ? 1 : 0); set('hkFire', hk === 'FIRING' ? 1 : 0); set('hkArmed', T.alive ? 1 : 0);
+      set('hkRadar', hk === 'OFF' ? 0 : 1); set('hkTrack', hk === 'TRACKING' || hk === 'LAYING' || hk === 'FIRING' ? 1 : 0); set('hkFire', hk === 'FIRING' ? 1 : 0); set('hkArmed', T.alive ? 1 : 0);
       set('ldrSafe', T.loaded ? 0 : 1); set('ldrArmed', T.loaded ? 1 : 0); set('turPwr', T.alive ? 1 : 0); set('smkL', 0.8); set('smkR', 0.8); set('apsL', st.apsL == null || st.apsL > 0 ? 1 : 0); set('apsR', st.apsR == null || st.apsR > 0 ? 1 : 0);
       set('net0', 0.8); set('net1', 0.6 + 0.4 * (Math.sin(this.clock * 9) > 0.3 ? 1 : 0)); set('net2', blink * 0.7); set('radio0', 0.7); set('radio1', 0.7);
       for (const who of CREW_NAMES) set('icom' + who, 0.5);
@@ -207,7 +210,7 @@ export class Interior {
       const dm = this.domeMode; for (const d of DOME_IDS) { set(d + 'w', dm === 1 ? 1 : 0); set(d + 'r', dm === 2 ? 1 : 0); set(d + 'b', dm === 3 ? 1 : 0); }
     }
     // switches the crew and the systems move themselves
-    this._crewSet('park', Math.abs(v) < 0.1 ? 1 : 0); this._crewSet('mag', this.gpsMag === 10 ? 1 : 0); this._crewSet('radar', hk === 'RADAR SILENT' || hk === 'OFF' ? 0 : 1);
+    this._crewSet('park', Math.abs(v) < 0.1 ? 1 : 0); this._crewSet('mag', this.gpsMag === 10 ? 1 : 0); this._crewSet('radar', hk === 'OFF' ? 0 : 1);
     // spring back the controls the crew owns, release pushed buttons
     for (const c of this.controls) { if (c.anim > 0) { c.anim = Math.max(0, c.anim - dt * 2.2); this._poseControl(c); } if (c.press > 0) { c.press -= dt; this._poseControl(c); } }
 
@@ -303,20 +306,22 @@ export class Interior {
       if (x) { x.fillStyle = '#7ff0a0'; x.font = `700 20px ${F}`; x.textAlign = 'left'; const rows = [['RANGE', rf ? pad(Math.round(rf.R / 10) * 10, 4) + ' M' : '---- M'], ['AMMO', 'MPAT'], ['ROUNDS', pad(T.main, 2) + ' MP  ' + pad(T.ap == null ? 0 : T.ap, 2) + ' KE'], ['GUN', !T.alive ? 'OFF' : T.loaded ? 'LOADED' : T.main > 0 ? 'LOADING' : 'EMPTY'], ['TURRET', (rel >= 0 ? 'R ' : 'L ') + pad(Math.abs(rel), 3) + '°']]; rows.forEach((r, i) => { x.fillText(r[0], 12, 26 + i * 26); x.fillText(r[1], 130, 26 + i * 26); }); } }
     // HKOI panel: state, rounds, threats, a small all-round scope
     { const list = info.slice().sort((p, q) => p.range - q.range).slice(0, 5), blink = this.warning && Math.floor(this.clock * 2.2) % 2 ? 1 : 0;
-      const x = begin('hkoi', [hk, st.obs, st.he, st.apsL, st.apsR, this.hkPage, blink, T.alive, Math.round(this.turBrg / 3), list.map(m => m.tt.short + Math.round(m.range / 20) + (m.tracked ? 't' : m.cued ? 'c' : '')).join(',')].join('|'));
+      const x = begin('hkoi', [hk, st.obs, st.he, st.apsL, st.apsR, this.hkPage, blink, this.hkTracks, this.hkPage === 2 && this.crewS && this.crewS.on ? ['cdr', 'gnr', 'ldr', 'drv'].map(r => this.crewS.who[r].state + Math.round(this.crewS.who[r].stress * 20) + this.crewS.who[r].status).join() + this.crewS.buttoned : '', T.alive, Math.round(this.turBrg / 3), list.map(m => m.tt.short + Math.round(m.range / 20) + (m.tracked ? 't' : m.cued ? 'c' : '')).join(',')].join('|'));
       if (x) { const cy = '#7ff0e6', am = '#ffb020', rd = '#ff5040', gr = '#5cff7a'; x.textAlign = 'left'; x.fillStyle = cy; x.font = `700 22px ${F}`; x.fillText('HKOI  30 MM', 12, 28);
-        const sc = hk === 'FIRING' ? rd : hk === 'RADAR SILENT' ? cy : hk === 'OFF' ? '#557' : am; x.fillStyle = sc; x.fillRect(190, 8, 180, 28); x.fillStyle = '#020806'; x.textAlign = 'center'; x.font = `700 20px ${F}`; x.fillText(hk, 280, 29); x.textAlign = 'left';
+        const sc = hk === 'FIRING' ? rd : hk === 'SEARCH' ? cy : hk === 'OFF' ? '#557' : am; x.fillStyle = sc; x.fillRect(190, 8, 180, 28); x.fillStyle = '#020806'; x.textAlign = 'center'; x.font = `700 20px ${F}`; x.fillText(hk, 280, 29); x.textAlign = 'left';
         x.font = `700 19px ${F}`; const num = v => (v == null ? '--' : String(v)); x.fillStyle = st.obs != null && st.obs < 40 ? am : cy; x.fillText('OBSCURANT  ' + num(st.obs), 12, 64); x.fillStyle = st.he != null && st.he < 40 ? am : cy; x.fillText('HE AIRBURST  ' + num(st.he), 190, 64);
-        x.fillStyle = cy; x.fillText(`TROPHY  L ${num(st.apsL)}  R ${num(st.apsR)}`, 12, 90); x.fillText('MODE  AUTO', 250, 90); x.strokeStyle = '#2c6f6a'; x.lineWidth = 1; x.beginPath(); x.moveTo(8, 102); x.lineTo(504, 102); x.stroke();
-        if (this.hkPage === 2) { x.fillText('ROUNDS PAGE', 12, 128); x.font = `600 17px ${F}`; x.fillText('Obscurant rounds blind a guided missile\'s', 12, 156); x.fillText('link with a cloud in its path. HE airburst', 12, 178); x.fillText('rounds are for drones and close threats.', 12, 200); x.fillText(`Trophy countermeasures left: ${num(st.apsL)} and ${num(st.apsR)}`, 12, 230); }
-        else { x.font = `700 17px ${F}`; x.fillStyle = '#4fb0a8'; x.fillText('THREAT        RANGE     BRG    STATE', 12, 124); if (!list.length) { x.fillStyle = cy; x.fillText(hk === 'RADAR SILENT' ? 'NO WARNING · RADAR SILENT' : 'NONE IN THE AIR', 12, 152); }
+        x.fillStyle = cy; x.fillText(`TROPHY  L ${num(st.apsL)}  R ${num(st.apsR)}`, 12, 90); x.fillText(`TRACKS ${this.hkTracks || 0}   AUTO`, 250, 90); x.strokeStyle = '#2c6f6a'; x.lineWidth = 1; x.beginPath(); x.moveTo(8, 102); x.lineTo(504, 102); x.stroke();
+        if (this.hkPage === 2) { const cs = this.crewS; x.fillText('CREW', 12, 128); x.font = `600 17px ${F}`;
+          if (!cs || !cs.on) x.fillText('NO CREW REPORT', 12, 156); else { ['cdr', 'gnr', 'ldr', 'drv'].forEach((r, i) => { const m = cs.who[r]; x.fillStyle = m.status === 'down' ? rd : m.stress_level > 1 ? rd : m.stress_level ? am : cy; x.fillText(`${String(m.name).toUpperCase().slice(0, 10).padEnd(11)} ${String(m.status === 'down' ? 'DOWN' : m.state).toUpperCase().slice(0, 12).padEnd(13)} STRESS ${Math.round(m.stress * 100)}%`, 12, 154 + i * 23); }); x.fillStyle = cy; x.fillText(cs.abandoned ? 'VEHICLE ABANDONED' : cs.buttoned ? 'HATCHES CLOSED' : 'HATCHES OPEN', 12, 250); } }
+        else if (this.hkPage === 1) { x.fillText('ROUNDS PAGE', 12, 128); x.font = `600 17px ${F}`; x.fillText('Obscurant rounds blind a guided missile\'s', 12, 156); x.fillText('link with a cloud in its path. HE airburst', 12, 178); x.fillText('rounds are for drones and close threats.', 12, 200); x.fillText(`Trophy countermeasures left: ${num(st.apsL)} and ${num(st.apsR)}`, 12, 230); }
+        else { x.font = `700 17px ${F}`; x.fillStyle = '#4fb0a8'; x.fillText('THREAT        RANGE     BRG    STATE', 12, 124); if (!list.length) { x.fillStyle = cy; x.fillText(hk === 'OFF' ? 'SYSTEM OFF' : 'RADAR SCANNING · NO TRACKS', 12, 152); }
           list.forEach((m, i) => { x.fillStyle = m.tracked ? gr : m.cued ? am : cy; const y = 150 + i * 24; x.fillText(String(m.tt.short || 'THREAT').toUpperCase().slice(0, 11), 12, y); x.fillText(pad(m.range, 4) + ' M', 130, y); x.fillText(pad((m.brg + 360) % 360, 3), 222, y); x.fillText(m.tracked ? 'TRACKED' : m.cued ? 'CUED' : 'WARNING', 282, y); }); }
         // scope: the vehicle at the centre, north up; a line for the turret, a dot for each threat in the air
         { const ox = 432, oy = 196, R = 62; x.strokeStyle = '#2c6f6a'; x.lineWidth = 1.5; for (const r of [R, R * 0.5]) { x.beginPath(); x.arc(ox, oy, r, 0, 6.3); x.stroke(); } x.fillStyle = '#4fb0a8'; x.font = `700 13px ${F}`; x.textAlign = 'center'; x.fillText('N', ox, oy - R - 4); x.fillText('4 KM', ox, oy + R + 14);
           const tb = this.turBrg * DEG; x.strokeStyle = cy; x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(tb) * R * 0.45, oy - Math.cos(tb) * R * 0.45); x.stroke();
           for (const m of list) { const b = (m.brg || 0) * DEG, rr = Math.min(1, m.range / 4000) * R; x.fillStyle = m.tracked ? gr : m.cued ? am : rd; x.beginPath(); x.arc(ox + Math.sin(b) * rr, oy - Math.cos(b) * rr, 4, 0, 6.3); x.fill(); } x.textAlign = 'left'; }
         if (blink) { x.fillStyle = rd; x.fillRect(8, 282, 496, 30); x.fillStyle = '#020806'; x.textAlign = 'center'; x.font = `700 21px ${F}`; x.fillText('MISSILE WARNING', 256, 304); }
-        else { x.fillStyle = this.warning ? rd : '#4fb0a8'; x.textAlign = 'center'; x.font = `700 17px ${F}`; x.fillText(this.warning ? 'MISSILE WARNING' : hk === 'RADAR SILENT' ? 'LISTENING · NOTHING IN THE AIR' : ' ', 256, 303); } } }
+        else { x.fillStyle = this.warning ? rd : '#4fb0a8'; x.textAlign = 'center'; x.font = `700 17px ${F}`; x.fillText(this.warning ? 'MISSILE WARNING' : hk === 'SEARCH' ? 'RADAR SCANNING · NOTHING IN THE AIR' : ' ', 256, 303); } } }
     // driver's display
     { const v = T.v || 0, kmh = Math.round(Math.abs(v) * 3.6), hdg = Math.round(((s.shown ? s.shown.h : T.h) % 360 + 360) % 360) % 360, gear = v > 0.3 ? 'D' : v < -0.3 ? 'R' : 'N', blink = this.warning && Math.floor(this.clock * 2.2) % 2 ? 1 : 0;
       const x = begin('drv', [kmh, hdg, gear, blink, this.warning, T.alive, Math.round(this.tank.turretYaw || 0)].join('|'));

@@ -39,7 +39,7 @@ for (const fps of [30, 60, 144, 240]) {
     catch (e) { fails++; if (fails < 4) console.log('EXCEPTION at t', t.toFixed(2), cams.mode, e.stack.split('\n').slice(0, 3).join(' | ')); }
     if (!I.built) continue;
     maxDoor = Math.max(maxDoor, I.st.door); maxRec = Math.max(maxRec, I.part.breech.position.z - I.part.breech.userData.home.z); maxHatch = Math.max(maxHatch, I.st.hatch); if (I.hkState === 'FIRING') sawFire++; if (I.warning) sawWarn++;
-    maxThr = Math.max(maxThr, -I.part.throttle.rotation.x); maxSteer = Math.max(maxSteer, Math.abs(I.st.steer)); maxCup = Math.max(maxCup, I.st.cup1 + I.st.cup2); if (I.st.gear > 0.9) gearD++;
+    maxThr = Math.max(maxThr, I.st.thr); maxSteer = Math.max(maxSteer, Math.abs(I.st.steer)); maxCup = Math.max(maxCup, I.st.cup1 + I.st.cup2); if (I.st.gear > 0.9) gearD++;
     if (Math.abs(t - 26) < dt / 2) I.setCupolaHatch(1); if (Math.abs(t - 28) < dt / 2) I.setCupolaHatch(2); if (Math.abs(t - 30) < dt / 2) I.setCupolaHatch(0);
     if (Math.abs(t - 8) < dt / 2) at8 = [I.st.door.toFixed(2), I.part.round.visible, I.part.block.position.y.toFixed(2)];
     const c = R.scene.camera; for (const v of [c.position.x, c.position.y, c.position.z, c.quaternion.w, I.head.z, I.head.x]) if (!Number.isFinite(v)) nb++;

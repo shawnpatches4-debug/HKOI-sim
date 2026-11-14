@@ -4,8 +4,6 @@ export const ALLOW = [
   ['part:block', 'part:breech', 'the breech block slides in the breech ring'],
   ['aux-sight', 'gun', 'the auxiliary telescope passes through the gun mount to look out beside the gun'],
   ['bustle', 'part:round', 'a round slides out of its tube through the face of the rack'],
-  ['part:tbar', 'part:throttle', 'the twist grip turns on the end of the T-bar'],
-  ['driver', 'part:tbar', 'the T-bar hangs from its stem under the control box'],
   ['console1', 'gunner-handles', 'the bracket of the control handles is bolted under the sight panel'],
   ['basket', 'hull-tub', 'the round basket floor is tested here as a square box; the true clearance is tested separately below (hull fittings at least 1.02 m from the turret axis)'],
 ];

@@ -75,7 +75,7 @@ const FS = /* glsl */`
     cabClip(vW, uShell);
     vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
     vec3 v = normalize(cameraPosition - vW);
-    float kind = vC.a; vec3 alb = vC.rgb; float specK = 0.10; float shin = 18.0; float glow = 0.0;
+    float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb; float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
       vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05; glow = uBack * 0.22;
     #else
@@ -86,8 +86,15 @@ const FS = /* glsl */`
       else if (kind < 0.87) { vec3 tr = tri(uTread, vO, vON, 5.0); alb *= 0.45 + 0.8 * tr.r; specK = 0.35 * tr.r; shin = 24.0; }
       else { alb *= 0.75 + 0.35 * w3.r; specK = 0.0; }
     #endif
+    #ifndef LABELS
+    if (flat_ > 0.5) {   // distance from the nearest edge of this face, in metres: darker in toward the joint (as if less light reached it), and a thin worn line where paint rubs off the corner
+      vec2 duv = max(fwidth(vUv), vec2(1e-5)); float mpp = max(length(fwidth(vW)), 1e-5) * 0.7; vec2 e = min(vUv, 1.0 - vUv) / duv * mpp; float m = min(e.x, e.y);
+      occ = mix(0.66, 1.0, smoothstep(0.0, 0.022, m));
+      float rub = (1.0 - smoothstep(0.0012, 0.0035, m)) * (0.35 + 0.65 * w3.b); if (kind < 0.12) alb = mix(alb, vec3(0.42, 0.43, 0.41), rub * 0.55); else if (kind < 0.37) alb += rub * 0.10;
+    }
+    #endif
     vec3 dif = uAmb; vec3 spc = vec3(0.0);
-    float low = mix(0.62, 1.0, smoothstep(-1.1, 0.3, vO.y));   /* less light reaches the floor and the corners under the consoles */
+    float low = mix(0.52, 1.0, smoothstep(-1.1, 0.3, vO.y)) * occ;   /* less light reaches the floor and the corners under the consoles */
     for (int i = 0; i < ${NLAMP}; i++) {
       vec3 L = uLampPos[i] - vW; float d = length(L); L /= max(d, 1e-3);
       float r = d / uLampR[i]; float att = 1.0 / (1.0 + 6.0 * r * r) * clamp(1.6 - r * 0.8, 0.0, 1.0);
@@ -177,7 +184,7 @@ export function glassMaterial() {
   const c = canvas(128, 64), x = c.getContext('2d'), R = rnd(11); x.clearRect(0, 0, 128, 64);
   for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(205,215,200,${0.03 + R() * 0.07})`; x.fillRect(R() * 128, 0, 1 + R() * 5, 64); }
   for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(60,55,45,${0.08 + R() * 0.15})`; x.beginPath(); x.arc(R() * 128, R() * 64, 0.5 + R() * 1.6, 0, 7); x.fill(); }
-  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(120,150,140,0.20)'); g.addColorStop(0.3, 'rgba(120,150,140,0.03)'); g.addColorStop(1, 'rgba(120,150,140,0.12)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
+  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(95,140,125,0.34)'); g.addColorStop(0.3, 'rgba(105,145,130,0.10)'); g.addColorStop(1, 'rgba(120,150,140,0.12)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.ShaderMaterial({ uniforms: { uInside: SHARED.uInside, uMap: { value: t }, uExpo: SHARED.uExpo, uDay: { value: new THREE.Vector3(1, 1, 1) } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`varying vec2 vUv; ${DEPTH_VS} void main() { vUv = uv; cabDepth(modelViewMatrix * vec4(position, 1.0)); }`,
@@ -232,12 +239,12 @@ export class Kit {
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
     if (!this.b.has(bucket)) this.b.set(bucket, []); this.b.get(bucket).push(g); this.tris += (g.index ? g.index.count : n) / 3; return this;
   }
-  box(b, w, h, d, col, x, y, z, rx, ry, rz) { this._solid = true; return this.geo(b, new THREE.BoxGeometry(w, h, d), col, x, y, z, rx, ry, rz); }
+  box(b, w, h, d, col, x, y, z, rx, ry, rz) { this._solid = true; return this.geo(b, new THREE.BoxGeometry(w, h, d), [col[0], col[1] + 2],   /* +2 marks a flat-faced piece: the shader shades and wears its edges */ x, y, z, rx, ry, rz); }
   // cylinder along the y axis unless turned; seg sides
   cyl(b, r0, r1, len, col, x, y, z, rx, ry, rz, seg = 12, open = false) { this._solid = !open; return this.geo(b, new THREE.CylinderGeometry(r0, r1, len, seg, 1, open), col, x, y, z, rx, ry, rz); }
   ball(b, r, col, x, y, z, sx = 1, sy = 1, sz = 1) { this._solid = true; return this.geo(b, new THREE.SphereGeometry(r, 10, 7), col, x, y, z, 0, 0, 0, sx, sy, sz); }
   ring(b, R, r, col, x, y, z, rx, ry, rz, seg = 28, arc = Math.PI * 2) { return this.geo(b, new THREE.TorusGeometry(R, r, 6, seg, arc), col, x, y, z, rx, ry, rz); }
-  plane(b, w, h, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.PlaneGeometry(w, h), col, x, y, z, rx, ry, rz); }
+  plane(b, w, h, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.PlaneGeometry(w, h), [col[0], col[1] + 2], x, y, z, rx, ry, rz); }
   // a pipe or cable through the given points
   tube(b, pts, r, col, seg = 5) { const c = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2]))); return this.geo(b, new THREE.TubeGeometry(c, Math.max(6, pts.length * 4), r, seg), col); }
   // a placard: text drawn on the label sheet, placed as a small plate facing +z of the current frame at x, y, z (h = plate height in metres)
