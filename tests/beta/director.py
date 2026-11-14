@@ -38,6 +38,16 @@ HAND_JS = r'''(() => { const B = __beta, D = B.director, r = {}, run = n => { fo
   D.toggle(); run(2); r.off = { on: D.on, ctrl: D.ctrl, mode: B.cams.mode, speed: D.app.speed, capHidden: document.getElementById('dir-cap').style.opacity === '0', tagHidden: document.getElementById('dir-tag').hidden };
   D.toggle(); B.setPlaying(false); r.err = document.getElementById('errbar').hidden ? '' : document.getElementById('errbar').textContent.slice(0, 200); return JSON.stringify(r); })()'''
 
+AGAIN_JS = r'''(() => { const B = __beta, D = B.director, bar = document.getElementById('rp-bar'); bar.value = 0; bar.dispatchEvent(new Event('input'));
+  B.setPlaying(true); D.app.speed = 1; D.yielded = false; D.replayed.clear(); D.update(1 / 60);
+  let prev = B.battle.t, n = 0, went = null, back = null, saw = false, rig = null; const speeds = {};
+  while (n++ < 60000) { B.advance(D.app.speed / 60); D.update(1 / 60); const t = B.battle.t;
+    if (D.rp) { saw = true; speeds[D.app.speed] = 1; if (D.shot) rig = D.shot.rig; }
+    if (t < prev - 0.5 && !went) went = [+prev.toFixed(1), +t.toFixed(1)]; else if (went && saw && !D.rp && back == null) back = +t.toFixed(1);
+    prev = t; if (back != null && t > back + 3 || t > 70) break; }
+  B.setPlaying(false);
+  return JSON.stringify({ went, back, saw, rig, speeds: Object.keys(speeds), speedEnd: D.app.speed, still: !!D.rp, t: +B.battle.t.toFixed(1), planned: D.plan.replays.map(r => [+r.at.toFixed(1), +r.from.toFixed(1), +r.to.toFixed(1), r.shot.rig]), err: document.getElementById('errbar').hidden ? '' : document.getElementById('errbar').textContent.slice(0, 200) }); })()'''
+
 async def ready(pg):
     for i in range(160):
         if await pg.evaluate('!!(window.__beta && window.__beta.ready)'): return True
@@ -100,7 +110,12 @@ async def main():
                 print(f"replay scrubbed to {frac / 10:.0f}%: battle t {s['t']:.1f}, {len(s['plan'])} shots planned, same film as the straight run up to {t:.1f} s: {same}")
                 if not same: bad.append(f'film differs after scrubbing to {frac / 10:.0f}%')
                 if s['err']: bad.append('frame error after scrub: ' + s['err'])
-            await pg.screenshot(path=os.path.join(OUT, 'director_replay.png')); await pg.close()
+            # instant replay (only in the page's Replay): the director jumps back once, films the moment again at half speed, and returns
+            a = json.loads(await pg.evaluate(AGAIN_JS)); print('instant replay:', a)
+            if not a['went'] or a['back'] is None or not a['saw'] or a['still'] or a['speedEnd'] != 1 or a['speeds'] != ['0.5']: bad.append('instant replay did not run as planned')
+            elif abs(a['went'][1] - a['planned'][0][1]) > 0.3 or a['back'] < a['planned'][0][0] - 0.2: bad.append('instant replay went to the wrong moment')
+            if a['err']: bad.append('frame error in instant replay: ' + a['err'])
+            await pg.wait_for_timeout(2500); await pg.screenshot(path=os.path.join(OUT, 'director_replay.png')); await pg.close()
 
         if 'strip' in PARTS:
             pg = await page(1280, 720, os.environ.get('GFX', 'medium'))

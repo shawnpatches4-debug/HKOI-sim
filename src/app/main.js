@@ -303,7 +303,7 @@ const hkV = new THREE.Vector3();
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
-const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, refresh() { if (state === 'play') buildBar(); } };
+const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
 const director = new Director(film), xray = new XRayPanel(film);
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;

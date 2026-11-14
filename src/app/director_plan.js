@@ -45,6 +45,7 @@ export class Plan {
     this.cands = [];      /* shots that want the camera: { a, b, known, pri, min, cam | rig, ... } */
     this.caps = [];       /* captions waiting or shown: { t, known, pri, text, v, idx } */
     this.slows = [];      /* [from, to, known] */
+    this.replays = [];    /* one per engagement worth seeing twice: { v, at, from, to, known, shot } */
     this.shots = [];      /* what the camera did: { t0, t1, ...shot } in time order */
     this.shown = [];      /* what the caption line did: { t0, t1, text } */
     this.cur = null; this.capCur = null; this.idleN = 0; this.iS = 0; this.iC = 0;
@@ -71,6 +72,8 @@ export class Plan {
     while (i > 0 && S[i].t0 > t) i--; while (i < S.length - 1 && S[i + 1].t0 <= t) i++;
     this.iC = i; const c = S[i]; return c.t0 <= t && t < c.t1 ? c : null;
   }
+  // the instant replay that is due at battle time t (within a second after its moment), if any
+  replayAt(t) { for (const r of this.replays) if (t >= r.at && t < r.at + 1 && t >= r.known) return r; return null; }
   slowAt(t) { for (const s of this.slows) if (t >= s[0] && t >= s[2] && t < s[1]) return true; return false; }
 
   // ---- reading the battle -------------------------------------------------------------------------------------------------
@@ -115,6 +118,7 @@ export class Plan {
     if (rec.killed) this.lostAt = t0 + (rec.kill_t != null ? rec.kill_t : rec.t_end);
     let hits = []; try { if (DMG) hits = DMG.report(rec, v.cfg); } catch (err) { hits = []; }
     if (this.apsTotal == null) { const a = v.cfg && v.cfg.aps; this.apsTotal = a && a.mag_L != null ? a.mag_L + a.mag_R : a && a.mag_per_side ? 2 * a.mag_per_side : 0; }
+    let again = null;   /* the moment of this engagement worth an instant replay: a hit first, else a cut by the cloud, else a Trophy intercept */
     const out = [];   /* the endings near the vehicle, to be merged into one low wide shot when they come close together */
     // which missile the film follows from launch to ending when several are in the air: the one with the most to show
     const score = th => (th.state === 'hit' ? 5 : 0) + (/^hkoi/.test(th.defeated_by || '') ? 4 : 0) + (th.viz.fired != null ? 2 : 0) + (th.defeated_by === 'aps' ? 1 : 0) + Math.min(0.9, th.viz.end.t / 100);
@@ -148,6 +152,7 @@ export class Plan {
         else if (tCut != null) {
           this._cap(tCut, K, 8, guide === 'radio_saclos' ? 'The cloud hides the missile from its launcher: it is blind' : 'The cloud cuts the guidance beam: the missile is blind', v.i, th.idx);
           this.slows.push([tCut - 0.2, tCut + 0.3, K]);
+          if (!again || again.w < 2) again = { w: 2, from: tCut - 2.4, to: Math.min(tE + 1.2, tCut + 5), shot: Object.assign({ rig: 'cloud', high: true, x: xs / b.puffs.length, span: x1 - x0, label: 'the cut again, from the other side' }, id) };
         } else if (j === bursts.length - 1 && by !== 'hkoi_he') {
           const why = res.reason === 'cloud_thin' ? 'The cloud is too thin to break the beam' : res.reason === 'fuze_miss' ? 'The rounds burst off the line of sight: the beam stays clear' : res.reason === 'saclos_unaffected' ? 'The cloud does not blind this missile' : null;
           if (why) this._cap(tLast + 0.6, K, 3 + 2 * bonus, why, v.i, th.idx);
@@ -159,6 +164,7 @@ export class Plan {
         const h = hits.find(x => x.idx === th.idx), tried = (rec.aps || []).some(a => a.idx === th.idx && !a.kill) ? 'Trophy misses it. ' : ''; pri = 9;
         text = tried + (h ? `${name} hits the ${h.zoneName.replace(/ \(.*/, '').toLowerCase()}: ${!h.penetrated ? 'the armour holds' : end.killing ? 'it goes through and the vehicle is lost' : 'it goes through, the vehicle fights on'}` : `${name} hits the vehicle`);
         this.slows.push([tE - 0.3, tE + 0.4, K]);
+        if (!again || again.w < 3) again = { w: 3, from: tE - 3.2, to: tE + 1.4, shot: Object.assign({ rig: 'replay', label: 'the hit again, from above' }, id) };
       }
       else if (by === 'aps') text = null;   /* told with the Trophy shot below */
       else if (by === 'hkoi_he') { text = `HKOI shoots the ${name} down`; pri = 7; }
@@ -183,6 +189,7 @@ export class Plan {
       if (!a.kill && th && th.state === 'hit') continue;   /* told with the hit that followed */
       this._cap(t0 + a.t, K, 8, a.kill ? `${count}. ${name} destroyed${d != null ? ' ' + metres(d) + ' out' : ''}` : `${count}. It misses the ${name}`, v.i, a.idx);
       this.slows.push([t0 + a.t - 0.25, t0 + a.t + 0.3, K]);
+      if (a.kill && th && !again) again = { w: 1, from: t0 + a.t - 3, to: t0 + a.t + 1.3, shot: { rig: 'replay', v: v.i, idx: th.idx, brg: th.brg, label: 'the intercept again, from above' } };
     }
     // endings close together share one shot that turns from one to the next
     out.sort((p, q) => p.t - q.t); let g = null;
@@ -193,6 +200,7 @@ export class Plan {
       g.marks.push({ t: o.t, brg: o.brg, idx: o.idx }); g.end = Math.max(g.end, o.t + o.tail); if (o.pri > g.pri) { g.pri = o.pri; g.what = o.what; }
     }
     flush();
+    if (again) { let last = 0; for (const th of rec.threats) last = Math.max(last, t0 + th.viz.end.t); again.shot.pri = 9; again.shot.min = 1.5; again.shot.t0 = again.from; this.replays.push({ v: v.i, at: Math.max(again.to + 1, last + 2.2), from: Math.max(t0 + 0.4, again.from), to: again.to, known: K, shot: again.shot }); }
     if (rec.killed) {
       const tK = t0 + (rec.kill_t != null ? rec.kill_t : rec.t_end);
       this._cap(tK + 2.4, K, 10, 'The vehicle is destroyed');
