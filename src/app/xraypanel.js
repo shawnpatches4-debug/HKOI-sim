@@ -9,7 +9,7 @@ const CSS = `
   #xr { position: fixed; z-index: 6; left: 12px; top: 96px; width: 330px; max-width: calc(100vw - 24px); padding: 10px 12px 10px; font-size: 13px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
   body.hud-eng #xr:not(.big) { left: 50%; transform: translateX(-50%); }   /* the engineer display has columns at both sides: the small panel goes between them */
   #xr:not(.big) table, #xr:not(.big) .xr-note, #xr:not(.big) .xr-key, #xr:not(.big) .xr-nav { display: none; }   /* small, during a battle: the picture, what was struck and the result; Details opens the rest */
-  #xr.big .xr-more { display: none; }
+  #xr.big .xr-more { display: none; } #xr .xr-head span { white-space: nowrap; }
   #xr.big { background: #0a0f0e; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
   #xr .xr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } #xr .xr-head b { font: 700 12px/1 var(--mono); letter-spacing: .1em; color: var(--accent); }
   #xr .xr-head span { color: var(--dim); font: 12px var(--mono); flex: 1; } #xr .xr-head .btn { padding: 3px 9px; }
