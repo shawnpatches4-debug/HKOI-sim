@@ -18,7 +18,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 - **Third-party assets stay out of git** while the repository is public (`assets/` is ignored). Never `git add -f` an asset. One exception he ordered himself on 14 Nov 2026: the T-72 and T-90 source packs in `models_src/` (see its README). Sources of the supplied models are still unconfirmed: see `docs/ASSETS.md`.
 - **Log every version to the Notion "R&D Log"** if a Notion connection is available (data source id `01785400-2dc2-43cd-a2ab-0a8b29a01c16`; properties Entry, Type, Module, Version, date:Date:start, Patent-relevant, Notes). If not available, say so and list what needs logging.
 - His email address is private: never send it to an outside service.
-- Crew figures are parked ("skip implementing crew for now"). Do not use the crewman model without showing him a picture first.
+- Crew figures: on 14 Nov he ordered his original crew models back into the seats (with a commander added) and their real faces in the crew panel; graphic hit effects (blood) stay on at all times.
 - Plain words, metric units, military terms where natural, no em dashes in UI text.
 
 ## Lessons paid for (each one froze or broke the beta for him)
@@ -46,7 +46,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 ## Showing Shawn a build
 He tests on a gaming PC (RTX 4070 Super, 240 fps on Minimum). `bash tools/dev.sh pub` makes `build/beta_pub`: a static folder
 (index.html fragment + js + assets) that loads three.js from jsDelivr. It is published to his private page "HKOI Battlefield Beta" with the Artifact tool (update that page in place: list his artifacts to find it;
-send every file of build/beta_pub except assets/crew). Do not touch the legacy "HKOI Mission Simulator" page. Never tell him something works on his machine unless he has confirmed it.
+send every file of build/beta_pub, including assets/crew and assets/veh: the original crew models are used in the seats and the face panel since 14 Nov by his order). Do not touch the legacy "HKOI Mission Simulator" page. Never tell him something works on his machine unless he has confirmed it.
 
 ## Commits
 `git config user.email noreply@anthropic.com; git config user.name Claude`. Commit per checkpoint and push.
