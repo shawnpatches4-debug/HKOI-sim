@@ -153,7 +153,7 @@ export class GroundCover {
     const ht = new THREE.DataTexture(world.H, world.n, world.n, THREE.RedFormat, THREE.FloatType); ht.minFilter = ht.magFilter = THREE.NearestFilter; ht.generateMipmaps = false; ht.needsUpdate = true;
     u.hkHeight.value = ht; u.hkCol.value = terrain.tex.col; u.hkC1.value = terrain.tex.c1; u.hkC2.value = terrain.tex.c2;
     const fg = world.fieldGrid || { cs: 1, sn: 0 }; u.hkGrid.value.set(fg.cs, fg.sn, world.half, world.size); u.hkCellN.value.set(world.cell, world.n);
-    u.hkDry.value = world.biomeKey === 'desert' ? 0.05 : 1; this.world = world;
+    u.hkDry.value = world.biomeKey === 'desert' ? 0.02 : 1; this.world = world;
   }
   setLevel(level) {
     const L = LEVELS[level] || LEVELS[0]; this.level = level; this.mesh.geometry.instanceCount = L[0]; this.uniforms.hkPatch.value.set(L[1] * 2, L[1], 1); this.mesh.visible = L[0] > 0;

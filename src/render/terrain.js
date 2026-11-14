@@ -146,7 +146,10 @@ const BODY = /* glsl */`
     float spF = 0.46, spL = 0.5, spT = 0.76;
     float aF = wSoil * (1.0 - smoothstep(0.22, 0.6, fwr / spF)), aL = wLow * (1.0 - smoothstep(0.22, 0.6, fwr / spL)), aT = wTall * (1.0 - smoothstep(0.22, 0.6, fwr / spT));
     float phF = rc / spF * 6.2832 + (n1 - 0.5) * 1.6, phL = rc / spL * 6.2832, phT = rc / spT * 6.2832;
-    float gL = 0.5 - 0.5 * sin(phL), gT = 0.5 - 0.5 * sin(phT); float gap = aL * gL * gL * gL + aT * gT * gT;   /* soil showing between the rows */
+    float gL = 0.5 - 0.5 * sin(phL), gT = 0.5 - 0.5 * sin(phT); float gap = aL * gL * gL * gL + aT * gT * gT;
+    #if HK_DETAIL == 0
+      gap *= 0.45;   /* without the close-up surfaces the bare rows read too hard */
+    #endif   /* soil showing between the rows */
     float tr = abs(mod(rc + 4.0, 21.0) - 10.5), tram = crop * clamp(0.5 + (0.17 - abs(tr - 0.9)) / fwr, 0.0, 1.0) * (0.55 + 0.45 * n1);
     /* broad bands a tractor leaves: each pass a slightly different tone, seen from far off */
     float pass = hk_h(vec2(floor(rc / 6.0), across + 3.0)), passW = 1.0 - smoothstep(1.5, 5.0, fwr);
