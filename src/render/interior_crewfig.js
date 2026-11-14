@@ -28,7 +28,7 @@ const BASE = {
   gnr: { face: 0, ...SEATED, tip: 0.2, upper: [0.22, -0.7, 0.68], fore: [-0.12, 0.05, 1] },
   cdr: { face: 0, ...SEATED, thigh: [0.14, -0.3, 1], shin: [0, -1, 0.05] },
   ldr: { face: 50, ...SEATED },
-  drv: { face: 0, ...SEATED, tip: -0.9, thigh: [0.13, 0.5, 1], shin: [0, -0.55, 0.85], foot: [0, 0.5, 1], upper: [0.2, -0.3, 0.95], fore: [-0.1, 0.35, 1] },
+  drv: { face: 0, ...SEATED, tip: -0.9, thigh: [0.14, 0.75, 0.75], shin: [0, -0.82, 0.58], foot: [0, 0.4, 1], upper: [0.2, -0.3, 0.95], fore: [-0.1, 0.35, 1] },
 };
 // where each man looks, and for how long, when nothing else has his attention: [seconds, look (radians, + = to his left), nod (+ = down), what]
 const GAZE = {
@@ -113,7 +113,7 @@ export class CrewFigures {
     const yc = stiff(0.035); for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) { const s = r.hand[i][k], gk = M.hands[i][k]; if (first) { s.x = gk; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, gk, yc, dt, 1); s.g = gk; }
     r.fresh = false;
     // ---- stand him so that his eyes are at the eye point, then put his hands on the controls
-    fk(r.rig, r.draw); const ry = r.g.rotation.y, c = Math.cos(ry), s = Math.sin(ry), hp = Wp[J.Head], ex = hp.x, ey = hp.y + 0.11 + (M.bodyOnly ? 0.03 : 0), ez = hp.z + 0.12 + (M.bodyOnly ? 0.06 : 0);   /* his eyes: above and ahead of the head joint (which sits at the top of the neck); for the viewer's own body a little more, so his collar and chest stay out of the picture */
+    fk(r.rig, r.draw); const ry = r.g.rotation.y, c = Math.cos(ry), s = Math.sin(ry), hp = Wp[J.Head], ex = hp.x, ey = hp.y + 0.11, ez = hp.z + 0.12;   /* his eyes: above and ahead of the head joint (which sits at the top of the neck); for the viewer's own body a little more, so his collar and chest stay out of the picture */
     r.g.position.set(r.head[0].x - (c * ex + s * ez), r.head[1].x - ey, r.head[2].x - (-s * ex + c * ez));
     for (let i = 0; i < 2; i++) { const g = clamp(r.grip[i].x, 0, 1); if (g < 0.01) { r.handErr[i] = 0; continue; } const S = i ? 'Right' : 'Left', H = r.hand[i];
       const dx = H[0].x - r.g.position.x, dy = H[1].x - r.g.position.y, dz = H[2].x - r.g.position.z; _t.set(c * dx - s * dz, dy, s * dx + c * dz);                        /* the control, in his own frame */
@@ -121,7 +121,7 @@ export class CrewFigures {
       if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Wp[J[S + 'Hand']].distanceTo(_v) : 0; r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
     for (let i = 0; i < NJ; i++) r.rig.bones[i].quaternion.copy(r.draw[i]);
     // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
-    const hb = r.rig.bones[J.Head], hs = M.bodyOnly ? 0.001 : 1; if (hb.scale.x !== hs) hb.scale.setScalar(hs);
+    const cut = M.bodyOnly ? 0.34 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
     // blood: the uniform darkens and stains, more for the dead than for the wounded
     const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.7, 0.26, 0.22] : lvl === 1 ? [0.9, 0.6, 0.55] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
   }
