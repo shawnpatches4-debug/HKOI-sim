@@ -82,7 +82,7 @@
     _scan() {
       const T = this.tank, W = this.world, A = this._crew(); if (this.t < A.scanAt) return; A.scanAt = this.t + 1;
       const see = SEEING[this.cond] == null ? 1 : SEEING[this.cond];
-      for (const u of this.units) { if (!u.alive || u.gone || u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
+      for (const u of this.units) { if (!u.alive || u.gone || u.known || u.mounted /* enemyveh.js: men riding in a truck are not seen as a team on foot */) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
         const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.3 : veg >= 2 ? 0.5 : 1, close = R < 400 ? 6 : R < 800 ? 3 : R < 1500 ? 1.5 : 1,   /* men a few hundred metres away fill the thermal sight: far easier to pick out than at two kilometres */ moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
         const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30 * this._crewMul('arc');   /* crew.js: tunnel vision narrows the gunner's sector */
         const p = Math.min(0.6, 0.03 * Math.exp(-R / 1500) * cover * close * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1) * this._crewMul(inSector ? 'scan_gnr' : 'scan_cdr'));   /* chance per second (assumed); crew.js: a stressed man notices less */
@@ -127,6 +127,7 @@
       if (hk != null) { const d = angDiff(hk, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360; if (this._rf) { this._rf = null; } A.w.main = 'turret given to HKOI'; A.w.hkoi = 'engaging an incoming threat'; return; }
       A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar scanning, nothing in the air';   /* the radar scans all the time (Shawn, 14 Nov) */
       { const out = this._crewOut('gnr'); if (out) { this._rf = null; A.w.main = out; return; } }   /* crew.js: the gunner has frozen, or nobody is on the gun */
+      if (this._gunVeh && this._gunVeh(A)) return;   /* enemyveh.js: a located enemy vehicle more dangerous than any team in view gets the gun (aim point, round, result) */
       const tg = this._targets(); let pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
       // the gunner finishes what he started: he leaves a target he is already laying on only for a more dangerous one
       if (pick && this._rf) { const cur = tg.find(q => q.k === this._rf.k); if (cur && cur.los && cur.R <= 4200 && !(cur.moving && cur.R > 800) && cur.danger >= pick.danger) pick = cur; }
@@ -161,7 +162,7 @@
     // when the fire starts and what it does to the gunner: either he ducks and the missile is lost (mask), or his aim is shakier (jit_k).
     _counterFire(launches, rec1, plan, at, masks) {
       const T = this.tank, W = this.world, A = this._crew(), S = SUPP[this.skill] || SUPP.trained, M = MG.m2; if (T.m2 <= 0 || this._crewOut('crows')) return;   /* crew.js */
-      const order = launches.map((l, i) => ({ l, i, th: rec1.threats.find(q => q.uid === l.u.id && Math.abs(q.t0 - l.t0) < 1e-6) || rec1.threats[i] })).filter(o => o.th && o.l.u.spec.needsLos && o.l.R <= M.rmax).sort((a, b) => a.th.impact - b.th.impact);
+      const order = launches.map((l, i) => ({ l, i, th: rec1.threats.find(q => q.uid === l.u.id && Math.abs(q.t0 - l.t0) < 1e-6) || rec1.threats[i] })).filter(o => o.th && o.l.u.spec.needsLos && o.l.R <= M.rmax && !o.l.u.veh /* enemyveh.js: a missile gunner under armour does not duck from a machine gun */).sort((a, b) => a.th.impact - b.th.impact);
       let free = 0;
       for (const o of order) { const { l, i, th } = o, u = l.u, placed = u.known ? l.t0 + 1.0 : th.track != null ? th.track + 0.5 : null; if (placed == null) continue;
         if (!W.los(at.e, at.n, 2.5, u.e, u.n, 0.8).clear) continue;
