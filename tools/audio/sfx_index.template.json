@@ -8,7 +8,7 @@
     "aps_out": [], "aps_in": [],
     "launch_small": [], "launch_big": [], "flyby": [], "crack": [],
     "explosion_small": [], "explosion_medium": [], "explosion_large": [], "airburst": [],
-    "hit_in": [], "smoke_discharge": [],
+    "hit_in": [], "pen_in": [], "nearmiss_in": [], "smoke_discharge": [],
     "turbine_in_loop": [], "turbine_out_loop": [], "tracks_loop": [],
     "wind_loop": [], "rain_loop": [], "rain_roof_loop": []
   }

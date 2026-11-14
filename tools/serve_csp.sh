@@ -8,6 +8,7 @@ import sys, re
 s = open(sys.argv[1]).read()
 s = re.sub(r'file://[^"]*?/package/', '/three/', s)
 csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:\">"
-s = s.replace('<head>', '<head>\n' + csp, 1); open(sys.argv[2], 'w').write(s)
+icon = '<link rel="icon" href="data:,">'   # the hosting page has its own icon; without this line every local test logs a 404 for /favicon.ico
+s = s.replace('<head>', '<head>\n' + csp + '\n' + icon, 1); open(sys.argv[2], 'w').write(s)
 P
 cd "$D"; (python3 -m http.server "$PORT" >/dev/null 2>&1 &) ; sleep 1; echo "serving $D on $PORT"

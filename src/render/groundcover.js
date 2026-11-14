@@ -40,9 +40,9 @@ function coverSheet() {
       c.strokeStyle = grey(lum + 18, 0.8); c.lineWidth = 1; for (let k = -3; k <= 3; k++) { c.beginPath(); c.moveTo(0, k * S * 0.012); c.lineTo(k < 0 ? -S * 0.03 : S * 0.03, k * S * 0.012 - S * 0.035); c.stroke(); } c.restore(); }
   });
   cell(2, R => {
-    for (let q = 0; q < 3; q++) { const x0 = S * (0.25 + q * 0.25 + (R() - 0.5) * 0.08), top = S * (0.04 + R() * 0.1), lum = 40 + R() * 12;
-      c.strokeStyle = grey(lum); c.lineWidth = S * 0.016; c.beginPath(); c.moveTo(x0, S); c.lineTo(x0 + (R() - 0.5) * 10, top + S * 0.06); c.stroke();
-      for (let k = 0; k < 9; k++) { const y = S - S * (0.12 + k * 0.09 + R() * 0.03), side = k % 2 ? 1 : -1, len = S * (0.2 + R() * 0.1), w = S * (0.03 + R() * 0.012);   /* long arching leaves */
+    for (let q = 0; q < 5; q++) { const x0 = S * (0.14 + q * 0.18 + (R() - 0.5) * 0.06), top = S * (0.04 + R() * 0.1), lum = 40 + R() * 12;
+      c.strokeStyle = grey(lum); c.lineWidth = S * 0.011; c.beginPath(); c.moveTo(x0, S); c.lineTo(x0 + (R() - 0.5) * 10, top + S * 0.06); c.stroke();
+      for (let k = 0; k < 9; k++) { const y = S - S * (0.12 + k * 0.09 + R() * 0.03), side = k % 2 ? 1 : -1, len = S * (0.13 + R() * 0.07), w = S * (0.014 + R() * 0.007);   /* long arching leaves */
         c.fillStyle = grey(lum - 8 + k * 2.5 + R() * 8); c.beginPath(); c.moveTo(x0, y); c.quadraticCurveTo(x0 + side * len * 0.55, y - len * 0.55 - w, x0 + side * len, y + len * 0.12); c.quadraticCurveTo(x0 + side * len * 0.5, y - len * 0.3 + w, x0, y + w * 0.6); c.fill(); }
       c.strokeStyle = grey(lum + 20); c.lineWidth = 2; for (let k = 0; k < 7; k++) { c.beginPath(); c.moveTo(x0, top + S * 0.07); c.lineTo(x0 + (k - 3) * S * 0.014, top + R() * S * 0.02); c.stroke(); } }   /* the tassel */
   });
@@ -83,18 +83,18 @@ const VERT_BODY = /* glsl */`
     float fe = wxz.x, fn = -wxz.y; vec2 fxz = vec2(fe * hkGrid.x + fn * hkGrid.y, -fe * hkGrid.y + fn * hkGrid.x);
     float across = step(0.5, c1.a), rc = mix(fxz.y, fxz.x, across), sp = mix(0.5, 0.76, tall), snap = (floor(rc / sp) + 0.25) * sp - rc;
     vec2 rdir = mix(vec2(-hkGrid.y, -hkGrid.x), vec2(hkGrid.x, -hkGrid.y), across);
-    float crop = max(low, tall); wxz += rdir * snap * crop;
+    float crop = max(low, tall); wxz += rdir * snap * tall;
     // what grows here, how thick and how tall
     float open = clamp(1.0 - c1.r * 1.6 - c2.b * 0.75, 0.0, 1.0);
     float thick = mix(mix(open * hkDry, 0.38, wood), 1.0, crop) * (1.0 - 0.8 * uSnow);   /* under snow only scattered stalks still show */
     float tram = abs(mod(rc + 4.0, 21.0) - 10.5);
     float there = step(aSeed.z, thick) * smoothstep(2.9, 3.6, rd) * (1.0 - crop * step(abs(tram - 0.9), 0.3));
     float h = mix(mix(0.14 + 0.24 * aSeed.w + 0.25 * c2.g, 0.35 + 0.3 * aSeed.w, wood), mix(0.55 + 0.35 * aSeed.w, 1.75 + 0.35 * aSeed.w, tall), crop);
-    float w = mix(mix(0.75, 0.9, wood), mix(0.6, 1.0, tall), crop);
+    float w = mix(mix(0.75, 0.9, wood), mix(0.6, 0.85, tall), crop);
     float kind = mix(mix(0.0, 3.0, wood), mix(1.0, 2.0, tall), crop);
     // fade out at the rim of the patch, and where something stands on it
     float edge = 1.0 - smoothstep(R * 0.62, R, distance(wxz, hkCentre));
-    float trod = 1.0; for (int i = 0; i < ${MAX_CLEAR}; i++) { vec3 q = hkClear[i]; float r = max(q.z, 0.01); trod *= mix(1.0, smoothstep(r * 0.55, r, distance(wxz, q.xy)), step(0.0, q.z)); }
+    float trod = 1.0; for (int i = 0; i < ${MAX_CLEAR}; i++) { vec3 q = hkClear[i]; float r = max(q.z, 0.01); trod *= mix(1.0, smoothstep(r * 0.72, r, distance(wxz, q.xy)), step(0.0, q.z)); }
     float sc = there * edge * smoothstep(1.0, 2.8, distance(wxz, hkEye)) * hkPatch.z *   /* nothing right against the lens */ (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
     h *= sc * mix(1.0, 0.18, 1.0 - trod) * (1.0 - 0.45 * uSnow * crop); w *= step(0.02, sc);
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
@@ -105,7 +105,8 @@ const VERT_BODY = /* glsl */`
     float tip = position.y * position.y * h * (0.10 + 0.07 * sway) * hkWind.y;
     lp.xz += vec2(hkWind.x, hkWind.z) * tip;
     transformed = vec3(wxz.x + lp.x, gy + lp.y, wxz.y + lp.z);
-    vTint = mc.rgb * (0.8 + 0.5 * aSeed.z) * mix(0.6, 1.12, position.y) * (1.0 - 0.3 * uWet);
+    vTint = mc.rgb * (0.72 + 0.5 * aSeed.z) * mix(0.42, 1.15, position.y * position.y * 0.5 + position.y * 0.5) * (1.0 - 0.3 * uWet);
+    vTint *= vec3(1.0 + (aSeed.w - 0.5) * 0.22, 1.0, 1.0 - (aSeed.w - 0.5) * 0.25) * (position.z == 0.0 ? 1.0 : 0.86);   /* each tuft its own shade; the two crossed cards differ, so it does not read as one flat cut-out */
     vTint = mix(vTint, vec3(dot(vTint, vec3(0.4, 0.5, 0.1))) * vec3(1.25, 1.0, 0.62), 0.8 * uSnow);   /* winter: what still stands is dead and straw-coloured */
     vUp = position.y; vWp = transformed;
     vMapUv = (uv * 0.96 + 0.02 + vec2(mod(kind, 2.0), floor(kind / 2.0))) * 0.5; vMapUv.y = (floor(kind / 2.0) + 1.0 - (uv.y * 0.96 + 0.02)) * 0.5;
@@ -136,7 +137,7 @@ export class GroundCover {
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   /* lit like the ground it grows from, so it blends into it */
         .replace('#include <begin_vertex>', VERT_BODY);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vTint; varying vec3 vWp; varying float vUp; uniform float uSnow;')
-        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 2.4; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
+        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 1.75; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
           { vec2 tx = vMapUv * 1024.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.4 * lod)); }`)
         .replace('#include <normal_fragment_begin>', 'vec3 normal = normalize(vNormal); vec3 nonPerturbedNormal = normal;');
     };
@@ -167,7 +168,7 @@ export class GroundCover {
     const alt = this.world ? p.y - this.world.h(p.x, -p.z) : 0, k = 1 - Math.min(1, Math.max(0, (alt - 28) / 40));
     u.hkPatch.value.z = k; this.mesh.visible = this.level > 0 && k > 0;
     const C = u.hkClear.value; let n = 0;
-    if (units) for (const o of units.children) { if (n >= MAX_CLEAR) break; if (!o.visible) continue; C[n++].set(o.position.x, o.position.z, (o.userData.heat || 0) >= 0.8 ? 2.6 : 5.5); }
+    if (units) for (const o of units.children) { if (n >= MAX_CLEAR) break; if (!o.visible) continue; C[n++].set(o.position.x, o.position.z, (o.userData.heat || 0) >= 0.8 ? 2.4 : 4.3); }
     for (; n < MAX_CLEAR; n++) C[n].z = -1;
   }
 }
