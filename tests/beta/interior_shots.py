@@ -25,6 +25,7 @@ def full():
     out += [('drv_block_left', "lk('in_drv', -32, 22, 1.8)"), ('drv_block_centre', "lk('in_drv', 0, 22, 1.8)"), ('drv_block_right', "lk('in_drv', 32, 22, 1.8)"), ('drv_tbar_and_displays', "lk('in_drv', 0, -8, 1.3)"), ('drv_display_close', "lk('in_drv', 30, -6, 2.6)"), ('drv_master_close', "lk('in_drv', -30, -6, 2.6)")]
     out += [('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])"), ('cut_left', "cutv(-5.2, 2.4, 3.0)"), ('cut_right', "cutv(5.2, 2.0, 3.0)"), ('cut_above', "cutv(-0.6, -1.5, 8.5)"), ('cut_front_left_low', "cutv(-3.6, 5.2, 2.0)")]
     return out
+ONLY = [k for k in os.environ.get('ONLY', '').split(',') if k]
 async def main():
     out, tag, params = sys.argv[1], sys.argv[2], sys.argv[3]; which = sys.argv[4] if len(sys.argv) > 4 else 'all'; os.makedirs(out, exist_ok=True)
     async with async_playwright() as p:
@@ -37,6 +38,7 @@ async def main():
             await pg.wait_for_timeout(1500)
         await pg.evaluate(HELP); await pg.evaluate('void (hud(0), __beta.setPlaying(false))'); settle = int(os.environ.get('SETTLE', '4500'))
         async def shot(name, js, wait=None):
+            if ONLY and not any(k in name for k in ONLY): return   # ONLY=a,b: a short run of just the pictures whose names contain one of these
             n0 = await pg.evaluate('__beta.scene.frameN'); await pg.evaluate('void (' + js + ')')
             for i in range(120):   # the page draws slowly here: wait for four whole frames (camera, small outside views, displays), not for a time
                 await pg.wait_for_timeout(500)
