@@ -96,5 +96,5 @@ if (cmd === 'metrics') {
   console.log(bad ? 'MOTION CHECKS FAILED' : 'MOTION CHECKS PASS'); process.exit(bad ? 1 : 0);
 } else if (cmd === 'look') {   /* node harness.mjs look <kind> <file.js or js text using D, M, THREE> [ground] : for looking into one thing */
   const D = await makeDriver(kind, a4 || 'flat'), M = globalThis.__motion, src = a3.endsWith('.js') ? fs.readFileSync(a3, 'utf8') : a3;
-  const r = await (new Function('D', 'M', 'THREE', src))(D, M, THREE); if (r !== undefined) console.log(typeof r === 'string' ? r : JSON.stringify(r));
+  const r = await (new (Object.getPrototypeOf(async function () {}).constructor)('D', 'M', 'THREE', src))(D, M, THREE); if (r !== undefined) console.log(typeof r === 'string' ? r : JSON.stringify(r));
 }

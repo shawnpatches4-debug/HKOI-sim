@@ -20,8 +20,8 @@ import * as THREE from 'three';
 // the hips first (1.57 = lying face down, negative = on the back).
 // ---------------------------------------------------------------------------------------------------------------------
 const LIMBS = [['Spine', 'Spine1'], ['Spine1', 'Spine2'], ['Spine2', 'Neck'], ['Neck', 'Head'], ['LeftUpLeg', 'LeftLeg'], ['LeftLeg', 'LeftFoot'], ['RightUpLeg', 'RightLeg'], ['RightLeg', 'RightFoot'], ['LeftFoot', 'LeftToeBase'], ['RightFoot', 'RightToeBase'], ['LeftArm', 'LeftForeArm'], ['LeftForeArm', 'LeftHand'], ['RightArm', 'RightForeArm'], ['RightForeArm', 'RightHand']];
-const PRONE_LEGS = { LeftUpLeg: [0.18, 0, -1], LeftLeg: [0.05, -0.02, -1], LeftFoot: [0.3, -0.5, -1], RightUpLeg: [-0.18, 0, -1], RightLeg: [-0.05, -0.02, -1], RightFoot: [-0.3, -0.5, -1] };
-const KNEEL_LEGS = { LeftUpLeg: [0.12, -0.12, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, 0.16, -1], RightFoot: [0, -0.4, -1] };
+const PRONE_LEGS = { LeftUpLeg: [0.18, -0.03, -1], LeftLeg: [0.05, -0.04, -1], LeftFoot: [0.45, -0.12, -1], RightUpLeg: [-0.18, -0.03, -1], RightLeg: [-0.05, -0.04, -1], RightFoot: [-0.45, -0.12, -1] };
+const KNEEL_LEGS = { LeftUpLeg: [0.12, 0.04, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, 0.02, -1], RightFoot: [0, -0.1, -1] };
 export const POSES = {
   // upright with a straight back: loads are fixed to a figure in this pose
   ready: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.05], LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
@@ -30,6 +30,8 @@ export const POSES = {
   kneel: { Spine: [0, 1, 0.12], Spine1: [0, 1, 0.2], Spine2: [0, 1, 0.25], Neck: [0, 1, 0.25], ...KNEEL_LEGS, LeftArm: [0.2, -0.85, 0.45], LeftForeArm: [-0.35, 0.1, 0.95], RightArm: [-0.2, -0.85, 0.45], RightForeArm: [0.35, 0.1, 0.95] },
   // on the right knee with the back straight and the arms loose: passed through when getting up, and held while handling a load
   knee: { Spine: [0, 1, 0.1], Spine1: [0, 1, 0.14], Spine2: [0, 1, 0.16], Neck: [0, 1, 0.1], ...KNEEL_LEGS, LeftArm: [0.22, -0.9, 0.35], LeftForeArm: [-0.1, -0.5, 0.85], RightArm: [-0.22, -1, 0.2], RightForeArm: [-0.05, -0.8, 0.6] },
+  // on the right knee with the left foot forward, bent over with both hands on the ground: between hands and knees and kneeling upright
+  lunge: { tip: 1.45, Spine: [0, 0.12, 1], Spine1: [0, 0.16, 1], Spine2: [0, 0.2, 1], Neck: [0, 0.9, 0.6], ...KNEEL_LEGS, LeftArm: [0.25, -1, -0.05], LeftForeArm: [0.05, -1, 0.1], RightArm: [-0.2, -1, -0.05], RightForeArm: [-0.05, -1, 0.1] },
   // sitting back on the heels beside a tripod launcher, leaning in to the eyepiece (the hands are put on the controls separately)
   gunner: { Spine: [0, 1, 0.3], Spine1: [0, 1, 0.42], Spine2: [0, 1, 0.5], Neck: [0, 1, 0.3], LeftUpLeg: [0.22, -0.6, 1], LeftLeg: [0, 0.06, -1], LeftFoot: [0, -0.15, -1], RightUpLeg: [-0.22, -0.6, 1], RightLeg: [0, 0.06, -1], RightFoot: [0, -0.15, -1], LeftArm: [0.1, -0.6, 0.8], LeftForeArm: [-0.4, 0.1, 0.9], RightArm: [-0.1, -0.6, 0.8], RightForeArm: [-0.2, 0.1, 0.95] },
   // kneeling with a tube on the right shoulder
@@ -37,13 +39,13 @@ export const POSES = {
   // squatting low, forearms on the knees
   crouch: { Spine: [0, 1, 0.35], Spine1: [0, 1, 0.5], Spine2: [0, 1, 0.55], Neck: [0, 1, 0.1], LeftUpLeg: [0.22, 0.15, 1], LeftLeg: [0, -1, -0.28], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.22, 0.15, 1], RightLeg: [0, -1, -0.28], RightFoot: [0, -0.3, 1], LeftArm: [0.1, -0.5, 0.85], LeftForeArm: [-0.3, -0.2, 0.9], RightArm: [-0.1, -0.5, 0.85], RightForeArm: [0.3, -0.2, 0.9] },
   // on hands and knees: passed through on the way down to the ground and up from it
-  hands_knees: { tip: 0.95, Spine: [0, 0.45, 1], Spine1: [0, 0.4, 1], Spine2: [0, 0.35, 1], Neck: [0, 0.8, 0.7], LeftUpLeg: [0.12, -1, 0.25], LeftLeg: [0, -0.12, -1], LeftFoot: [0, -0.6, -1], RightUpLeg: [-0.12, -1, 0.25], RightLeg: [0, -0.12, -1], RightFoot: [0, -0.6, -1], LeftArm: [0.2, -1, 0.45], LeftForeArm: [0, -1, 0.3], RightArm: [-0.2, -1, 0.45], RightForeArm: [0, -1, 0.3] },
+  hands_knees: { tip: 1.42, Spine: [0, 0.08, 1], Spine1: [0, 0.1, 1], Spine2: [0, 0.12, 1], Neck: [0, 0.7, 0.75], LeftUpLeg: [0.1, -1, 0.1], LeftLeg: [0, -0.02, -1], LeftFoot: [0, -0.02, -1], RightUpLeg: [-0.1, -1, 0.1], RightLeg: [0, -0.02, -1], RightFoot: [0, -0.02, -1], LeftArm: [0.12, -1, -0.3], LeftForeArm: [0, -1, 0.3], RightArm: [-0.12, -1, -0.3], RightForeArm: [0, -1, 0.3] },
   // lying down with the chest pushed up on the hands: between lying flat and hands and knees
-  pushup: { tip: 1.3, Spine: [0, 0.3, 1], Spine1: [0, 0.42, 1], Spine2: [0, 0.5, 1], Neck: [0, 0.8, 0.7], ...PRONE_LEGS, LeftArm: [0.3, -1, 0.2], LeftForeArm: [0.02, -1, 0.25], RightArm: [-0.3, -1, 0.2], RightForeArm: [-0.02, -1, 0.25] },
+  pushup: { tip: 1.3, Spine: [0, 0.3, 1], Spine1: [0, 0.42, 1], Spine2: [0, 0.5, 1], Neck: [0, 0.8, 0.7], LeftUpLeg: [0.15, -0.5, -1], LeftLeg: [0.05, 0.02, -1], LeftFoot: [0.3, -0.05, -1], RightUpLeg: [-0.15, -0.5, -1], RightLeg: [-0.05, 0.02, -1], RightFoot: [-0.3, -0.05, -1], LeftArm: [0.35, -1, -0.75], LeftForeArm: [0.02, -1, 0.75], RightArm: [-0.35, -1, -0.75], RightForeArm: [-0.02, -1, 0.75] },
   // lying face down on the elbows, head up, looking forward
   prone: { tip: 1.5, Spine: [0, 0.1, 1], Spine1: [0, 0.2, 1], Spine2: [0, 0.3, 1], Neck: [0, 0.75, 0.7], ...PRONE_LEGS, LeftArm: [0.55, -0.55, 0.6], LeftForeArm: [-0.45, 0, 0.9], RightArm: [-0.55, -0.55, 0.6], RightForeArm: [0.45, 0, 0.9] },
   // flat under fire: chest on the ground, arms drawn in beside the head
-  pinned: { tip: 1.54, Spine: [0, 0.04, 1], Spine1: [0, 0.08, 1], Spine2: [0, 0.12, 1], Neck: [0, 0.3, 1], ...PRONE_LEGS, LeftArm: [0.9, -0.2, 0.5], LeftForeArm: [-0.25, 0, 1], RightArm: [-0.9, -0.2, 0.5], RightForeArm: [0.25, 0, 1] },
+  pinned: { tip: 1.54, Spine: [0, 0.04, 1], Spine1: [0, 0.08, 1], Spine2: [0, 0.12, 1], Neck: [0, 0.3, 1], ...PRONE_LEGS, LeftArm: [0.9, -0.5, 0.5], LeftForeArm: [-0.25, -0.08, 1], RightArm: [-0.9, -0.5, 0.5], RightForeArm: [0.25, -0.08, 1] },
   // hit: buckling at the knees and the waist
   buckle: { tip: 0.35, Spine: [0.1, 1, 0.5], Spine1: [0.12, 1, 0.7], Spine2: [0.12, 0.9, 0.9], Neck: [0.1, 0.6, 1], LeftUpLeg: [0.2, -0.5, 1], LeftLeg: [0, -1, -0.7], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.15, -0.8, 0.7], RightLeg: [0, -0.7, -1], RightFoot: [0, -0.5, 0.6], LeftArm: [0.5, -1, 0.3], LeftForeArm: [0.1, -1, 0.5], RightArm: [-0.5, -1, 0.2], RightForeArm: [-0.2, -0.8, 0.8] },
   // lying still, face down, limbs where they fell
@@ -141,8 +143,12 @@ export function makeRig(fig, names) {
   rig.hipW = Math.abs(hip.x); rig.hipY = hip.y; rig.hipZ = hip.z; rig.footW = Math.abs(ball.x); rig.ballZ = ball.z;
   return rig;
 }
-// the lowest joint, measured from ground that slopes by (gx, gz) metres per metre in the figure's frame
-export function lowest(gx = 0, gz = 0) { let low = 1e9; for (let i = 0; i < NJ; i++) { const p = Wp[i], y = p.y - gx * p.x - gz * p.z; if (y < low) low = y; } return low; }
+// How much body there is around each joint (metres): the joints are inside the body, deeper in the trunk than in a hand or a foot.
+const FLESH = { Hips: 0.11, Spine: 0.11, Spine1: 0.115, Spine2: 0.12, Neck: 0.07, Head: 0.1, Shoulder: 0.08, Arm: 0.06, ForeArm: 0.045, Hand: 0.035, UpLeg: 0.1, Leg: 0.06, Foot: 0.07, ToeBase: 0.07 };
+export const BODY = RIG.map(n => FLESH[n.replace(/^(Left|Right)/, '')]);
+// The lowest part of the body (the working space must hold the pose), measured from ground that slopes by (gx, gz) metres per metre in
+// the figure's frame. The figure is seated so that this just touches the ground: whatever he rests on, he neither floats nor sinks.
+export function lowest(gx = 0, gz = 0) { let low = 1e9; for (let i = 0; i < NJ; i++) { const p = Wp[i], y = p.y - gx * p.x - gz * p.z - BODY[i]; if (y < low) low = y; } return low; }
 // From limb directions to joint turns. D[i] = [x, y, z] the way limb i should point (null = leave it as it hangs);
 // X (optional) = whole-body extras in radians: tip (lean the pelvis forward), roll, yaw, twist (chest), look and nod (head).
 // Fills out[i] with each joint's own turn, and leaves every joint's place (Wp) and facing (Wq) in the working space.

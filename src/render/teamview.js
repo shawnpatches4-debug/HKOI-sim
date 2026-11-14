@@ -351,7 +351,7 @@ export class TeamView {
       if (this.ground && !a.settled) { a.hx = (this._h(X + 0.4, Z) - this._h(X - 0.4, Z)) / 0.8; a.hz = (this._h(X, Z + 0.4) - this._h(X, Z - 0.4)) / 0.8; }
       const k = 1 - flat, gx = (a.hx * cs - a.hz * sn) * k, gz = (a.hx * sn + a.hz * cs) * k;
       low = lowest(gx, gz);
-      const seat = 0.07 + 0.06 * flat - low;                                     /* joints sit a few centimetres inside the body, more so in the chest */
+      const seat = -low;                                                         /* the lowest part of his body just touches the ground */
       if (!a.seatOk || dt <= 0) { a.seat.x = seat; a.seat.v = 0; a.seatOk = true; a.seat0 = seat; } else chase(a.seat, a.seat0, seat, stiff(0.03), dt, 1);
       a.seat0 = seat;
       const hY = this._h(X, Z); if (dt > 0) chase(a.gy, a.gy0 == null ? hY : a.gy0, hY, stiff(0.06), dt, 1); else { a.gy.x = hY; a.gy.v = 0; } a.gy0 = hY;
@@ -480,10 +480,19 @@ export class TeamView {
   _toStride(a) { if (a.gen === 'stride') return; a.gen = 'stride'; if (a.kw.x < 0.01) resetGait(a.g, a.rig); a.settled = false; }
   // the in-between poses for getting from how he is now to a new pose; k stretches the time
   _route(a, key, post, k = 1) {
-    const from = a.post, R = [];
-    if (from === 'flat') { if (post !== 'flat') { R.push(['pushup', 0.38], ['hands_knees', 0.36]); if (post === 'up') R.push(['knee', 0.42], ['live', 0.5]); else R.push([key, 0.5]); } else R.push([key, 0.45]); }
-    else if (from === 'low') { if (post === 'flat') R.push(['hands_knees', 0.42], ['pushup', 0.34], [key, 0.32]); else if (post === 'up') { if (!KNEELING[a.key]) R.push(['knee', 0.34]); R.push(['live', 0.52]); } else R.push([key, 0.55]); }
-    else { if (post === 'flat') R.push(['crouch', 0.28], ['hands_knees', 0.34], ['pushup', 0.28], [key, 0.3]); else if (post === 'low') { if (!KNEELING[key] && key !== 'crouch') R.push(['crouch', 0.4]); R.push([key, 0.5]); } else R.push(['live', 0.3]); }
+    const from = a.post, R = [], kneels = KNEELING[a.key];
+    if (from === 'flat') {
+      if (post === 'flat') R.push([key, 0.45]);
+      else { R.push(['pushup', 0.36], ['hands_knees', 0.34]); if (post === 'up') R.push(['lunge', 0.3], ['knee', 0.32], ['live', 0.5]); else if (KNEELING[key]) R.push(['lunge', 0.3], [key, 0.4]); else R.push([key, 0.5]); }
+    } else if (from === 'low') {
+      if (post === 'flat') { if (kneels) R.push(['lunge', 0.3]); R.push(['hands_knees', kneels ? 0.3 : 0.42], ['pushup', 0.32], [key, 0.3]); }
+      else if (post === 'up') { if (!kneels) R.push(['knee', 0.36]); R.push(['live', 0.52]); }
+      else R.push([key, 0.55]);
+    } else {
+      if (post === 'flat') R.push(['knee', 0.26], ['lunge', 0.22], ['hands_knees', 0.26], ['pushup', 0.26], [key, 0.26]);       /* under fire: down fast, by way of one knee and the hands */
+      else if (post === 'low') { if (!KNEELING[key]) R.push(['knee', 0.4]); R.push([key, 0.5]); }
+      else R.push(['live', 0.3]);
+    }
     for (const r of R) r[1] *= k; return R;
   }
   _to(i, key, post, place, k) {

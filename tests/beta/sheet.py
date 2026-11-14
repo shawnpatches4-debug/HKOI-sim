@@ -1,4 +1,4 @@
-# python3 sheet.py <outbase> <kind> [dist] : 4 states x 3 angles pose sheet of one enemy team kind (run with the CSP server up, BASE set)
+# python3 sheet.py <outbase> <kind> [dist] : 4 states x 3 angles pose sheet of one enemy team kind (run with the CSP server up, BASE set) The walk and run rows show the team standing ready to move (the map point does not move here); use seq.py for the movement itself.
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 from PIL import Image
