@@ -143,7 +143,10 @@
       if (!worth || this.t < this._rf.at) return;
       const there = u.alive && (u.state !== 'moving' || this.t < (u.packUntil || 0)) && Math.hypot(u.e - k.e, u.n - k.n) < 25;
       if (!there) { k.done = true; u.known = false; this._rf = null; this.say(this.t, 'tank', 'GNR', `Gunner holds fire on the ${u.spec.name} #${u.id + 1} site: the position is empty.`, 'the team has gone; no round wasted'); return; }
-      const moving = (T.v || 0) > 1.5, tof = R / 1140, p = Math.max(0.4, Math.min(0.88, 0.92 - R / 5000)) * (moving ? 0.6 : 1), roll = this.rng.random();
+      // Chance that one multi-purpose round knocks out a team: high close in, low at long range against men under cover whose place is known only to
+      // within tens of metres (assumed: 60% at 500 m, 46% at 1 km, 18% at 2 km, never under 12%; trees cut it, open ground and a team caught moving raise it)
+      const moving = (T.v || 0) > 1.5, tof = R / 1140, vg = this.world.veg(u.e, u.n).cls, caught = u.state === 'moving' || u.state === 'setup';
+      const p = Math.max(0.12, Math.min(0.7, 0.75 - R / 3500)) * (vg >= 4 ? 0.75 : vg >= 2 ? 0.9 : 1.1) * (caught ? 1.25 : 1) * (moving ? 0.6 : 1), roll = this.rng.random();
       T.main--; T.loaded = false; T.loadT = 0; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, wtxt;
       if (roll < p) { hit = true; u.alive = false; u.state = 'dead'; k.done = true; this.killedByTank = (this.killedByTank || 0) + 1; text = `Main gun round on ${u.spec.name} #${u.id + 1} at ${(R / 1000).toFixed(2)} km: position destroyed.`; wtxt = `aimed fire at a located position (about ${Math.round(p * 100)}% at this range${moving ? ', on the move' : ''})`; }
       else { this._suppress(u, true, 6); if (u.ammo > 0 && this._displace(u, 'a tank round has just landed beside it')) { /* it packs up; the crew will see it go if it stays in view */ } else if (k.shots >= 3) k.done = true; text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team pinned${u.state === 'moving' ? ' and pulling out' : ''}.`; wtxt = 'a near miss: a dug-in team is a small target at this range'; }
