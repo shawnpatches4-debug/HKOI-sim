@@ -12,8 +12,8 @@ import * as THREE from 'three';
 import { noiseTexture } from './fx.js';
 
 const MAXP = 96, LOBES_MAX = 5, STRIDE = 12, TAU = Math.PI * 2;
-// the engine's figures for one round, read from its own settings (payload in grams x square metres blocked per gram). Looking straight through the middle of one puff of width sh the middle of one puff of width s
-// the optical depth is 0.85 x 40 / (2 pi s2): 1.35 when it forms (about a quarter of the light gets through), 0.34 three seconds later.
+// the engine's figures for one round, read from its own settings: payload in grams x square metres blocked per gram. Looking straight through the middle of one puff of width s
+// the optical depth is that product / (2 pi s2): with 75 g at 0.85 it is 2.5 when the puff forms (about 8% of the light gets through) and falls as it spreads.
 // That is what is drawn: one puff alone is NOT a wall. It takes several on the same line to blind a missile, as the engine says.
 const _hk = typeof window !== 'undefined' && window.HK && window.HK.defaultConfig ? window.HK.defaultConfig() : null, TAU_PUFF = (_hk ? _hk.obs.alpha_m2_per_g * _hk.rnd.payload_g : 0.85 * 75) / (2 * Math.PI * 4);
 const LOBES = { min: 2, low: 3, medium: 4, high: 5, auto: 4 };
