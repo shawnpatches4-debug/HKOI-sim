@@ -57,6 +57,8 @@
         this.rng = new HK.RNG(HK.seedFor(this.seed, 9001));
         this.cfg0 = opt.cfg || HK.defaultConfig();
         this.lookup = opt.lookup || (this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {});
+        /* the weather of the chosen conditions reaches the engine's cloud and sensor physics (rain washes the cloud out and brings wind, fog and falling snow cut what lasers and sensors see). Snow as haze is an assumption. */
+        { const wx = ({ fog: 'fog', rain: 'rain', snow: 'haze' })[opt.cond]; if (wx && this.cfg0.env && this.cfg0.env.weather !== wx) { this.cfg0 = JSON.parse(JSON.stringify(this.cfg0)); this.cfg0.env.weather = wx; this.lookup = this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {}; } }
         this.skill = SKILL[opt.skill] ? opt.skill : 'trained'; this.cond = opt.cond || 'day';
         this.dt = opt.dt || 0.1;
         this.t = 0;
