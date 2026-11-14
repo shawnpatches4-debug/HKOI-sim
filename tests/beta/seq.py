@@ -10,7 +10,7 @@ from PIL import Image
 DRIVE = r"""window.__drv = (kind) => { const B = __beta, u = B.battle.units.find(x => x.spec.key === kind), i = B.battle.units.indexOf(u), tv = B.teams()[i], T = B.battle.tank;
   const place = tv.place.bind(tv), update = tv.update.bind(tv); tv.place = () => {}; tv.update = () => {};   /* the page's own frame loop no longer touches this team */
   const toTank = Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI, info = { loaded: true, spare: true, firing: false };
-  const D = { tv, u, e: u.e, n: u.n, hdg: toTank + 90, toTank, info, t: 0,
+  const D = { tv, u, ground: (x, z) => B.scene.world.h(x, -z), e: u.e, n: u.n, hdg: toTank + 90, toTank, info, t: 0,
     reset() { D.e = u.e; D.n = u.n; D.hdg = toTank + 90; place(B.scene.at(D.e, D.n, 0), toTank); tv._gx = null; update(0.001, 'still', true, info); tv.settle(); },
     step(dt, mode, spd) { const mv = mode === 'walk' || mode === 'run', h = D.hdg * Math.PI / 180; if (mv) { D.e += Math.sin(h) * spd * dt; D.n += Math.cos(h) * spd * dt; }
       place(B.scene.at(D.e, D.n, 0), mv ? D.hdg : toTank); update(dt, mode, true, info); D.t += dt; },
@@ -51,7 +51,7 @@ async def main():
             if await pg.evaluate('__beta.teams().every(t => t.loaded)'): break
             await pg.wait_for_timeout(1000)
         await pg.evaluate('document.getElementById("go").click()'); await pg.wait_for_timeout(1500); await pg.evaluate('__beta.setPlaying(false)')
-        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight{display:none!important}'); await pg.evaluate('void (' + DRIVE + ')'); await pg.evaluate(f"__drv('{kind}')"); await pg.evaluate('__D.reset()')
+        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight{display:none!important}'); await pg.evaluate('void (' + DRIVE + ')'); await pg.evaluate(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'motion_metrics.js')).read()); await pg.evaluate(f"__drv('{kind}')"); await pg.evaluate('__D.reset()')
         if os.environ.get('EVAL'):   # print the result of one expression (it can use __D, the driver) and stop
             print(json.dumps(await pg.evaluate(os.environ['EVAL']))); print('errors', errs[:5]); await b.close(); return
         if os.environ.get('NUM'):
