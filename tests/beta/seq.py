@@ -12,7 +12,7 @@ import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 from PIL import Image
 DRIVE = r"""window.__drv = (kind) => { const B = __beta, u = B.battle.units.find(x => x.spec.key === kind), i = B.battle.units.indexOf(u), tv = B.teams()[i], T = B.battle.tank;
-  const place = tv.place.bind(tv), update = tv.update.bind(tv); tv.place = () => {}; tv.update = () => {};   /* the page's own frame loop no longer touches this team */
+  const O = tv.__own || (tv.__own = { place: tv.place.bind(tv), update: tv.update.bind(tv) }), place = O.place, update = O.update; tv.place = () => {}; tv.update = () => {};   /* the page's own frame loop no longer touches this team */
   const toTank = Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI, fresh = { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5 }, info = Object.assign({}, fresh);
   const D = { tv, u, ground: (x, z) => B.scene.world.h(x, -z), e0: u.e, n0: u.n, e: u.e, n: u.n, hdg: toTank + 90, toTank, info, t: 0,
     reset() { D.e = D.e0; D.n = D.n0; D.hdg = toTank + 90; D.t = 0; Object.assign(info, fresh); tv.ground = D.ground; tv.group.visible = true; if (tv._start) tv._start(); place(B.scene.at(D.e, D.n, 0), toTank); tv._gx = null; update(0.001, 'still', true, info); tv.settle(); },
@@ -48,19 +48,28 @@ async def main():
             print(json.dumps(await pg.evaluate(os.environ['EVAL']))); print('errors', errs[:5]); await b.close(); return
         if os.environ.get('NUM'):
             print(json.dumps(await pg.evaluate('__motion.all(__D, {})'), indent=1)); print('errors', errs[:5]); await b.close(); return
-        if os.environ.get('SLOPE'): print('slope', await pg.evaluate(f"__D.slope(200, '{os.environ['SLOPE']}')"))
-        pre = json.loads(os.environ.get('PRE', '[]')); fig = os.environ.get('FIG', '-1')
-        for s in pre:
-            if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
-            await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)})")
-        ims = []
-        for s in steps:
-            if s.get('turn'): await pg.evaluate(f"void (__D.hdg += {s['turn']})")
-            if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
-            for k in range(s.get('shots', 1)):
-                await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)}); __D.cam({ang}, {dist}, {camh}, {follow}, {back}, {fig})"); await pg.wait_for_timeout(int(os.environ.get('WAIT', '1800')))
-                f = f'{out}_{len(ims):02d}.png'; await pg.screenshot(path=f, timeout=120000); ims.append(Image.open(f).copy()); os.remove(f)
-        w, h = ims[0].size; rows = (len(ims) + cols - 1) // cols; S = Image.new('RGB', (w * cols, h * rows))
-        for i, im in enumerate(ims): S.paste(im, ((i % cols) * w, (i // cols) * h))
-        S.save(out + '_seq.png'); print('strip', S.size, 'team error', await pg.evaluate('__D.tv._err ? String(__D.tv._err.stack || __D.tv._err).slice(0, 400) : null'), 'errors', errs[:5]); await b.close()
+        # one strip, described by the environment, or several in one go (the page takes a minute or two to load): JOBS = a JSON file holding a
+        # list of {"out", "kind", "steps", "pre", "slope", "ang", "dist", "camh", "follow", "back", "fig", "cols"} (anything left out is taken from the environment)
+        jobs = json.load(open(os.environ['JOBS'])) if os.environ.get('JOBS') else [{}]
+        for job in jobs:
+            g = lambda k, d: job.get(k, os.environ.get(k.upper(), d))
+            jout = job.get('out', out); jkind = job.get('kind', kind); jsteps = job.get('steps', steps); jcols = int(g('cols', cols))
+            await pg.evaluate(f"__drv('{jkind}')"); await pg.evaluate('void (__D.c0 = null, __D.reset())')
+            if g('slope', ''): print('slope', await pg.evaluate(f"__D.slope(200, '{g('slope', '')}')"))
+            pre = job.get('pre', json.loads(os.environ.get('PRE', '[]')))
+            for s in pre:
+                if s.get('turn'): await pg.evaluate(f"void (__D.hdg += {s['turn']})")
+                if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
+                await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)})")
+            ims = []
+            for s in jsteps:
+                if s.get('turn'): await pg.evaluate(f"void (__D.hdg += {s['turn']})")
+                if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
+                for k in range(s.get('shots', 1)):
+                    await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)}); __D.cam({g('ang', ang)}, {g('dist', dist)}, {g('camh', camh)}, {g('follow', follow)}, {g('back', back)}, {g('fig', '-1')})"); await pg.wait_for_timeout(int(os.environ.get('WAIT', '1800')))
+                    f = f'{jout}_{len(ims):02d}.png'; await pg.screenshot(path=f, timeout=120000); ims.append(Image.open(f).copy()); os.remove(f)
+            w, h = ims[0].size; rows = (len(ims) + jcols - 1) // jcols; S = Image.new('RGB', (w * jcols, h * rows))
+            for i, im in enumerate(ims): S.paste(im, ((i % jcols) * w, (i // jcols) * h))
+            S.save(jout + '_seq.png'); print('strip', jout, S.size, 'team error', await pg.evaluate('__D.tv._err ? String(__D.tv._err.stack || __D.tv._err).slice(0, 400) : null'), 'errors', errs[:5]); sys.stdout.flush()
+        await b.close()
 asyncio.run(main())
