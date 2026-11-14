@@ -16,6 +16,11 @@ def geoms(scene): return [(n, g) for n, g in scene.geometry.items()]
 def join(ms): return trimesh.util.concatenate(ms) if len(ms) > 1 else ms[0]
 def matname(g): return getattr(g.visual.material, 'name', '') or ''
 
+# some faces of a mesh as a mesh of their own, keeping the supplied surface directions (normals) and picture coordinates
+def sub(m, idx):
+    f = m.faces[idx]; used, inv = np.unique(f.reshape(-1), return_inverse=True)
+    vis = trimesh.visual.TextureVisuals(uv=m.visual.uv[used], material=m.visual.material) if getattr(m.visual, 'uv', None) is not None else None
+    return trimesh.Trimesh(vertices=m.vertices[used], faces=inv.reshape(-1, 3), vertex_normals=m.vertex_normals[used], visual=vis, process=False)
 # connected pieces of a mesh: corners at the same place count as one
 def pieces(m):
     _, inv = np.unique(np.round(m.vertices, 4), axis=0, return_inverse=True); f = inv.reshape(-1)[m.faces]; par = np.arange(inv.max() + 1)
@@ -53,14 +58,14 @@ if cand:
     _, bi = max(cand); lo, hi = box[bi]; ax, ay, z0 = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]
     take = [i for i, (l, h) in enumerate(box) if i == bi or (abs(l[0] - ax) < 0.3 and abs(h[0] - ax) < 0.3 and abs(l[1] - ay) < 0.3 and abs(h[1] - ay) < 0.3 and l[2] > z0 - 0.05)]
     gf = np.concatenate([ps[i] for i in take]); keep = np.ones(len(tur.faces), bool); keep[gf] = False
-    gun = tur.submesh([gf], append=True, repair=False); tur = tur.submesh([np.nonzero(keep)[0]], append=True, repair=False)
+    gun = sub(tur, gf); tur = sub(tur, np.nonzero(keep)[0])
     gun_meta = {'pivot': [round(float(ax), 3), round(float(ay), 3), round(float(max(z0 - 0.7, piv[2] + 0.3)), 3)], 'root': round(float(z0), 3), 'muzzle': [round(float(ax), 3), round(float(ay), 3), round(float(max(box[i][1][2] for i in take)), 3)], 'pieces': len(take)}
 else: print('NO GUN FOUND: the barrel is joined to the turret; the turret will turn but the gun will not elevate')
 
 # the light copy leaves out everything small (bolts, handles, single armour blocks): pieces whose longest side is under `small` metres
 def prune(m, small):
     ps = pieces(m); keep = [p for p in ps if (np.ptp(m.vertices[m.faces[p].reshape(-1)], axis=0)).max() >= small]
-    return m.submesh([np.concatenate(keep)], append=True, repair=False) if keep and len(keep) < len(ps) else m
+    return sub(m, np.concatenate(keep)) if keep and len(keep) < len(ps) else m
 def write(parts, path, r, e, lock='true'):
     sc = trimesh.Scene()
     for n, g in parts: sc.add_geometry(g, node_name=n, geom_name=n)

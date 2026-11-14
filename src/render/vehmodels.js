@@ -15,10 +15,13 @@ import { loadModel, skin } from './units.js';
 // Real sizes in metres. len/wid/hgt: overall. half: half the wheelbase or track on the ground (for following the ground). gauge: centre
 // line to the middle of a wheel or track. mass: how heavily it sits on its springs (1 = a tank).
 export const SPEC = {
-  uaz: { name: 'UAZ-469', icon: 'truck', file: 'veh/uaz.json', len: 4.03, wid: 1.8, hgt: 2.0, half: 1.2, gauge: 0.72, mass: 0.25, wheeled: true,
+  uaz: { name: 'UAZ-469', icon: 'truck', file: 'veh/uaz.json', len: 4.03, wid: 1.8, hgt: 2.0, half: 1.2, gauge: 0.72, mass: 0.25, wheeled: true, closed: true, floor: 0.62,
     tex: { 'UAZ-469': { map: 'veh/uaz_c.webp', rough: 0.7 }, Glass: { color: '#10181a', rough: 0.1, metal: 0.5 } } },
   bmp2: { name: 'BMP-2', icon: 'ifv', file: 'veh/bmp2.json', len: 6.74, wid: 3.15, hgt: 2.45, half: 2.0, gauge: 1.3, mass: 0.6 },
-  t72: { name: 'T-72B3', icon: 'tank', len: 6.9, wid: 3.6, hgt: 2.2, half: 2.3, gauge: 1.48, mass: 1, standIn: true },
+  t72: { name: 'T-72B3', icon: 'tank', file: 'veh/t72.json', len: 6.9, wid: 3.6, hgt: 2.2, half: 2.2, gauge: 1.38, mass: 1, tank: true,
+    tex: { body: { map: 'veh/t72_c.webp', normal: 'veh/t72_n.webp', rm: 'veh/t72_rm.webp' }, track: { map: 'veh/t72_track_c.webp', cut: true }, kord: { map: 'veh/kord_c.webp' } } },
+  t90: { name: 'T-90M', icon: 'tank', file: 'veh/t90.json', len: 6.9, wid: 3.8, hgt: 2.2, half: 2.2, gauge: 1.38, mass: 1, tank: true,
+    tex: { body: { map: 'veh/t90_c.webp', normal: 'veh/t90_n.webp', rm: 'veh/t90_rm.webp', cut: true }, track: { map: 'veh/t90_track_c.webp', cut: true }, kord: { map: 'veh/kord_c.webp' } } },
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -28,6 +31,7 @@ const _m = new THREE.Matrix4(), _e = new THREE.Euler(), _q = new THREE.Quaternio
 
 // A geometry as plain separate triangles with position, normal, uv (and colour if given), moved by `matrix`: the one form everything is merged in.
 function plain(geom, matrix, col) {
+  if (!geom.attributes.normal && geom.index) { geom = geom.clone(); geom.computeVertexNormals(); }   /* smooth across joined corners */
   const g = geom.index ? geom.toNonIndexed() : geom.clone(), n = g.attributes.position.count, out = new THREE.BufferGeometry();
   const copy = (a, size) => { const f = new Float32Array(n * size); if (a) for (let i = 0; i < n; i++) { f[i * size] = a.getX(i); f[i * size + 1] = a.getY(i); if (size > 2) f[i * size + 2] = a.getZ(i); } return new THREE.BufferAttribute(f, size); };
   out.setAttribute('position', copy(g.attributes.position, 3)); out.setAttribute('uv', copy(g.attributes.uv, 2));
@@ -71,7 +75,7 @@ const PAINT = [1, 1, 1], PAINT2 = [0.86, 0.88, 0.84], PAINT3 = [1.12, 1.1, 1.05]
 // ---------------------------------------------------------------------------------------------------------------------
 // The far shape: a few boxes with the right outline, for a vehicle that is a dozen dots wide on the screen
 // ---------------------------------------------------------------------------------------------------------------------
-function farShape(kind, P, body, turret, mat) {
+function farShape(kind, P, body, turret, mat, roof) {
   const S = SPEC[kind], L = S.len, W = S.wid, b = new Bits();
   if (kind === 'uaz') {
     b.box(W * 0.94, 0.62, L, 0, 0.78, 0, PAINT).box(W * 0.9, 0.72, L * 0.56, 0, 1.44, -L * 0.14, CANVAS).box(W * 0.8, 0.3, 0.06, 0, 1.4, L * 0.15, GLASS, -0.2);
@@ -79,7 +83,7 @@ function farShape(kind, P, body, turret, mat) {
     piece('farHull', b.merge(), mat, body, 'far');
     return;
   }
-  const tank = kind === 't72', top = tank ? 1.16 : 2.05, nose = tank ? 0.8 : 1.35;
+  const tank = kind === 't72', top = tank ? (roof || 1.16) : 2.05, nose = tank ? 0.8 : 1.35;
   b.prism([[-L / 2, 0.45], [L / 2 - 0.5, 0.45], [L / 2, nose], [L / 2 - (tank ? 1.6 : 2.3), top], [-L / 2, top]], -W / 2 + 0.3, W / 2 - 0.3, PAINT);
   for (const sx of [-1, 1]) b.box(0.5, tank ? 0.95 : 1.0, L * 0.96, sx * (W / 2 - 0.3), tank ? 0.5 : 0.52, 0, sx > 0 ? DARK : RUBBER);
   if (tank) { b.cyl(0.3, 0.9, 0.6, 1.0, -L / 2 - 0.3, PAINT2, 'x', 6).cyl(0.3, 0.9, -0.6, 1.0, -L / 2 - 0.3, PAINT2, 'x', 6); }
@@ -91,7 +95,8 @@ function farShape(kind, P, body, turret, mat) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// T-72 class tank, built in code. STAND-IN: the outline and proportions of a T-72B with reactive armour blocks, not a model of one.
+// A tank built in code: the outline and proportions of a T-72B with reactive armour blocks. It is ONLY the fallback shown if the
+// supplied tank file (assets/veh/t72.json or t90.json) cannot be loaded; with the files in place it is never seen.
 // ---------------------------------------------------------------------------------------------------------------------
 function trackTexture() {
   const c = document.createElement('canvas'); c.width = 32; c.height = 64; const g = c.getContext('2d');
@@ -254,11 +259,51 @@ async function buildLoaded(kind, base) {
   return P;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Supplied tanks (T-72B3, T-90M), packed by tools/vehicle_join.py: the pieces are already straight and named, and the file says where
+// the turret and the gun turn and where every wheel's axle is. A full copy for close up and a light copy for the middle distance.
+// ---------------------------------------------------------------------------------------------------------------------
+const texLoader = new THREE.TextureLoader();
+function picture(url, colour) { const t = texLoader.load(url); t.flipY = false; t.anisotropy = 4; if (colour) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+function tankMaterial(name, T, base) {
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0.15, side: THREE.DoubleSide }); m.name = name; if (!T) return m;
+  if (T.map) m.map = picture(base + T.map, true);
+  if (T.normal) { m.normalMap = picture(base + T.normal, false); m.normalScale.set(0.8, 0.8); }
+  if (T.rm) { m.roughnessMap = m.metalnessMap = picture(base + T.rm, false); m.roughness = 1; m.metalness = 0.6; }
+  if (T.cut) m.alphaTest = 0.5;
+  return m;
+}
+async function buildTank(kind, base) {
+  const V = SPEC[kind], src = await loadModel(base + V.file); if (!src) return null;
+  const X = src.userData || {}; if (!X.turret || !X.wheels) throw new Error('tank file without its measurements: ' + V.file);
+  const mats = { body: tankMaterial('body', V.tex.body, base), track: tankMaterial('track', V.tex.track, base), kord: tankMaterial('kord', V.tex.kord, base) };
+  const P = group(kind), gear = group('gear', P), body = group('body', P), items = {}; src.updateMatrixWorld(true);
+  src.traverse(m => { if (m.isMesh) { const g = plain(m.geometry, m.matrixWorld); g.computeBoundingBox(); items[m.name] = { name: m.name, g, box: g.boundingBox, mat: /track/i.test(m.name) ? mats.track : /kord/i.test(m.name) ? mats.kord : mats.body }; } });
+  const tp = X.turret, gp = X.gun ? X.gun.pivot : [tp[0], tp[1] + 0.2, tp[2] + 0.8], mz = X.gun ? X.gun.muzzle : [tp[0], tp[1] + 0.2, tp[2] + 5.5];
+  const turret = group('turret', body, tp[0], tp[1], tp[2]), gun = group('gun', turret, gp[0] - tp[0], gp[1] - tp[1], gp[2] - tp[2]);
+  const put = (name, parent, lod, o, shadow = true) => { const it = items[name]; if (!it) return null; return mergeInto(parent, [it], name, lod, o[0], o[1], o[2], shadow)[0]; };
+  put('hull', body, 'near', [0, 0, 0]); put('lod1_hull', body, 'mid', [0, 0, 0]);
+  put('turret', turret, 'near', tp); put('kord', turret, 'near', tp); put('lod1_turret', turret, 'mid', tp);
+  put('gun', gun, 'near', gp); put('lod1_gun', gun, 'mid', gp);
+  ['trackL', 'trackR'].forEach((n, i) => { const m = put(n, gear, 'near', [0, 0, 0], false); if (m) { m.name = 'track:' + i; m.userData.side = items[n].box.max.x + items[n].box.min.x > 0 ? 1 : -1; m.userData.slide = trackFlow(items[n].g); } });
+  put('lod1_track', gear, 'mid', [0, 0, 0], false); put('lod1_gear', gear, 'mid', [0, 0, 0], false);
+  const wheels = X.wheels.map((w, i) => { const g = group('wheel:' + i, gear, w.c[0], w.c[1], w.c[2]); put(w.name, g, 'near', w.c, false); return { x: w.c[0], y: w.c[1], z: w.c[2], r: w.r, side: w.c[0] > 0 ? 1 : -1 }; });
+  point('muzzle', gun, mz[0] - gp[0], mz[1] - gp[1], mz[2] - gp[2]); point('coax', gun, -0.35, 0.02, (X.gun ? X.gun.root : gp[2] + 0.7) - gp[2] + 0.1); point('rail', gun, mz[0] - gp[0], mz[1] - gp[1], mz[2] - gp[2]);
+  const hb = items.hull.box, len = mz[2] - (X.gun ? X.gun.root : gp[2]);
+  hot('gun', gun, 0, 0, 0, 0, 0, mz[2] - gp[2] - len / 2, new THREE.CylinderGeometry(0.15, 0.15, len, 6).rotateX(Math.PI / 2));
+  hot('engine', body, 2.3, 0.1, 1.7, 0, tp[1] - 0.12, hb.min.z + 1.75); hot('exhaust', body, 0.4, 0.3, 0.9, hb.max.x - 0.25, tp[1] - 0.3, hb.min.z + 1.6);
+  for (const sx of [1, -1]) hot('gear', gear, 0.6, 0.9, 6.2, sx * V.gauge, 0.5, 0.3);
+  farShape('t72', P, body, turret, paintMat(), tp[1]);
+  P.userData = { kind, wheels, turretAt: tp, roof: tp[1] + 0.8, hatch: [[tp[0] - 0.5, tp[1] + 0.8, tp[2] - 0.2], [tp[0] + 0.5, tp[1] + 0.8, tp[2] - 0.2]], deck: [0, tp[1], hb.min.z + 1.75] };
+  return P;
+}
+
 // One prepared vehicle per kind, made once; every vehicle on the field is a copy of it (see VehicleView). Resolves to null if a
 // supplied model is missing.
 const ready = new Map();
 export function vehicleProto(kind, base) {
   if (!SPEC[kind]) return Promise.resolve(null);
-  if (!ready.has(kind)) ready.set(kind, kind === 't72' ? Promise.resolve().then(buildT72) : buildLoaded(kind, base).catch(e => { console.warn('vehicle model not prepared', kind, e && e.message); return null; }));
+  if (!ready.has(kind)) ready.set(kind, (SPEC[kind].tank ? buildTank(kind, base) : buildLoaded(kind, base)).catch(e => { console.warn('vehicle model not prepared', kind, e && e.message); return null; })
+    .then(p => p || (SPEC[kind].tank ? (console.warn('tank file missing: showing the plain built-in tank shape for', kind), buildT72()) : null)));
   return ready.get(kind);
 }
