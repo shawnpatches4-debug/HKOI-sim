@@ -7,12 +7,11 @@
    "fired": 5,
    "hits": 0,
    "by": {
-    "gunner_jitter": 1,
-    "hkoi_cut": 1,
+    "gunner_jitter": 2,
     "unguided_miss": 1,
     "aps": 2
    },
-   "obs": 124,
+   "obs": 123,
    "he": 150,
    "apsL": 3,
    "apsR": 3,
@@ -26,13 +25,13 @@
    "waves": 1,
    "teamsLeft": 0,
    "main": 15,
-   "killedByTank": 1,
-   "killedByMg": 1,
+   "killedByTank": 0,
+   "killedByMg": 2,
    "coax": 2400,
-   "m2": 504
+   "m2": 384
   },
-  "log": 83,
-  "events": 31,
+  "log": 102,
+  "events": 34,
   "over": "won",
   "last": "Enemy breaks contact: 3 of 5 teams still able to fight, and they pull out."
  },
@@ -63,24 +62,24 @@
    "coax": 2280,
    "m2": 528
   },
-  "log": 36,
-  "events": 18,
+  "log": 39,
+  "events": 19,
   "over": null,
-  "last": "A new enemy group moves in from the south: wave 2 of 2, 3 teams."
+  "last": "Gunner lays on Kornet team #7, 2.19 km, bearing 241: it can fire on us."
  },
  {
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 2,
-   "fired": 5,
+   "volleys": 3,
+   "fired": 6,
    "hits": 0,
    "by": {
-    "hkoi_cut": 1,
+    "hkoi_cut": 2,
     "gunner_jitter": 1,
     "aps": 3
    },
-   "obs": 126,
+   "obs": 105,
    "he": 150,
    "apsL": 3,
    "apsR": 2,
@@ -93,14 +92,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 14,
+   "main": 8,
    "killedByTank": 2,
    "killedByMg": 1,
    "coax": 2400,
    "m2": 552
   },
-  "log": 82,
-  "events": 37,
+  "log": 115,
+  "events": 48,
   "over": "won",
   "last": "Enemy breaks contact: 2 of 5 teams still able to fight, and they pull out."
  },
@@ -114,10 +113,10 @@
    "by": {
     "aps": 1,
     "unguided_miss": 1,
-    "hkoi_cut": 3,
-    "gunner_jitter": 1
+    "hkoi_cut": 2,
+    "gunner_jitter": 2
    },
-   "obs": 113,
+   "obs": 109,
    "he": 150,
    "apsL": 4,
    "apsR": 3,
@@ -129,33 +128,32 @@
    },
    "wave": 2,
    "waves": 2,
-   "teamsLeft": 0,
-   "main": 12,
-   "killedByTank": 2,
+   "teamsLeft": 3,
+   "main": 4,
+   "killedByTank": 0,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 480
   },
-  "log": 117,
-  "events": 53,
-  "over": "won",
-  "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
+  "log": 147,
+  "events": 66,
+  "over": null,
+  "last": "Gunner lays on Kornet team #8, 2.92 km, bearing 271: it can fire on us."
  },
  {
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 2,
-   "fired": 2,
+   "volleys": 1,
+   "fired": 1,
    "hits": 0,
    "by": {
-    "hkoi_cut": 1,
-    "terrain_mask": 1
+    "aps": 1
    },
-   "obs": 136,
+   "obs": 141,
    "he": 150,
    "apsL": 4,
-   "apsR": 4,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -164,17 +162,17 @@
    },
    "wave": 1,
    "waves": 1,
-   "teamsLeft": 3,
-   "main": 13,
+   "teamsLeft": 0,
+   "main": 14,
    "killedByTank": 1,
    "killedByMg": 1,
    "coax": 2360,
    "m2": 576
   },
-  "log": 69,
-  "events": 33,
-  "over": null,
-  "last": "Main gun round on Konkurs team #4 at 1.55 km: position destroyed."
+  "log": 47,
+  "events": 28,
+  "over": "won",
+  "last": "The group could not get a shot and pulls back."
  },
  {
   "summary": {
@@ -185,13 +183,13 @@
    "hits": 1,
    "by": {
     "unguided_miss": 1,
-    "aps": 2,
+    "aps": 3,
     "HIT": 1,
-    "hkoi_cut": 3
+    "hkoi_cut": 2
    },
-   "obs": 114,
+   "obs": 128,
    "he": 150,
-   "apsL": 4,
+   "apsL": 3,
    "apsR": 2,
    "crew": {
     "cdr": "ok",
@@ -202,20 +200,20 @@
    "wave": 2,
    "waves": 2,
    "teamsLeft": 0,
-   "main": 11,
+   "main": 10,
    "killedByTank": 3,
    "killedByMg": 3,
    "coax": 2320,
    "m2": 480
   },
-  "log": 127,
-  "events": 53,
+  "log": 129,
+  "events": 58,
   "over": "won",
   "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
  },
  {
   "summary": {
-   "t": 18.4,
+   "t": 13.8,
    "alive": false,
    "volleys": 1,
    "fired": 4,
@@ -237,15 +235,15 @@
    },
    "wave": 1,
    "waves": 1,
-   "teamsLeft": 3,
+   "teamsLeft": 5,
    "main": 17,
    "killedByTank": 0,
-   "killedByMg": 2,
+   "killedByMg": 0,
    "coax": 2400,
    "m2": 552
   },
-  "log": 38,
-  "events": 21,
+  "log": 35,
+  "events": 19,
   "over": null,
   "last": "Vehicle destroyed."
  },
@@ -285,14 +283,15 @@
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 2,
-   "fired": 4,
+   "volleys": 4,
+   "fired": 6,
    "hits": 0,
    "by": {
-    "gunner_jitter": 3,
-    "hkoi_cut": 1
+    "hkoi_cut": 3,
+    "gunner_jitter": 2,
+    "terrain_mask": 1
    },
-   "obs": 119,
+   "obs": 92,
    "he": 150,
    "apsL": 4,
    "apsR": 4,
@@ -305,14 +304,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 15,
+   "main": 5,
    "killedByTank": 1,
    "killedByMg": 1,
    "coax": 2360,
    "m2": 576
   },
-  "log": 74,
-  "events": 27,
+  "log": 147,
+  "events": 55,
   "over": "won",
   "last": "Enemy breaks contact: 3 of 5 teams still able to fight, and they pull out."
  },
@@ -321,17 +320,16 @@
    "t": 360,
    "alive": true,
    "volleys": 3,
-   "fired": 9,
+   "fired": 8,
    "hits": 0,
    "by": {
     "unguided_miss": 3,
     "gunner_jitter": 3,
-    "aps": 1,
     "hkoi_cut": 2
    },
-   "obs": 92,
+   "obs": 106,
    "he": 150,
-   "apsL": 3,
+   "apsL": 4,
    "apsR": 4,
    "crew": {
     "cdr": "ok",
@@ -342,14 +340,14 @@
    "wave": 2,
    "waves": 2,
    "teamsLeft": 0,
-   "main": 13,
+   "main": 8,
    "killedByTank": 2,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 552
   },
-  "log": 137,
-  "events": 55,
+  "log": 142,
+  "events": 59,
   "over": "won",
   "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
  },
@@ -374,14 +372,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 18,
-   "killedByTank": 0,
-   "killedByMg": 0,
-   "coax": 2400,
-   "m2": 600
+   "main": 17,
+   "killedByTank": 1,
+   "killedByMg": 1,
+   "coax": 2360,
+   "m2": 576
   },
-  "log": 19,
-  "events": 17,
+  "log": 38,
+  "events": 20,
   "over": "won",
   "last": "The group could not get a shot and pulls back."
  },
