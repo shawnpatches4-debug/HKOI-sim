@@ -78,6 +78,7 @@
         // later waves are built from it (see _waveForce) and come from another direction once the wave before has been beaten.
         const force0 = opt.force || [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }];
         this.force0 = force0; this.nWaves = Math.max(1, Math.min(6, opt.waves | 0 || 1)); this.wave = 0; this.waveAt = null; this.waveFrom = 0;
+        if (this.mission === 'hold' && !opt.tank && this._pickStart) this._pickStart();
         this._place(this._waveForce(0));
         this.say(0, 'setup', null, `Battle on ${this.world.biome.name}, map seed ${this.world.seed}. ${this.units.length} enemy teams in position.`);
       }

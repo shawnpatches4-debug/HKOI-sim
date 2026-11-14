@@ -194,8 +194,10 @@
     _scorePos(c, threats, look) {
       const W = this.world; if (!W.inside(c.e, c.n) || !W.passable(c.e, c.n, true)) return -9; if (W.slope(c.e, c.n) > 0.3) return -9;
       let s = 0, sw = 0, hid = 0, see = 0;
+      // nothing located yet: judge the spot against watchers all round at 1,500 m, so he settles where folds in the ground hide the hull from most directions
+      const known = threats.length > 0; if (!known) { threats = []; for (let a = 0; a < 6.28; a += 0.5236) threats.push({ e: c.e + Math.sin(a) * 1500, n: c.n + Math.cos(a) * 1500, w: 1 }); }
       for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : 1) + (tur ? 0.6 : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
-      s = sw ? s / sw : 0.6;
+      s = sw ? s / sw : 0.6; if (!known) { threats = []; hid = 0; see = 0; }
       // open ground toward the enemy (or the way we are looking when no enemy is known): how much of the first 1,000 m is in view
       const dirs = threats.length ? threats.slice(0, 4).map(o => Math.atan2(o.e - c.e, o.n - c.n)) : look != null ? [look * DEG - 0.5, look * DEG, look * DEG + 0.5] : [0, 1.57, 3.14, 4.71];
       let open = 0, on = 0; for (const a of dirs) for (const r of [250, 500, 750, 1000]) { on++; if (W.los(c.e, c.n, 2.6, c.e + Math.sin(a) * r, c.n + Math.cos(a) * r, 1.0).clear) open++; }
@@ -241,6 +243,16 @@
       if (M.type === 'hold') this._hold(M, tg, th, inView, settled, v);
       else if (M.type === 'advance') this._advance(M, tg, th, inView, settled, v, careful);
       else this._hunt(M, tg, th, inView, settled, v, careful);
+    },
+    // Before the battle (hold mission, and only when the player has not placed the vehicle himself): the commander is already in the best
+    // fighting position within 200 m of where he was put, with two alternates picked. A crew that holds ground does not arrive as the shooting starts.
+    _pickStart() {
+      const T = this.tank, A = this._crew(), cands = [];
+      for (let de = -200; de <= 200; de += 25) for (let dn = -200; dn <= 200; dn += 25) { if (Math.hypot(de, dn) > 200) continue; const c = { e: T.home.e + de, n: T.home.n + dn, d: Math.hypot(de, dn) }; c.s = this._scorePos(c, [], T.h); if (c.s > -9) cands.push(c); }
+      cands.sort((a, b) => b.s - a.s); const pos = []; for (const c of cands) { if (pos.every(p => Math.hypot(p.e - c.e, p.n - c.n) >= 50)) pos.push(c); if (pos.length === 3) break; }
+      if (!pos.length) return; T.e = pos[0].e; T.n = pos[0].n; T.home = { e: T.e, n: T.n };
+      A.m = { type: 'hold', phase: 'start', since: 0, arrived: 0, rounds0: T.main, home: { e: T.e, n: T.n }, pos, cur: 0, lastVolley: -1, clearSince: null };
+      this.say(0, 'tank', 'CDR', `The vehicle is in its primary position with ${pos.length - 1} alternate${pos.length === 2 ? '' : 's'} picked.`, 'long open view, no cover close by for a rocket team; the enemy\'s direction is not known yet');
     },
     // HOLD: a primary position and two alternates; shift after being fired on, after several rounds from one spot, or to see a team
     _hold(M, tg, th, inView, settled, v) {
