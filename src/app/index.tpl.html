@@ -73,6 +73,7 @@
   #crew div { padding-left: 44px; text-indent: -44px; } #crew b { color: var(--accent); font-weight: 600; display: inline-block; width: 44px; text-indent: 0; }
   @media (max-width: 1500px) { #crew { bottom: 150px; } }
   /* replay: a time bar with a mark at every event */
+  body:has(#replay:not([hidden])) #crew { bottom: 250px; }   /* the crew panel moves up out of the replay bar's way */
   #replay { position: fixed; left: 50%; bottom: 136px; transform: translateX(-50%); width: min(900px, calc(100vw - 24px)); padding: 8px 10px; z-index: 3; box-sizing: border-box; }
   .rp-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font: 12px var(--mono); } .rp-row b { letter-spacing: .12em; color: var(--warn); margin-right: 4px; } .rp-row .sp { flex: 1; } #rp-time { color: var(--fg); margin-left: 6px; } #rp-what { color: var(--dim); margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
   .rp-track { position: relative; margin-top: 6px; height: 22px; } #rp-bar { position: absolute; left: 0; right: 0; top: 2px; width: 100%; margin: 0; accent-color: var(--accent); }
