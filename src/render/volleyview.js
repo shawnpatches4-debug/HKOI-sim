@@ -104,7 +104,10 @@ export class VolleyView {
   _surf(x, z) { const W = this.b.world; if (W.buildingAt && W.buildingAt(x, -z, 2)) return 'wall'; const g = W.veg ? W.veg(x, -z) : null; return g && (g.cls === 4 || g.cls === 5) ? 'trees' : null; }   /* 4 forest, 5 tree line */
   _mode(th, tv) { let md = 'guided'; for (const p of th.viz.phases || []) if (p.t <= tv) md = p.mode; return md; }
 
-  dispose() { this.s.scene.remove(this.group); for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear(); }
+  dispose() {
+    this.s.scene.remove(this.group); this.transit.clear(); this.live.clear(); this.fly.length = 0; this.later.length = 0;
+    this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut]) { L.geo.dispose(); L.line.material.dispose(); }
+  }
   // After a jump in time (replay): everything that has already happened in the current engagement is taken as seen, so old
   // explosions and muzzle flashes do not all go off at once. Lingering smoke is dropped; the cloud is rebuilt as old as it should be.
   skipTo(t) {

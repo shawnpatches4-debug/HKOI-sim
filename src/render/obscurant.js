@@ -53,7 +53,7 @@ void main() {
   lit = mix(lit, fogColor, vFog * 0.8);
   // the highlight: a cool tint in the soft fringe of each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
   // part of the cloud: it stays readable while the real cloud thins, and carries a little light of its own after dark.
-  float hA = vH * (edge * 0.26 + m * 0.06) * soft;
+  float hA = vH * (edge * 0.36 + m * 0.1) * soft;
   vec3 hC = tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night;
   if (thermal != 0.0) { lit = vec3(0.3 + 0.12 * sun); hC = vec3(0.6); }
   vec3 L = toneOut(lit), H = toneOut(hC);

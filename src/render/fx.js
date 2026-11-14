@@ -61,7 +61,7 @@ void main() {
   vec2 c = position.xy; vec2 off;
   if (kind > 4.5 || (kind > 1.5 && kind < 2.5)) {   /* tracers and sparks: a streak along the direction of flight */
     vec3 a3 = (viewMatrix * vec4(vel, 0.0)).xyz; float sp = length(a3), s2 = length(a3.xy); vec2 ax = s2 > 0.0001 ? a3.xy / s2 : vec2(1.0, 0.0);
-    float w = max(size, px * (kind > 4.5 ? 2.2 : 1.4)), len = kind > 4.5 ? aS.y : clamp(sp * 0.03, size, size * 16.0);
+    float w = max(size, px * (kind > 4.5 ? 2.2 : 1.1)), len = kind > 4.5 ? aS.y : clamp(sp * 0.022, size, size * 22.0);
     len = max(len * s2 / max(sp, 0.0001), w);
     off = ax * c.x * len * 0.5 + vec2(-ax.y, ax.x) * c.y * w * 0.5;
   } else { float s = size; if (kind > 2.5) s = max(s, px * (kind > 3.5 ? 3.0 : 1.6)); off = c * s * 0.5; }
@@ -226,9 +226,9 @@ export class Particles {
   }
   // sparks thrown in a cone about direction (dx, dy, dz); spread 0 = a jet, 1 = a hemisphere, 2 = every way
   sparks(x, y, z, dx, dy, dz, n, speed, spread = 1, life = 0.7, col = null, bright = 5) {
-    const c = col || [1, 0.7, 0.32]; n = this.cnt(n);
+    const c = col || [1, 0.55, 0.2]; n = this.cnt(n); bright *= 0.6;   /* kept below the point where they bleach to white */
     for (let i = 0; i < n; i++) { let ux = dx + (this.R() - 0.5) * 2 * spread, uy = dy + (this.R() - 0.5) * 2 * spread, uz = dz + (this.R() - 0.5) * 2 * spread; const l = Math.hypot(ux, uy, uz) || 1, s = speed * (0.35 + this.R() * 0.9) / l;
-      this.spawn(KIND.SPARK, x, y, z, ux * s, uy * s, uz * s, life * (0.5 + this.R()), 0.07, 0.03, c[0], c[1] * (0.8 + this.R() * 0.3), c[2], 1, 0.9, -9.8, bright, 0); }
+      this.spawn(KIND.SPARK, x, y, z, ux * s, uy * s, uz * s, life * (0.4 + this.R() * 1.2), 0.05, 0.02, c[0], c[1] * (0.7 + this.R() * 0.5), c[2], 1, 0.9 + this.R() * 0.8, -9.8, bright * (0.5 + this.R()), 0); }
   }
   // lumps of earth or metal thrown up, falling back
   clods(x, y, z, n, speed, size, col, up = 1, heat = 0) {
@@ -374,8 +374,8 @@ export class Particles {
   breakup(x, y, z, vx, vy, vz, k = 1) {
     this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.11, 3.5 * k, 16 * k, 1, 0.9, 0.7, 1, 0, 0, 12, 0);
     const sp = Math.hypot(vx, vy, vz) || 1, n = this.cnt(9 * k);
-    for (let i = 0; i < n; i++) { const c = 0.12 + this.R() * 0.4, j = sp * 0.12; this.spawn(KIND.FIRE, x, y, z, vx * c + (this.R() - 0.5) * j, vy * c + (this.R() - 0.5) * j + 2, vz * c + (this.R() - 0.5) * j, 1.6 + this.R() * 1.6, 0.7 * k, 2.6 * k, 0.15, 0.15, 0.15, 0.55, 1.6, -5, 0.55, 0); }
-    for (let i = 0; i < this.cnt(26 * k); i++) { const c = 0.1 + this.R() * 0.55, j = sp * 0.16; this.spawn(KIND.SPARK, x, y, z, vx * c + (this.R() - 0.5) * j, vy * c + (this.R() - 0.5) * j + 3, vz * c + (this.R() - 0.5) * j, 0.8 + this.R() * 1.2, 0.1, 0.05, 1, 0.65 + this.R() * 0.2, 0.3, 1, 0.8, -9.8, 6, 0); }
+    for (let i = 0; i < n; i++) { const c = 0.05 + this.R() * 0.2, j = sp * 0.05; this.spawn(KIND.FIRE, x, y, z, vx * c + (this.R() - 0.5) * j, vy * c + (this.R() - 0.5) * j + 2, vz * c + (this.R() - 0.5) * j, 1.4 + this.R() * 1.4, 0.7 * k, 2.6 * k, 0.15, 0.15, 0.15, 0.55, 3.2, -14, 0.55, 0); }   /* the pieces lose their speed fast and drop within a few metres */
+    for (let i = 0; i < this.cnt(26 * k); i++) { const c = 0.05 + this.R() * 0.3, j = sp * 0.07; this.spawn(KIND.SPARK, x, y, z, vx * c + (this.R() - 0.5) * j, vy * c + (this.R() - 0.5) * j + 3, vz * c + (this.R() - 0.5) * j, 0.8 + this.R() * 1.2, 0.1, 0.05, 1, 0.65 + this.R() * 0.2, 0.3, 1, 0.8, -9.8, 6, 0); }
     this.clods(x, y, z, 8 * k, sp * 0.12, 0.13, [0.2, 0.2, 0.19], 0.5, 0.6);
     for (let i = 0; i < this.cnt(6 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, vx * 0.03 + (this.R() - 0.5) * 4, (this.R() - 0.5) * 3, vz * 0.03 + (this.R() - 0.5) * 4, 4 + this.R() * 4, 1.2 * k, 6 * k, 0.16, 0.16, 0.16, 0.55, 2, 0.15, 0, 0);
   }
