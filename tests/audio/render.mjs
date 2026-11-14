@@ -198,5 +198,18 @@ async function inside() {
   fs.writeFileSync(path.join(OUT, 'inside_penetration_alarm_fire.json'), JSON.stringify({ said: s.icom.said, dropped: s.icom.dropped }, null, 1));
 }
 
-const scenes = { fx, beds, talk, battle, compare, slots, inside };
+// the same half minute from every kind of view the page has: the crew talking while the 30 mm, the main gun, Trophy and
+// a blast go off. tests/audio/check.py: nothing clips, inside is dull and outside is not, the crew is heard only from seats.
+async function views() {
+  for (const view of ['orbit', 'chase', 'cdr', 'in_cdr', 'in_gnr', 'in_ldr', 'in_drv', 'cut', 'enemy']) {
+    const cam = view === 'enemy' ? 1500 : view === 'orbit' || view === 'chase' || view === 'cut' ? 25 : 3, g30 = t0 => [0, 1, 2, 3, 4, 5].map(i => [t0 + i * 0.3, x => x.gun30(cam)]);
+    const s = await render('view_' + view, 26, { voices: true, seed: 7, state: () => ({ view, cond: 'day', biome: 'farmland', speed: 4, heading: 0, turret: 0, alive: true, camDist: cam, rate: 1, drones: [], talking: false }),
+      acts: [[1.0, x => x.cue('GNR', 'ready', 0, { ttl: 4 })], [4.0, x => x.cue('LDR', 'ready', 0, { ttl: 4 })], ...g30(4.2), [7.0, x => x.cue('DRV', 'ready', 0, { ttl: 4 })], [7.6, x => x.gun120(cam)],
+        [10.5, x => x.cue('CDR', 'redcon', 0, { ttl: 4 })], ...g30(11.0), [13.2, x => x.aps(cam)], [14.5, x => x.cue('CDR', 'cease', 1, { ttl: 4 })], [15.0, x => x.explosion(cam + 20, 1.4)], ...g30(15.4),
+        [18.5, x => x.cue('GNR', 'ontheway', 1, { ttl: 4 })], [18.6, x => { for (let i = 0; i < 8; i++) x.mg(cam, true); }], [21, x => x.cue('DRV', 'ack_fwd', 1, { ttl: 4 })], ...g30(21.2)] });
+    fs.writeFileSync(path.join(OUT, 'view_' + view + '.json'), JSON.stringify({ said: s.icom.said, dropped: s.icom.dropped }, null, 1));
+  }
+}
+
+const scenes = { fx, beds, talk, battle, compare, slots, inside, views };
 for (const name of want.length ? want : Object.keys(scenes)) { const t0 = Date.now(); await scenes[name](); console.log('scene', name, 'rendered in', ((Date.now() - t0) / 1000).toFixed(1), 's'); }

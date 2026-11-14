@@ -1,6 +1,6 @@
 {
   "pack": "crew_dialogs_ground_en_us",
-  "note": "The crew lines of the release build, chosen clip by clip from the owner's human voice pack (tools/audio/build_crew.py cuts them into assets/crew2_*.mp3). Each entry: event -> [[clip number, delivery 0 calm / 1 tense / 2 shouted, words as the speech recogniser and a re-check understood them], ...]. Nobody has listened. Events are spoken by src/audio/crewtalk.js; an event that is not here is silent in the simulator.",
+  "note": "The crew lines of the release build, chosen clip by clip from the owner's human voice pack (tools/audio/build_crew.py cuts them into assets/crew2_*.mp3). Each entry: event -> [[clip number, delivery 0 calm / 1 tense / 2 shouted, words as the speech recogniser and a re-check understood them], ...]. Nobody has listened (clips 329, 331 and 333: the first word was heard as careful or doubtful). Events are spoken by src/audio/crewtalk.js; an event that is not here is silent in the simulator.",
   "prefix": "crew3",
   "e": {
     "CDR": {
@@ -15,7 +15,7 @@
       "hit": [[475, 0, "We have been hit, checking systems."], [316, 1, "They hit us! Check for damage!"], [317, 2, "We have been hit!"]],
       "cease": [[319, 0, "Target, cease fire."], [320, 1, "Target, target, cease fire."], [321, 2, "Target, cease fire!"]],
       "reengage": [[325, 0, "Re-engaging!"], [326, 0, "Re-engaging!"], [343, 0, "Re-engaging!"], [327, 1, "Re-engaging!"], [328, 1, "Re-engaging!"], [330, 1, "Re-engaging!"], [332, 2, "Re-engaging!"], [345, 2, "Re-engaging!"]],
-      "reengage_doubt": [[344, 0, "Doubtful, re-engaging."], [329, 0, "Doubtful (first word unsure), re-engaging!"], [333, 1, "Doubtful (first word unsure), re-engaging!"], [331, 2, "Doubtful (first word unsure), re-engaging!"]],
+      "reengage_doubt": [[344, 0, "Doubtful, re-engaging."], [329, 0, "Doubtful, re-engaging!"], [333, 1, "Doubtful, re-engaging!"], [331, 2, "Doubtful, re-engaging!"]],
       "load_sabot": [[175, 0, "Load sabot!"], [173, 1, "Load sabot!"], [174, 2, "Load sabot!"]],
       "reload": [[190, 0, "Reload!"], [188, 1, "Reload!"], [189, 2, "Reload!"]],
       "loader_down": [[440, 0, "Loader unconscious!"], [287, 0, "We lost the loader!"], [288, 1, "Loader has been knocked out."], [441, 2, "We lost the loader!"]]
