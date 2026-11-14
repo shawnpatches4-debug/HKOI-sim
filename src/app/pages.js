@@ -20,7 +20,7 @@ const CSS = `
 `;
 const ENDED = { hkoi: 'Blinded or shot down by HKOI', trophy: 'Stopped by Trophy', hit: 'HIT THE VEHICLE', gunner_jitter: 'Enemy gunner missed', terrain_mask: 'Lost behind cover', counter_fire: 'Gunner driven off by machine-gun fire', suppressed_aim: 'Aim shaken by machine-gun fire', unguided_miss: 'Missed on its own', crew_smoke: 'Lost in crew smoke' };
 const THREAT = { kornet: 'Kornet', saclos: 'Konkurs', rpg: 'RPG', sal: 'Laser-homing missile', fpv: 'FPV drone', fpv_fiber: 'Fibre FPV drone' };
-const RESULT = { lost: 'Vehicle destroyed', won: 'Enemy beaten off', objective: 'Objective reached', withdrawn: 'Broke contact', time: 'Time ran out' };
+const RESULT = { lost: 'Vehicle destroyed', won: 'Enemy beaten off', objective: 'Objective reached', withdrawn: 'Broke contact', abandoned: 'Crew abandoned the vehicle', time: 'Time ran out' };
 const clock = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0'), pc = x => Math.round(100 * x) + '%';
 
 // ctx: { el, store, deps: { HK, Battle, Study, Ladder }, scenario() -> { opts, text }, playRung(rung), back() }

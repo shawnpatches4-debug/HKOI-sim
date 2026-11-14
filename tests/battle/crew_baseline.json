@@ -14,8 +14,8 @@
    },
    "obs": 125,
    "he": 150,
-   "apsL": 2,
-   "apsR": 2,
+   "apsL": 3,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -46,8 +46,8 @@
    "by": {},
    "obs": 150,
    "he": 150,
-   "apsL": 3,
-   "apsR": 3,
+   "apsL": 4,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -82,8 +82,8 @@
    },
    "obs": 105,
    "he": 150,
-   "apsL": 2,
-   "apsR": 1,
+   "apsL": 3,
+   "apsR": 2,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -119,8 +119,8 @@
    },
    "obs": 114,
    "he": 150,
-   "apsL": 3,
-   "apsR": 2,
+   "apsL": 4,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -153,8 +153,8 @@
    },
    "obs": 146,
    "he": 150,
-   "apsL": 3,
-   "apsR": 2,
+   "apsL": 4,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -190,8 +190,8 @@
    },
    "obs": 114,
    "he": 150,
-   "apsL": 3,
-   "apsR": 1,
+   "apsL": 4,
+   "apsR": 2,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -226,8 +226,8 @@
    },
    "obs": 150,
    "he": 150,
-   "apsL": 3,
-   "apsR": 2,
+   "apsL": 4,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -258,8 +258,8 @@
    "by": {},
    "obs": 150,
    "he": 150,
-   "apsL": 3,
-   "apsR": 3,
+   "apsL": 4,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -293,8 +293,8 @@
    },
    "obs": 129,
    "he": 150,
-   "apsL": 3,
-   "apsR": 3,
+   "apsL": 4,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -330,8 +330,8 @@
    },
    "obs": 99,
    "he": 150,
-   "apsL": 2,
-   "apsR": 3,
+   "apsL": 3,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -362,8 +362,8 @@
    "by": {},
    "obs": 150,
    "he": 150,
-   "apsL": 3,
-   "apsR": 3,
+   "apsL": 4,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -398,8 +398,8 @@
    },
    "obs": 150,
    "he": 150,
-   "apsL": 2,
-   "apsR": 3,
+   "apsL": 3,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -434,8 +434,8 @@
    },
    "obs": 146,
    "he": 150,
-   "apsL": 1,
-   "apsR": 3,
+   "apsL": 2,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "wounded",
@@ -469,8 +469,8 @@
    },
    "obs": 150,
    "he": 146,
-   "apsL": 2,
-   "apsR": 3,
+   "apsL": 3,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -504,8 +504,8 @@
    },
    "obs": 134,
    "he": 150,
-   "apsL": 2,
-   "apsR": 2,
+   "apsL": 3,
+   "apsR": 3,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -540,8 +540,8 @@
    },
    "obs": 144,
    "he": 126,
-   "apsL": 1,
-   "apsR": 3,
+   "apsL": 2,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -560,6 +560,6 @@
   "log": 123,
   "events": 41,
   "over": null,
-  "last": "Volley 4 over: 1 fired, 0 hits. HKOI rounds left 144 obscurant, 126 HE; Trophy 1 left, 3 right."
+  "last": "Volley 4 over: 1 fired, 0 hits. HKOI rounds left 144 obscurant, 126 HE; Trophy 2 left, 4 right."
  }
 ]

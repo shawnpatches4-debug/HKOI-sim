@@ -35,7 +35,7 @@
     const s = b.summary(), threats = [];
     for (const v of b.volleys) for (const th of v.rec.threats) { const l = v.launches.find(q => q.u.id === th.uid) || {}; threats.push({ key: th.key, R: Math.round(l.R || th.R || 0), by: bucketOf(th), fired: !!(th.viz && th.viz.fired != null), tags: (th.tags || []).slice(0, 6), together: v.rec.threats.filter(q => q.impact != null && th.impact != null && Math.abs(q.impact - th.impact) < 3).length }); }   /* together: how many arrive within three seconds of this one, itself included */
     const crew = s.crew || {};
-    return { seed, survived: b.tank.alive, result: !b.tank.alive ? 'lost' : b.over ? b.over.result : 'time', t: Math.round(b.t), wave: s.wave, hits: s.hits, crewDown: Object.values(crew).filter(x => x !== 'ok').length,
+    return { seed, survived: b.tank.alive && !(b.over && b.over.result === 'abandoned'),   /* a vehicle its crew has abandoned is out of the fight: counted as lost */ result: !b.tank.alive ? 'lost' : b.over ? b.over.result : 'time', t: Math.round(b.t), wave: s.wave, hits: s.hits, crewDown: Object.values(crew).filter(x => x !== 'ok').length,
       obsUsed: (cfg.gun ? cfg.gun.obscurant_rounds : 150) - (s.obs == null ? 0 : s.obs), heUsed: (cfg.gun ? cfg.gun.he_rounds : 150) - (s.he == null ? 0 : s.he), apsLeft: (s.apsL || 0) + (s.apsR || 0),
       destroyed: (b.killedByTank || 0) + (b.killedByMg || 0), threats };
   }
