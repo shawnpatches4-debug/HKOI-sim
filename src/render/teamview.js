@@ -316,7 +316,7 @@ export class TeamView {
       if (!g.refOk) { g.ref.x = mid; g.ref.v = 0; g.refOk = true; g.ref0 = mid; } else chase(g.ref, g.ref0, mid, stiff(0.09), dt || 1e-4, 1);
       g.ref0 = mid; g.feet[0].gy = g.feet[0].gY - g.ref.x; g.feet[1].gy = g.feet[1].gY - g.ref.x;
       const clip = TeamView.CLIPS && (g.run > 0.5 ? TeamView.CLIPS.run : TeamView.CLIPS.walk);
-      stridePose(rig, g, a.carry, dt);
+      g.clipL = clip ? clip.stride || 0 : 0; stridePose(rig, g, a.carry, dt);
       if (clip) { clipPose(clip, rig, g.ph * clip.duration, TQ); } else solve(rig, SD, SX, TQ);
       a.sox = SO.x; a.soy = SO.y;
     }

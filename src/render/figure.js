@@ -251,7 +251,7 @@ export const Y_MOVING = rate(HALF_MOVING), Y_POSING = rate(HALF_POSING);
 // right at 0.5), his smoothed speed over the ground, how much of a run it is (0 walk .. 1 run), and where the ball of each
 // foot is on the ground (figure's frame; on = the foot is down and must not slide; gy = height of the ground under it).
 // ---------------------------------------------------------------------------------------------------------------------
-export function newGait() { const foot = () => ({ x: 0, z: 0, on: true, sx: 0, sz: 0, gy: 0, gY: 0, fresh: true, far: 0 }); return { ph: 0.5, run: 0, vx: 0, vz: 0, v: 0, L: 0.5, beta: 0.56, slope: 0, ref: { x: 0, v: 0 }, refOk: false, hy: { x: 0, v: 0 }, hyOk: false, hy0: 0, turn: 0, feet: [foot(), foot()] }; }
+export function newGait() { const foot = () => ({ x: 0, z: 0, on: true, sx: 0, sz: 0, gy: 0, gY: 0, fresh: true, far: 0 }); return { ph: 0.5, run: 0, vx: 0, vz: 0, v: 0, L: 0.5, beta: 0.56, slope: 0, ref: { x: 0, v: 0 }, refOk: false, hy: { x: 0, v: 0 }, hyOk: false, hy0: 0, clipL: 0, turn: 0, feet: [foot(), foot()] }; }
 export function resetGait(g, rig) { g.ph = 0.5; g.vx = g.vz = g.v = 0; g.run = 0; g.L = 0.5; g.beta = 0.56; g.turn = 0; g.refOk = false; g.hyOk = false; g.feet.forEach((f, k) => { f.x = (k ? -1 : 1) * rig.footW; f.z = rig.ballZ; f.on = true; f.sx = f.x; f.sz = f.z; f.gy = 0; f.fresh = true; }); }
 // Stride length and the share of the stride each foot spends on the ground, from the speed. Chosen so the legs can actually reach:
 // an easy walk is about 1.3 m per stride (two steps); from about 1.7 m/s a loaded man breaks into a short-stepping trot, feet barely
@@ -260,7 +260,7 @@ function gaitShape(g) {
   const v = g.v, r = g.run;
   const Lw = Math.max(0.25, Math.min(1.5, (0.40 + 0.21 * v) / 0.56) * sat(v / 0.5)), bw = 0.56;
   const Lr = Math.max(1.5, v / (1.36 + 0.07 * (v - 3.2))), br = mix(0.5, Math.min(0.92, 0.72 + 0.06 * (v - 3.2)) / Lr, ease((v - 2.3) / 1.1));
-  g.L = mix(Lw, Lr, r); g.beta = Math.min(0.7, Math.max(0.2, mix(bw, br, r)));
+  g.L = g.clipL > 0 ? g.clipL : mix(Lw, Lr, r); g.beta = Math.min(0.7, Math.max(0.2, mix(bw, br, r)));
 }
 // Move the stride on by one small step of time. (mx, mz) = how far the figure moved over the ground and dyaw = how far he turned,
 // both in his own frame.
@@ -385,8 +385,12 @@ export function stridePose(rig, g, carry, dt) {
 // AnimationClip, or anything with tracks named "<bone>.quaternion" holding times and values) into a table for this
 // skeleton; `clipPose` fills `out` with the joint turns at time t (seconds, wrapped if the clip loops).
 // In TeamView, set TeamView.CLIPS.walk / .run to such a table and the stride pose is taken from the clip, played at the
-// rate the ground is covered (one loop of the clip = one full stride of two steps), while the feet-on-the-ground and
-// chasing rules above still apply on top.
+// rate the ground is covered: one loop of the clip = one full stride of two steps, left foot landing at the start.
+// Give the table a `stride` (metres of ground one loop covers at its natural speed) and the stride length follows the clip,
+// so its feet meet the ground at the speed the ground goes by. What is NOT done yet: the clip's legs are used as recorded
+// (no correction of each foot onto its exact footprint, so a clip played far from its natural speed will slide a little),
+// and the hips' recorded up-and-down track is not read (the worked-out hip height is used). Timelines (kneel, lie down, get up)
+// could take clips the same way: a key in a timeline is just a table of joint turns.
 // ---------------------------------------------------------------------------------------------------------------------
 export function readClip(clip, names) {
   const nm = names || (n => n.replace(/^mixamorig:?/, '')), tracks = RIG.map(() => null); let dur = clip.duration || 0;
