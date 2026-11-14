@@ -42,6 +42,7 @@ B.commander = window.__fakeCommander; B.vehicles = window.__fakeVehicles;
 M.draw(mapState(true)); save('cdr_spectator');
 const L = labels(); console.log('labels:\n  ' + L.join('\n  ')); console.log('list:\n  ' + rows().join('\n  ')); console.log('head: ' + M.cdr.head.textContent);
 for (const w of ['watch the valley', 'strike the tank', 'north ridge', 'by UAZ', 'fix the tank', 'commit down', 'break contact', 'hold fire', 'Tank believed here', 'reported 38 s ago', 'He expects it here', 'his picture is', 'Tank (true position)', 'WRONG', 'BMP-2', 'T-72B3', 'T-90M', 'UAZ', 'arrives in 3:20']) if (!has(w)) bad.push(`nothing on the map says "${w}"`);
+if (!M.cdr.head.textContent.includes('Holding for a salvo: 3 of 4 ready') || !has('in about 90 s')) bad.push('the hold on fire or the time of his forecast is not shown');
 if (rows().length !== 10 || !rows()[0].startsWith('Break') || !rows()[9].includes('done')) bad.push('the list is not ten orders, newest first, the finished one last');
 if (rows().filter(r => r.includes('Wrong:')).length !== 2) bad.push('wrong orders are not flagged in the list for the spectator');
 // the countdown counts

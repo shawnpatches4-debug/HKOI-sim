@@ -29,7 +29,7 @@ const INK = { own: '#c62419', ownDark: '#5a0d08', ride: '#9a4a00', strike: '#8a0
 const EASE_POS = 5, EASE_IN = 4, EASE_OUT = 3;
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
 const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-const ago = s => s < 90 ? Math.round(s) + ' s' : Math.round(s / 60) + ' min';
+const ago = s => s < 120 ? Math.round(s) + ' s' : Math.round(s / 60) + ' min';
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private window: not remembered */ } } };
 
 // which symbol a team or vehicle gets
@@ -52,6 +52,13 @@ function orderText(o, who) {
   const short = String(who).replace(/ #(\d+)$/, ' $1'), t = o.text ? String(o.text) : (KIND[o.kind] || o.kind).toLowerCase();
   const names = t.toLowerCase(), w = short.toLowerCase().replace(/ \d+$/, '');
   return names.includes(w) || names.includes('all teams') ? t : `${short}: ${t}`;
+}
+// his hold on the teams' fire, in one line (optional field: older battles do not have it)
+function fireText(f) {
+  if (!f || !f.state) return '';
+  if (f.state === 'ambush_hold') return 'Holding the ambush' + (f.want ? `: ${f.ready || 0} of ${f.want} ready.` : '.');
+  if (f.state === 'salvo_hold') return 'Holding for a salvo' + (f.want ? `: ${f.ready || 0} of ${f.want} ready.` : '.');
+  return f.state === 'free' ? 'Teams are free to fire.' : '';
 }
 // how his belief of the tank's position came about, in plain words
 function sourceText(src, age) {
@@ -152,6 +159,7 @@ export class CommanderView {
       this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing && (M.k / dpr > 0.11 || !f.alive) ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
     if (!C.with && C.e != null) { const [a, b] = P(C.e, C.n); this._symbol(x, a, b, 'cdr', dpr, { dead: C.alive === false, cdr: true }); this._label(a, b + 15 * dpr, 'Commander' + (C.alive === false ? ' · killed' : C.radio === false ? ' · radio out' : ''), '#ffd9d3', 0); }
     if (lost) { const cv = this.map.cv; this._banner(x, cv.width / 2, 78 * dpr, C.alive === false ? 'Commander lost: teams act on their own' : 'Commander has lost his radio: teams act on their own', dpr); }
+    for (const L of (C.intel && C.intel.lost) || []) { const [a, b] = P(L[0], L[1]), r = 5 * dpr; x.strokeStyle = 'rgba(20,20,20,.85)'; x.lineWidth = 2.2 * dpr; x.beginPath(); x.moveTo(a - r, b - r); x.lineTo(a + r, b + r); x.moveTo(a - r, b + r); x.lineTo(a + r, b - r); x.stroke(); }   /* where he knows he lost a team */
     this._labels(x, dpr); this._legend(x, dpr, spectator); x.restore();
     this._list(C, plan, byKey, t, spectator, battle);
   }
@@ -186,7 +194,9 @@ export class CommanderView {
     if (pr && (pr.path && pr.path.length || pr.to)) {
       const pts = (pr.path && pr.path.length ? pr.path : [b ? [b.e, b.n] : pr.to, pr.to]).map(p => P(p[0], p[1])); if (b && pr.path && pr.path.length) pts[0] = P(b.e, b.n);
       x.globalAlpha = b ? Math.max(0.5, b.a) : 0.8; this._path(x, pts, { w: 2.6 * dpr, col: INK.believed, dash: [9 * dpr, 6 * dpr], head: 11 * dpr, dpr }); x.globalAlpha = 1;
-      const end = pts[pts.length - 1]; this._label(end[0], end[1] + 14 * dpr, 'He expects it here' + (pr.why ? ': ' + pr.why : ''), '#cfe0ff', 1);
+      const end = pts[pts.length - 1];
+      if (pr.r_m > 0) { x.globalAlpha = b ? Math.max(0.4, b.a * 0.8) : 0.6; x.beginPath(); x.arc(end[0], end[1], Math.max(5 * dpr, pr.r_m * M.k), 0, 6.283); x.fillStyle = 'rgba(23,70,201,.07)'; x.fill(); x.strokeStyle = INK.believed; x.lineWidth = 1.4 * dpr; x.setLineDash([3 * dpr, 5 * dpr]); x.stroke(); x.setLineDash([]); x.globalAlpha = 1; }   /* the forecast widens: how unsure he is of where it will be */
+      this._label(end[0], end[1] + 14 * dpr, (pr.kind === 'staying' ? 'He expects it to stay' : 'He expects it here') + (pr.eta_s > 0 && pr.kind !== 'staying' ? ' in about ' + ago(pr.eta_s) : '') + (pr.why ? ': ' + pr.why : ''), '#cfe0ff', 1);
     }
     // the truth, for the spectator only
     if (spectator && T) {
@@ -318,13 +328,14 @@ export class CommanderView {
   // ------------------------------------------------------------------ the list beside the map
   _list(C, plan, byKey, t, spectator, battle) {
     const b = this.bel, T = battle && battle.tank, off = spectator && b && T ? Math.round(Math.hypot(T.e - b.e, T.n - b.n)) : null, withName = C.with ? this._nameOf(C.with) : null;
-    const hs = [C.picture && C.picture.src, C.alive === false ? 'x' : 'a', C.radio === false ? 'x' : 'r', withName, b ? Math.round(b.age) : '-', b ? Math.round(b.r / 10) : '-', off != null ? Math.round(off / 10) : '', C.predict && C.predict.why].join('|');
+    const fire = fireText(C.fire), hs = [fire, C.picture && C.picture.src, C.alive === false ? 'x' : 'a', C.radio === false ? 'x' : 'r', withName, b ? Math.round(b.age) : '-', b ? Math.round(b.r / 10) : '-', off != null ? Math.round(off / 10) : '', C.predict && C.predict.why].join('|');
     if (hs !== this.headSig) { this.headSig = hs; const h = this.head; h.textContent = ''; const add = (text, cls) => { const s = document.createElement(cls === 'b' ? 'b' : 'span'); if (cls && cls !== 'b') s.className = cls; s.textContent = text; h.append(s); };
       if (C.alive === false) add('Commander lost: teams act on their own. ', 'bad'); else { add(withName ? `With ${withName}. ` : 'In the field. ', 'b'); add(C.radio === false ? 'Radio lost: teams act on their own. ' : 'Radio working. ', C.radio === false ? 'bad' : ''); }
       h.append(document.createElement('br'));
       add(b ? `His picture of the tank: ${sourceText(C.picture.src, b.age)}${b.r ? ', within about ' + Math.round(b.r / 10) * 10 + ' m' : ''}. ` : 'He has no report of the tank. ');
       if (off != null) add(`His picture is ${Math.round(off / 10) * 10} m off. `, off > Math.max(150, b.r) ? 'bad' : '');
-      if (C.predict && C.predict.why) { h.append(document.createElement('br')); add('He expects: ' + C.predict.why + '.'); } }
+      if (C.predict && C.predict.why) { h.append(document.createElement('br')); add('He expects: ' + C.predict.why + '.'); }
+      if (fire) { h.append(document.createElement('br')); add(fire, 'b'); } }
     const sorted = plan.slice().sort((p, q) => (p.done ? 1 : 0) - (q.done ? 1 : 0) || (q.t_order || 0) - (p.t_order || 0));
     const sig = sorted.map(o => o.id + (o.done ? 'd' : '') + (spectator && o.wrong ? 'w' : '') + (String(o.id) === String(this.sel) ? '*' : '') + o.kind + (o.text || '')).join('|');
     if (sig !== this.listSig) { this.listSig = sig; this.rows.textContent = ''; this.eta.clear();

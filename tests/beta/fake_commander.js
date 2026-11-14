@@ -24,7 +24,8 @@ void (window.__fakeCommander = function () {
   const bb = (Math.atan2(be - c.e, bn - c.n) * 180 / Math.PI + 360) % 360;
   return { alive: !lost, radio: !lost, with: { uid: c.id }, e: c.e, n: c.n,
     picture: { e: be, n: bn, t: t - 38 - stale, age: 38 + stale, off_m: 316, r_m: 150 + stale * 2, src: window.__fakeSrc || 'report' },
-    predict: { path: [[be, bn], [be - 300, bn + 250], [be - 420, bn + 700]], to: [be - 420, bn + 700], why: 'it has been moving north and will go on to the high ground' },
+    predict: { path: [[be, bn], [be - 300, bn + 250], [be - 420, bn + 700]], to: [be - 420, bn + 700], why: 'it has been moving north and will go on to the high ground', kind: 'heading', r_m: 220, eta_s: 90 },
+    fire: window.__fakeOld ? undefined : { state: 'salvo_hold', since: t - 12, until: t + 20, want: 4, ready: 3 }, intel: window.__fakeOld ? undefined : { trophy: [{ brg: 90, intercepts: 2, dry: true }], lost: [[T.e + 600, T.n + 500, t - 40]] },
     sectors: [{ uid: c.id, brg_from: (bb + 340) % 360, brg_to: (bb + 20) % 360 }, { vid: 101, brg_from: 200, brg_to: 260 }],
     plan, orders: plan };
 });
