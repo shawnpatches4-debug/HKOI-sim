@@ -5,7 +5,7 @@
 #       | seats | consoles | live | all (default all) | crew (proposal pictures of crew figures: needs crew=1 in the hash params)
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
-HELP = """void (window.hud = v => { for (const id of ['status','log','bar','crew','caption','marks','seatcap','hud','replay']) { const e = document.getElementById(id); if (e) e.style.visibility = v ? '' : 'hidden'; } },
+HELP = """void (window.hud = v => { for (const id of ['status','log','bar','crew','caption','marks','seatcap','hud','replay']) { const e = document.getElementById(id); if (e) e.style.visibility = v ? '' : 'hidden'; } let st = document.getElementById('nohud'); if (!st) { st = document.createElement('style'); st.id = 'nohud'; document.head.appendChild(st); } st.textContent = v ? '' : ['status','log','logov','bar','crew','caption','marks','seatcap','hud','replay','threats','engleft','engright','crewmen','defences','enemybox','strip','dock','subs','ticker','facerow','gauges','warn','units','map'].map(i => '#' + i).join(',') + ' { visibility: hidden !important; }'; },
   window.lk = (m, y, p, z, off) => { if (__beta.cams.mode !== m) __beta.cams.set(m); __beta.interior.setLook(y, p, z || 1, off || null); },
   window.cutv = (right, fwd, h) => { __beta.cams.set('cut'); __beta.cams.snap = false; const T = __beta.battle.tank, s = __beta.scene, a = T.h * Math.PI / 180, p = s.at(T.e + Math.cos(a) * right + Math.sin(a) * fwd, T.n - Math.sin(a) * right + Math.cos(a) * fwd, 0); s.camera.position.set(p.x, p.y + h, p.z); },
   window.stepTo = f => { const b = __beta.battle; let n = 0; while (!f(b) && b.tank.alive && n++ < 6000) __beta.runTo(b.t + 0.1); return [+b.t.toFixed(1), !!f(b)]; })"""

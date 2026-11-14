@@ -82,7 +82,7 @@ const FS = /* glsl */`
   uniform vec3 uLampPos[${NLAMP}]; uniform vec3 uLampCol[${NLAMP}]; uniform float uLampR[${NLAMP}];
   uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol; uniform float uInsideF; uniform float uSimT; uniform float uCabY; uniform vec4 uSmokeAt;
   #ifdef CMAP
-    uniform sampler2D uCMap; uniform vec3 uTint; uniform sampler2D uBloodT; uniform float uBloodAmt; uniform float uNearCut; uniform vec3 uSleeve;
+    uniform sampler2D uCMap; uniform vec3 uTint; uniform sampler2D uBloodT; uniform float uBloodAmt; uniform float uNearCut; uniform vec3 uSleeve; uniform float uSleeveSkin;
   #endif
   uniform sampler2D uWear; uniform sampler2D uTread;
   #ifdef LABELS
@@ -101,11 +101,11 @@ const FS = /* glsl */`
     float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb;
     #ifdef CMAP
       if (uNearCut > 0.0 && (vC.r < 0.5 || distance(cameraPosition, vW) < uNearCut)) discard; if (uNearCut < 0.0 && distance(cameraPosition, vW) < -uNearCut) discard;   /* head out of a hatch: his whole body below him, only his own head left out */   /* the viewer's own body: only his arms and hands are drawn */
-      alb = uTint;
+      alb = uTint; vec3 tx = vec3(1.0);
       #ifdef HASMAP
-        alb *= texture2D(uCMap, vUv).rgb * 1.5;
+        tx = texture2D(uCMap, vUv).rgb; alb *= tx * 1.5;
       #endif
-      if (uSleeve.x >= 0.0 && vC.r > 0.5) alb = uSleeve * (0.55 + 0.6 * dot(alb, vec3(0.3, 0.5, 0.2)));   /* sleeves down over the model's bare forearms */
+      if (uSleeve.x >= 0.0 && vC.r > 0.5 && (uSleeveSkin < 0.5 || (tx.r > tx.g * 1.12 && tx.r > tx.b * 1.3))) alb = uSleeve * (0.55 + 0.6 * dot(alb, vec3(0.3, 0.5, 0.2)));   /* sleeves down over the model's bare forearms */
       { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.42, bt.a * uBloodAmt); }   /* blood soaking the uniform */
     #endif
     float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
@@ -183,7 +183,7 @@ export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSi
   _wear = _wear || wearTexture(); _tread = _tread || treadTexture();
   const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } }, defines = {};
   if (labels) { u.uAtlas = { value: labels }; defines.LABELS = 1; if (!glow) defines.NOGLOW = 1; }
-  if (skinned) { defines.CMAP = 1; if (map) defines.HASMAP = 1; u.uCMap = { value: map }; u.uTint = { value: new THREE.Vector3(...(tint || [1, 1, 1])) }; u.uBloodT = { value: blood }; u.uBloodAmt = { value: 0 }; u.uNearCut = { value: 0 }; u.uSleeve = { value: new THREE.Vector3(-1, 0, 0) }; side = THREE.DoubleSide; }
+  if (skinned) { defines.CMAP = 1; if (map) defines.HASMAP = 1; u.uCMap = { value: map }; u.uTint = { value: new THREE.Vector3(...(tint || [1, 1, 1])) }; u.uBloodT = { value: blood }; u.uBloodAmt = { value: 0 }; u.uNearCut = { value: 0 }; u.uSleeve = { value: new THREE.Vector3(-1, 0, 0) }; u.uSleeveSkin = { value: 0 }; side = THREE.DoubleSide; }
   return new THREE.ShaderMaterial({ uniforms: u, vertexShader: skinned ? VS_SKIN : VS, fragmentShader: FS, side, defines });
 }
 

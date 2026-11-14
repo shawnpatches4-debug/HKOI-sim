@@ -239,7 +239,7 @@ export class Interior {
       if (spells && !hurt) { u = 0; for (const sp of spells) { if (B.t < sp[0]) continue; const top = Math.min(1, (Math.min(B.t, sp[1]) - sp[0]) / 4), v = B.t < sp[1] ? top : top * clamp(1 - (B.t - sp[1]) / 2, 0, 1); if (v > u) u = v; } }
       else if (hurt) u = Math.max(0, this.st.ldrU - (sdt || 0) / 1.2);
       this.st.ldrU = u; }
-    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.12) / 0.28), cs0 && cs0.abandoned ? 1 : 0);   /* the lid goes up under his hands over about a second, not ahead of them */ P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
+    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.12) / 0.28), cs0 && cs0.abandoned ? 1 : 0);   /* the lid goes up under his hands over about a second, not ahead of them */ P.hatch.rotation.set(this.st.hatch * 2.85, -Math.PI / 2, 0, 'YXZ');   /* unlatched and pushed up and over on its outboard hinge until it lies back on the turret side, clear of the HKOI station's pedestal and of his gun */
     this._mg(B, T, sdt || 0);
     // the handles follow the turret, the T-bar follows the steering
     const yaw = this.tank.turretYaw || 0, hdg = s.shown ? s.shown.h : T.h, v = T.v || 0;
