@@ -57,6 +57,7 @@
         this.rng = new HK.RNG(HK.seedFor(this.seed, 9001));
         this.cfg0 = opt.cfg || HK.defaultConfig();
         this.lookup = opt.lookup || (this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {});
+        if (opt.armour != null && this.cfg0.vehicle && !!this.cfg0.vehicle.armour !== !!opt.armour) { this.cfg0 = JSON.parse(JSON.stringify(this.cfg0)); this.cfg0.vehicle.armour = !!opt.armour; }   /* opt.armour: the plate struck decides whether a hit knocks the vehicle out (engine armourPk); off by default */
         /* the weather of the chosen conditions reaches the engine's cloud and sensor physics (rain washes the cloud out and brings wind, fog and falling snow cut what lasers and sensors see). Snow as haze is an assumption. */
         { const wx = ({ fog: 'fog', rain: 'rain', snow: 'haze' })[opt.cond]; if (wx && this.cfg0.env && this.cfg0.env.weather !== wx) { this.cfg0 = JSON.parse(JSON.stringify(this.cfg0)); this.cfg0.env.weather = wx; this.lookup = this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {}; } }
         this.skill = SKILL[opt.skill] ? opt.skill : 'trained'; this.cond = opt.cond || 'day';
