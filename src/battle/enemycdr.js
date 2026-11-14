@@ -64,9 +64,11 @@
   // The teams' own judgement by crew level (works with or without a commander; green crews do none of it). partner: how long a
   // team whose last missile was blinded by HKOI waits for another launcher to fire with it (s); rpgOpen: a rocket team will not start
   // a stalk from further than 350 m unless at least this share of the way is in cover; flee: chance that a team moves when the team
-  // beside it (within 150 m) is destroyed. Assumed values.
-  const TSK = { green: null, trained: { partner: 15, rpgOpen: 0.5, flee: 0.5 }, expert: { partner: 25, rpgOpen: 0.5, flee: 1 }, veteran: { partner: 30, rpgOpen: 0.6, flee: 1 } };
-  const SALVO = 3, DRONE_LEAD = 1.5, DEAD_R = 150, DEAD_S = 90, PLAN_AHEAD = 240;
+  // beside it (within 150 m) is destroyed; tot: expert and veteran crews firing together time their launches so the missiles ARRIVE
+  // together even without a commander (ranges are known from the ambush plan), to within this many seconds; trained crews do not.
+  // Assumed values.
+  const TSK = { green: null, trained: { partner: 15, rpgOpen: 0.5, flee: 0.5, tot: 0 }, expert: { partner: 25, rpgOpen: 0.5, flee: 1, tot: 1.5 }, veteran: { partner: 30, rpgOpen: 0.6, flee: 1, tot: 1 } };
+  const SALVO = 3, STAY_S = 60, DRONE_LEAD = 1.5, DEAD_R = 150, DEAD_S = 90, PLAN_AHEAD = 240;
   const quad = b => Math.floor((((b % 360) + 360 + 45) % 360) / 90);   /* which quarter of the compass a bearing lies in: 0 north, 1 east, 2 south, 3 west */
   const REPORT_EVERY = 8, STALE = 60, HEAR = 4000, WRONG_M = 150, SEP = 40, NO_MOVE_AGAIN = 120;
   const MISSILE = { kornet: 1, saclos: 1, sal: 1 };
@@ -326,6 +328,9 @@
     //   after it                missile launchers fire by salvo, not singly: three ready, or two after half his wait, or whoever is
     //                           ready when the wait runs out (25 / 40 / 45 s); a launcher on a side where he has counted four Trophy
     //                           shots fires at once; with a drone on its way and due inside the wait, the salvo goes with the drone.
+    //   between the first and the second salvo the missile teams that fired stay where they are and reload (for 60 s at most):
+    //                           they do not scoot after one shot unless they are shot at. Trophy has eight rounds; the first salvo
+    //                           uses most of them and the second arrives before the tank can do anything about it.
     // Rocket teams and tank guns are never held after the first shot. A green commander does none of this.
     _cdrGate(ready) {
       this._cdrArr = (this.transit || []).filter(d => d.arrive <= this.t);
@@ -341,23 +346,25 @@
       const go = (text, why, n) => { F.state = 'free'; F.since = this.t; F.until = null; C.st.salvos++; C.st.salvoN += n; if (n >= 2 && spread >= SEP) C.st.salvoTwo++; this._cdrOrder('all', 'strike', text, { by: 'own', why, quiet: C.st.salvos > 2 }); };
       if (!this.opened) {
         if (!ready.length) return;
-        if (C.holdSince == null) { C.holdSince = this.t; C.holdAlive = this._cdrMembers(C).teams.length; F.state = 'ambush_hold'; F.since = this.t; F.until = this.t + K.open; F.want = want;
-          this._cdrOrder('all', 'hold_fire', `hold the ambush until ${want} missile launcher${want === 1 ? ' is' : 's are'} laid${spreadOf(lb) >= SEP ? ', from two directions' : ''} (he will wait up to ${K.open} s)`, { by: 'own', why: 'the first salvo is the one the tank is least ready for' }); }
+        if (C.holdAlive == null) C.holdAlive = this._cdrMembers(C).teams.length;
         F.ready = msl.length;
-        const waited = this.t - C.holdSince, M = this._cdrMembers(C).teams, blown = M.length < C.holdAlive || M.some(u => this.t < (u.suppressedUntil || 0));
+        const waited = C.holdSince == null ? 0 : this.t - C.holdSince, M = this._cdrMembers(C).teams, blown = M.length < C.holdAlive || M.some(u => this.t < (u.suppressedUntil || 0));
         const ok = live === 0 || (msl.length >= want && (spreadOf(lb) < SEP || spread >= SEP));
-        if (!(ok || blown || waited >= K.open)) { hold(true); C.st.openHeld += this.dt; return; }
+        if (!(ok || blown || waited >= K.open)) {
+          if (C.holdSince == null) { C.holdSince = this.t; F.state = 'ambush_hold'; F.since = this.t; F.until = this.t + K.open; F.want = want;
+            this._cdrOrder('all', 'hold_fire', `hold the ambush until ${want} missile launcher${want === 1 ? ' is' : 's are'} laid${spreadOf(lb) >= SEP ? ', from two directions' : ''} (he will wait up to ${K.open} s)`, { by: 'own', why: 'the first salvo is the one the tank is least ready for' }); }
+          hold(true); C.st.openHeld += this.dt; return; }
         const why = ok ? `${msl.length} launcher${msl.length === 1 ? '' : 's'} laid${spread >= SEP ? ', ' + Math.round(spread) + ' degrees apart' : ''}` : blown ? 'a team is under fire: the ambush is blown' : `he has held for ${Math.round(waited)} s and will not wait longer`;
         C.st.openWhy[ok ? 'ready' : blown ? 'blown' : 'timeout'] = (C.st.openWhy[ok ? 'ready' : blown ? 'blown' : 'timeout'] || 0) + 1;
         this.opened = true; this.openedAt = this.t; this.ev(this.t, 'ambush', { wave: this.wave, teams: ready.map(u => u.id) });
         this.say(this.t, 'enemy', null, `The enemy commander springs the ambush: ${why}.`, 'from now on the missile teams fire by salvo on his word; rocket teams fire when they can');
-        go(`open fire: ${why}`, 'the opening salvo', msl.length); return;
+        for (const u of msl) u.cdrStay = this.t + STAY_S;   /* reload where you are: the second salvo, while Trophy is still short of rounds, matters more than the move */
+        C.stayUntil = this.t + STAY_S;
+        go(`open fire: ${why}; missile teams reload where they are for a second salvo, then move`, 'the opening salvo', msl.length); return;
       }
       if (!msl.length) { if (F.state !== 'free' && C.salvoSince == null) F.state = 'free'; return; }
-      if (C.salvoSince == null) { C.salvoSince = this.t; F.state = 'salvo_hold'; F.since = this.t; F.until = this.t + K.strike; F.want = want;
-        this._cdrOrder('all', 'hold_fire', `missile teams hold for a salvo of ${want} (he will wait up to ${K.strike} s)`, { by: 'own', quiet: C.st.salvos > 2, why: 'missiles that arrive together swamp HKOI and Trophy; missiles fed in one at a time are picked off' }); }
       F.ready = msl.length;
-      const waited = this.t - C.salvoSince, I = C.intel, dry = msl.find(u => I.aps[quad(brgOf(p.e, p.n, u.e, u.n))] >= 4);
+      const waited = C.salvoSince == null ? 0 : this.t - C.salvoSince, I = C.intel, dry = msl.find(u => I.aps[quad(brgOf(p.e, p.n, u.e, u.n))] >= 4);
       const drone = (this.transit || []).some(d => d.arrive > this.t && d.arrive - this.t <= Math.min(20, K.strike - waited)), here = this._cdrArr.length > 0;
       let why = null;
       if (here) why = 'the drone is arriving: the missiles go with it';
@@ -366,21 +373,31 @@
       else if (dry) why = `Trophy has been seen to fire four times toward the ${compass(quad(brgOf(p.e, p.n, dry.e, dry.n)) * 90)}: he takes that side to be empty and lets that launcher fire`;
       else if (msl.length >= 2 && waited >= K.strike / 2) why = `two launchers ready after ${Math.round(waited)} s`;
       else if (waited >= K.strike) why = 'the wait ran out';
-      if (!why) { hold(false); return; }
-      C.salvoSince = null; go(`fire: ${why}`, 'salvo fire', msl.length);
+      if (!why) {
+        if (C.salvoSince == null) { C.salvoSince = this.t; F.state = 'salvo_hold'; F.since = this.t; F.until = this.t + K.strike; F.want = want;
+          this._cdrOrder('all', 'hold_fire', `missile teams hold for a salvo of ${want} (he will wait up to ${K.strike} s)`, { by: 'own', quiet: C.st.salvos > 2, why: 'missiles that arrive together swamp HKOI and Trophy; missiles fed in one at a time are picked off' }); }
+        hold(false); return; }
+      if (C.stayUntil) { C.stayUntil = 0; for (let i = this.waveFrom || 0; i < this.units.length; i++) this.units[i].cdrStay = 0; }   /* the second salvo is away: every team is free to move again */
+      if (C.salvoSince != null) { C.salvoSince = null; go(`fire: ${why}`, 'salvo fire', msl.length); }
+      else { C.st.salvos++; C.st.salvoN += msl.length; if (msl.length >= 2 && spread >= SEP) C.st.salvoTwo++; }   /* nothing was held: no order needed */
     },
     // Called as an engagement is put together: the commander times the launches so the missiles ARRIVE together (a far launcher
-    // fires first, a near one waits), to within his crews' timing error (2 / 1 / 0.5 s), using the ranges he believes. A drone
+    // fires first, a near one waits), to within his crews' timing error (2 / 1 / 0.5 s), using the ranges he believes. Without a
+    // commander, expert and veteran crews do the same among themselves to within 1.5 / 1 s (TSK.tot); trained and green crews do not. A drone
     // arriving with the salvo is given a lead of 1.5 s so that Trophy and HKOI's airburst are spent on it first.
     _cdrTot(teams) {
-      const C = this.cdr; if (!C || !C.on || !C.alive || !(C.K.tot > 0) || !C.radioOk) return;
+      const C = this.cdr; let sig = 0, p = null, rng = null;
+      if (C && C.on && C.alive && C.K.tot > 0 && C.radioOk) { sig = C.K.tot; p = C.pic; rng = C.rng; }
+      else if (this.xOpt && this.xOpt.ai !== 'classic' && TSK[this.skill] && TSK[this.skill].tot > 0) { sig = TSK[this.skill].tot; p = this.belief || this.tank; rng = this._tx().rng; }   /* no commander: expert and veteran crews do it among themselves, less exactly */
+      if (!sig) return;
       const arr = this._cdrArr || [], shooters = teams.filter(u => !u.spec.indirect); if (shooters.length + arr.length < 2) return;
-      const p = C.pic, F = shooters.map(u => Math.hypot(p.e - u.e, p.n - u.n) / ((HK.THREATS[u.spec.key] || {}).speed || 250)); let tgt = 0;
+      const F = shooters.map(u => Math.hypot(p.e - u.e, p.n - u.n) / ((HK.THREATS[u.spec.key] || {}).speed || 250)); let tgt = 0;
       shooters.forEach((u, i) => { tgt = Math.max(tgt, F[i] + (u._lead || 0)); });
       for (const d of arr) tgt = Math.max(tgt, Math.min(d.R0, 900) / ((HK.THREATS[d.key] || {}).speed || 30) + DRONE_LEAD);
-      shooters.forEach((u, i) => { u._lead = clamp(Math.max(u._lead || 0, tgt - F[i] + C.rng.normal(0, C.K.tot)), 0, 40); });
-      C.st.tot++;
+      shooters.forEach((u, i) => { u._lead = clamp(Math.max(u._lead || 0, tgt - F[i] + rng.normal(0, sig)), 0, 40); });
+      if (C && C.on && C.alive) C.st.tot++; else this._tx().stat.tot++;
     },
+    _tx() { return this._teamX || (this._teamX = { rng: new HK.RNG(HK.seedFor(this.seed, 9010)), vol: 0, stat: { blinded: 0, waited: 0, fled: 0, rpgWait: 0, tot: 0 } }); },
 
     // ================================================================ the teams' own judgement (no commander needed)
     // Once a second. Skill decides how much of it a crew does (TSK above): green crews none.
@@ -391,7 +408,7 @@
     _teamStep(dt) {
       void dt; if (!this.xOpt || this.xOpt.ai === 'classic') return; const S = TSK[this.skill]; if (!S) return;
       if (this.t < (this._teamAt || 0)) return; this._teamAt = this.t + 1;
-      const X = this._teamX || (this._teamX = { rng: new HK.RNG(HK.seedFor(this.seed, 9010)), vol: 0, stat: { blinded: 0, waited: 0, fled: 0, rpgWait: 0 } }), W = this.world;
+      const X = this._tx(), W = this.world;
       for (; X.vol < this.volleys.length && this.volleys[X.vol].done; X.vol++) for (const th of this.volleys[X.vol].rec.threats) if (th.defeated_by === 'hkoi_cut') { const u = this.units.find(q => q.id === th.uid); if (u && u.alive) { u.blindedAt = this.t; X.stat.blinded++; } }
       for (const u of this.units) {
         if (!u.alive && !u._tDead) { u._tDead = true; if (u.gone) continue;
@@ -400,7 +417,7 @@
         if (u.alive && !u.gone && u.spec.key === 'rpg' && u.state === 'hidden' && !(u.sight > 0) && this.t >= (u.nextLook || 0) - 1 && this.t >= (u._rpgAt || 0)) {
           u._rpgAt = this.t + 8; const B = this.belief; if (!B) continue; const d = Math.hypot(B.e - u.e, B.n - u.n); let cov = 0;
           if (d > 350) { for (let k = 1; k <= 8; k++) { const f = k / 9, e = u.e + (B.e - u.e) * f, n = u.n + (B.n - u.n) * f, vg = W.veg(e, n).cls; if ((vg >= 3 && vg <= 6) || W.buildingAt(e, n)) cov++; }
-            if (cov / 8 < S.rpgOpen) { u.nextLook = Math.max(u.nextLook || 0, this.t + 9); if (!u.waitAmbush) { u.waitAmbush = true; X.stat.rpgWait++; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1} lies in wait: ${Math.round(d / 10) * 10} m of mostly open ground to the vehicle.`, `${this.skill} crews do not walk across the front of a thermal sight; it will fire if the vehicle comes to it`); } continue; } }
+            if (cov / 8 < S.rpgOpen) { u.nextLook = Math.max(u.nextLook || 0, this.t + 9); u.waitAmbush = true; if (!u._tWaitSaid) { u._tWaitSaid = true; X.stat.rpgWait++; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1} lies in wait: ${Math.round(d / 10) * 10} m of mostly open ground to the vehicle.`, `${this.skill} crews do not walk across the front of a thermal sight; it will fire if the vehicle comes to it`); } continue; } }
           u.waitAmbush = false; }
       }
     },

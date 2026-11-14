@@ -127,3 +127,58 @@ A team not guiding is simply delayed: it cannot acquire or fire while heavily su
   (`gunner_jitter_mrad`). That is a small, careful addition to the engine's inputs, not a change to how it decides outcomes. To be
   checked against the old build's results before and after.
 - Expect HKOI and tank survival numbers to get WORSE with a faster, adapting enemy. Each stage reports the pace table before and after.
+
+## Enemy logic, second pass (14 Nov 2026): the commander's judgement and the teams' own
+
+Shawn: "improve the AI enemy logic and improve the commanders intuition". He was surprised that the first commander made no
+measurable difference. Code: `src/battle/enemycdr.js` (commander and the teams' own judgement), `src/battle/enemyveh.js`
+(vehicles). Every figure marked (A) is Claude's assumption. Nothing was tuned to a result; the tables are in docs/WORKLOG.md.
+
+### Why the first commander changed nothing (measured, `node tests/battle/cdr_diag.js`, 200 battles a row, paired seeds)
+- The first shot fell 3 s into a hold battle (15 s on an advance): every team fired as soon as it was laid. His first real order
+  took effect at 28 s (median; 256 s on an advance), in only 36 to 50% of battles, about one order a battle.
+- He held launchers for 0.2 to 1.0 launcher-seconds a battle: in effect never.
+- After the opening the teams fed missiles in singly (advance: 6.9 engagements of 1.21 launchers each), which HKOI and Trophy
+  pick off one at a time. Nothing he did changed how the shots were grouped.
+
+### What the commander now decides (only from his teams' reports, the sound of the gun, and what his teams see happen)
+1. **The opening.** He holds the whole ambush until three missile launchers are laid (all of them if he has fewer), from two
+   bearings 40 degrees apart when his ground offers that. He lets go at once if a team comes under fire or is lost (the ambush is
+   blown), and in any case after 40 / 60 / 75 s (trained / expert / veteran) (A).
+2. **Salvo fire.** After the opening, missile launchers fire by salvo, not singly: three ready, or two after half his wait, or
+   whoever is ready when the wait runs out (25 / 40 / 45 s) (A). Rocket teams and tank guns are not held.
+   Between the first and the second salvo the missile teams that fired stay and reload where they are (60 s at most) instead of
+   scooting after one shot, unless they are shot at: Trophy has eight rounds and the first salvo uses most of them (A).
+3. **Arrival together.** Launches are timed so the missiles arrive together, by the ranges he believes, to within his crews'
+   timing error (2 / 1 / 0.5 s) (A). A drone arriving with the salvo is given 1.5 s lead so Trophy and the airburst rounds are
+   spent on it first (A); with a drone due inside his wait, the salvo waits for it.
+4. **Counting Trophy.** His teams see Trophy fire. He counts its shots by quarter of the compass; after four toward one quarter he
+   takes that side to be empty and lets a launcher there fire at once. He can be wrong (the tank turns): a fifth shot from that
+   side resets his count (A).
+5. **Where the tank is going.** Real movement (250 m or more over his last reports, still going the same way) is extended to where
+   the tank will be in about four minutes, the time a team needs to move and set up: along a road if one runs its way within 200 m,
+   toward a village or town if one lies within 30 degrees and 3 km ahead (the obvious objective on the map), otherwise straight on
+   (A). He never reads the tank's real objective. A shuffle between fighting positions counts as staying.
+6. **Belief that spreads.** His uncertainty grows from the report's own error by 1.5 m for every second since (2 to 8 m/s if he
+   thinks the tank is moving), to 1,200 m at most (A).
+7. **Ambush ahead, not chase.** A team that covers neither where the tank is nor where he expects it is sent to ground that looks
+   onto the place ahead (by truck if it has one). A team that still has the tank in its sights is left alone.
+8. **Dominated ground.** Where a team has just been destroyed, a team lying within 150 m is ordered out (A).
+9. **Rocket teams wait.** They stay hidden until the tank's reported or expected path comes within 450 m of them (A). They are no
+   longer sent across the open to "fix" the tank.
+10. **Armour from the flank.** Tanks in reserve are committed to a hull-down position about 80 degrees round from the middle of
+    his firing teams (the way the M1 has been made to face), on whichever side they already stand (A).
+11. **The next wave.** He tells the next group to come in from the side where Trophy has been seen to run dry, or else from behind
+    the way the tank now faces (A).
+12. **Drones scout.** A drone inside 2.5 km passes the tank's position every 5 s, good to about 15 m (A).
+A green commander does 5, 6, 7 and 12 only: no fire control. He is still fooled: reports are late and wrong by crew level, reports stop
+when the reporting team is dead, pinned or moving, and everything stops when he is killed or his radio goes.
+
+### What every team now does by itself (no commander needed; green crews do none of it; `enemyAI: 'classic'` switches it off)
+- A team whose missile HKOI blinded does not fire alone again while another launcher can fire with it: it waits up to
+  15 / 25 / 30 s (trained / expert / veteran) (A).
+- When a team is destroyed, a team lying within 150 m of it moves (trained crews half the time, expert and veteran always) (A).
+- A rocket team does not start a stalk from beyond 350 m unless half the way (veteran: 60%) is in cover: it lies in wait (A).
+- Expert and veteran crews firing together time their launches so the missiles arrive together, to within 1.5 / 1 s (A): the far
+  launcher fires first. (Before, they launched together and the missiles arrived spread out by range.) Trained and green crews do not.
+- Unchanged: choice of firing position, the Kornet band of 2 to 5 km, shoot-and-scoot odds by crew level, suppression, morale.

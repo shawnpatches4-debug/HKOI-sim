@@ -1,4 +1,5 @@
-// node tests/battle/standard.js [battles per cell, default 200] [skills, e.g. trained,veteran] [commander: off | auto]
+// node tests/battle/standard.js [battles per cell, default 200] [skills, e.g. trained,veteran] [commander: off | auto] [only=ambush,heavy]
+// (commander auto gives a commander to forces of 5 or more teams: of these five, the missile ambush and the prepared defence)
 // The five standard forces of the setup screen (src/app/main.js FORCES) at the chosen crew levels, with HKOI + Trophy, Trophy only,
 // HKOI only and neither, on the same seeds: share of battles in which the M1 was lost, and how hard the enemy fought.
 // Used to compare the enemy's logic before and after a change (run it on both versions of the code and put the tables side by side).
@@ -20,7 +21,8 @@ const pc = (x, n) => (n ? (100 * x / n).toFixed(0) : '0').padStart(3) + '%';
 console.log(`Standard forces, ${N} battles a cell (ground and mission mixed: hold, hold, advance, hunt; one wave; up to 600 s), commander ${CDR || 'off'}. M1 lost:`);
 console.log('force     crews     both  Trophy  HKOI  neither |  with both defences: launched/battle  hits/battle  teams lost/battle  length s  steps mean ms');
 let steps = 0, ms = 0;
-for (const key of Object.keys(FORCES)) for (const skill of SKILLS) {
+const ONLY = (args.find(a => /^only=/.test(a)) || '').slice(5).split(',').filter(Boolean);   /* only=ambush,heavy runs just those forces */
+for (const key of Object.keys(FORCES).filter(k => !ONLY.length || ONLY.includes(k))) for (const skill of SKILLS) {
   const row = {}; let fired = 0, hits = 0, kills = 0, len = 0;
   for (const su of ['both', 'trophy', 'hkoi', 'neither']) { let lost = 0;
     for (let i = 0; i < N; i++) {

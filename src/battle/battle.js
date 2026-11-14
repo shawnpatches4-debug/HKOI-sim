@@ -279,7 +279,7 @@
       // and against the distance to walk. The route prefers vegetation and ground the vehicle cannot see.
       _displace(u, why, text, cand) {
         if (!u.alive || u.gone) return false;
-        if ((u.veh || u.rideVeh) && this._vehDisplaceHook) { const x = this._vehDisplaceHook(u, why, text, cand); if (x != null) return x; }   /* enemyveh.js: a vehicle shifts position its own way; a team with a truck may ride */
+        if ((u.veh || u.rideVeh || u.cdrStay) && this._vehDisplaceHook) { const x = this._vehDisplaceHook(u, why, text, cand); if (x != null) return x; }   /* enemyveh.js: a vehicle shifts position its own way; a team with a truck may ride; enemycdr.js: a team the commander has told to stay for a second salvo does not scoot after its first shot */
         const W = this.world, T = this.tank, sp = u.spec, Bv = this.belief || T; if (u.ammo <= 0) { u.state = 'spent'; return false; }
         if (u.state === 'moving') return true;   /* already packing up or on the way: one decision at a time */
         // other firing points near the team: ground within 450 m of it that looks onto where the vehicle is believed to be, from inside the weapon's reach

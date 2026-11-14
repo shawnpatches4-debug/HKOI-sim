@@ -376,6 +376,7 @@
         if (/gave the position away|nerves/.test(why || '') && u.shotsHere < 3) return false;   /* armour does not run after one shot */
         return this._vehSeek(u, this.belief || this.tank, why, { local: true, reach: 220, lo: Math.min(u.K.lo * 0.6, Math.hypot(this.tank.e - u.e, this.tank.n - u.n) - 250), hi: 4000 });
       }
+      if (u.cdrStay && this.t < u.cdrStay && /gave the position away|nerves/.test(why || '')) return false;   /* enemycdr.js: told to stay for the second salvo; it still moves if it is shot at */
       if (cand || u.ride || !u.rideVeh) return null;
       if (/gun turning|landed beside|gave the position away|nerves|two shots|pinned/.test(why || '')) return null;   /* a quick shift to an alternate is done on foot */
       return this._rideDisplace(u, why) ? true : null;
