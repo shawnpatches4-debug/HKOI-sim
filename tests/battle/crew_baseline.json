@@ -12,7 +12,7 @@
     "unguided_miss": 1,
     "aps": 2
    },
-   "obs": 125,
+   "obs": 124,
    "he": 150,
    "apsL": 3,
    "apsR": 3,
@@ -145,16 +145,17 @@
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 1,
-   "fired": 1,
+   "volleys": 2,
+   "fired": 2,
    "hits": 0,
    "by": {
-    "aps": 1
+    "hkoi_cut": 1,
+    "terrain_mask": 1
    },
-   "obs": 146,
+   "obs": 136,
    "he": 150,
    "apsL": 4,
-   "apsR": 3,
+   "apsR": 4,
    "crew": {
     "cdr": "ok",
     "gnr": "ok",
@@ -163,17 +164,17 @@
    },
    "wave": 1,
    "waves": 1,
-   "teamsLeft": 0,
-   "main": 14,
-   "killedByTank": 0,
+   "teamsLeft": 3,
+   "main": 13,
+   "killedByTank": 1,
    "killedByMg": 1,
-   "coax": 2400,
+   "coax": 2360,
    "m2": 576
   },
-  "log": 78,
-  "events": 30,
-  "over": "won",
-  "last": "The group could not get a shot and pulls back."
+  "log": 69,
+  "events": 33,
+  "over": null,
+  "last": "Main gun round on Konkurs team #4 at 1.55 km: position destroyed."
  },
  {
   "summary": {
