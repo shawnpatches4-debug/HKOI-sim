@@ -14,7 +14,7 @@ Beta 0.20 is what Shawn last tested from the hosted page; `main` is ahead of it 
 Priorities 1 to 5 are all in the code and on the beta page: enemy AI and stride (0.21), enemy sight reticles to true scale + team menu + close-up camera (src/app/enemyviews.js, cameras.js), tank animation (recovered from the live page, see WORKLOG), and a rebuild of enemy weapon handling that Shawn asked for mid-session.
 Waiting on Shawn's eyes: all of the above. Known gaps are listed in the last WORKLOG entry.
 BEFORE PUBLISHING, ALWAYS compare the live page with git (Artifact read + file list): the page has been ahead of the repository once already.
-AI REBUILD: all three stages are in the code and published as beta 0.28 (see the last WORKLOG entries). Shawn has not yet judged 0.28. Two helper jobs may have left branches to merge: enemy crew animation and the crew voice pack.
+AI REBUILD: all three stages are in the code; latest published build is beta 0.30 (animation and crew voice pack merged; fixes after his 0.28 feedback: see the last WORKLOG entry). Shawn has not yet judged 0.30. No helper branches are waiting to be merged. Two helper jobs may have left branches to merge: enemy crew animation and the crew voice pack.
 NEW TOP PRIORITY (Shawn, after playing 0.24): rebuild the tank and enemy AI from the ground up. All his decisions are in docs/AI_SPEC.md (agreed by questions, not yet built; three stages, a playable build after each). Read it before touching battle.js. Baseline numbers: node tests/battle/pace.js.
 After that, his earlier list: Trophy firing from its turret modules; main gun elevation; roof guns swinging; weapon-station detail; more parked vehicles; T-72B3 unit; and so on (below).
 
