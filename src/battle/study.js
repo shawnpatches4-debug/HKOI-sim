@@ -58,6 +58,42 @@
     return res;
   }
 
-  const api = { SETUPS, BUCKETS, run, one, summarise, range95, cfgFor, bucketOf };
+  // ================= Raids by the thousand (the old simulator's method) =================
+  // A raid is ONE engagement: a few threats launched within a few seconds at the vehicle in its position, resolved by the engine alone.
+  // It takes a few thousandths of a second, so 5,000 or 10,000 per setup are practical, and with that many the ranges are narrow enough
+  // to say whether a difference is real. All four setups fight the SAME raids (same seed for raid number i), so they can also be compared
+  // raid by raid: in how many did adding HKOI save the vehicle, in how many did it cost it.
+  const TYPE = { kornet: 'kornet', saclos: 'saclos', sal: 'sal', fpv: 'fpv', fpv_fiber: 'fpv', rpg: 'rpg' };
+  // sc: { preset: 'old' } for the old simulator's raid exactly as it was, or { preset: 'setup', force, raid, jitter, pilot } for the enemy
+  // of the battle set up on the title screen: its weapons in their proportions, its crews' steadiness, launched together (an ambush) or
+  // over about six seconds from long range (a stand-off raid), with the vehicle keeping still for HKOI as the Battlefield commander does.
+  function raidConfig(HK, base, sc, setup) {
+    const c = cfgFor(HK, base, setup); if (!sc || sc.preset === 'old') return c;
+    const mix = {}; let teams = 0; for (const f of sc.force || []) { const k = TYPE[f.type]; if (!k || !HK.THREATS[k]) continue; mix[k] = (mix[k] || 0) + (f.n || 1); teams += f.n || 1; }
+    if (teams) { c.enemy.mix = mix; c.enemy.raid_size = Math.max(1, Math.min(6, teams)); }
+    c.enemy.window_s = sc.raid ? sc.raid.window : 3; c.enemy.kornet_min_m = sc.raid ? sc.raid.minR : 400; if (sc.jitter != null) c.enemy.gunner_jitter_mrad = sc.jitter; if (sc.pilot) c.enemy.drone_skill = sc.pilot;
+    if (c.crew) c.crew.enabled = false;
+    return c;
+  }
+  function raidStart(HK, base, sc, n) { const S = {}; for (const st of SETUPS) { const cfg = raidConfig(HK, base, sc, st); cfg.seed = 1; S[st.key] = { cfg, lookup: st.hkoi ? HK.meetLookup(cfg) : {}, n: 0, surv: 0, killed: new Uint8Array(n), sums: {} }; } return { S, n, i: 0 }; }
+  // fight raids i .. i + count - 1 under all four setups
+  function raidStep(HK, run, count) {
+    const end = Math.min(run.n, run.i + count);
+    for (; run.i < end; run.i++) for (const st of SETUPS) { const A = run.S[st.key], m = HK.runMission(A.cfg, new HK.RNG(HK.seedFor(A.cfg.seed, run.i)), A.lookup, null); A.n++; if (m.killed) A.killed[run.i] = 1; else A.surv++; for (const k in m) if (typeof m[k] === 'number') A.sums[k] = (A.sums[k] || 0) + m[k]; }
+    return run.i >= run.n;
+  }
+  const BY = [['hkoi', 'Stopped by HKOI'], ['aps', 'Stopped by Trophy'], ['gunner', 'Enemy gunner missed'], ['smoke', 'Crew smoke'], ['other', 'Other'], ['hit', 'Hit the vehicle']];
+  const LEAK = { cloud_thin: 'cloud too thin to cut the guidance', no_time: 'no time to engage', no_time_second: 'no time for a second burst', aps_inhibited: 'Trophy held back (friendly infantry close)', aps_miss: 'Trophy missed', aps_empty: 'Trophy out of interceptors on that side', aps_reset: 'Trophy still resetting from its last shot', lwr_miss: 'warning receiver did not pick it up', min_range: 'launched inside minimum range', jam: 'gun jammed', fuze_miss: 'fuzes did not trigger', no_track: 'radar never got a track', track_too_late: 'track came too late', no_cue_emcon: 'radar silent and no warning', blind_arc: 'came from behind the turret', not_obs: 'not a missile obscurant works on', drift_hit: 'blinded but still drifted into the vehicle', stab_upset: 'vehicle movement upset the lay', cdr_busy: 'commander busy' };
+  function raidSummary(A) {
+    const n = A.n, s = A.sums, th = s.threats || 0, out = { n, survived: A.surv, survival: n ? A.surv / n : 0, range: range95(A.surv, n), hitsPerRaid: n ? (s.hits || 0) / n : 0, threatsPerRaid: n ? th / n : 0, obsPerRaid: n ? (s.obs_rounds || 0) / n : 0, hePerRaid: n ? (s.he_rounds || 0) / n : 0, apsPerRaid: n ? (s.aps_used || 0) / n : 0, by: {}, leaks: [], threats: th };
+    for (const k in s) { if (k.indexOf('by_') !== 0) continue; const d = k.slice(3), b = /^hkoi/.test(d) || d === 'self_destruct' ? 'hkoi' : d === 'aps' ? 'aps' : d === 'gunner_jitter' ? 'gunner' : d === 'crew_smoke' ? 'smoke' : d === 'hit' ? 'hit' : 'other'; out.by[b] = (out.by[b] || 0) + s[k]; }
+    if (!out.by.hit && s.f_hit) out.by.hit = s.f_hit;
+    for (const k in s) { const m = /^leak([HA])_(.+)$/.exec(k); if (m) out.leaks.push({ why: (m[1] === 'H' ? 'HKOI: ' : 'Trophy: ') + (LEAK[m[2]] || m[2].replace(/_/g, ' ')), n: s[k] }); }
+    out.leaks.sort((a, b) => b.n - a.n); return out;
+  }
+  // raid by raid: where did adding HKOI change the outcome? z is how many standard errors the net effect is from zero (over 2 is clear, over 3 is beyond doubt)
+  function paired(withH, without) { let saved = 0, cost = 0; const n = Math.min(withH.n, without.n); for (let i = 0; i < n; i++) { if (without.killed[i] && !withH.killed[i]) saved++; else if (!without.killed[i] && withH.killed[i]) cost++; } return { n, saved, cost, net: n ? (saved - cost) / n : 0, z: saved + cost ? (saved - cost) / Math.sqrt(saved + cost) : 0 }; }
+
+  const api = { SETUPS, BUCKETS, run, one, summarise, range95, cfgFor, bucketOf, raidConfig, raidStart, raidStep, raidSummary, paired, BY };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.HKStudy = api;
 })(typeof window !== 'undefined' ? window : globalThis);

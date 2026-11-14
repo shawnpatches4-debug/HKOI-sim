@@ -27,13 +27,13 @@ async def main():
         await pg.screenshot(path=os.environ.get('SHOT', '/tmp/pages') + '_debrief.png')
         await pg.evaluate('document.getElementById("r-menu").click()'); await pg.wait_for_timeout(600)
         await pg.evaluate('document.getElementById("o-numbers").click()'); await pg.wait_for_timeout(600)
-        await pg.evaluate('[...document.querySelectorAll("#numbers .seg button")][0].click()'); await pg.evaluate('[...document.querySelectorAll("#numbers .row button")].find(x => x.textContent === "Run").click()')
+        await pg.evaluate('[...document.querySelectorAll("#numbers .seg button")].find(x => x.textContent === "1,000").click()'); await pg.evaluate('[...document.querySelectorAll("#numbers .row button")].find(x => x.textContent === "Run").click()')
         for i in range(400):
             if await pg.evaluate('!!document.querySelector("#numbers .pg-take")'): break
             await pg.wait_for_timeout(1500)
         r = json.loads(await pg.evaluate('JSON.stringify({take: (document.querySelector("#numbers .pg-take") || {}).textContent, tables: document.querySelectorAll("#numbers .pg-tbl").length, status: document.querySelector("#numbers .pg-note").textContent})'))
         print('numbers', r)
-        if not r['take'] or r['tables'] < 4: bad.append('run the numbers did not finish with its tables')
+        if not r['take'] or r['tables'] < 3: bad.append('run the numbers did not finish with its tables')
         await pg.screenshot(path=os.environ.get('SHOT', '/tmp/pages') + '_numbers.png', full_page=False)
         print('console errors', errs[:5]); print('PAGES CHECK ' + ('PASSED' if not bad and not errs else 'FAILED: ' + '; '.join(bad + errs[:2]))); await b.close()
 asyncio.run(main())

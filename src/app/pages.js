@@ -55,26 +55,57 @@ export function initPages(ctx) {
   }
 
   // ---------------------------------------------------------------- run the numbers
+  // Two kinds of run. RAIDS (the default, and the old simulator's method): one engagement each, thousands of them, the four setups on the
+  // same raids. WHOLE BATTLES: the full fight with both sides' AI, far slower, so only tens to a hundred; useful for the long game
+  // (does Trophy last through three waves?) but too few to settle small differences.
   const N = screen('numbers', true); let running = false, stop = false;
   function openNumbers() {
-    const c = N.c, sc = ctx.scenario(); c.textContent = '';
-    c.append(el('h1', null, 'RUN THE NUMBERS'), el('div', 'sub', `${sc.text}. The same battles are fought again and again, unseen, with four setups of the vehicle's defences.`));
-    let n = 25; const pick = el('div', 'seg'), status = el('div', 'pg-note', 'Each battle takes about a second, so 25 per setup is a minute or two. More battles give a narrower range.'), bar = el('div', 'pg-bar'), fill = el('div'), out = el('div'); bar.append(fill);
-    const sizes = [10, 25, 50, 100], draw = () => { pick.textContent = ''; for (const k of sizes) { const b = el('button', 'btn' + (k === n ? ' on' : ''), `${k} battles each`); b.onclick = () => { if (!running) { n = k; draw(); } }; pick.append(b); } }; draw();
+    const c = N.c, sc = ctx.scenario(); c.textContent = ''; let kind = 'raids', preset = 'setup', n = 5000, nb = 25;
+    const sub = el('div', 'sub'), opts = el('div'), status = el('div', 'pg-note'), bar = el('div', 'pg-bar'), fill = el('div'), out = el('div'); bar.append(fill);
+    const seg = (items, get, set) => { const box = el('div', 'seg'); const draw = () => { box.textContent = ''; for (const [v, name, tip] of items) { const b = el('button', 'btn' + (get() === v ? ' on' : ''), name); if (tip) b.title = tip; b.onclick = () => { if (running) return; set(v); drawOpts(); }; box.append(b); } }; draw(); return box; };
+    const opt = (label, box) => { const o = el('div', 'opt'); o.append(el('label', null, label), box); return o; };
+    const drawOpts = () => { opts.textContent = ''; const g = el('div', 'opts');
+      g.append(opt('Kind of run', seg([['raids', 'Raids by the thousand', 'One engagement each. Fast, so thousands can be run and small differences settled.'], ['battles', 'Whole battles (slow)', 'The full fight with both sides thinking. About a second each.']], () => kind, v => { kind = v; })));
+      if (kind === 'raids') { g.append(opt('Enemy', seg([['setup', 'This setup\'s enemy', sc.text], ['old', 'The old simulator\'s raid', 'Three threats over six seconds, Kornet from 2 km, exactly as the old page ran it']], () => preset, v => { preset = v; })));
+        g.append(opt('Raids per setup', seg([[1000, '1,000'], [2000, '2,000'], [5000, '5,000'], [10000, '10,000']], () => n, v => { n = v; }))); }
+      else g.append(opt('Battles per setup', seg([[10, '10'], [25, '25'], [50, '50'], [100, '100']], () => nb, v => { nb = v; })));
+      opts.append(g);
+      sub.textContent = kind === 'raids' ? (preset === 'old' ? 'The old simulator\'s raid: three threats over six seconds, Kornet-class launches from 2 km or more.' : `Raids by this setup's enemy: ${sc.raidText}.`) + ' Every raid is fought four times: with HKOI and Trophy, Trophy only, HKOI only, and neither.' : `${sc.text}. Whole battles, each fought four times.`;
+      status.textContent = kind === 'raids' ? `About ${Math.round(n / 5000 * 40)} to ${Math.round(n / 5000 * 90)} seconds for ${n.toLocaleString()} raids per setup. The page stays usable while it runs.` : 'Each battle takes about a second. With so few, only large differences show: use raids to settle small ones.'; };
+    drawOpts();
     const go = btn('Run', async () => {
-      if (running) { stop = true; return; } running = true; stop = false; go.textContent = 'Stop'; out.textContent = ''; const rows = {}, lookups = {}, t0 = performance.now(); for (const st of Study.SETUPS) rows[st.key] = [];
-      const total = n * Study.SETUPS.length; let done = 0;
-      try { for (let seed = 1; seed <= n && !stop; seed++) for (const st of Study.SETUPS) { if (stop) break; rows[st.key].push(Study.one({ HK: deps.HK, Battle: deps.Battle }, sc.opts, st, seed, lookups)); done++; fill.style.width = (100 * done / total).toFixed(1) + '%'; status.textContent = `Battle ${done} of ${total} · ${Math.round((performance.now() - t0) / 1000)} s`; await new Promise(r => setTimeout(r, 0)); } }
-      catch (e) { status.textContent = 'The run stopped on an error: ' + (e && e.message); }
-      running = false; go.textContent = 'Run again'; const res = {}; for (const st of Study.SETUPS) res[st.key] = Study.summarise(rows[st.key], st); if (res.both.n) results(out, res, sc);
+      if (running) { stop = true; return; } running = true; stop = false; go.textContent = 'Stop'; out.textContent = ''; const t0 = performance.now(), prog = (d, tot, what) => { fill.style.width = (100 * d / tot).toFixed(1) + '%'; status.textContent = `${what} ${d.toLocaleString()} of ${tot.toLocaleString()} · ${Math.round((performance.now() - t0) / 1000)} s`; };
+      try {
+        if (kind === 'raids') { const run = Study.raidStart(deps.HK, sc.cfg, preset === 'old' ? { preset: 'old' } : Object.assign({ preset: 'setup' }, sc.raid), n); await new Promise(r => setTimeout(r, 0));
+          while (!stop && !Study.raidStep(deps.HK, run, 40)) { prog(run.i, n, 'Raid'); await new Promise(r => setTimeout(r, 0)); } prog(run.i, n, 'Raid'); if (run.i > 0) raidResults(out, run, preset === 'old' ? 'the old simulator\'s raid' : sc.raidText); }
+        else { const rows = {}, lookups = {}; for (const st of Study.SETUPS) rows[st.key] = []; const total = nb * Study.SETUPS.length; let done = 0;
+          for (let seed = 1; seed <= nb && !stop; seed++) for (const st of Study.SETUPS) { if (stop) break; rows[st.key].push(Study.one({ HK: deps.HK, Battle: deps.Battle }, sc.opts, st, seed, lookups)); done++; prog(done, total, 'Battle'); await new Promise(r => setTimeout(r, 0)); }
+          const res = {}; for (const st of Study.SETUPS) res[st.key] = Study.summarise(rows[st.key], st); if (res.both.n) battleResults(out, res, sc); } }
+      catch (e) { status.textContent = 'The run stopped on an error: ' + (e && e.message); console.error(e); }
+      running = false; go.textContent = 'Run again';
     }, true);
-    c.append(row(pick), bar, status, out, row(go, btn('Back', () => { if (running) stop = true; N.s.hidden = true; ctx.back(); })));
+    c.append(el('h1', null, 'RUN THE NUMBERS'), sub, opts, bar, status, out, row(go, btn('Back', () => { if (running) stop = true; N.s.hidden = true; ctx.back(); })));
     N.s.hidden = false;
   }
-  function results(out, res, sc) {
+  const copyBox = (out, txt) => { const ta = el('textarea'); ta.value = txt; ta.hidden = true; ta.readOnly = true; ta.style.cssText = 'width:100%;height:110px;margin-top:8px;background:rgba(255,255,255,.06);color:inherit;border:1px solid var(--line);border-radius:6px;font:11px var(--mono)'; const cp = btn('Copy summary', () => { if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => { cp.textContent = 'Copied'; }).catch(() => { cp.textContent = 'Select the text below'; ta.hidden = false; ta.select(); }); else { ta.hidden = false; ta.select(); } }); out.append(row(cp), ta); };
+  const pc1 = x => (100 * x).toFixed(1) + '%';
+  function raidResults(out, run, what) {
+    out.textContent = ''; const S = Study.SETUPS, R = {}; for (const st of S) R[st.key] = Study.raidSummary(run.S[st.key]); const n = R.both.n, p1 = Study.paired(run.S.both, run.S.aps), p2 = Study.paired(run.S.hkoi, run.S.none);
+    const sure = z => Math.abs(z) >= 3 ? 'far beyond chance' : Math.abs(z) >= 2 ? 'unlikely to be chance' : 'within what chance alone could give: run more raids';
+    const line = (p, a, b, tag) => `${tag}: adding HKOI ${p.net >= 0 ? 'raised' : 'lowered'} survival from ${pc1(b.survival)} to ${pc1(a.survival)} (${p.net >= 0 ? '+' : ''}${(100 * p.net).toFixed(1)} points). Raid by raid it saved the vehicle in ${p.saved.toLocaleString()} raids and cost it in ${p.cost.toLocaleString()}; that difference is ${sure(p.z)}.`;
+    out.append(el('div', 'pg-take', line(p1, R.both, R.aps, 'With Trophy fitted')), el('div', 'pg-take', line(p2, R.hkoi, R.none, 'Without Trophy')));
+    out.append(el('div', 'pg-h', `The four setups, ${n.toLocaleString()} raids each, the same raids for all four`));
+    out.append(table(['Setup', 'Vehicle survives', 'Likely range', 'Hits per raid', 'Threats per raid', 'Obscurant rounds', 'HE rounds', 'Trophy shots'], S.map(st => { const r = R[st.key]; return [st.name, pc1(r.survival), `${pc1(r.range[0])} to ${pc1(r.range[1])}`, r.hitsPerRaid.toFixed(3), r.threatsPerRaid.toFixed(1), r.obsPerRaid.toFixed(1), r.hePerRaid.toFixed(1), r.apsPerRaid.toFixed(2)]; })));
+    out.append(el('div', 'pg-h', 'What ended each threat, per 100 fired at the vehicle'));
+    out.append(table(['Setup'].concat(Study.BY.map(b => b[1])), S.map(st => { const r = R[st.key]; return [st.name].concat(Study.BY.map(([k]) => r.threats ? (100 * (r.by[k] || 0) / r.threats).toFixed(1) : '0')); })));
+    out.append(el('div', 'pg-h', 'Why threats got past each defence (with both fitted), most common first'));
+    out.append(table(['Reason', 'Times', 'Per 100 threats'], R.both.leaks.filter(l => !/ off$/.test(l.why)).slice(0, 10).map(l => [l.why, l.n.toLocaleString(), (100 * l.n / Math.max(1, R.both.threats)).toFixed(1)])));
+    out.append(el('div', 'pg-note', 'A raid is one engagement resolved by the same engine that decides the battles you watch, with the vehicle halted in its position. The likely range is the 95% range for the true figure given this many raids. The inputs are assumptions, not test results: cloud payload of 40 g a round, Trophy at 90% when cued and 80% when not, enemy gunner steadiness, a 3 km radar pick-up and the rest of the engine\'s settings.'));
+    copyBox(out, [`HKOI Battlefield, ${n.toLocaleString()} raids per setup: ${what}.`].concat(S.map(st => { const r = R[st.key]; return `${st.name}: vehicle survives ${pc1(r.survival)} (${pc1(r.range[0])} to ${pc1(r.range[1])}), ${r.hitsPerRaid.toFixed(3)} hits per raid.`; }), [line(p1, R.both, R.aps, 'With Trophy fitted'), line(p2, R.hkoi, R.none, 'Without Trophy')]).join('\n'));
+  }
+  function battleResults(out, res, sc) {
     out.textContent = ''; const S = Study.SETUPS, both = res.both, aps = res.aps;
-    // the plain-words reading, honest about small batches
-    const apart = both.range[0] > aps.range[1] ? 'The ranges do not overlap, so this batch shows a real difference.' : both.range[1] < aps.range[0] ? 'Trophy alone did better here, and the ranges do not overlap.' : 'The ranges overlap, so this batch is too small to say the difference is real: run more battles.';
+    const apart = both.range[0] > aps.range[1] ? 'The ranges do not overlap, so this batch shows a real difference.' : both.range[1] < aps.range[0] ? 'Trophy alone did better here, and the ranges do not overlap.' : 'The ranges overlap: with this few battles the difference could be chance. Raids by the thousand settle it.';
     out.append(el('div', 'pg-take', `With HKOI and Trophy the vehicle survived ${both.survived} of ${both.n} battles (${pc(both.survival)}); with Trophy alone ${aps.survived} of ${aps.n} (${pc(aps.survival)}). ${apart}`));
     out.append(el('div', 'pg-h', 'The four setups'));
     out.append(table(['Setup', 'Vehicle survives', 'Likely range', 'Hits per battle', 'Crew hurt', 'Threats per battle', 'Teams destroyed', 'Mean length'], S.map(st => { const r = res[st.key]; return [st.name, pc(r.survival), `${pc(r.range[0])} to ${pc(r.range[1])}`, r.hitsPerBattle.toFixed(2), r.crewPerBattle.toFixed(2), r.threatsPerBattle.toFixed(1), r.destroyedPerBattle.toFixed(1), clock(r.meanT)]; })));
@@ -82,12 +113,7 @@ export function initPages(ctx) {
     out.append(table(['Setup'].concat(Study.BUCKETS.map(b => b[1])), S.map(st => { const r = res[st.key]; return [st.name].concat(Study.BUCKETS.map(([k]) => r.threats ? Math.round(100 * (r.chain[k] || 0) / r.threats) : 0)); })));
     out.append(el('div', 'pg-h', 'Why the hits got through'));
     out.append(table(['Setup', 'Reasons, most common first'], S.map(st => [st.name, Object.entries(res[st.key].why).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} (${v})`).join('; ') || 'no hits'])));
-    out.append(el('div', 'pg-h', 'By weapon, with HKOI and Trophy'));
-    out.append(table(['Weapon', 'Fired', 'Stopped by HKOI', 'Stopped by Trophy', 'Hit the vehicle'], Object.entries(both.byType).sort((a, b) => b[1].n - a[1].n).map(([k, t]) => [THREAT[k] || k, t.n, pc((t.hkoi || 0) / t.n), pc((t.trophy || 0) / t.n), pc((t.hit || 0) / t.n)])));
-    out.append(el('div', 'pg-note', 'Every figure comes from the same engine that decides the battles you watch. The inputs are assumptions, not test results: enemy gunner steadiness by crew level, cloud payload of 40 g a round, Trophy at 90% when cued, and the rest listed in the engine\'s settings.'));
-    const txt = [`HKOI Battlefield, run the numbers: ${sc.text}, ${both.n} battles per setup.`].concat(S.map(st => { const r = res[st.key]; return `${st.name}: vehicle survives ${pc(r.survival)} (${pc(r.range[0])} to ${pc(r.range[1])}), ${r.hitsPerBattle.toFixed(2)} hits per battle.`; })).join('\n');
-    const cp = btn('Copy summary', () => { if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => { cp.textContent = 'Copied'; }).catch(() => { cp.textContent = 'Select the text below'; ta.hidden = false; ta.select(); }); else { ta.hidden = false; ta.select(); } }), ta = el('textarea'); ta.value = txt; ta.hidden = true; ta.readOnly = true; ta.style.cssText = 'width:100%;height:90px;margin-top:8px;background:rgba(255,255,255,.06);color:inherit;border:1px solid var(--line);border-radius:6px;font:11px var(--mono)';
-    out.append(row(cp), ta);
+    copyBox(out, [`HKOI Battlefield, whole battles: ${sc.text}, ${both.n} per setup.`].concat(S.map(st => { const r = res[st.key]; return `${st.name}: vehicle survives ${pc(r.survival)} (${pc(r.range[0])} to ${pc(r.range[1])}), ${r.hitsPerBattle.toFixed(2)} hits per battle.`; })).join('\n'));
   }
   return { debrief, openLadder, openNumbers, closeAll() { L.s.hidden = true; N.s.hidden = true; stop = true; } };
 }
