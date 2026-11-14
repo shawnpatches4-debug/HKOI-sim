@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------------------------------------------------
+// (The neck of the supplied figure points up and well forward, about [0, 0.9, 0.43]: a pose that gives the neck that direction has a level face.)
 // Poses: which way each limb segment points [left(+x)/right(-x), up, forward]; `tip` leans the whole body forward about
 // the hips first (1.57 = lying face down, negative = on the back).
 // ---------------------------------------------------------------------------------------------------------------------
@@ -24,26 +25,26 @@ const PRONE_LEGS = { LeftUpLeg: [0.18, -0.03, -1], LeftLeg: [0.05, -0.04, -1], L
 const KNEEL_LEGS = { LeftUpLeg: [0.12, 0.04, 1], LeftLeg: [0, -1, 0.05], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.05, -1, 0.18], RightLeg: [0, 0.02, -1], RightFoot: [0, -0.1, -1] };
 export const POSES = {
   // upright with a straight back: loads are fixed to a figure in this pose
-  ready: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.05], LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
+  ready: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 0.9, 0.45], LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
   stand: { LeftArm: [0.25, -1, 0.1], LeftForeArm: [0.1, -1, 0.3], RightArm: [-0.25, -1, 0.1], RightForeArm: [-0.1, -1, 0.3] },
   // down on the right knee behind a launcher, hands forward on the controls
-  kneel: { Spine: [0, 1, 0.12], Spine1: [0, 1, 0.2], Spine2: [0, 1, 0.25], Neck: [0, 1, 0.25], ...KNEEL_LEGS, LeftArm: [0.2, -0.85, 0.45], LeftForeArm: [-0.35, 0.1, 0.95], RightArm: [-0.2, -0.85, 0.45], RightForeArm: [0.35, 0.1, 0.95] },
+  kneel: { Spine: [0, 1, 0.12], Spine1: [0, 1, 0.2], Spine2: [0, 1, 0.25], Neck: [0, 0.9, 0.5], ...KNEEL_LEGS, LeftArm: [0.2, -0.85, 0.45], LeftForeArm: [-0.35, 0.1, 0.95], RightArm: [-0.2, -0.85, 0.45], RightForeArm: [0.35, 0.1, 0.95] },
   // on the right knee with the back straight and the arms loose: passed through when getting up, and held while handling a load
-  knee: { Spine: [0, 1, 0.1], Spine1: [0, 1, 0.14], Spine2: [0, 1, 0.16], Neck: [0, 1, 0.1], ...KNEEL_LEGS, LeftArm: [0.22, -0.9, 0.35], LeftForeArm: [-0.1, -0.5, 0.85], RightArm: [-0.22, -1, 0.2], RightForeArm: [-0.05, -0.8, 0.6] },
+  knee: { Spine: [0, 1, 0.1], Spine1: [0, 1, 0.14], Spine2: [0, 1, 0.16], Neck: [0, 0.9, 0.47], ...KNEEL_LEGS, LeftArm: [0.22, -0.9, 0.35], LeftForeArm: [-0.1, -0.5, 0.85], RightArm: [-0.22, -1, 0.2], RightForeArm: [-0.05, -0.8, 0.6] },
   // on the right knee with the left foot forward, bent over with both hands on the ground: between hands and knees and kneeling upright
   lunge: { tip: 1.45, Spine: [0, 0.12, 1], Spine1: [0, 0.16, 1], Spine2: [0, 0.2, 1], Neck: [0, 0.9, 0.6], ...KNEEL_LEGS, LeftArm: [0.25, -1, -0.05], LeftForeArm: [0.05, -1, 0.1], RightArm: [-0.2, -1, -0.05], RightForeArm: [-0.05, -1, 0.1] },
   // sitting back on the heels beside a tripod launcher, leaning in to the eyepiece (the hands are put on the controls separately)
-  gunner: { Spine: [0, 1, 0.3], Spine1: [0, 1, 0.42], Spine2: [0, 1, 0.5], Neck: [0, 1, 0.3], LeftUpLeg: [0.22, -0.6, 1], LeftLeg: [0, 0.06, -1], LeftFoot: [0, -0.15, -1], RightUpLeg: [-0.22, -0.6, 1], RightLeg: [0, 0.06, -1], RightFoot: [0, -0.15, -1], LeftArm: [0.1, -0.6, 0.8], LeftForeArm: [-0.4, 0.1, 0.9], RightArm: [-0.1, -0.6, 0.8], RightForeArm: [-0.2, 0.1, 0.95] },
+  gunner: { Spine: [0, 1, 0.3], Spine1: [0, 1, 0.42], Spine2: [0, 1, 0.5], Neck: [0, 0.9, 0.58], LeftUpLeg: [0.22, -0.6, 1], LeftLeg: [0, 0.06, -1], LeftFoot: [0, -0.15, -1], RightUpLeg: [-0.22, -0.6, 1], RightLeg: [0, 0.06, -1], RightFoot: [0, -0.15, -1], LeftArm: [0.1, -0.6, 0.8], LeftForeArm: [-0.4, 0.1, 0.9], RightArm: [-0.1, -0.6, 0.8], RightForeArm: [-0.2, 0.1, 0.95] },
   // kneeling with a tube on the right shoulder
-  shoulder: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 1, 0.1], ...KNEEL_LEGS, LeftArm: [-0.35, -0.45, 0.85], LeftForeArm: [-0.95, 0.35, 0.25], RightArm: [-0.55, -0.75, 0.4], RightForeArm: [0.02, 0.8, 0.6] },
+  shoulder: { Spine: [0, 1, 0.05], Spine1: [0, 1, 0.05], Spine2: [0, 1, 0.08], Neck: [0, 0.9, 0.47], ...KNEEL_LEGS, LeftArm: [-0.35, -0.45, 0.85], LeftForeArm: [-0.95, 0.35, 0.25], RightArm: [-0.55, -0.75, 0.4], RightForeArm: [0.02, 0.8, 0.6] },
   // squatting low, forearms on the knees
-  crouch: { Spine: [0, 1, 0.35], Spine1: [0, 1, 0.5], Spine2: [0, 1, 0.55], Neck: [0, 1, 0.1], LeftUpLeg: [0.22, 0.15, 1], LeftLeg: [0, -1, -0.28], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.22, 0.15, 1], RightLeg: [0, -1, -0.28], RightFoot: [0, -0.3, 1], LeftArm: [0.1, -0.5, 0.85], LeftForeArm: [-0.3, -0.2, 0.9], RightArm: [-0.1, -0.5, 0.85], RightForeArm: [0.3, -0.2, 0.9] },
+  crouch: { Spine: [0, 1, 0.35], Spine1: [0, 1, 0.5], Spine2: [0, 1, 0.55], Neck: [0, 0.9, 0.5], LeftUpLeg: [0.22, 0.15, 1], LeftLeg: [0, -1, -0.28], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.22, 0.15, 1], RightLeg: [0, -1, -0.28], RightFoot: [0, -0.3, 1], LeftArm: [0.1, -0.5, 0.85], LeftForeArm: [-0.3, -0.2, 0.9], RightArm: [-0.1, -0.5, 0.85], RightForeArm: [0.3, -0.2, 0.9] },
   // on hands and knees: passed through on the way down to the ground and up from it
   hands_knees: { tip: 1.42, Spine: [0, 0.08, 1], Spine1: [0, 0.1, 1], Spine2: [0, 0.12, 1], Neck: [0, 0.7, 0.75], LeftUpLeg: [0.1, -1, 0.1], LeftLeg: [0, -0.02, -1], LeftFoot: [0, -0.02, -1], RightUpLeg: [-0.1, -1, 0.1], RightLeg: [0, -0.02, -1], RightFoot: [0, -0.02, -1], LeftArm: [0.12, -1, -0.3], LeftForeArm: [0, -1, 0.3], RightArm: [-0.12, -1, -0.3], RightForeArm: [0, -1, 0.3] },
   // lying down with the chest pushed up on the hands: between lying flat and hands and knees
   pushup: { tip: 1.3, Spine: [0, 0.3, 1], Spine1: [0, 0.42, 1], Spine2: [0, 0.5, 1], Neck: [0, 0.8, 0.7], LeftUpLeg: [0.15, -0.5, -1], LeftLeg: [0.05, 0.02, -1], LeftFoot: [0.3, -0.05, -1], RightUpLeg: [-0.15, -0.5, -1], RightLeg: [-0.05, 0.02, -1], RightFoot: [-0.3, -0.05, -1], LeftArm: [0.35, -1, -0.75], LeftForeArm: [0.02, -1, 0.75], RightArm: [-0.35, -1, -0.75], RightForeArm: [-0.02, -1, 0.75] },
   // lying face down on the elbows, head up, looking forward
-  prone: { tip: 1.5, Spine: [0, 0.1, 1], Spine1: [0, 0.2, 1], Spine2: [0, 0.3, 1], Neck: [0, 0.75, 0.7], ...PRONE_LEGS, LeftArm: [0.55, -0.55, 0.6], LeftForeArm: [-0.45, 0, 0.9], RightArm: [-0.55, -0.55, 0.6], RightForeArm: [0.45, 0, 0.9] },
+  prone: { tip: 1.5, Spine: [0, 0.1, 1], Spine1: [0, 0.2, 1], Spine2: [0, 0.3, 1], Neck: [0, 0.85, 0.58], ...PRONE_LEGS, LeftArm: [0.55, -0.55, 0.6], LeftForeArm: [-0.45, 0, 0.9], RightArm: [-0.55, -0.55, 0.6], RightForeArm: [0.45, 0, 0.9] },
   // flat under fire: chest on the ground, arms drawn in beside the head
   pinned: { tip: 1.54, Spine: [0, 0.04, 1], Spine1: [0, 0.08, 1], Spine2: [0, 0.12, 1], Neck: [0, 0.3, 1], ...PRONE_LEGS, LeftArm: [0.9, -0.5, 0.5], LeftForeArm: [-0.25, -0.08, 1], RightArm: [-0.9, -0.5, 0.5], RightForeArm: [0.25, -0.08, 1] },
   // hit: buckling at the knees and the waist
@@ -319,7 +320,7 @@ export function stridePose(rig, g, carry, dt) {
   SX.tip = (0.03 + 0.08 * r) * amp + 0.2 * slope * amp + 0.4 * push; SX.yaw = -(0.09 + 0.03 * r) * amp * c0; SX.roll = (0.04 - 0.015 * r) * amp * c1 + 0.012 * sway;
   SX.twist = (0.10 + 0.07 * r) * amp * c0 * (1 - 0.6 * carry);
   SX.look = -0.9 * (SX.yaw + SX.twist) + Math.max(-0.5, Math.min(0.5, -0.22 * g.turn));     /* the head stays on where he is going, and leads into a turn */
-  SX.nod = -0.55 * (SX.tip + lean);
+  SX.nod = 0;
   SO.x = (0.022 - 0.012 * r) * amp * c1 + 0.016 * sway; SO.z = 0;
   _kh.multiplyQuaternions(rig.rootQ, rig.rel[0]).premultiply(_k1.setFromAxisAngle(AXX, SX.tip)).premultiply(_k1.setFromAxisAngle(AXZ, SX.roll)).premultiply(_k1.setFromAxisAngle(AXY, SX.yaw));
   // feet: heel down first, flat, heel up, toe off, then the swing with the knee lifted (a run kicks the heel up behind)
@@ -371,7 +372,7 @@ export function stridePose(rig, g, carry, dt) {
   }
   // back: leaning into a run; head kept up
   const sp = SD[J.Spine], s1 = SD[J.Spine1], s2 = SD[J.Spine2], nk = SD[J.Neck];
-  sp[0] = 0; sp[1] = 1; sp[2] = lean * 0.8; s1[0] = 0; s1[1] = 1; s1[2] = lean; s2[0] = 0; s2[1] = 1; s2[2] = lean * 1.05; nk[0] = 0; nk[1] = 1; nk[2] = 0.05 + lean * 0.25;
+  sp[0] = 0; sp[1] = 1; sp[2] = lean * 0.8; s1[0] = 0; s1[1] = 1; s1[2] = lean; s2[0] = 0; s2[1] = 1; s2[2] = lean * 1.05; nk[0] = 0; nk[1] = 0.9; nk[2] = 0.45 + lean * 0.3;      /* (the neck of this figure leans forward as supplied: this keeps his face level) */
   // arms: each swings from the shoulder, forward with the opposite leg; the elbow is loose in a walk and bent square in a run
   const swing = (0.36 + 0.34 * r) * amp, hang = -0.02 - 0.2 * r * amp;
   for (let k = 0; k < 2; k++) {
