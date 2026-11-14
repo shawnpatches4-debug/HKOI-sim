@@ -45,7 +45,8 @@ export const SHIFT = {
 export const TURN = { jaw: 0.3, eyeYaw: 0.42, eyePitch: 0.26, shoulders: 22, thrust: 28 };   // thrust: the head pushed forward (+) or pulled back (-), millimetres
 // How each man is told apart, and what stress does to skin and light (multipliers of the picture's own colours).
 export const LOOK = {
-  cdrSkin: [2.3, 2.15, 2.1],       // the commander's face: the gunner's dark skin lightened by these factors (red, green, blue)
+  cdrSkinLift: 0.5,                // the commander's face: every colour of the gunner's head picture raised to this power (dark brown becomes light) ...
+  cdrSkin: [1.0, 0.84, 0.72],      // ... and then multiplied by these (red, green, blue): a light tan, plainly not the gunner
   cdrHelmet: [0.5, 0.62, 0.3],     // his helmet: the camouflage cover multiplied to a plain olive; its goggles and their strap removed
   pallor: [0.62, 0.74, 0.8],       // a face that has lost all its colour (shaken about half way, wounded three quarters, dead fully)
   flush: [1.1, 0.93, 0.9],         // a strained face, before fear takes the colour out again
@@ -90,6 +91,12 @@ function without(geo, drop) {
   if (!gone.size) return geo;
   const keep = []; for (let t = 0; t < I.count; t += 3) if (!gone.has(find(id[I.getX(t)]))) keep.push(I.getX(t), I.getX(t + 1), I.getX(t + 2));
   const out = geo.clone(); out.setIndex(keep); return out;
+}
+
+// the commander's own skin tone: the head picture's colours lifted and tinted in the material itself (LOOK.cdrSkinLift, LOOK.cdrSkin)
+function lighten(mat) {
+  mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\n  diffuseColor.rgb = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(${LOOK.cdrSkinLift.toFixed(3)})) * vec3(${LOOK.cdrSkin.map(v => v.toFixed(3)).join(', ')});`); };
+  mat.customProgramCacheKey = () => 'cdr-skin'; mat.needsUpdate = true;
 }
 
 export class Faces {
@@ -149,12 +156,12 @@ export class Faces {
     const chin = B.Bip01MBottomLip ? wp(B.Bip01MBottomLip).sub(wp(B.Bip01MJaw)) : F.clone(), jawSign = _v.crossVectors(L, chin).dot(U) < 0 ? 1 : -1;
     const face = eyes.clone().sub(wp(head)), nodSign = _v.crossVectors(L, face.lengthSq() > 1e-8 ? face : F).dot(U) < 0 ? 1 : -1, yawSign = _v.crossVectors(U, F).dot(L) > 0 ? 1 : -1;
     // his own skin, so it can change colour and shine; the commander's lighter skin and olive helmet; goggles and dark glasses off
-    const skin = [], base = role === 'cdr' ? LOOK.cdrSkin : [1, 1, 1];
+    const skin = [], base = [1, 1, 1];
     fig.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = false;
       const names = [].concat(o.material).map(m => m.name || '').join(' ');
       if (/head/i.test(names) && role === 'cdr') o.geometry = without(o.geometry, c => c.min.z > 1.73);                                  /* the goggles on the helmet's front and their strap */
       if (/head/i.test(names) && role === 'ldr') o.geometry = without(o.geometry, c => c.min.z > 1.655 && c.max.z < 1.705 && c.min.y < -0.12);   /* the dark glasses: frame and both lenses (the eyeballs sit behind -0.112) */
-      const mats = [].concat(o.material).map(m => { const c = m.clone(); c.metalness = 0; c.roughness = Math.max(0.7, c.roughness || 0); if (/head/i.test(m.name)) skin.push(c); else if (role === 'cdr' && /helmet/i.test(m.name)) c.color.setRGB(...LOOK.cdrHelmet); return c; });
+      const mats = [].concat(o.material).map(m => { const c = m.clone(); c.metalness = 0; c.roughness = Math.max(0.7, c.roughness || 0); if (/head/i.test(m.name)) { skin.push(c); if (role === 'cdr') lighten(c); } else if (role === 'cdr' && /helmet/i.test(m.name)) c.color.setRGB(...LOOK.cdrHelmet); return c; });
       o.material = Array.isArray(o.material) ? mats : mats[0]; });
     const cam = new THREE.PerspectiveCamera(27, W / H, 0.1, 6); cam.position.copy(eyes).addScaledVector(F, 0.7).addScaledVector(U, 0.0).addScaledVector(L, role === 'gnr' ? -0.07 : role === 'drv' ? 0.06 : 0.02); cam.up.copy(U); cam.lookAt(_v.copy(eyes).addScaledVector(U, -0.045)); cam.updateMatrixWorld(true);
     return { role, i, seed: i * 1.7 + 1, g, head, rec, shifts, neck, base, stress: 0, jaw, hd, eyeL, eyeR, clav, jawSign, nodSign, yawSign, skin, cam, U, F, L, sp: new Springs(), speak: 0 };
