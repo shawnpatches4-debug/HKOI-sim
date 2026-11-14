@@ -171,6 +171,8 @@ async def main():
             await pg.evaluate("void __beta.runTo(Math.max(__beta.battle.t, T0 + 4.6))")   # all the way up (the pictures of the climb may have been skipped)
             staged_fire = await pg.evaluate("(() => { fire(); return true; })()"); print('burst staged:', staged_fire)
             await pg.evaluate("void __beta.runTo(__beta.battle.t + 1.2)")   # the gun laid on the target
+            for pre in [q for q in os.environ.get('PRE', '').split('|') if q]:   # tests only: extra pictures after a piece of page code (e.g. hiding one crew figure)
+                await shot(f'ldr_{tagk}_firing_first_person_pre{abs(hash(pre)) % 1000}', "(" + pre + ", lk('in_ldr', 0, 0, 1))"); print('PRE', abs(hash(pre)) % 1000, pre)
             await shot(f'ldr_{tagk}_firing_first_person', "lk('in_ldr', 0, 0, 1)");
             if os.environ.get('PICK'):   # what lies under given points of the picture (NDC x,y pairs): names up the parent chain of the first hits
                 print('PICK', await pg.evaluate("JSON.stringify((" + os.environ['PICK'] + ").map(([x, y]) => { const V = __beta.THREE, s = __beta.scene, r = new V.Raycaster(); r.setFromCamera(new V.Vector2(x, y), s.camera); return r.intersectObjects(s.scene.children, true).filter(h => h.object.visible).slice(0, 3).map(h => { const n = []; let o = h.object; while (o && n.length < 6) { n.push((o.name || o.type) + (o.visible ? '' : '(hid)')); o = o.parent; } return [+h.distance.toFixed(2), n.join(' < ')]; }); }))"))
