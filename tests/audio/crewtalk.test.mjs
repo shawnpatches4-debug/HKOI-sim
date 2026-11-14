@@ -69,6 +69,32 @@ for (const biome of ['farmland', 'desert', 'town', 'forest']) for (const seed of
   for (const x of talk.trace) if (x[3] === 'silent') { const key = x[1] + ': ' + String(x[2]).replace(/\d+/g, 'N'); silent[key] = (silent[key] || 0) + 1; }
   minutes += b.t / 60; battles++;
 }
+// ---- 2b. each man's own stress picks his take (src/battle/crew.js), and a man who is down or frozen says nothing
+console.log('share of crew lines by delivery (calm / tense / shouted), and what a man in each state was given:');
+for (const quality of ['green', 'trained', 'expert']) {
+  const byLevel = [0, 0, 0], byState = {}; let mixed = 0, engagements = 0, mutedAsk = 0, mutes = 0;
+  for (const biome of ['farmland', 'town']) for (const seed of [1, 2, 3, 4]) for (const force of forces) {
+    const b = new Battle.Battle({ biome, mapSeed: 3, seed, skill: 'expert', cfg, lookup, force, mission: 'hold', waves: 2, crewQuality: quality });
+    const asked = [], net = { ready: true, has: (who, ev) => !!(REL[who] && REL[who][ev]), request(who, ev, o) { if (!this.has(who, ev)) return false; asked.push({ t: b.t, who, ev, level: o.level, v: b.volleys.length }); return true; }, flush() {} };
+    const talk = new CrewTalk(net, { warn() {}, blip() {}, smoke() {} }); let n0 = 0;
+    while (b.t < 600 && !(b.over && b.t > (b._overT || (b._overT = b.t)) + 5)) {
+      b.step(); talk.update(b, b.t, { mission: 'hold' }); const S = b.crewState();
+      for (const a of asked.slice(n0)) {
+        if (a.who === 'HQ' || a.who === 'ANY') continue; const m = S.who[a.who.toLowerCase()], lv = a.level == null ? 1 : a.level;
+        byLevel[lv]++; const st = byState[m.state] || (byState[m.state] = [0, 0, 0]); st[lv]++;
+        if (m.status === 'down' || /^frozen/.test(m.busy || '')) { mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
+        if (m.state === 'panicked' && lv !== 2) bad(quality, 'a panicked man was not given his shouted take', a.who, a.ev, lv);
+        if (m.state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
+      }
+      n0 = asked.length;
+    }
+    mutes += talk.trace.filter(x => /he says nothing/.test(String(x[2]))).length;
+    const perV = {}; for (const a of asked) if (a.level != null && a.who !== 'HQ' && a.who !== 'ANY') (perV[a.v] || (perV[a.v] = new Set())).add(a.level);
+    for (const k in perV) { engagements++; if (perV[k].has(2) && (perV[k].has(0) || perV[k].has(1))) mixed++; }
+  }
+  const tot = byLevel[0] + byLevel[1] + byLevel[2] || 1, pc = a => a.map(x => Math.round(100 * x / (a[0] + a[1] + a[2] || 1)) + '%').join(' / ');
+  console.log(`  ${quality.padEnd(8)} ${pc(byLevel)}   by state: ` + ['steady', 'strained', 'shaken', 'panicked'].filter(k => byState[k]).map(k => `${k} ${pc(byState[k])}`).join('; ') + `   | lines withheld because the man was down or frozen: ${mutes}; engagements with a shouting man and a calmer one together: ${mixed} of ${engagements}`);
+}
 // ---- 3. report
 const top = o => Object.entries(o).sort((a, b) => b[1] - a[1]);
 console.log(`${battles} battles, ${minutes.toFixed(0)} minutes of battle, ${lines} lines asked for (${(lines / minutes).toFixed(1)} a minute before the intercom drops the stale ones)`);
