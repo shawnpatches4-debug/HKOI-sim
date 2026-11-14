@@ -25,6 +25,7 @@ def full():
     out += [('drv_block_left', "lk('in_drv', -32, 22, 1.8)"), ('drv_block_centre', "lk('in_drv', 0, 22, 1.8)"), ('drv_block_right', "lk('in_drv', 32, 22, 1.8)"), ('drv_tbar_and_displays', "lk('in_drv', 0, -8, 1.3)"), ('drv_display_close', "lk('in_drv', 30, -6, 2.6)"), ('drv_master_close', "lk('in_drv', -30, -6, 2.6)")]
     out += [('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])"), ('cut_left', "cutv(-5.2, 2.4, 3.0)"), ('cut_right', "cutv(5.2, 2.0, 3.0)"), ('cut_above', "cutv(-0.6, -1.5, 8.5)"), ('cut_front_left_low', "cutv(-3.6, 5.2, 2.0)")]
     return out
+ONLY = [k for k in os.environ.get('ONLY', '').split(',') if k]
 async def main():
     out, tag, params = sys.argv[1], sys.argv[2], sys.argv[3]; which = sys.argv[4] if len(sys.argv) > 4 else 'all'; os.makedirs(out, exist_ok=True)
     async with async_playwright() as p:
@@ -37,6 +38,7 @@ async def main():
             await pg.wait_for_timeout(1500)
         await pg.evaluate(HELP); await pg.evaluate('void (hud(0), __beta.setPlaying(false))'); settle = int(os.environ.get('SETTLE', '4500'))
         async def shot(name, js, wait=None):
+            if ONLY and not any(k in name for k in ONLY): return   # ONLY=a,b: a short run of just the pictures whose names contain one of these
             n0 = await pg.evaluate('__beta.scene.frameN'); await pg.evaluate('void (' + js + ')')
             for i in range(120):   # the page draws slowly here: wait for four whole frames (camera, small outside views, displays), not for a time
                 await pg.wait_for_timeout(500)
@@ -103,6 +105,70 @@ async def main():
             await pg.evaluate("""void (window.stageAt = (T) => { const b = __beta.battle, V = __beta.THREE; b.interiorHits = [{ T, pen: true, kill: false, minor: false, s: 1.6, e: new V.Vector3(1.7, 0.35, -0.3), d: new V.Vector3(-1, -0.03, 0.1).normalize(), comps: { gps: 'damaged' }, crew: { gnr: 'wounded' }, idx: 7 }]; })""")
             T0 = await pg.evaluate('__beta.battle.t + 1.0'); await pg.evaluate(f'void stageAt({T0})')
             for i, dtt in enumerate([0.9, 0.15, 0.25, 0.5, 1.0, 2.5, 8]): await shot(f'strip_hit_{i}', f"(__beta.runTo(__beta.battle.t + {dtt}), lk('in_ldr', 30, 2, 1.2))")
+        if which == 'mfd':   # every display straight on and filling the picture: in a quiet moment, then with a missile in the air
+            face = lambda seat, key, pre='0': f"({pre}, __beta.cams.mode !== '{seat}' && __beta.cams.set('{seat}'), __beta.interior.lookThrough(null), __beta.interior.faceScreen('{key}'))"
+            LIST = [('gnr_sight', 'in_gnr', 'gps', '0'), ('gnr_fire_control', 'in_gnr', 'comp', '0'), ('cdr_display', 'in_cdr', 'citv', '0'), ('hkoi_threats', 'in_cdr', 'hkoi', '__beta.interior.hkPage = 0'), ('hkoi_rounds', 'in_cdr', 'hkoi', '__beta.interior.hkPage = 1'), ('hkoi_crew', 'in_cdr', 'hkoi', '__beta.interior.hkPage = 2'), ('drv_display', 'in_drv', 'drv', '0'), ('ldr_panel', 'in_ldr', 'ldr', '0')]
+            await pg.evaluate("void __beta.runTo(__beta.battle.t + 1.5)")
+            for nm, seat, key, pre in LIST: await shot(f'mfd_quiet_{nm}', face(seat, key, pre))
+            await shot('mfd_quiet_from_gunners_seat', "(__beta.interior.lookThrough(null), lk('in_gnr', 0, 0, 1))"); await shot('mfd_quiet_from_commanders_seat', "lk('in_cdr', 60, -12, 1)")
+            print('missile in the air at', await pg.evaluate("JSON.stringify(stepTo(b => { const v = b.volleys[b.volleys.length - 1]; return !!v && v.rec && v.rec.threats.some(th => b.t > v.t0 + th.t0 + 1.2 && b.t < v.t0 + (th.viz.end ? th.viz.end.t : 0) - 1.0); }))"))
+            for nm, seat, key, pre in LIST:
+                if 'crew' in nm or 'rounds' in nm: continue
+                await shot(f'mfd_missile_{nm}', face(seat, key, pre))
+            await shot('mfd_missile_from_commanders_seat', "(__beta.interior.lookThrough(null), lk('in_cdr', 60, -12, 1))")
+            print('hkoi', await pg.evaluate("JSON.stringify({hk: __beta.interior.hkState, warning: __beta.interior.warning, calls: __beta.scene.renderer.info.render.calls, tris: __beta.scene.renderer.info.render.triangles})"))
+        if which == 'optics':   # every periscope and vision block: from the seat, then with the eye put to it
+            opt = lambda seat, find, pre='0': f"({pre}, __beta.cams.mode !== '{seat}' && __beta.cams.set('{seat}'), __beta.interior.lookThrough(null), __beta.interior.lookThrough(__beta.interior.controls.find(c => c.optic && {find})))"
+            few = os.environ.get('FEW') == '1'
+            await pg.evaluate("void (__beta.interior.cupUser = true, __beta.interior.setCupolaHatch(0, true), __beta.runTo(__beta.battle.t + 1))")
+            if not few:
+                for nm, js in [('seat_drv_blocks', "lk('in_drv', 0, 18, 1.3)"), ('seat_ldr_periscope', "lk('in_ldr', -46, 29, 1.6)"), ('seat_gnr_aux', "lk('in_gnr', -33, 25, 1.8)"), ('seat_cdr_ports_front', "lk('in_cdr', 8, 20, 1)"), ('seat_cdr_ports_left', "lk('in_cdr', -82, 20, 1)")]: await shot('optic_' + nm, "(__beta.interior.lookThrough(null), " + js + ")")
+            for i, nm in enumerate(['left', 'centre', 'right']):
+                if few and i != 1: continue
+                await shot(f'optic_at_drv_block_{nm}', opt('in_drv', f"c.g === 'hul' && c.optic.yaw === {[-32, 0, 32][i]}"))
+            for y in ([0] if few else [-50, 0, 50]): await shot(f'optic_at_ldr_periscope_{y}', opt('in_ldr', "c.optic.kind === 'lp'") + f", __beta.interior.lpYaw = {y}")
+            for i, d in enumerate(['front', 'right_front', 'right', 'right_rear', 'rear', 'left_rear', 'left', 'left_front']):
+                if few and i != 0: continue
+                await shot(f'optic_at_cdr_port{i}_{d}', opt('in_cdr', f"c.optic.ring === {i}"))
+            await shot('optic_at_gnr_aux', opt('in_gnr', "c.optic.kind === 'gas'"))
+            print('at an optic', await pg.evaluate("JSON.stringify({calls: __beta.scene.renderer.info.render.calls, tris: __beta.scene.renderer.info.render.triangles, sightCalls: __beta.interior.stats.sightCalls})"))
+            if not few:
+                print('missile in the air at', await pg.evaluate("JSON.stringify(stepTo(b => { const v = b.volleys[b.volleys.length - 1]; return !!v && v.rec && v.rec.threats.some(th => b.t > v.t0 + th.t0 + 1.5 && b.t < v.t0 + (th.viz.end ? th.viz.end.t : 0) - 0.8); }))"))
+                ring = await pg.evaluate("(() => { const I = __beta.interior, m = (__beta.volleys || {}).info; const inf = (I.s && I.s.volleyInfo) || []; const b = __beta.battle, v = b.volleys[b.volleys.length - 1]; const l = v && v.launches && v.launches[0]; const brg = l ? l.brg : 0; return ((Math.round((((brg - (I.turBrg || 0)) % 360) + 360) % 360 / 45)) % 8); })()")
+                print('threat toward port', ring); await shot('optic_missile_through_cdr_port', opt('in_cdr', f"c.optic.ring === {ring}")); await shot('optic_missile_through_ldr_periscope', opt('in_ldr', "c.optic.kind === 'lp'")); await shot('optic_missile_drv_centre', opt('in_drv', "c.g === 'hul' && c.optic.yaw === 0"))
+            await pg.evaluate("void __beta.interior.lookThrough(null)")
+        if which in ('ldrup', 'hatches'):
+            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
+            for i in range(80):
+                st = await pg.evaluate('JSON.stringify(__beta.interior.stats)')
+                if '"crewReady":true' in st or '"crewFailed":true' in st: break
+                await pg.wait_for_timeout(1500)
+            print('crew', st)
+            await pg.evaluate("void (window.outv = (dist, h, off) => { const T = __beta.battle.tank; __beta.near(dist, h, ((T.h || 0) + off + 360) % 360); })")
+        if which == 'hatches':   # both hatches in every position, from inside and from outside
+            for st, nm in [(0, 'closed'), (1, 'open_protected'), (2, 'open')]:
+                await pg.evaluate(f"void (__beta.interior.cupUser = true, __beta.interior.setCupolaHatch({st}, true))")
+                await shot(f'hatch_cdr_{nm}_inside', "lk('in_cdr', 8, 42, 1)"); await shot(f'hatch_cdr_{nm}_inside_rear', "lk('in_cdr', 178, 30, 1)"); await shot(f'hatch_cdr_{nm}_from_loader', "lk('in_ldr', 40, 26, 1)")
+                await shot(f'hatch_cdr_{nm}_outside', "outv(5.5, 3.6, 150)"); await shot(f'hatch_cdr_{nm}_outside_close', "outv(3.4, 3.2, 20)")
+            await pg.evaluate("void __beta.interior.setCupolaHatch(0, true)")
+            await shot('hatch_ldr_closed_inside', "lk('in_ldr', -60, 55, 1)")
+        if which == 'ldrup':   # the loader opening his hatch, climbing up, firing his machine gun and coming down
+            real = None   # staged: the battle itself often calls him down again within a second, which is no use for a strip of the whole act
+            print('loader goes up at', real); tagk = 'real' if real is not None else 'staged'
+            if real is None: await pg.evaluate("void (window.forceUp = true, (() => { const L = __beta.battle.tank.ai.ldr; Object.defineProperty(L, 'up', { get: () => window.forceUp, set() {}, configurable: true }); window.spEnd = 1e9; const sp = [__beta.battle.t, 1e9]; Object.defineProperty(sp, 1, { get: () => window.spEnd, set() {} }); L.upAt = [sp]; })())")
+            await pg.evaluate("void (window.T0 = __beta.battle.t, window.fire = () => { const b = __beta.battle, T = b.tank, a = ((T.h || 0) + 30) * Math.PI / 180; b._mg = { t: b.t - 0.3, dur: 3, m240: true, e: T.e + Math.sin(a) * 400, n: T.n + Math.cos(a) * 400, R: 400 }; })")
+            UP = [0.05, 0.35, 0.6, 0.85, 1.1, 1.4, 1.7, 2.0, 2.3, 2.75, 3.3, 4.1]
+            for i, dtt in enumerate(UP):
+                await shot(f'ldr_{tagk}_first_person_{i:02d}_{dtt}s', f"(__beta.runTo(T0 + {dtt}), lk('in_ldr', 0, 0, 1))")
+                if i in (3, 6, 9, 11): await shot(f'ldr_{tagk}_from_cdr_{i:02d}_{dtt}s', "lk('in_cdr', -84, -20, 1)"); await shot(f'ldr_{tagk}_from_gnr_{i:02d}_{dtt}s', "lk('in_gnr', -120, 22, 1)"); await shot(f'ldr_{tagk}_outside_{i:02d}_{dtt}s', "outv(5.0, 3.4, 215)")
+                print('U', dtt, await pg.evaluate('JSON.stringify({U: +__beta.interior.st.ldrU.toFixed(2), lid: +__beta.interior.st.hatch.toFixed(2), mode: __beta.interior.mode, headOut: __beta.interior.headOut, loaded: __beta.battle.tank.loaded})'))
+            staged_fire = await pg.evaluate("(() => { const b = __beta.battle; if (!(b._mg && b._mg.m240 && b.t < b._mg.t + 3)) { fire(); return true; } return false; })()"); print('burst staged:', staged_fire)
+            await shot(f'ldr_{tagk}_firing_first_person', "(__beta.runTo(__beta.battle.t + 0.5), lk('in_ldr', 0, 0, 1))"); await shot(f'ldr_{tagk}_firing_from_cdr', "lk('in_cdr', -84, -20, 1)"); await shot(f'ldr_{tagk}_firing_outside', "outv(5.0, 3.4, 215)"); await shot(f'ldr_{tagk}_firing_outside_front', "outv(6.0, 2.6, 330)")
+            print('firing', await pg.evaluate('JSON.stringify({firing: __beta.interior.mgFiring, mgYaw: +__beta.interior.st.mgYaw.toFixed(1), pivot: !!__beta.interior.mgPivot})'))
+            if real is None: await pg.evaluate("void (window.forceUp = false, window.T1 = __beta.battle.t, window.spEnd = __beta.battle.t)")
+            else: print('comes down at', await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (b.tank.ai.ldr.up && b.tank.alive && n++ < 3000) __beta.runTo(b.t + 0.1); window.T1 = b.t; return +b.t.toFixed(1); })()"))
+            for i, dtt in enumerate([0.3, 0.7, 1.1, 1.5, 2.0]): await shot(f'ldr_{tagk}_down_first_person_{i}_{dtt}s', f"(__beta.runTo(T1 + {dtt}), lk('in_ldr', 0, 0, 1))")
+            await shot(f'ldr_{tagk}_down_from_cdr', "lk('in_cdr', -84, -20, 1)")
         if which == 'cuts':   # the cutaway from every side, at rest and again with the turret laid on a target
             CU = [('left', "cutv(-5.2, 2.4, 3.0)"), ('right', "cutv(5.2, 2.0, 3.0)"), ('above', "cutv(-0.6, -1.5, 8.5)"), ('front_left', "cutv(-3.6, 5.2, 2.0)"), ('rear_right_high', "cutv(3.2, -3.4, 5.6)")]
             for name, js in CU: await shot('cut_' + name, js)

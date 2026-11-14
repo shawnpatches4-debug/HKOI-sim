@@ -10,7 +10,7 @@
 //    conversation is in the right place when the view changes).
 //
 // The clips come from the owner's crew voice pack through tools/audio/build_crew.py: one sound file per speaker and
-// assets/crew2_index.json = { strips: { key: file }, e: { WHO: { event: [[strip, start s, length s, level 0..2, clip, words], ...] } } }.
+// assets/crew3_index.json = { strips: { key: file }, e: { WHO: { event: [[strip, start s, length s, level 0..2, clip, words], ...] } } }.
 
 // Playback speed per speaker. ASSUMPTION: measurements could not separate distinct voice actors in the pack (it may be
 // one or two people), so each crewman is played a few percent slower or faster to help tell them apart. 1 = untouched.
@@ -24,7 +24,7 @@ export class Intercom {
     this.index = null; this.bufs = {}; this.ready = false;
     this.queue = []; this.cur = null; this.freeAt = 0; this.lastClip = {}; this.lastAsk = {};
     this.said = []; this.dropped = [];        // what was spoken and what was dropped (for tests and for the report)
-    this.listening = false;
+    this.listening = false; this.vol = 1;
     this.out = c.createGain(); this.out.gain.value = 0; this.out.connect(mix.bus.voices.direct);
     this.crew = this._chain({ lo: 300, hi: 3300, peakF: 1900, peakDb: 5, drive: 1.5, level: 0.65 });
     this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 2.4, level: 0.6 });
@@ -48,7 +48,7 @@ export class Intercom {
   async load(base, get) {
     if (this.index || !base) return;
     let idx = null;
-    for (const name of ['crew2_index.json', 'crewvoice_index.json']) {   /* the second is the first cut of the same human pack */
+    for (const name of ['crew3_index.json', 'crew2_index.json']) {   /* the second is the first cut of the same human pack */
       try { const a = await get(base + name); if (a) { const j = JSON.parse(new TextDecoder().decode(a)); if (j && j.e && j.strips) { idx = j; break; } } } catch (e) { /* try the next */ }
     }
     if (!idx) return; this.index = idx;
@@ -60,7 +60,9 @@ export class Intercom {
   takes(who, ev) { const L = this.index && this.index.e[who] && this.index.e[who][ev]; return L && L.length && this.bufs[L[0][0]] ? L : null; }
   has(who, ev) { return !!this.takes(who, ev); }
   // from the crew's seats the net is heard; from anywhere else it is not
-  listen(on) { if (on === this.listening) return; this.listening = on; this.out.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.04); }
+  listen(on) { if (on === this.listening) return; this.listening = on; this.out.gain.setTargetAtTime(on ? this.vol : 0, this.ctx.currentTime, 0.04); }
+  // the intercom volume knob inside the vehicle: 1 = the normal setting
+  level(v) { v = Math.max(0, Math.min(1.4, v)); if (Math.abs(v - this.vol) < 0.01) return; this.vol = v; if (this.listening) this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.04); }
 
   // Ask for a line. pri: 0 routine (reports), 1 normal, 2 urgent, 3 warning or casualty. ttl: seconds it may wait before it is stale.
   // delay: seconds before it may start. group: lines that belong together (when one is cut or dropped, the rest go too).

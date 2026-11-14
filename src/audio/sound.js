@@ -23,6 +23,7 @@ export const BED_SLOTS = ['turbine_in_loop', 'turbine_out_loop', 'tracks_loop', 
 export { SLOTS };
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const p_set = (p, v, t) => p.setTargetAtTime(v, t, 0.08);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
 
@@ -71,7 +72,10 @@ export class Sound {
     B.lwr = osc('square', 1250, M.bus.ui.direct); B.lwrLfo = osc('square', 7, B.lwr.g.gain, 0);
     B.rwr = osc('sine', 820, M.bus.ui.direct); B.rwrLfo = osc('square', 2.5, B.rwr.o.frequency, 0); B.rwrLfo.g.gain.value = 110;
     B.icomFloor = M.bed('ui', { direct: true, color: 'pink', type: 'bandpass', f: 1800, q: 0.4 });
-    this.warnL = false; this.warnR = false;
+    // --- inside, after the armour has been holed: the fire and penetration alarm (two notes, over and over), and a fire burning
+    B.alarm = osc('square', 960, M.bus.ui.direct); B.alarmLfo = osc('square', 1.6, B.alarm.o.frequency, 0); B.alarmLfo.g.gain.value = 160;
+    B.fire = M.bed('vehicle', { direct: true, color: 'brown', f: 900 }); B.fireHi = M.bed('vehicle', { direct: true, color: 'white', type: 'bandpass', f: 3200, q: 0.7 });
+    this.warnL = false; this.warnR = false; this.pulseT = null;
   }
   _swapBeds() {
     const M = this.mix, B = this.bed; if (!B) return;
@@ -87,7 +91,9 @@ export class Sound {
 
   // ------------------------------------------------------------------ every frame
   // st: { view (camera mode) or inside, cond, biome, speed (m/s), heading, turret (degrees), alive, camDist (m to own vehicle),
-  //       rate (simulation speed), drones: [{ id, d }], battle, talking, mission }
+  //       rate (simulation speed), drones: [{ id, d }], battle, talking, mission, interior (the Interior object, read only) }
+  // Slow motion (rate under 1): sounds are not slowed or lowered in pitch; each still plays at its own moment, and the crew
+  // talks at normal speed. Above 2x the crew is silent and most detail is skipped.
   update(dt, st) {
     if (!this.ctx || !this.mix) return; st = st || {};
     // The work below runs about 30 times a second however fast the picture is drawn (240 frames a second would otherwise
@@ -99,13 +105,26 @@ export class Sound {
     const seat = st.view != null ? (SEATS[st.view] || 'out') : st.inside ? 'in' : 'out';
     this.seat = seat; this.inside = seat === 'in'; this.lite = (st.rate || 1) > 2.01; this.camDist = st.camDist || 0;
     M.setSeat(seat); this.icom.listen(seat !== 'out');
+    // --- what the interior reports (src/render/interior.js, read only): the intercom volume knob, the warning-tone switch,
+    // and what a hit did inside. Heard only from a seat inside.
+    const I = st.interior && st.interior.inside ? st.interior : null, FX = I && I.fxS;
+    this.icom.level(I && I.intercomVol != null ? I.intercomVol / 0.75 : 1);
+    const toneOn = !(I && I.toneOn === false);
+    { const hp = I && I.hitPulse;
+      if (hp && hp.t !== this.pulseT) {
+        const fresh = I.simT != null && Math.abs(I.simT - hp.t) < 1.2 && st.talking;   /* a hit that has only just happened, not one found on entering the seat later */ this.pulseT = hp.t;
+        if (fresh && !this.lite) { if (hp.penetrated) this.penetration(hp.strength); else if (hp.strength < 0.26) this.nearMiss(hp.strength); }   /* the hull strike itself is hit(); Trophy's own crack is aps() */
+      } else if (!hp) this.pulseT = null; }
+    const alarm = I && I.alarm && st.talking ? 0.02 : 0, burning = FX && FX.fire && st.talking ? 1 : 0;
+    p_set(B.alarm.g.gain, alarm, t); p_set(B.fire.g.gain, burning * 0.25 * (0.8 + 0.2 * Math.sin(t * 7.3) * Math.sin(t * 2.9)), t); p_set(B.fireHi.g.gain, burning * 0.03, t);
+    if (burning && !this.lite && t >= (this.next.crackle || 0)) { this.next.crackle = t + rnd(0.03, 0.25); const w = M.voice('vehicle', { direct: true, cabin: 0.2 }); M.noise(w.in, w.t, { dur: rnd(0.004, 0.02), type: 'highpass', f0: rnd(1500, 5000), gain: rnd(0.03, 0.14) }); }
     const inH = seat === 'in', hatch = seat === 'hatch', heard = seat !== 'out';
     // --- crew talk
     if (st.battle && st.talking && !this.lite) this.talk.update(st.battle, t, { mission: st.mission });
     this.icom.update();
-    const lw = this.warnL && heard && st.talking ? 0.035 : 0;   /* the beeper's gain swings between 0 and twice this, 7 times a second */
+    const lw = this.warnL && heard && toneOn && st.talking ? 0.035 : 0;   /* the beeper's gain swings between 0 and twice this, 7 times a second */
     set(B.lwr.g.gain, lw, 0.01); set(B.lwrLfo.g.gain, lw, 0.01);
-    set(B.rwr.g.gain, this.warnR && !this.warnL && heard && st.talking ? 0.055 : 0, 0.03);
+    set(B.rwr.g.gain, this.warnR && !this.warnL && heard && toneOn && st.talking ? 0.055 : 0, 0.03);
     set(B.icomFloor.g.gain, heard ? 0.006 : 0);
     // --- weather
     const cond = st.cond || 'day', rainy = cond === 'rain', windy = cond === 'snow' || cond === 'fog' ? 0.5 : rainy ? 0.9 : cond === 'night' ? 0.35 : 0.6;
