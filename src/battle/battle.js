@@ -228,6 +228,7 @@
       // A site scores for seeing the vehicle from within range, for concealment, for being well away from anywhere the vehicle has located,
       // and against the distance to walk. The route prefers vegetation and ground the vehicle cannot see.
       _displace(u, why, text, cand) {
+        if (!u.alive || u.gone) return false;
         const W = this.world, T = this.tank, sp = u.spec, Bv = this.belief || T; if (u.ammo <= 0) { u.state = 'spent'; return false; }
         if (u.state === 'moving') return true;   /* already packing up or on the way: one decision at a time */
         // other firing points near the team: ground within 450 m of it that looks onto where the vehicle is believed to be, from inside the weapon's reach
@@ -483,7 +484,7 @@
         if (rec.killed) { T.alive = false; this.say(this.t, 'result', null, 'Vehicle destroyed.'); return; }
         if (this._loaderRisk) this._loaderRisk(v);
         for (const th of rec.threats) { const u = this.units.find(q => q.id === th.uid); if (!u) continue; if (th.track != null && !u.spec.indirect) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); } }
-        for (const l of v.launches) { const u = l.u; u.readyAt = this.t + u.spec.reload; u.state = u.ammo > 0 ? 'hidden' : 'spent'; u.sight = 0; u.shotsHere = (u.shotsHere || 0) + 1; if (u.ammo > 0) { if (u.shotsHere >= 2) this._displace(u, 'two shots from one spot: time to move'); else if (!u.spec.indirect && r.random() < S.scoot) this._displace(u, 'its launch gave the position away: moves before the tank answers'); else if (r.random() < (1 - S.nerve) * 0.5) this._displace(u, 'nerves: leaves after one shot'); } }
+        for (const l of v.launches) { const u = l.u; if (!u.alive || u.gone) continue;   /* a team knocked out during the engagement does nothing more */ u.readyAt = this.t + u.spec.reload; u.state = u.ammo > 0 ? 'hidden' : 'spent'; u.sight = 0; u.shotsHere = (u.shotsHere || 0) + 1; if (u.ammo > 0) { if (u.shotsHere >= 2) this._displace(u, 'two shots from one spot: time to move'); else if (!u.spec.indirect && r.random() < S.scoot) this._displace(u, 'its launch gave the position away: moves before the tank answers'); else if (r.random() < (1 - S.nerve) * 0.5) this._displace(u, 'nerves: leaves after one shot'); } }
         { const S2 = SKILL[this.skill]; this.beaten = (this.beaten || 0) + rec.threats.filter(th => /^hkoi|^aps$/.test(th.defeated_by || '')).length; const want = S2.adapt >= 2 ? 'combined' : S2.adapt >= 1 ? 'pairs' : null;
           if (want && !this.tactic && this.beaten >= 2) { this.tactic = want; this.say(this.t, 'enemy', null, `Enemy changes tactics: ${this.beaten} of its missiles have been stopped, so teams now ${want === 'combined' ? 'time missiles, rockets and drones to arrive together' : 'hold their shots to fire in pairs'}.`, `${this.skill} crews adapt to the vehicle's defences`); } }
         const hits = rec.hits || 0; this.say(this.t, 'result', null, `Volley ${v.i + 1} over: ${rec.threats.length} fired, ${hits} hit${hits === 1 ? '' : 's'}. HKOI rounds left ${T.st.obs} obscurant, ${T.st.he} HE; Trophy ${T.st.apsL} left, ${T.st.apsR} right.`);
