@@ -13,10 +13,10 @@ import { groundDetail } from './groundtex.js';
 
 // broad ground colours per setting
 export const GROUND = {
-  farmland: { open: '#7a8350', meadow: '#8d9058', plough: '#5a4a39', low: ['#c4aa60', '#84914f', '#b8a676', '#627a3f'], high: ['#587338', '#70803a'], scrub: '#6c7547', forest: '#3d3b27', built: '#857d70', road: '#a39274', rock: '#7a705d', soil: '#5b4936', asphalt: 0 },
+  farmland: { open: '#727a4b', meadow: '#868a56', plough: '#5a4a39', low: ['#c0a760', '#7b874b', '#b5a475', '#5f7540'], high: ['#536c38', '#6b7a3a'], scrub: '#6c7547', forest: '#3d3b27', built: '#857d70', road: '#a39274', rock: '#7a705d', soil: '#5b4936', asphalt: 0 },
   desert: { open: '#c6a878', meadow: '#c0a273', plough: '#b3966a', low: ['#bca572'], high: ['#a8955f'], scrub: '#a8976a', forest: '#8a7c56', built: '#b7a382', road: '#d6c098', rock: '#96806a', soil: '#aa8f66', asphalt: 0 },
-  town: { open: '#788150', meadow: '#8a8d57', plough: '#524131', low: ['#bfa75f', '#8a9850', '#b5a475'], high: ['#5a7439'], scrub: '#6c7547', forest: '#3d3b27', built: '#7f7a73', road: '#5f5e5c', rock: '#7a705d', soil: '#5b4936', asphalt: 1 },
-  forest: { open: '#6c7d48', meadow: '#7d8a4f', plough: '#4c3c2d', low: ['#a9a05a', '#7f9049'], high: ['#557036'], scrub: '#5f6f42', forest: '#343320', built: '#7d766b', road: '#8e8064', rock: '#6f695c', soil: '#54432f', asphalt: 0 },
+  town: { open: '#707849', meadow: '#848855', plough: '#524131', low: ['#bca55f', '#7a864b', '#b2a274'], high: ['#536c38'], scrub: '#6c7547', forest: '#3d3b27', built: '#7f7a73', road: '#5f5e5c', rock: '#7a705d', soil: '#5b4936', asphalt: 1 },
+  forest: { open: '#66744a', meadow: '#76804f', plough: '#4c3c2d', low: ['#a59c5c', '#74824a'], high: ['#506838'], scrub: '#5f6f42', forest: '#343320', built: '#7d766b', road: '#8e8064', rock: '#6f695c', soil: '#54432f', asphalt: 0 },
 };
 
 const hash = (i, j, s) => { let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
@@ -143,11 +143,11 @@ const BODY = /* glsl */`
     float spF = 0.46, spL = 0.5, spT = 0.76;
     float aF = wSoil * (1.0 - smoothstep(0.22, 0.6, fwr / spF)), aL = wLow * (1.0 - smoothstep(0.22, 0.6, fwr / spL)), aT = wTall * (1.0 - smoothstep(0.22, 0.6, fwr / spT));
     float phF = rc / spF * 6.2832 + (n1 - 0.5) * 1.6, phL = rc / spL * 6.2832, phT = rc / spT * 6.2832;
-    float gap = aL * (0.5 - 0.5 * sin(phL)) + aT * (0.5 - 0.5 * sin(phT));   /* soil showing between the rows */
+    float gL = 0.5 - 0.5 * sin(phL), gT = 0.5 - 0.5 * sin(phT); float gap = aL * gL * gL * gL + aT * gT * gT;   /* soil showing between the rows */
     float tr = abs(mod(rc + 4.0, 21.0) - 10.5), tram = crop * clamp(0.5 + (0.17 - abs(tr - 0.9)) / fwr, 0.0, 1.0) * (0.55 + 0.45 * n1);
     /* broad bands a tractor leaves: each pass a slightly different tone, seen from far off */
     float pass = hk_h(vec2(floor(rc / 6.0), across + 3.0)), passW = 1.0 - smoothstep(1.5, 5.0, fwr);
-    float band = 1.0 + (pass - 0.5) * 0.05 * passW * (wSoil + crop);
+    float band = 1.0 + (pass - 0.5) * 0.05 * passW * wSoil;
 
     // road: a worn surface with two wheel ruts, and grass creeping in at the middle and the edges of a dirt track
     float rd = c2.a * ${ROAD_RANGE.toFixed(1)}, rfw = fwidth(rd) + 0.01, halfW = mix(2.5, 3.3, hkAsphalt);
@@ -163,11 +163,11 @@ const BODY = /* glsl */`
     #if HK_DETAIL > 0
       vec2 pa = vWp.xz * (1.0 / 3.3), pb = (mat2(0.8, -0.6, 0.6, 0.8) * vWp.xz) * (1.0 / 31.0);
       float fN = 1.0 - smoothstep(16.0, 85.0, dC);
-      vec4 t0 = mix(mix(vec4(hkMean[0], 0.5), texture(hkDet, vec3(pb, 0.0)), 0.6), texture(hkDet, vec3(pa, 0.0)), fN);
-      vec4 t1 = mix(mix(vec4(hkMean[1], 0.5), texture(hkDet, vec3(pb, 1.0)), 0.6), texture(hkDet, vec3(pa, 1.0)), fN);
-      vec4 t2 = mix(mix(vec4(hkMean[2], 0.5), texture(hkDet, vec3(pb, 2.0)), 0.6), texture(hkDet, vec3(pa, 2.0)), fN);
-      vec4 t3 = mix(mix(vec4(hkMean[3], 0.5), texture(hkDet, vec3(pb, 3.0)), 0.6), texture(hkDet, vec3(pa, 3.0)), fN);
-      vec4 t4 = mix(mix(vec4(hkMean[4], 0.5), texture(hkDet, vec3(pb, 4.0)), 0.6), texture(hkDet, vec3(pa, 4.0)), fN);
+      vec4 t0 = mix(mix(vec4(hkMean[0], 0.5), texture(hkDet, vec3(pb, 0.0)), 0.4), texture(hkDet, vec3(pa, 0.0)), fN);
+      vec4 t1 = mix(mix(vec4(hkMean[1], 0.5), texture(hkDet, vec3(pb, 1.0)), 0.4), texture(hkDet, vec3(pa, 1.0)), fN);
+      vec4 t2 = mix(mix(vec4(hkMean[2], 0.5), texture(hkDet, vec3(pb, 2.0)), 0.4), texture(hkDet, vec3(pa, 2.0)), fN);
+      vec4 t3 = mix(mix(vec4(hkMean[3], 0.5), texture(hkDet, vec3(pb, 3.0)), 0.4), texture(hkDet, vec3(pa, 3.0)), fN);
+      vec4 t4 = mix(mix(vec4(hkMean[4], 0.5), texture(hkDet, vec3(pb, 4.0)), 0.4), texture(hkDet, vec3(pa, 4.0)), fN);
       /* the taller surface wins where two meet, so grass tufts break into soil instead of fading across it */
       w0 *= 0.15 + t0.a * t0.a; w1 *= 0.15 + t1.a * t1.a; w2 *= 0.15 + t2.a * t2.a; w3 *= 0.15 + t3.a * t3.a; w4 *= 0.15 + t4.a * t4.a;
       float ws = w0 + w1 + w2 + w3 + w4 + 1e-4; w0 /= ws; w1 /= ws; w2 /= ws; w3 /= ws; w4 /= ws;
@@ -183,7 +183,7 @@ const BODY = /* glsl */`
       dcol = vec3(0.82 + 0.36 * (n1 * 0.6 + n3 * 0.4));
     #endif
     vec3 base = mc.rgb * dcol * band;
-    base = mix(base, hkSoil * soilTex * (0.8 + 0.4 * n2), clamp(gap * 0.5 + tram * 0.5, 0.0, 1.0));
+    base = mix(base, hkSoil * soilTex * (0.8 + 0.4 * n2), clamp(gap * 0.8 + tram * 0.5, 0.0, 1.0));
     base *= 1.0 - aF * 0.22 * (0.5 - 0.5 * sin(phF));
     base = mix(base, hkRock * mix(soilTex, stoneTex, 0.5) * (0.75 + 0.5 * n2), steep);
     vec3 roadCol = hkRoad * stoneTex * (0.86 + 0.28 * n2) * (1.0 - rut * 0.22);
@@ -246,7 +246,7 @@ export function buildTerrain(world, opt = {}) {
     for (let i = 1; i <= N; i++) edge.push([R - i * world.cell, world.H[N - i], R]);                        /* south edge, east to west */
     for (let j = 1; j < N; j++) edge.push([-R, world.H[j * n], R - j * world.cell]);                        /* west edge, south to north */
     for (const [x, y, z] of edge) { const k = far / Math.max(Math.abs(x), Math.abs(z)); p.push(x, y, z, x * k, yFar, z * k); }
-    const E = edge.length; for (let q = 0; q < E; q++) { const a = q * 2, b = ((q + 1) % E) * 2; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+    const E = edge.length; for (let q = 0; q < E; q++) { const a = q * 2, b = ((q + 1) % E) * 2; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     const ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); ag.setIndex(idx); ag.computeVertexNormals();
     const nrm = ag.attributes.normal; for (let q = 0; q < nrm.count; q++) nrm.setXYZ(q, 0, 1, 0);
     const apron = new THREE.Mesh(ag, mat); apron.name = 'apron'; apron.receiveShadow = false; mesh.add(apron); }

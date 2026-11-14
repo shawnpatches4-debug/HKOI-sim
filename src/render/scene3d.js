@@ -1,6 +1,7 @@
 // The battlefield renderer: ground, scenery, sky and light, the vehicle and the enemy, drawn from a World and a Battle.
 import * as THREE from 'three';
 import { SkyDome } from './sky.js';
+import { GroundCover } from './groundcover.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildTerrain } from './terrain.js';
 import { buildTrees, buildBuildings } from './scenery.js';
@@ -17,16 +18,16 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // like a camera, so a bright sky needs values above 1. glow = how strongly the haze lights up towards the sun.
 export const CONDITIONS = {
   day: { name: 'Day', el: 36, az: 150, sun: '#fff0d8', sunI: 3.4, sky: '#b4cbe8', ground: '#6b644a', hemiI: 0.85, fog: '#bccbdb', fogI: 1.25, fogD: 0.00015, glow: ['#ffe9c4', 0.35], exposure: 0.6, tint: '#fff8ee', shadow: '#eef3ff', sat: 1.06, contrast: 1.1, envI: 0.9,
-    sky: { zenith: ['#2f62b4', 1.7], horizon: ['#a8c6e6', 1.7], disc: ['#fff3dc', 70], halo: ['#ffe8c6', 0.55], cloudLit: ['#ffffff', 2.3], cloudDark: ['#8d9db4', 1.15], cover: 0.4, soft: 0.2, cirrus: 0.4, hazeTop: 9 } },
+    sky: { zenith: ['#2f62b4', 1.7], horizon: ['#a8c6e6', 1.7], disc: ['#fff3dc', 70], halo: ['#ffe8c6', 0.55], cloudLit: ['#ffffff', 2.3], cloudDark: ['#8d9db4', 1.15], cover: 0.3, soft: 0.13, cirrus: 0.16, hazeTop: 9 } },
   dawn: { name: 'Dawn', el: 7, az: 95, sun: '#ff9c58', sunI: 3.6, sky: '#8ea2cc', ground: '#4a4038', hemiI: 0.6, fog: '#c9a48e', fogI: 0.8, fogD: 0.00026, glow: ['#ff9440', 1.6], exposure: 0.78, tint: '#ffe6cc', shadow: '#d6def8', sat: 1.08, contrast: 1.12, envI: 0.75,
     sky: { zenith: ['#35548f', 0.9], horizon: ['#f2b98c', 1.25], disc: ['#ffd9a8', 60], halo: ['#ff9648', 1.5], cloudLit: ['#ffbd92', 1.7], cloudDark: ['#59587a', 0.75], cover: 0.45, soft: 0.25, cirrus: 0.7, hazeTop: 7 } },
   dusk: { name: 'Dusk', el: 5, az: 265, sun: '#ff8748', sunI: 3.4, sky: '#8792c2', ground: '#463c37', hemiI: 0.6, fog: '#bf9482', fogI: 0.75, fogD: 0.00028, glow: ['#ff7e36', 1.7], exposure: 0.82, tint: '#ffdfc6', shadow: '#d0d4f6', sat: 1.08, contrast: 1.12, envI: 0.75,
     sky: { zenith: ['#30477f', 0.85], horizon: ['#ee9f78', 1.2], disc: ['#ffc890', 55], halo: ['#ff8040', 1.6], cloudLit: ['#ff9f7c', 1.6], cloudDark: ['#4c4a6e', 0.7], cover: 0.5, soft: 0.25, cirrus: 0.7, hazeTop: 7 } },
-  overcast: { name: 'Overcast', el: 50, az: 180, sun: '#e3e7ec', sunI: 1.0, sky: '#b2bbc4', ground: '#56564e', hemiI: 1.35, fog: '#aab3bb', fogI: 0.95, fogD: 0.00038, glow: ['#dfe6ee', 0.08], exposure: 0.62, tint: '#f2f6fa', shadow: '#eaf0f6', sat: 0.88, contrast: 1.08, envI: 1.0,
+  overcast: { name: 'Overcast', el: 50, az: 180, sun: '#e3e7ec', sunI: 1.0, sky: '#b2bbc4', ground: '#56564e', hemiI: 1.35, fog: '#aab3bb', fogI: 0.95, fogD: 0.00038, glow: ['#dfe6ee', 0.08], wind: 1.4, exposure: 0.62, tint: '#f2f6fa', shadow: '#eaf0f6', sat: 0.88, contrast: 1.08, envI: 1.0,
     sky: { zenith: ['#9aa3ac', 1.0], horizon: ['#b4bcc4', 1.0], disc: ['#ffffff', 0], halo: ['#e6ebf0', 0.25], cloudLit: ['#c9d0d7', 1.25], cloudDark: ['#727a84', 0.9], cover: 1.0, soft: 0.6, hazeTop: 6 } },
-  rain: { name: 'Rain and mud', el: 48, az: 190, sun: '#c9d0d8', sunI: 0.8, sky: '#939ca4', ground: '#474944', hemiI: 1.5, fog: '#8b949b', fogI: 0.85, fogD: 0.0011, glow: ['#c9d2da', 0.05], exposure: 0.82, tint: '#ecf2f6', shadow: '#e2ebf0', sat: 0.76, contrast: 1.08, wet: 1, precip: 'rain', envI: 0.9,
+  rain: { name: 'Rain and mud', el: 48, az: 190, sun: '#c9d0d8', sunI: 0.8, sky: '#939ca4', ground: '#474944', hemiI: 1.5, fog: '#8b949b', fogI: 0.85, fogD: 0.0011, glow: ['#c9d2da', 0.05], wind: 2.0, exposure: 0.82, tint: '#ecf2f6', shadow: '#e2ebf0', sat: 0.76, contrast: 1.08, wet: 1, precip: 'rain', envI: 0.9,
     sky: { zenith: ['#737b83', 0.9], horizon: ['#8b949b', 0.9], disc: ['#ffffff', 0], halo: ['#c9d2da', 0.1], cloudLit: ['#9da5ad', 1.0], cloudDark: ['#4f565e', 0.85], cover: 1.0, soft: 0.5, speed: 0.008, hazeTop: 3.5 } },
-  fog: { name: 'Fog', el: 30, az: 140, sun: '#ece6d8', sunI: 0.9, sky: '#babebd', ground: '#5a5a54', hemiI: 1.2, fog: '#b4b8b7', fogI: 0.95, fogD: 0.0042, glow: ['#fff2d8', 0.2], exposure: 0.7, tint: '#f6f6f2', shadow: '#eef0f0', sat: 0.7, contrast: 1.0, wet: 0.35, envI: 0.9,
+  fog: { name: 'Fog', el: 30, az: 140, sun: '#ece6d8', sunI: 0.9, sky: '#babebd', ground: '#5a5a54', hemiI: 1.2, fog: '#b4b8b7', fogI: 0.95, fogD: 0.0042, glow: ['#fff2d8', 0.2], wind: 0.4, exposure: 0.7, tint: '#f6f6f2', shadow: '#eef0f0', sat: 0.7, contrast: 1.0, wet: 0.35, envI: 0.9,
     sky: { zenith: ['#b4b8b7', 1.0], horizon: ['#b4b8b7', 0.95], disc: ['#fff4e0', 1.2], discSize: 0.0006, halo: ['#fff2d8', 0.3], cloudLit: ['#c2c6c5', 1.0], cloudDark: ['#a4a8a7', 0.95], cover: 1.0, soft: 0.7, hazeTop: 0.9 } },
   snow: { name: 'Snow', el: 22, az: 165, sun: '#eef2f8', sunI: 1.4, sky: '#c6d0dc', ground: '#aab2bd', hemiI: 1.25, fog: '#cdd4dc', fogI: 1.0, fogD: 0.0009, glow: ['#eef2f8', 0.1], exposure: 0.56, tint: '#f2f7ff', shadow: '#dbe6ff', sat: 0.82, contrast: 1.06, snow: 1, precip: 'snow', envI: 1.0,
     sky: { zenith: ['#b3bcc7', 1.05], horizon: ['#cdd4dc', 1.0], disc: ['#ffffff', 0], halo: ['#eef2f8', 0.2], cloudLit: ['#d6dce4', 1.15], cloudDark: ['#9099a5', 0.95], cover: 1.0, soft: 0.6, hazeTop: 3 } },
@@ -58,6 +59,7 @@ export class Scene3D {
     this.hemi = new THREE.HemisphereLight('#ffffff', '#444444', 1); sc.add(this.hemi);
     sc.fog = new THREE.FogExp2('#ffffff', 0.0001);
     // ground and scenery
+    this.cover = new GroundCover(); sc.add(this.cover.mesh);
     this.opt = opt; this.setWorld(world);
     this.units = new THREE.Group(); sc.add(this.units);
     this.fx = new Particles(12000); sc.add(this.fx.mesh);
@@ -116,6 +118,7 @@ export class Scene3D {
     this.terrain = buildTerrain(world); sc.add(this.terrain.mesh);
     this.trees = buildTrees(world, { perCell: this.opt.treesPerCell || 2 }); sc.add(this.trees);
     this.buildings = buildBuildings(world); sc.add(this.buildings);
+    this.cover.setWorld(world, this.terrain);
     // scenery never moves: work out its placement once and skip the per-frame pass over its thousands of parts
     for (const o of [this.trees, this.buildings]) { o.updateMatrixWorld(true); o.updateMatrixWorld = () => { }; }
     this._detail();
@@ -125,7 +128,7 @@ export class Scene3D {
   setCondition(key) {
     const C = CONDITIONS[key] || CONDITIONS.day; this.condition = key;
     const el = C.el * Math.PI / 180, az = C.az * Math.PI / 180, dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)); this.sunDir = dir;
-    ENV.sunDir.value.copy(dir); ENV.glow.value.set(C.glow[0]).multiplyScalar(C.glow[1]); this.skyDome.set(C.sky, C.fog); this.skyDome.uniforms.fogCol.value.multiplyScalar(C.fogI || 1);
+    ENV.sunDir.value.copy(dir); ENV.wind.value.set(0.94, C.wind == null ? 1 : C.wind, 0.34); ENV.glow.value.set(C.glow[0]).multiplyScalar(C.glow[1]); this.skyDome.set(C.sky, C.fog); this.skyDome.uniforms.fogCol.value.multiplyScalar(C.fogI || 1);
     this.sun.color.set(C.sun); this.sun.intensity = C.sunI; this.hemi.color.set(C.sky); this.hemi.groundColor.set(C.ground); this.hemi.intensity = C.hemiI;
     this.scene.fog.color.set(C.fog).multiplyScalar(C.fogI || 1); this.scene.fog.density = C.fogD; this.renderer.toneMappingExposure = C.exposure;
     this.scene.background = null;
@@ -147,7 +150,7 @@ export class Scene3D {
   at(e, n, up = 0, out = new THREE.Vector3()) { return out.set(e, this.world.h(e, n) + up, -n); }
   setFocus(e, n) { this.at(e, n, 2, this.focus); }
   render(dt = 0.016) {
-    this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position, this.Q.near, this.Q.mid, this.Q.far); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
+    this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position, this.Q.near, this.Q.mid, this.Q.far); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9; this.cover.update(this.camera, this.units);
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
     this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset(); if (this.thermal && this.clock > (this._heatAt || 0)) { this._heat(true); this._heatAt = this.clock + 2; }   /* models that arrived since: make them glow too */

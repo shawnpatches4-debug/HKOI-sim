@@ -80,8 +80,8 @@ const PAINT = {
     c.fillStyle = '#34401f'; c.fillRect(0, 0, SIZE, SIZE);
     blotches(c, R, 50, 30, 90, r => hsl(70 + r() * 40, 30, 12 + r() * 14, 0.5));
     const flow = flowField(R);
-    strokes(c, R, 5200, { len: [10, 22], width: [1.2, 2.4], flow, spread: 2.2, colour: (r, f) => hsl(66 + r() * 34, 26 + r() * 20, 15 + f * 9 + r() * 7) });
-    strokes(c, R, 5200, { len: [12, 28], width: [1.0, 2.0], flow, spread: 1.6, colour: (r, f) => hsl(62 + r() * 36, 28 + r() * 22, 25 + f * 12 + r() * 8) });
+    strokes(c, R, 5200, { len: [10, 22], width: [1.2, 2.4], flow, spread: 4.5, colour: (r, f) => hsl(66 + r() * 34, 26 + r() * 20, 15 + f * 9 + r() * 7) });
+    strokes(c, R, 5200, { len: [12, 28], width: [1.0, 2.0], flow, spread: 3.6, colour: (r, f) => hsl(62 + r() * 36, 28 + r() * 22, 25 + f * 12 + r() * 8) });
     strokes(c, R, 700, { len: [10, 24], width: [0.8, 1.5], flow, spread: 2.5, colour: r => hsl(46 + r() * 10, 30 + r() * 15, 44 + r() * 14, 0.9) });   /* dry blades */
     strokes(c, R, 1600, { len: [8, 20], width: [0.8, 1.4], flow, spread: 1.4, colour: r => hsl(70 + r() * 30, 34 + r() * 18, 40 + r() * 10, 0.85) });   /* lit tips */
   },

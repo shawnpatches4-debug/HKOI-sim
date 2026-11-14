@@ -5,7 +5,13 @@
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 NEARB = "void (()=>{const b=window.__beta,T=b.battle.tank,B=b.world.buildings;let m=null,d=1e9;for(const x of B){const q=Math.hypot(x.e-T.e,x.n-T.n);if(q<d){d=q;m=x;}}if(m){const a=Math.atan2(T.e-m.e,T.n-m.n);b.view(m.e+Math.sin(a+%s)*%s,m.n+Math.cos(a+%s)*%s,0,%s,m.e,m.n);}})()"
+NEARV = "void (()=>{const b=window.__beta,w=b.world,T=b.battle.tank;let best=null,bd=1e9;for(let j=0;j<w.n;j++)for(let i=0;i<w.n;i++){if(w.V[j*w.n+i]!==%d)continue;const e=i*w.cell-w.half,n=j*w.cell-w.half,d=Math.hypot(e-T.e,n-T.n);if(d<bd){bd=d;best=[e,n];}}if(best){const a=Math.atan2(T.e-best[0],T.n-best[1]);b.view(best[0]+Math.sin(a)*%s,best[1]+Math.cos(a)*%s,0,%s,best[0],best[1]);}})()"
 V = {
+    'treeline': NEARV % (5, 30, 30, 2.2),
+    'woodedge': NEARV % (4, 40, 40, 2.2),
+    'scrub': NEARV % (3, 10, 10, 1.7),
+    'crop': NEARV % (1, 12, 12, 1.7),
+    'maize': NEARV % (2, 12, 12, 1.7),
     'orbit': "window.__beta.near(42, 13, 200)",
     'chase': "window.__beta.near(17, 2.6, 20)",
     'wide': "window.__beta.near(230, 55, 135)",

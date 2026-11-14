@@ -53,7 +53,7 @@ const FRAG = /* glsl */`
       cl = dens * fade;
       col = mix(col, cc, cl);
       /* thin high streaks */
-      if (cirrus > 0.0) { vec2 hp = dir.xz / (y + 0.2) * vec2(0.5, 2.6) + time * cloudSpeed * 0.2; float hc = smoothstep(0.5, 0.95, fbm3(hp) * 1.9) * fbm3(hp * 5.0 + 2.0); col = mix(col, cloudLit, hc * cirrus * fade * (1.0 - cl)); }
+      if (cirrus > 0.0) { vec2 hp = dir.xz / (y + 0.25) * vec2(0.9, 2.0) + time * cloudSpeed * 0.2; float hc = smoothstep(0.5, 0.95, fbm3(hp) * 1.9) * fbm3(hp * 5.0 + 2.0); col = mix(col, cloudLit, hc * cirrus * fade * (1.0 - cl)); }
     }
     col += sunDisc * disc * (1.0 - cl * 0.97);
     // haze along the horizon, the same colour the ground fades into; below the horizon there is only haze
