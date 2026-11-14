@@ -23,6 +23,7 @@ import { loadModel } from '../render/units.js';
 export const ROLES = ['cdr', 'gnr', 'ldr', 'drv'];
 const MODEL = { cdr: 'crew_gunner', gnr: 'crew_gunner', ldr: 'crew_loader', drv: 'crew_driver' };
 const W = 160, H = 200;
+const CROP = { x: 0.15, y: 0.07, w: 0.7, h: 0.7 };   // the part of each drawn picture shown in the crew panel (head, helmet rim to collar)
 const STATES = ['steady', 'strained', 'shaken', 'panicked'];
 
 // ---- THE EXPRESSION TABLE (for anyone posing the seated figures: the same numbers work on them).
@@ -243,7 +244,7 @@ export class Faces {
       R.setViewport(i * W, 0, W, H); R.setScissor(i * W, 0, W, H); R.render(this.scene, this.men[r].cam); });
     ROLES.forEach((r, i) => {
       const m = s.crew.who[r], M = this.men[r], big = this.out[r], sm = this.small[r];
-      if (big && big.isConnected) { const x = big._x || (big._x = big.getContext('2d')); x.drawImage(cv, i * W, 0, W, H, 0, 0, big.width, big.height); this.marks(x, big, M, m, s); }
+      if (big && big.isConnected) { const x = big._x || (big._x = big.getContext('2d')); x.drawImage(cv, i * W + W * CROP.x, H * CROP.y, W * CROP.w, H * CROP.h, 0, 0, big.width, big.height); this.marks(x, big, M, m, s); }   /* the panel shows the face itself, close: the part of the picture that carries the expression */
       if (sm && sm.isConnected) { const x = sm._x || (sm._x = sm.getContext('2d')); x.drawImage(cv, i * W + W * 0.2, H * 0.1, W * 0.6, H * 0.62, 0, 0, sm.width, sm.height); if (m.status === 'down') { x.fillStyle = 'rgba(4,6,5,.55)'; x.fillRect(0, 0, sm.width, sm.height); } }
     });
   }
@@ -253,7 +254,7 @@ export class Faces {
     if ((hurt || down) && s.graphic) {
       const age = Math.max(0, s.now - (N.w != null ? N.w : N.d != null ? N.d : s.now)), grow = sat(age / 9), sd = M.seed;
       _v.setFromMatrixPosition(M.head.matrixWorld).addScaledVector(M.U, 0.098).addScaledVector(M.F, 0.085).addScaledVector(M.L, (M.i % 2 ? 0.05 : -0.05)).project(M.cam);   /* on the cheekbone, below the helmet's rim */
-      const px = (_v.x + 1) / 2 * cv.width, py = (1 - _v.y) / 2 * cv.height, u = cv.height / 200;
+      const px = ((_v.x + 1) / 2 - CROP.x) / CROP.w * cv.width, py = ((1 - _v.y) / 2 - CROP.y) / CROP.h * cv.height, u = cv.height / 200 / CROP.h;
       x.save(); x.lineCap = 'round'; x.lineJoin = 'round';
       const side = M.i % 2 ? 1 : -1;
       x.fillStyle = 'rgba(38,3,3,.9)'; x.beginPath(); for (let k = 0; k < 9; k++) { const a = k / 9 * 6.283, rr = (2.2 + 2.4 * hash(k, sd + 21)) * u; x.lineTo(px + Math.cos(a) * rr * 1.5, py + Math.sin(a) * rr); } x.closePath(); x.fill();   /* the wound: a dark ragged patch */
