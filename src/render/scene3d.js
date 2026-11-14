@@ -116,7 +116,7 @@ export class Scene3D {
     const sc = this.scene, t0 = performance.now(); this.world = world;
     if (this.terrain) { sc.remove(this.terrain.mesh); this.terrain.dispose(); }
     for (const o of [this.trees, this.buildings]) if (o) { sc.remove(o); if (o.userData.dispose) o.userData.dispose(); else o.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) [].concat(m.material).forEach(x => x.dispose()); }); }
-    this.terrain = buildTerrain(world); sc.add(this.terrain.mesh);
+    this.terrain = buildTerrain(world, { clear: this.cover.uniforms.hkClear }); sc.add(this.terrain.mesh);
     this.trees = buildTrees(world, { perCell: this.opt.treesPerCell || 2 }); sc.add(this.trees);
     this.buildings = buildBuildings(world); sc.add(this.buildings);
     this.cover.setWorld(world, this.terrain);
