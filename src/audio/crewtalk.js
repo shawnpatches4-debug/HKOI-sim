@@ -101,7 +101,7 @@ export class CrewTalk {
     if (!this.started && t < 8 && this.net.ready !== false && this.net.has('GNR', 'ready')) {
       this.started = true; const g = 'start';
       const adv = opts.mission === 'advance' || opts.mission === 'hunt';
-      this._ask(t, 'HQ', adv ? 'start_advance' : 'start', { level: 0, pri: 0, ttl: 6, delay: 0.8, group: g }) || this._ask(t, 'HQ', 'start', { level: 0, pri: 0, ttl: 6, delay: 0.8, group: g });
+      this._ask(t, 'HQ', adv ? 'start_advance' : 'start', { level: 0, pri: 0, ttl: 6, group: g }) || this._ask(t, 'HQ', 'start', { level: 0, pri: 0, ttl: 6, group: g });
       this._report(t, now, g, T.mode === 'moving', 0);
     } else if (!this.started && t >= 8) this.started = true;
     // ---- the engine's crew talk for the engagements in progress
@@ -193,7 +193,7 @@ export class CrewTalk {
         const brg = (Math.atan2(e.to[0] - T.e, e.to[1] - T.n) * 180 / Math.PI + 360) % 360, ahead = Math.abs(angDiff(brg, T.h || 0)) < 60;
         this.lastOrder = ahead ? 'fwd' : 'any';
         this._ask(t, 'CDR', ahead && Math.random() < 0.5 ? 'drv_fwd' : 'moveout', { level: Math.min(1, lvl), pri: 1, ttl: 2.5 });
-        this._ask(t, 'DRV', ahead ? 'ack_fwd' : 'onmove', { level: lvl, pri: 1, ttl: 5, delay: 0.9 });
+        this._ask(t, 'DRV', ahead ? 'ack_fwd' : 'onmove', { level: lvl, pri: 1, ttl: 3, delay: 0.9 });
         break;
       }
       case 'drone_launch': if (!stale && e.R < 3500 && this.fx.blip) { this.fx.blip('rf'); this.trace.push([+t.toFixed(2), 'SYS', 'drone control link tone (no voice)', 'cue']); } break;

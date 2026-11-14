@@ -20,6 +20,16 @@ export const SLOTS = [
 export const Effects = {
   _live() { return !!(this.ctx && this.on && this.mix); },
   _shot() { this.lastShot = this.ctx.currentTime; },
+  // The common shape of a gun or a blast heard through the air, in four layers: the crack (the sharp leading edge, lost
+  // with distance), the bark (the mid-range body), the thump (the low push on the chest) and the tail (what rolls on
+  // afterwards; at long range it is most of what is left). `a` is the mixer's distance result for this sound.
+  _report(v, a, { at = 0, crack = 1, crackHz = 1200, crackDur = 0.04, bark = 1, barkHz = 900, barkDur = 0.08, thump = 0.6, thumpHz = 150, thumpDur = 0.11, tail = 0.12, tailDur = 0.4, tailHz = 600 } = {}) {
+    const M = this.mix, t = v.t + at, near = 1 - a.roll;
+    if (crack) M.noise(v.in, t, { dur: crackDur, attack: 0.0005, type: 'highpass', f0: crackHz, gain: crack * near });
+    if (bark) M.noise(v.in, t, { dur: barkDur, attack: 0.001, type: 'bandpass', f0: barkHz, f1: barkHz * 0.4, q: 0.6, gain: bark });
+    if (thump) M.tone(v.in, t, { f0: thumpHz, f1: thumpHz / 3, dur: thumpDur, gain: thump });
+    if (tail) M.noise(v.in, t + 0.015, { dur: tailDur * (1 + 2.5 * a.roll), color: 'brown', f0: tailHz, f1: 70, gain: tail * (1 + 3 * a.roll) });
+  },
 
   // ---------------------------------------------------------------- the 30 mm: the star of the mix
   // One round. Outside: a hard, tight report (crack, bark and a chest thump inside a tenth of a second), the bolt and feed
@@ -29,26 +39,22 @@ export const Effects = {
     if (!this._live()) return; const M = this.mix; this._shot();
     if (this.seat === 'in') {
       const v = M.voice('weapons', { direct: true, cabin: 0.5 }); if (M.sample('gun30_in', v)) return;
-      M.tone(v.in, v.t, { f0: 96, f1: 38, dur: 0.17, gain: 0.95 });
-      M.noise(v.in, v.t, { dur: 0.07, color: 'pink', f0: 650, f1: 170, gain: 0.7 });
+      M.tone(v.in, v.t, { f0: 96, f1: 38, dur: 0.15, gain: 0.6 });
+      M.noise(v.in, v.t, { dur: 0.07, attack: 0.001, f0: 1000, f1: 240, gain: 1.1 });
       if (this.lite) return;
-      M.noise(v.in, v.t + 0.011, { dur: 0.02, type: 'bandpass', f0: 2900, q: 5, gain: 0.3 });          /* bolt home */
-      M.ring(v.in, v.t + 0.012, { freqs: [1240, 2090, 3170], dur: 0.14, gain: 0.07 });                /* the mount rings */
-      M.noise(v.in, v.t + 0.07, { dur: 0.035, type: 'bandpass', f0: 1650, q: 4, gain: 0.26 });         /* chain drive and feed sprocket */
-      M.noise(v.in, v.t + rnd(0.12, 0.17), { dur: 0.02, type: 'bandpass', f0: 4300, q: 8, gain: 0.1 }); /* link into the chute */
+      M.noise(v.in, v.t + 0.011, { dur: 0.02, type: 'bandpass', f0: 2900, q: 4, gain: 1.0 });          /* bolt home */
+      M.ring(v.in, v.t + 0.012, { freqs: [1240, 2090, 3170], dur: 0.14, gain: 0.1 });                 /* the mount rings */
+      M.noise(v.in, v.t + 0.07, { dur: 0.035, type: 'bandpass', f0: 1650, q: 3, gain: 0.9 });          /* chain drive and feed sprocket */
+      M.noise(v.in, v.t + rnd(0.12, 0.17), { dur: 0.02, type: 'bandpass', f0: 4300, q: 6, gain: 0.4 }); /* link into the chute */
       return;
     }
     const a = M.far(d, 1), v = M.voice('weapons', { far: a, space: 0.4 }); if (M.sample('gun30_out', v)) return;
-    const near = 1 - a.roll;
-    M.noise(v.in, v.t, { dur: 0.034, attack: 0.0006, type: 'highpass', f0: 1500, gain: 1.05 * near });                    /* crack */
-    M.noise(v.in, v.t, { dur: 0.09, attack: 0.001, color: 'pink', type: 'bandpass', f0: 640, f1: 250, q: 0.8, gain: 1.5 }); /* bark */
-    M.tone(v.in, v.t, { f0: 155, f1: 52, dur: 0.13, gain: 1.0 });                                                         /* chest thump */
-    M.noise(v.in, v.t + 0.02, { dur: 0.4 + 1.2 * a.roll, color: 'brown', f0: 520, f1: 80, gain: 0.3 + 0.5 * a.roll });      /* tail */
+    this._report(v, a, { crack: 1.35, crackHz: 1300, crackDur: 0.04, bark: 1.9, barkHz: 950, barkDur: 0.09, thump: 0.45, thumpHz: 150, thumpDur: 0.1, tail: 0.08, tailDur: 0.35 });
     if (this.lite || a.d > 140) return;
-    M.noise(v.in, v.t + 0.05, { dur: 0.022, type: 'bandpass', f0: 2500, q: 5, gain: 0.16 });            /* bolt and feed */
-    M.ring(v.in, v.t + 0.004, { freqs: [1180, 1990, 3050], dur: 0.16, gain: 0.05 });                   /* barrel and mount ring */
+    M.noise(v.in, v.t + 0.05, { dur: 0.022, type: 'bandpass', f0: 2500, q: 4, gain: 0.3 });             /* bolt and feed */
+    M.ring(v.in, v.t + 0.004, { freqs: [1180, 1990, 3050], dur: 0.16, gain: 0.07 });                   /* barrel and mount ring */
     const tc = v.t + rnd(0.16, 0.3);                                                                  /* the case and link drop clear */
-    M.ring(v.in, tc, { freqs: [3350, 5120], dur: 0.07, gain: 0.035 }); M.noise(v.in, tc, { dur: 0.012, type: 'bandpass', f0: 5200, q: 6, gain: 0.05 });
+    M.ring(v.in, tc, { freqs: [3350, 5120], dur: 0.07, gain: 0.05 }); M.noise(v.in, tc, { dur: 0.012, type: 'bandpass', f0: 5200, q: 5, gain: 0.1 });
   },
 
   // ---------------------------------------------------------------- the 120 mm
@@ -58,8 +64,8 @@ export const Effects = {
     if (!this._live()) return; const M = this.mix; this._shot();
     if (this.seat === 'in') {
       const v = M.voice('weapons', { direct: true, cabin: 0.6 }); if (M.sample('gun120_in', v)) return;
-      M.tone(v.in, v.t, { f0: 62, f1: 20, dur: 0.75, gain: 1.5 });
-      M.noise(v.in, v.t, { dur: 0.3, color: 'pink', f0: 380, f1: 80, gain: 1.1 });
+      M.tone(v.in, v.t, { f0: 62, f1: 20, dur: 0.7, gain: 1.2 });
+      M.noise(v.in, v.t, { dur: 0.3, attack: 0.001, f0: 700, f1: 110, gain: 1.4 });
       if (this.lite) return;
       M.ring(v.in, v.t + 0.16, { freqs: [520, 870, 1460, 2210], dur: 0.4, gain: 0.2 }); M.noise(v.in, v.t + 0.16, { dur: 0.05, type: 'bandpass', f0: 1200, q: 2, gain: 0.3 });   /* breech at full recoil */
       M.noise(v.in, v.t + 0.3, { dur: 1.1, attack: 0.25, type: 'highpass', f0: 2600, gain: 0.045 });                                                                         /* fume extractor */
@@ -68,12 +74,8 @@ export const Effects = {
       return;
     }
     const a = M.far(d, 2.2), v = M.voice('weapons', { far: a, space: 0.8 }); if (M.sample('gun120_out', v)) return;
-    const near = 1 - a.roll;
-    M.noise(v.in, v.t, { dur: 0.07, attack: 0.0008, type: 'highpass', f0: 700, gain: 1.2 * near });
-    M.noise(v.in, v.t, { dur: 0.36, color: 'pink', type: 'bandpass', f0: 420, f1: 110, q: 0.6, gain: 1.6 });
-    M.tone(v.in, v.t, { f0: 70, f1: 21, dur: 1.3, gain: 1.5 });
-    M.tone(v.in, v.t + 0.02, { f0: 40, f1: 17, dur: 0.9, gain: 1.0 });                                                    /* the pressure wave */
-    M.noise(v.in, v.t + 0.03, { dur: 2.8 + 2.2 * a.roll, color: 'brown', f0: 420, f1: 45, gain: 0.7 + 0.5 * a.roll });      /* the roll */
+    this._report(v, a, { crack: 1.5, crackHz: 600, crackDur: 0.08, bark: 2.2, barkHz: 620, barkDur: 0.32, thump: 0.9, thumpHz: 78, thumpDur: 0.8, tail: 0.45, tailDur: 2.4, tailHz: 450 });
+    M.tone(v.in, v.t + 0.02, { f0: 40, f1: 17, dur: 0.8, gain: 0.5 });                                                    /* the pressure wave */
     if (!this.lite && a.d < 200) M.noise(v.in, v.t + 0.08, { dur: 0.9, attack: 0.12, color: 'pink', f0: 1500, f1: 300, gain: 0.12 });   /* dust and blast wash */
   },
 
@@ -84,26 +86,16 @@ export const Effects = {
     if (this.seat === 'in') {
       const v = M.voice('weapons', { direct: true, cabin: 0.35 }); if (M.sample(heavy ? 'mg50_in' : 'mg762_in', v)) return;
       if (heavy) {   /* on the roof: thuds through the armour */
-        M.tone(v.in, v.t, { f0: 125, f1: 55, dur: 0.075, gain: 0.5 }); M.noise(v.in, v.t, { dur: 0.03, color: 'pink', f0: 500, gain: 0.25 });
+        M.tone(v.in, v.t, { f0: 125, f1: 55, dur: 0.075, gain: 0.45 }); M.noise(v.in, v.t, { dur: 0.035, f0: 800, f1: 250, gain: 0.6 });
       } else {       /* the coax is beside the gunner: mechanism and links, close */
-        M.tone(v.in, v.t, { f0: 210, f1: 95, dur: 0.035, gain: 0.3 }); M.noise(v.in, v.t, { dur: 0.016, type: 'bandpass', f0: 2600, q: 3, gain: 0.2 });
-        if (!this.lite) M.noise(v.in, v.t + 0.03, { dur: 0.012, type: 'bandpass', f0: 4700, q: 7, gain: 0.07 });
+        M.tone(v.in, v.t, { f0: 210, f1: 95, dur: 0.035, gain: 0.25 }); M.noise(v.in, v.t, { dur: 0.016, type: 'bandpass', f0: 2600, q: 2.5, gain: 0.7 });
+        if (!this.lite) M.noise(v.in, v.t + 0.03, { dur: 0.012, type: 'bandpass', f0: 4700, q: 5, gain: 0.3 });
       }
       return;
     }
     const a = M.far(d, heavy ? 0.75 : 0.45), v = M.voice('weapons', { far: a, space: 0.3 }); if (M.sample(heavy ? 'mg50_out' : 'mg762_out', v)) return;
-    const near = 1 - a.roll;
-    if (heavy) {
-      M.noise(v.in, v.t, { dur: 0.03, attack: 0.0006, type: 'highpass', f0: 1300, gain: 0.9 * near });
-      M.noise(v.in, v.t, { dur: 0.07, color: 'pink', type: 'bandpass', f0: 520, f1: 220, q: 0.8, gain: 1.2 });
-      M.tone(v.in, v.t, { f0: 165, f1: 62, dur: 0.09, gain: 0.9 });
-      M.noise(v.in, v.t + 0.015, { dur: 0.3 + 0.7 * a.roll, color: 'brown', f0: 450, f1: 90, gain: 0.22 + 0.3 * a.roll });
-    } else {
-      M.noise(v.in, v.t, { dur: 0.016, attack: 0.0005, type: 'highpass', f0: 2400, gain: 0.9 * near });
-      M.noise(v.in, v.t, { dur: 0.04, color: 'pink', type: 'bandpass', f0: 1100, f1: 500, q: 0.9, gain: 1.0 });
-      M.tone(v.in, v.t, { f0: 270, f1: 120, dur: 0.04, gain: 0.5 });
-      M.noise(v.in, v.t + 0.01, { dur: 0.18 + 0.5 * a.roll, color: 'brown', f0: 600, f1: 140, gain: 0.12 + 0.2 * a.roll });
-    }
+    if (heavy) this._report(v, a, { crack: 0.9, crackHz: 1400, crackDur: 0.03, bark: 1.0, barkHz: 850, barkDur: 0.06, thump: 0.5, thumpHz: 165, thumpDur: 0.08, tail: 0.07, tailDur: 0.28 });
+    else this._report(v, a, { crack: 1.0, crackHz: 2600, crackDur: 0.016, bark: 0.8, barkHz: 1700, barkDur: 0.035, thump: 0.2, thumpHz: 270, thumpDur: 0.035, tail: 0.04, tailDur: 0.16, tailHz: 900 });
   },
 
   // ---------------------------------------------------------------- Trophy: a very sharp double crack on the turret
@@ -117,13 +109,8 @@ export const Effects = {
       return;
     }
     const a = M.far(d, 1.4), v = M.voice('weapons', { far: a, space: 0.45 }); if (M.sample('aps_out', v)) return;
-    const near = 1 - a.roll;
-    M.noise(v.in, v.t, { dur: 0.016, attack: 0.0004, type: 'highpass', f0: 2600, gain: 1.2 * near });
-    M.tone(v.in, v.t, { f0: 240, f1: 90, dur: 0.04, gain: 0.7 });
-    M.noise(v.in, v.t + gap, { dur: 0.026, attack: 0.0004, type: 'highpass', f0: 1700, gain: 1.3 * near });
-    M.noise(v.in, v.t + gap, { dur: 0.12, color: 'pink', type: 'bandpass', f0: 700, f1: 240, q: 0.7, gain: 1.3 });
-    M.tone(v.in, v.t + gap, { f0: 170, f1: 52, dur: 0.16, gain: 1.0 });
-    M.noise(v.in, v.t + gap + 0.02, { dur: 0.35 + 0.8 * a.roll, color: 'brown', f0: 600, f1: 90, gain: 0.25 + 0.4 * a.roll });
+    this._report(v, a, { crack: 1.3, crackHz: 2600, crackDur: 0.016, bark: 0.6, barkHz: 1800, barkDur: 0.03, thump: 0.3, thumpHz: 240, thumpDur: 0.04, tail: 0 });
+    this._report(v, a, { at: gap, crack: 1.4, crackHz: 1700, crackDur: 0.026, bark: 1.3, barkHz: 1000, barkDur: 0.1, thump: 0.7, thumpHz: 170, thumpDur: 0.14, tail: 0.12, tailDur: 0.35 });
   },
 
   // ---------------------------------------------------------------- blasts
@@ -133,11 +120,8 @@ export const Effects = {
     if (!this._live()) return; const M = this.mix; this._shot();
     const a = M.far(d, 0.9 + 0.5 * size), v = M.voice('explosions', { far: a, space: 0.6 });
     if (!M.sample(size >= 1.8 ? 'explosion_large' : size >= 1.1 ? 'explosion_medium' : 'explosion_small', v)) {
-      const near = 1 - a.roll, s = Math.sqrt(size);
-      M.noise(v.in, v.t, { dur: 0.05, attack: 0.0008, type: 'highpass', f0: 900, gain: 1.0 * near });
-      M.noise(v.in, v.t, { dur: 0.3 + 0.1 * size, color: 'pink', type: 'bandpass', f0: 340 / s, f1: 90, q: 0.6, gain: 1.4 });
-      M.tone(v.in, v.t, { f0: 74 / s, f1: 23, dur: 0.5 + 0.35 * size, gain: 1.3 });
-      M.noise(v.in, v.t + 0.03, { dur: 1.4 + size + 2.5 * a.roll, color: 'brown', f0: 300, f1: 45, gain: 0.5 + 0.5 * a.roll });
+      const s = Math.sqrt(size);
+      this._report(v, a, { crack: 1.0, crackHz: 800, crackDur: 0.05, bark: 1.8, barkHz: 620 / s, barkDur: 0.26 + 0.1 * size, thump: 0.8, thumpHz: 95 / s, thumpDur: 0.45 + 0.3 * size, tail: 0.35, tailDur: 1.2 + size, tailHz: 400 });
       if (!this.lite && a.d < 160) {   /* earth and fragments coming down */
         const n = Math.round(5 + 7 * size);
         for (let i = 0; i < n; i++) M.noise(v.in, v.t + rnd(0.25, 1.1 + 0.6 * size), { dur: rnd(0.015, 0.05), type: 'bandpass', f0: rnd(1400, 5200), q: 3, gain: rnd(0.02, 0.09) });
@@ -151,11 +135,7 @@ export const Effects = {
   airburst(d, size = 0.5) {
     if (!this._live()) return; const M = this.mix; this._shot();
     const a = M.far(d, 0.7 + 0.5 * size), v = M.voice('explosions', { far: a, space: 0.5 }); if (M.sample('airburst', v)) return;
-    const near = 1 - a.roll;
-    M.noise(v.in, v.t, { dur: 0.035, attack: 0.0006, type: 'highpass', f0: 1500, gain: 1.0 * near });
-    M.noise(v.in, v.t, { dur: 0.12, color: 'pink', type: 'bandpass', f0: 800, f1: 260, q: 0.7, gain: 1.0 });
-    M.tone(v.in, v.t, { f0: 130, f1: 48, dur: 0.2, gain: 0.7 });
-    M.noise(v.in, v.t + 0.02, { dur: 0.6 + 1.2 * a.roll, color: 'brown', f0: 500, f1: 80, gain: 0.25 + 0.35 * a.roll });
+    this._report(v, a, { crack: 1.0, crackHz: 1500, crackDur: 0.035, bark: 1.0, barkHz: 1100, barkDur: 0.1, thump: 0.4, thumpHz: 130, thumpDur: 0.18, tail: 0.1, tailDur: 0.5 });
     if (!this.lite && a.d < 200) M.noise(v.in, v.t + 0.01, { dur: 0.22, attack: 0.02, type: 'highpass', f0: 3200, gain: 0.1 });   /* fragments and powder */
   },
   // a round strikes the listener's own vehicle: heard from inside as a slam and ringing armour; ears ring, the world goes dull
@@ -179,7 +159,7 @@ export const Effects = {
   // a launch seen from the listener's distance: the pop of the booster, then the motor's tearing rush
   launch(d, big) {
     if (!this._live()) return; const M = this.mix;
-    const a = M.far(d, big ? 1.1 : 0.8), v = M.voice('weapons', { far: a, space: 0.5 }); if (M.sample(big ? 'launch_big' : 'launch_small', v)) return;
+    const a = M.far(d, big ? 3 : 2), v = M.voice('weapons', { far: a, space: 0.5 }); if (M.sample(big ? 'launch_big' : 'launch_small', v)) return;
     M.noise(v.in, v.t, { dur: 0.06, attack: 0.001, type: 'bandpass', f0: 900, q: 0.8, gain: 1.0 });
     M.tone(v.in, v.t, { f0: 98, f1: 42, dur: 0.24, gain: 0.7 });
     M.noise(v.in, v.t + 0.02, { dur: big ? 1.5 : 0.8, attack: 0.07, color: 'pink', type: 'bandpass', f0: 520, f1: big ? 1900 : 2700, q: 0.9, gain: 0.8 });

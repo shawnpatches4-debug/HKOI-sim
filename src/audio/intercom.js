@@ -26,8 +26,8 @@ export class Intercom {
     this.said = []; this.dropped = [];        // what was spoken and what was dropped (for tests and for the report)
     this.listening = false;
     this.out = c.createGain(); this.out.gain.value = 0; this.out.connect(mix.bus.voices.direct);
-    this.crew = this._chain({ lo: 300, hi: 3300, peakF: 1900, peakDb: 5, drive: 2.0, level: 1.0 });
-    this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 4.5, level: 0.8 });
+    this.crew = this._chain({ lo: 300, hi: 3300, peakF: 1900, peakDb: 5, drive: 1.5, level: 0.65 });
+    this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 3.5, level: 0.55 });
     // the hiss of an open line: only while somebody is keyed
     this.hiss = mix.bed('voices', { direct: true, color: 'white', type: 'bandpass', f: 2100, q: 0.5 });
     this.hiss.g.disconnect(); this.hiss.g.connect(this.out);
@@ -36,7 +36,7 @@ export class Intercom {
   _chain({ lo, hi, peakF, peakDb, drive, level }) {
     const c = this.ctx, mk = (type, f, q = 0.7, gain = 0) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = gain; return b; };
     const input = c.createGain(), hp1 = mk('highpass', lo), hp2 = mk('highpass', lo * 0.9), pk = mk('peaking', peakF, 1.1, peakDb), lp1 = mk('lowpass', hi), lp2 = mk('lowpass', hi * 1.15);
-    const comp = c.createDynamicsCompressor(); comp.threshold.value = -26; comp.knee.value = 6; comp.ratio.value = 7; comp.attack.value = 0.004; comp.release.value = 0.12;
+    const comp = c.createDynamicsCompressor(); comp.threshold.value = -22; comp.knee.value = 6; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.12;
     const sh = c.createWaveShaper(), cv = new Float32Array(513);
     for (let k = 0; k < 513; k++) { const x = k / 256 - 1; cv[k] = Math.tanh(x * drive) / Math.tanh(drive); }
     sh.curve = cv; const post = mk('lowpass', hi * 1.3), g = c.createGain(); g.gain.value = level;
@@ -91,25 +91,27 @@ export class Intercom {
     if (now < this.freeAt && best.pri < 2) return;
     this.queue.splice(this.queue.indexOf(best), 1); this._start(best, now);
   }
+  // which take: nearest to how tense the moment is, never the one used last time, and not the one before that either
+  // when there are three or more to choose from
   _pick(who, ev, level) {
-    const L = this.takes(who, ev), key = who + '.' + ev, last = this.lastClip[key];
-    let d = 9; for (const x of L) d = Math.min(d, Math.abs(x[3] - level));
-    let pool = L.filter(x => Math.abs(x[3] - level) === d && x[4] !== last);
-    if (!pool.length) pool = L.filter(x => x[4] !== last);   /* the only take at this level was the last one used: any other */
-    if (!pool.length) pool = L;
-    const x = pool[Math.floor(Math.random() * pool.length)]; this.lastClip[key] = x[4]; return x;
+    const L = this.takes(who, ev), key = who + '.' + ev, used = this.lastClip[key] || (this.lastClip[key] = []);
+    const fresh = L.filter(x => x[4] !== used[0] && (L.length < 3 || x[4] !== used[1]));
+    let pool = fresh.length ? fresh : L, d = 9;
+    for (const x of pool) d = Math.min(d, Math.abs(x[3] - level));
+    pool = pool.filter(x => Math.abs(x[3] - level) === d);
+    const x = pool[Math.floor(Math.random() * pool.length)]; used.unshift(x[4]); used.length = Math.min(used.length, 2); return x;
   }
   _start(q, now) {
     const c = this.ctx, x = this._pick(q.who, q.ev, q.level), net = q.who === 'HQ' ? this.radio : this.crew, isRadio = q.who === 'HQ';
     const rate = VOICE_RATE[q.who] || 1, t0 = now + 0.02, tClip = t0 + 0.07, len = x[2] / rate, tEnd = tClip + len;
     const line = c.createGain(); line.gain.value = 1; line.connect(net.in);
-    const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.bufs[x[0]]; s.playbackRate.value = rate; g.gain.value = 1.5 * rnd(0.9, 1.1);
+    const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.bufs[x[0]]; s.playbackRate.value = rate; g.gain.value = rnd(0.9, 1.1);
     s.connect(g); g.connect(line); s.start(tClip, x[1], x[2]);
     this._click(line, t0, isRadio ? 0.5 : 0.35, isRadio);                         /* key down */
     if (isRadio) this.mix.noise(line, tEnd + 0.03, { dur: 0.09, attack: 0.004, hold: 0.05, type: 'bandpass', f0: 1700, q: 0.4, gain: 0.5 });   /* squelch tail */
     else this._click(line, tEnd + 0.05, 0.25, false);                             /* key up */
-    const h = this.hiss.g.gain, hv = isRadio ? 0.05 : 0.018;
-    h.cancelScheduledValues(t0); h.setTargetAtTime(hv, t0, 0.01); h.setTargetAtTime(0, tEnd + (isRadio ? 0.12 : 0.06), 0.015);
+    const h = this.hiss.g.gain, hv = isRadio ? 0.03 : 0.012, tOff = tEnd + (isRadio ? 0.12 : 0.06);   /* the open line hisses; explicit ramps only (one audio engine mishandles chained targets here) */
+    h.cancelScheduledValues(t0); h.setValueAtTime(0, t0); h.linearRampToValueAtTime(hv, t0 + 0.02); h.setValueAtTime(hv, tOff); h.linearRampToValueAtTime(0, tOff + 0.04);
     const end = tEnd + (isRadio ? 0.2 : 0.1);
     this.cur = { who: q.who, ev: q.ev, pri: q.pri, group: q.group, line, src: s, end, gapAfter: q.gap != null ? q.gap : rnd(0.22, 0.5) };
     this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], pri: q.pri, level: q.level, waited: +(now - q.asked).toFixed(2) });
@@ -118,9 +120,9 @@ export class Intercom {
   // somebody more important keys his microphone: the speaker is cut off in mid-word
   _cut(now) {
     const k = this.cur; if (!k) return;
-    k.line.gain.cancelScheduledValues(now); k.line.gain.setTargetAtTime(0, now, 0.012);
+    k.line.gain.cancelScheduledValues(now); k.line.gain.setValueAtTime(1, now); k.line.gain.linearRampToValueAtTime(0, now + 0.04);
     try { k.src.stop(now + 0.08); } catch (e) { /* already ended */ }
-    this.hiss.g.gain.cancelScheduledValues(now); this.hiss.g.gain.setTargetAtTime(0, now, 0.01);
+    this.hiss.g.gain.cancelScheduledValues(now); this.hiss.g.gain.setValueAtTime(0, now + 0.04);
     const last = this.said[this.said.length - 1]; if (last && last.end > now) { last.end = now; last.cut = true; }
     this.cur = null; this.freeAt = now + 0.12;
   }

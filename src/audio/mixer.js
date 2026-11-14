@@ -28,14 +28,17 @@ export class Mixer {
     const c = this.ctx = ctx;
     this.volume = volume; this.seat = 'out'; this.slots = {}; this.sampleBufs = {};
     // master: sum -> limiter -> soft clip (a hard guarantee that the output stays inside full scale) -> volume
+    // Quiet and middling sounds pass through untouched; only what would go over full scale is held back.
     this.sum = c.createGain(); this.sum.gain.value = 0.7;
     const lim = this.limiter = c.createDynamicsCompressor();
-    lim.threshold.value = -10; lim.knee.value = 8; lim.ratio.value = 16; lim.attack.value = 0.002; lim.release.value = 0.16;
-    const clip = c.createWaveShaper(), curve = new Float32Array(1025);
-    for (let k = 0; k < 1025; k++) { const x = k / 512 - 1; curve[k] = Math.tanh(x * 1.6) / Math.tanh(1.6) * 0.97; }
+    lim.threshold.value = -4; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.14;
+    const trim = c.createGain(); trim.gain.value = 0.86;   /* takes back the gain the compressor adds by itself */
+    const clip = c.createWaveShaper(), curve = new Float32Array(2049);
+    for (let k = 0; k < 2049; k++) curve[k] = Math.tanh(k / 1024 - 1);   /* gentle below, flat at the top: the ceiling */
     clip.curve = curve;
+    const lift = c.createGain(); lift.gain.value = 1.25;   /* ceiling tanh(1) x 1.25 = 0.95 of full scale */
     this.master = c.createGain(); this.master.gain.value = volume;
-    this.sum.connect(lim); lim.connect(clip); clip.connect(this.master); this.master.connect(c.destination);
+    this.sum.connect(lim); lim.connect(trim); trim.connect(clip); clip.connect(lift); lift.connect(this.master); this.master.connect(c.destination);
     // the air path shared by all buses: hull filter (two stages, steep), hull loss, and the "ears ringing" dip after a hit
     this.airMix = c.createGain();
     this.hull1 = c.createBiquadFilter(); this.hull1.type = 'lowpass'; this.hull1.frequency.value = 20000; this.hull1.Q.value = 0.6;
@@ -81,11 +84,11 @@ export class Mixer {
   _countryIR() {
     const c = this.ctx, sr = c.sampleRate, len = Math.floor(sr * 2.4), ir = c.createBuffer(2, len, sr);
     for (let ch = 0; ch < 2; ch++) {
-      const d = ir.getChannelData(ch); let lp = 0;
+      const d = ir.getChannelData(ch); let lp = 0, slow = 0;
       for (let i = 0; i < len; i++) {
-        const t = i / sr, k = clamp(0.5 * Math.exp(-t * 3.2) + 0.02, 0.02, 1);   /* the tail gets duller as it dies */
-        lp += k * ((Math.random() * 2 - 1) - lp);
-        d[i] = lp * Math.exp(-t * 2.3) * (t < 0.03 ? t / 0.03 : 1) * 0.6;
+        const t = i / sr, k = clamp(0.9 * Math.exp(-t * 2.6) + 0.05, 0.05, 1);   /* bright at first, duller as it dies */
+        lp += k * ((Math.random() * 2 - 1) - lp); slow += 0.012 * (lp - slow);   /* `slow` is the boom under about 90 Hz: left out, or tails turn to mud */
+        d[i] = (lp - slow) * Math.exp(-t * 2.5) * (t < 0.03 ? t / 0.03 : 1) * (0.35 + 0.9 * (1 - k));
       }
       const slaps = ch ? [0.071, 0.163, 0.297, 0.52, 0.83] : [0.058, 0.181, 0.262, 0.47, 0.91];
       slaps.forEach((ts, j) => {
