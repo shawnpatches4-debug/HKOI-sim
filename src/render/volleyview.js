@@ -39,7 +39,7 @@ export class VolleyView {
   _lines(dashed) {
     const geo = new LineSegmentsGeometry(); geo.setPositions(new Float32Array(MAXBEAM * 2 * 6)); geo.setColors(new Float32Array(MAXBEAM * 2 * 6));
     const mat = new LineMaterial({ linewidth: dashed ? 1.6 : 2.2, vertexColors: true, transparent: true, opacity: dashed ? 0.55 : 0.8, dashed, dashSize: 7, gapSize: 9, depthWrite: false, fog: false });
-    const line = new LineSegments2(geo, mat); if (dashed) line.computeLineDistances(); line.frustumCulled = false; line.renderOrder = 11; geo.instanceCount = 0; this.group.add(line);
+    const line = new LineSegments2(geo, mat); if (dashed) line.computeLineDistances(); line.frustumCulled = false; line.renderOrder = 8;   /* drawn before the cloud, so the cloud lies over the line where it covers it */ geo.instanceCount = 0; this.group.add(line);
     return { line, geo, pos: geo.attributes.instanceStart.data, col: geo.attributes.instanceColorStart.data, dist: dashed ? geo.attributes.instanceDistanceStart.data : null, n: 0 };
   }
   _seg(L, a, b, c0, c1, k0, k1) {
@@ -100,6 +100,8 @@ export class VolleyView {
     const tv = this.tankView; if (tv && tv.turret) { tv.group.updateWorldMatrix(true, true); return tv.turret.localToWorld(out.set(side === 'L' ? 1.85 : -1.85, 0.75, -0.6)); }
     return this.s.at(T.e, T.n, 2.6, out);
   }
+  // what a round or missile lands on at a scene point: a building, trees, or open ground
+  _surf(x, z) { const W = this.b.world; if (W.buildingAt && W.buildingAt(x, -z, 2)) return 'wall'; const g = W.veg ? W.veg(x, -z) : null; return g && g.h > 2 ? 'trees' : null; }
   _mode(th, tv) { let md = 'guided'; for (const p of th.viz.phases || []) if (p.t <= tv) md = p.mode; return md; }
 
   dispose() { this.s.scene.remove(this.group); for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear(); }
@@ -175,11 +177,11 @@ export class VolleyView {
         if (U.glow) { U.glow.visible = burning; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
-          const spacing = (drone ? 7 : rpg ? 2.2 : th.v > 320 ? 4.6 : 3.4) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
+          const spacing = (drone ? 7 : rpg ? 2 : th.v > 320 ? 3.4 : 2.6) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
           if (st.next < tv - 1.2) st.next = tv - 1.2;
           while (st.next <= tv && guard++ < 160) { const q = this.pos(v, th, l, st.next, this.tmp3);
             if (drone) fx.puff(q.x, q.y, q.z, 0, 0, 0, 1.6, 0.25, 0.9, 0.5, 0.52, 0.55, 0.1, 1, 0);
-            else { const a = st.next * 13.8 + th.idx, cr = tt.guidance === 'beam_rider' ? 0.4 : 0.12; fx.trail(q.x + this._an * Math.cos(a) * cr, q.y + Math.sin(a) * cr, q.z + this._ae * Math.cos(a) * cr, rpg ? 0.8 : th.v > 320 ? 1.25 : 1, rpg ? 0.86 : 0.8); }
+            else { const a = st.next * 13.8 + th.idx, cr = tt.guidance === 'beam_rider' ? 0.4 : 0.12; fx.trail(q.x + this._an * Math.cos(a) * cr, q.y + Math.sin(a) * cr, q.z + this._ae * Math.cos(a) * cr, rpg ? 0.7 : th.v > 320 ? 0.75 : 1, rpg ? 0.86 : 0.8); }
             st.next += step; }
           this.pos(v, th, l, tv, this.tmp);   /* put the working values back for the lines below */
         } else st.next = tv;
@@ -206,7 +208,7 @@ export class VolleyView {
           this.emit('hit', hp, { killing: !!end.killing }); s.blast(hp, end.killing ? 2 : 1.2, false);
           if (end.killing) this._kill(T, t);
         } else if (end.type === 'ground') {
-          p.y = W.h(p.x, -p.z) + 0.3; fx.explosion(p.x, p.y, p.z, 0.9); this.emit('explosion', p, { size: 0.9 }); s.blast(p, 0.9); s.marks.add(p.x, p.z, 1.5, (x, z) => W.h(x, -z), { kind: MARK.CRATER });
+          p.y = W.h(p.x, -p.z) + 0.3; fx.explosion(p.x, p.y, p.z, 0.9, { surface: this._surf(p.x, p.z) }); this.emit('explosion', p, { size: 0.9 }); s.blast(p, 0.9); s.marks.add(p.x, p.z, 1.5, (x, z) => W.h(x, -z), { kind: MARK.CRATER });
         } else if (end.type === 'miss') {   /* flies on past the vehicle and comes down behind it */
           if (st) { keep = true; this.fly.push({ mesh: st.mesh, x: p.x, y: p.y, z: p.z, vx: vel.x, vy: Math.min(vel.y, 2), vz: vel.z, t0: t, seed: v.i * 53 + th.idx * 7 + 3 }); this.emit('pass', p, {}); }
         } else if (end.type === 'aps_kill') {
@@ -267,7 +269,7 @@ export class VolleyView {
     const W = this.b.world, fx = this.fx;
     for (let i = this.fly.length - 1; i >= 0; i--) {
       const f = this.fly[i], a = t - f.t0, x = f.x + f.vx * a, z = f.z + f.vz * a, y = f.y + f.vy * a - 0.5 * 4.5 * a * a, g = W.h(x, -z);
-      if (y <= g + 0.2 || a > 6) { const p = this.tmp.set(x, g + 0.3, z); fx.seed(f.seed); fx.explosion(p.x, p.y, p.z, 0.8); this.emit('explosion', p, { size: 0.8 }); this.s.blast(p, 0.8); this.s.marks.add(p.x, p.z, 1.4, (px, pz) => W.h(px, -pz), { kind: MARK.CRATER }); this.group.remove(f.mesh); this.fly.splice(i, 1); continue; }
+      if (y <= g + 0.2 || a > 6) { const p = this.tmp.set(x, g + 0.3, z); fx.seed(f.seed); fx.explosion(p.x, p.y, p.z, 0.8, { surface: this._surf(p.x, p.z) }); this.emit('explosion', p, { size: 0.8 }); this.s.blast(p, 0.8); this.s.marks.add(p.x, p.z, 1.4, (px, pz) => W.h(px, -pz), { kind: MARK.CRATER }); this.group.remove(f.mesh); this.fly.splice(i, 1); continue; }
       f.mesh.position.set(x, y, z); f.mesh.lookAt(x + f.vx, y + f.vy - 4.5 * a, z + f.vz);
       if (!f.next || f.next < a - 0.3) f.next = a; while (f.next <= a) { fx.trail(f.x + f.vx * f.next, f.y + f.vy * f.next - 2.25 * f.next * f.next, f.z + f.vz * f.next, 1, 0.8); f.next += 0.016; }
     }

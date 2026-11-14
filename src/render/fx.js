@@ -68,7 +68,7 @@ void main() {
   mv.xy += off; gl_Position = projectionMatrix * mv;
   if (kind < 1.5) vCol.a *= smoothstep(size * 0.2, size * 1.2 + 2.0, dist);   /* do not fill the screen when the camera sits inside a puff */
   vFog = 1.0 - exp(-fogDensity * fogDensity * dist * dist);
-  vSoft = vec3(p.y + (viewMatrix[0][1] * off.x + viewMatrix[1][1] * off.y), aK.w, size);
+  vSoft = vec3(p.y + (viewMatrix[1][0] * off.x + viewMatrix[1][1] * off.y), aK.w, size);
   for (int i = 0; i < 3; i++) { vec3 d = flare[i].xyz - p; vFlare += vec3(1.0, 0.72, 0.42) * flare[i].w / (1.0 + dot(d, d) / 500.0); }
 }`;
 
@@ -86,17 +86,17 @@ void main() {
     float ang = seed * 6.2832 + age * 0.22 * (fract(seed * 7.13) - 0.5), cs = cos(ang), sn = sin(ang);
     vec2 q = vec2(vUv.x * cs - vUv.y * sn, vUv.x * sn + vUv.y * cs) * 0.34 + vec2(seed * 13.7, seed * 7.3 - age * 0.018);
     vec4 n = texture2D(noise, q); float n2 = texture2D(noise, q * 2.6 + 0.37).g;
-    float d = r + (n.r - 0.5) * 0.62 + (n2 - 0.5) * 0.3, m = smoothstep(1.0, 0.22, d);
+    float d = r + (n.r - 0.5) * 0.62 + (n2 - 0.5) * 0.3, m = (1.0 - smoothstep(0.22, 1.0, d));
     if (m < 0.004) discard;
     vec3 N = normalize(vec3(vUv + (vec2(n.b, n2) - 0.5) * 0.9, sqrt(max(0.04, 1.0 - r * r))));
-    float sun = dot(N, sunV) * 0.5 + 0.5, fadeIn = smoothstep(0.0, 0.05, f), fadeOut = pow(1.0 - f, 1.25);
+    float sun = dot(N, sunV) * 0.5 + 0.5, fadeIn = smoothstep(0.0, 0.07, age), fadeOut = pow(1.0 - f, 1.25);   /* appears within a few hundredths of a second, whatever its life */
     float soft = smoothstep(vSoft.y - 0.05, vSoft.y + 0.3 * vSoft.z + 0.05, vSoft.x);
     a = vCol.a * m * fadeIn * fadeOut * soft;
     lit = vCol.rgb * (sunColor * (0.5 + 0.75 * sun) * (0.82 + 0.3 * n.a) + vFlare);
     lit = mix(lit, fogColor, vFog);
     if (thermal != 0.0) { lit = vec3(0.2 + 0.1 * sun); a *= 0.6; }
     if (kind > 0.5) {
-      float h = clamp(1.0 - f / max(vHeat, 0.001), 0.0, 1.0), core = smoothstep(0.95, 0.0, d + (1.0 - h) * 0.35);
+      float h = clamp(1.0 - f / max(vHeat, 0.001), 0.0, 1.0), core = (1.0 - smoothstep(0.0, 0.95, d + (1.0 - h) * 0.35));
       vec3 fc = mix(vec3(1.0, 0.2, 0.02), vec3(1.0, 0.78, 0.4), h * h) * (1.2 + 5.0 * h);
       if (thermal != 0.0) fc = vec3(6.0);
       emi = fc * core * smoothstep(0.0, 0.25, h) * fadeIn * soft * (0.7 + 0.6 * n.r);
@@ -131,7 +131,8 @@ export class Particles {
     const cap = this.capMax = Math.max(max, BUDGET.high[0]);
     this.cap = BUDGET.medium[0]; this.q = BUDGET.medium[1]; this.quality = 'medium';
     this.data = new Float32Array(cap * STRIDE); this.dies = new Float32Array(cap);
-    this.head = 0; this.count = 0; this.time = 0; this.lastDeath = 0; this.lo = 1e9; this.hi = -1; this.wrapped = false;
+    this.head = 0; this.count = 0; this.time = 0; this.lastDeath = 0; this.total = 0;   /* total: every particle ever made (for tests and the cost report) */
+     this.lo = 1e9; this.hi = -1; this.wrapped = false;
     this.driven = false;   /* true once the view of the engagement steps the clock in simulated time */
     this.hold = false;     /* test hook: stop the clock so stills can be taken at exact moments */
     this.ground = null;    /* (x, z) -> height of the ground there; set by the view of the engagement */
@@ -180,7 +181,7 @@ export class Particles {
   spawn(kind, x, y, z, vx, vy, vz, life, s0, s1, r, g, b, a, drag, acc, heat, delay) {
     if (!(life > 0)) return;
     const i = this.head, o = i * STRIDE, d = this.data, t0 = this.time + (delay || 0);
-    this.head = (i + 1) % this.cap; if (this.count < this.cap) this.count++;
+    this.head = (i + 1) % this.cap; if (this.count < this.cap) this.count++; this.total++;
     if (i < this.lo) this.lo = i; if (i > this.hi) this.hi = i; if (this.head === 0) this.wrapped = true;
     d[o] = x; d[o + 1] = y; d[o + 2] = z; d[o + 3] = t0;
     d[o + 4] = vx; d[o + 5] = vy; d[o + 6] = vz; d[o + 7] = life;
@@ -242,8 +243,9 @@ export class Particles {
       this.spawn(KIND.FIRE, x + Math.cos(a) * 0.4 * k, y + 0.5 * k + this.R() * 0.6 * k, z + Math.sin(a) * 0.4 * k, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + up, Math.sin(a) * Math.cos(e) * s, life * (0.7 + this.R() * 0.6), 1.6 * k, 5.2 * k, smoke[0], smoke[1], smoke[2], 0.78, 2.6, 1.1, hot * (0.7 + this.R() * 0.6), 0); }
   }
   // a shell or warhead bursting on the ground: flash, fireball that turns to smoke, a fountain of earth, a dust ring, drifting smoke
+  // o.surface: 'wall' (masonry: grey dust and rubble) or 'trees' (splinters, leaves and a fire that burns for a while); default earth
   explosion(x, y, z, k = 1, o = {}) {
-    const dirt = o.dirt == null ? 1 : o.dirt, soil = o.soil || [0.3, 0.25, 0.18];
+    const dirt = o.dirt == null ? 1 : o.dirt, wall = o.surface === 'wall', trees = o.surface === 'trees', soil = o.soil || (wall ? [0.52, 0.5, 0.47] : [0.3, 0.25, 0.18]);
     this.spawn(KIND.FLASH, x, y + 0.8 * k, z, 0, 0, 0, 0.12, 6 * k, 30 * k, 1, 0.9, 0.7, 1, 0, 0, 14, 0);
     this.fireball(x, y, z, k, 12 * k, 7 * Math.sqrt(k), 5.5, [0.13, 0.125, 0.12], 0.2);
     this.sparks(x, y + 0.4, z, 0, 0.8, 0, 26 * k, 26 * Math.sqrt(k), 1.3, 0.9);
@@ -252,8 +254,10 @@ export class Particles {
       for (let i = 0; i < n; i++) { const a = this.R() * TAU, e = 0.75 + this.R() * 0.7, s = (8 + this.R() * 11) * Math.sqrt(k);
         this.spawn(KIND.SMOKE, x, y + 0.3, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, 1.5 + this.R() * 1.3, 0.9 * k, 3.6 * k, soil[0], soil[1], soil[2], 0.85, 1.5, -11, 0, 0); }
       this.clods(x, y, z, 26 * k * dirt, 17 * Math.sqrt(k), 0.22 * Math.sqrt(k), soil, 1);
-      this.dustRing(x, y, z, k, 10);
+      this.dustRing(x, y, z, k * (wall ? 1.5 : 1), 10, wall ? [0.66, 0.64, 0.6] : null);
     }
+    if (wall) for (let i = 0; i < this.cnt(10 * k); i++) { const a = this.R() * TAU, s = 1 + this.R() * 3; this.spawn(KIND.SMOKE, x, y + 1 + this.R() * 2, z, Math.cos(a) * s, 0.6 + this.R() * 1.5, Math.sin(a) * s, 8 + this.R() * 8, 2.4 * k, 10 * k, 0.66, 0.64, 0.6, 0.4, 1.2, 0.2, 0, 0.1); }
+    if (trees) { this.clods(x, y + 1, z, 30 * k, 15, 0.16, [0.24, 0.2, 0.11], 1); this.clods(x, y + 2, z, 40 * k, 9, 0.1, [0.2, 0.3, 0.1], 1.2); this.fire(x, y + 0.3, z, 30, 0.45 * k); }
     const n2 = this.cnt(9 * k);   /* smoke that hangs and drifts off on the wind */
     for (let i = 0; i < n2; i++) { const a = this.R() * TAU, s = this.R() * 1.6 * k;
       this.spawn(KIND.SMOKE, x + Math.cos(a) * s, y + 0.8 + this.R() * 1.8 * k, z + Math.sin(a) * s, Math.cos(a) * 0.8, 1.2 + this.R() * 2.2, Math.sin(a) * 0.8, 9 + this.R() * 9, 2.2 * k, 9 * k, 0.2, 0.19, 0.18, 0.42, 0.9, 0.55, 0, 0.25); }
@@ -291,7 +295,7 @@ export class Particles {
   }
   // one 30 mm round leaving the weapon station: a small sharp flash, a wisp of smoke, the empty case thrown out to the side
   muzzle30(x, y, z, dx, dy, dz, sx, sz) {
-    this.spawn(KIND.FLASH, x + dx * 0.5, y + dy * 0.5, z + dz * 0.5, 0, 0, 0, 0.07, 1.6, 5.5, 1, 0.85, 0.55, 1, 0, 0, 9, 0);
+    this.spawn(KIND.FLASH, x + dx * 0.5, y + dy * 0.5, z + dz * 0.5, 0, 0, 0, 0.07, 0.8, 2.8, 1, 0.85, 0.55, 1, 0, 0, 6, 0);
     for (let i = 0; i < this.cnt(3); i++) { const s = 4 + this.R() * 10; this.spawn(KIND.SMOKE, x, y, z, dx * s + (this.R() - 0.5) * 2, dy * s + 0.4, dz * s + (this.R() - 0.5) * 2, 1.4 + this.R() * 1.4, 0.35, 2.4, 0.66, 0.65, 0.63, 0.34, 3, 0.3, 0, 0); }
     this.sparks(x, y, z, dx, dy, dz, 4, 40, 0.18, 0.18, [1, 0.8, 0.5], 3);
     this.spawn(KIND.DEBRIS, x - dx * 1.3, y - dy * 1.3 - 0.1, z - dz * 1.3, sx * (2.5 + this.R() * 1.5) - dx, 1.6 + this.R() * 1.2, sz * (2.5 + this.R() * 1.5) - dz, 2.2, 0.09, 0.09, 0.85, 0.66, 0.26, 1, 0.3, -9.8, 0.25, 0);
@@ -366,7 +370,7 @@ export class Particles {
     for (let i = 0; i < this.cnt(6 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, vx * 0.03 + (this.R() - 0.5) * 4, (this.R() - 0.5) * 3, vz * 0.03 + (this.R() - 0.5) * 4, 4 + this.R() * 4, 1.2 * k, 6 * k, 0.16, 0.16, 0.16, 0.55, 2, 0.15, 0, 0);
   }
   // one puff of a missile's smoke trail
-  trail(x, y, z, k = 1, c = 0.8) { this.spawn(KIND.SMOKE, x, y, z, (this.R() - 0.5) * 0.6, 0.15, (this.R() - 0.5) * 0.6, 3.2 + this.R() * 2.2 + k, 0.45 * k, (1.9 + this.R()) * k, c, c, c * 0.98, 0.34, 1, 0.12, 0, 0); }
+  trail(x, y, z, k = 1, c = 0.8) { this.spawn(KIND.SMOKE, x, y, z, (this.R() - 0.5) * 0.8, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.8, 4.5 + this.R() * 3.5, 0.7 * k, (3.2 + this.R() * 1.4) * k, c, c, c * 0.98, 0.5, 1, 0.12, 0, 0); }
   // old name kept for callers that still use it: the cloud is now drawn by the obscurant layer, so this is only the fuze pop
   cloud(x, y, z) { this.cloudPop(x, y, z); }
 }
