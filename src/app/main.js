@@ -9,7 +9,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.30';
+const VERSION = '0.31';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -19,6 +19,7 @@ const FORCES = {
   light: { name: 'Light ambush', note: 'Two wire-guided launchers and an RPG team', force: [{ type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },
   ambush: { name: 'Missile ambush', note: 'Two Kornet, two Konkurs, one RPG team', force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },
   drones: { name: 'Drone hunt', note: 'Two radio FPV crews, one fibre FPV crew, one Kornet', force: [{ type: 'fpv', n: 2 }, { type: 'fpv_fiber', n: 1 }, { type: 'kornet', n: 1 }] },
+  standoff: { name: 'Stand-off raid', note: 'The old simulator\'s kind of raid: three launchers from 2 km or more, firing over about 6 seconds', force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }], raid: { minR: 2000, window: 6 } },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
@@ -45,7 +46,7 @@ function newBattle() {
   if (!lookup) lookup = cfg0.hkoi_enabled ? HK.meetLookup(cfg0) : {};
   for (const t of teams) scene.units.remove(t.group); if (volleys) volleys.dispose();
   const pos = tankPos();
-  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
+  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, raid: FORCES[set.force].raid, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
   teams = battle.units.map(u => { const t = new TeamView(u.type, ASSETS); scene.units.add(t.group); return t; });
   // enemy transport parked in dead ground behind some of the teams: seen only when the team it belongs to is
   for (const p of props) scene.units.remove(p.view.group); props.length = 0;
@@ -58,6 +59,47 @@ function newBattle() {
   api.battle = battle; place();
 }
 // the player's chosen start position for this map (none = the default at the map centre)
+// ---------------------------------------------------------------- replay
+// A battle is fully decided by its settings and seed, so a replay is the same battle run again: nothing is recorded. Jumping back in time
+// means starting it over and running forward (without drawing) to the moment asked for; that takes a fraction of a second.
+let replay = null;   // { T: length in seconds, ev: [{ t, text, k }], specWas }
+function rewind() {
+  const pos = tankPos();
+  battle = new BattleAPI.Battle({ world, seed: set.seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, raid: FORCES[set.force].raid, force: FORCES[set.force].force, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined });
+  if (volleys) volleys.dispose(); scene.marks.clear(); scene.fx.n = 0;
+  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
+  props.forEach((p, i) => { p.u = battle.units.find(u => u.id === p.u.id) || p.u; }); api.battle = battle;
+}
+function runQuiet(t, toEnd) { let n = 0; while (battle.t < t - 1e-6 && n++ < 20000) { if (toEnd && (!battle.tank.alive || battle.over || (n % 20 === 0 && battle.summary().teamsLeft === 0 && !battle._volleyActive()))) break; battle.step(); } if (battle._pending) battle.step(); }
+function seek(t) {
+  if (!replay) return; t = Math.max(0, Math.min(replay.T, t)); if (t < battle.t - 0.05) rewind(); runQuiet(t);
+  shotI = (battle.shots || []).length; landing.length = 0; mgI = (battle.mgs || []).length; simBank = 0; tNow = battle.t; volleys.skipTo(battle.t); $('log').textContent = ''; logShown = 0; capT = -9; $('caption').textContent = ''; place();
+}
+function replayEvents() { const ev = []; for (const l of battle.log) { const k = l.kind === 'volley' ? 'v' : /knocked out|position destroyed/.test(l.text) ? 'k' : /Vehicle destroyed|hits the vehicle|We.re hit|HIT/.test(l.text) && l.kind !== 'tank' ? 'h' : /springs the ambush|breaks contact|changes tactics|launches a drone/.test(l.text) ? 'v' : null; if (k && (!ev.length || l.t - ev[ev.length - 1].t > 0.4)) ev.push({ t: l.t, text: l.text, k }); } return ev; }
+function replayStart() {
+  sound.start(); sound.loadVoices(ASSETS); ensureWorld(); if (!battle || !ended || replay) { newBattle(); runQuiet(900, true); }   /* a battle not yet fought (from a replay code): play it through once, unseen, to learn its length and its events */
+  const T = Math.max(5, battle.t + 4), ev = replayEvents(), specWas = replay ? replay.specWas : set.spectator; replay = { T, ev, specWas }; set.spectator = true; ended = true;
+  rewind(); state = 'play'; playing = true; cams.set('orbit'); { const T0 = battle.tank; scene.camera.position.copy(scene.at(T0.e - 26, T0.n - 34, 13)); }
+  const tk = $('rp-ticks'); tk.textContent = ''; for (const e of ev) { const i = el('i', e.k === 'k' ? 'k' : e.k === 'h' ? 'h' : ''); i.style.left = (e.t / T * 100).toFixed(2) + '%'; i.title = e.text; tk.append(i); }
+  buildBar(); show();
+}
+function replayStop() { if (!replay) return; set.spectator = replay.specWas; replay = null; $('replay').hidden = true; }
+function replayCode() { const p = tankPos(); return btoa(JSON.stringify({ v: VERSION, b: set.biome, c: set.cond, f: set.force, s: set.skill, m: set.mission, map: set.map, seed: set.seed, pos: p ? [Math.round(p.e), Math.round(p.n), Math.round(p.h || 0)] : null })); }
+function replayLoad(code) { let o; try { o = JSON.parse(atob(String(code).trim())); } catch (e) { return 'That is not a replay code.'; } if (!o || !BIOMES.some(b => b[0] === o.b) || !FORCES[o.f]) return 'That replay code does not fit this version.';
+  set.biome = o.b; set.cond = CONDITIONS[o.c] ? o.c : 'day'; set.force = o.f; set.skill = o.s; set.mission = o.m || 'hold'; set.map = +o.map || 1; set.seed = +o.seed || 1; if (o.pos) { set.pos = set.pos || {}; set.pos[set.biome + ':' + set.map] = { e: o.pos[0], n: o.pos[1], h: o.pos[2] }; }
+  battle = null; ended = false; ensureWorld(true); replayStart(); return o.v !== VERSION ? `Made with version ${o.v}; this is ${VERSION}, so the battle may not run the same way.` : ''; }
+let rpT = 0, rpSig = '';
+function drawReplay(dt) { const box = $('replay'), on = !!replay && state === 'play' && !mapOpen; if (box.hidden === on) box.hidden = !on; if (!on) return;
+  if (playing && battle.t >= replay.T - 0.05) { playing = false; buildBar(); }
+  rpT -= dt; if (rpT > 0) return; rpT = 0.15; const t = Math.min(battle.t, replay.T), f = m => Math.floor(m / 60) + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+  let cur = null; for (const e of replay.ev) if (e.t <= t + 0.2) cur = e; const sig = f(t) + '|' + (cur ? cur.t : '') + '|' + playing; if (sig === rpSig) return; rpSig = sig;
+  $('rp-time').textContent = `${f(t)} / ${f(replay.T)}`; $('rp-what').textContent = cur ? cur.text : ''; $('rp-play').textContent = playing ? 'Pause' : 'Play'; if (document.activeElement !== $('rp-bar')) $('rp-bar').value = Math.round(t / replay.T * 1000); }
+$('rp-bar').addEventListener('input', e => { if (replay) { seek(+e.target.value / 1000 * replay.T); rpSig = ''; } });
+$('rp-start').onclick = () => { seek(0); playing = true; buildBar(); };
+$('rp-prev').onclick = () => { if (!replay) return; const p = replay.ev.filter(e => e.t < battle.t - 1.5).pop(); seek(p ? Math.max(0, p.t - 1) : 0); rpSig = ''; };
+$('rp-next').onclick = () => { if (!replay) return; const n = replay.ev.find(e => e.t > battle.t + 1.2); seek(n ? Math.max(0, n.t - 1) : replay.T); rpSig = ''; };
+$('rp-play').onclick = () => { if (replay && battle.t >= replay.T - 0.1) seek(0); playing = !playing; rpSig = ''; buildBar(); };
+$('rp-result').onclick = () => { playing = false; state = 'result'; show(); };
 function tankPos() { const p = set.pos && set.pos[set.biome + ':' + set.map]; return p && world.passable(p.e, p.n, true) ? p : null; }
 // ---------------------------------------------------------------- map screen
 const mapv = new MapView($('mapcv')); let mapOpen = false, mapFrom = 'title';
@@ -130,7 +172,7 @@ function checkEnd() {
 }
 
 // ---------------------------------------------------------------- screens and controls
-function show() { if (state !== 'play') { $('crew').hidden = true; $('esight').hidden = true; $('units').hidden = true; } $('title').hidden = state !== 'title'; $('result').hidden = state !== 'result'; const p = state === 'play'; $('status').hidden = !p; $('bar').hidden = !p; $('log').hidden = !(p && showLog); hud.hidden = !showPerf; if (!p) $('caption').textContent = ''; }
+function show() { if (state !== 'play') { $('crew').hidden = true; $('replay').hidden = true; $('esight').hidden = true; $('units').hidden = true; } $('title').hidden = state !== 'title'; $('result').hidden = state !== 'result'; const p = state === 'play'; $('status').hidden = !p; $('bar').hidden = !p; $('log').hidden = !(p && showLog); hud.hidden = !showPerf; if (!p) $('caption').textContent = ''; }
 function seg(id, items, key, after) { const box = $(id); box.textContent = ''; for (const [v, name] of items) { const b = el('button', 'btn' + (set[key] === v ? ' on' : ''), name); b.onclick = () => { set[key] = v; store.set('setup', set); seg(id, items, key, after); if (after) after(); }; box.append(b); } }
 function note() { $('o-note').textContent = FORCES[set.force].note + '. ' + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.'); }
 function buildTitle() {
@@ -153,9 +195,11 @@ function buildBar() {
   const sd = el('button', 'btn' + (sound.on ? ' on' : ''), 'Sound'); sd.onclick = () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); }; g.append(sd);
   const lg = el('button', 'btn' + (showLog ? ' on' : ''), 'Log'); lg.onclick = () => { showLog = !showLog; store.set('log', showLog); buildBar(); show(); }; g.append(lg);
   const pf = el('button', 'btn' + (showPerf ? ' on' : ''), 'FPS'); pf.title = 'Frame rate and scene load'; pf.onclick = () => { showPerf = !showPerf; store.set('perf', showPerf); buildBar(); show(); }; g.append(pf);
-  const mn = el('button', 'btn', 'Menu'); mn.onclick = () => { state = 'title'; playing = false; cams.set('orbit'); show(); }; g.append(mn);
+  const mn = el('button', 'btn', 'Menu'); mn.onclick = () => { replayStop(); state = 'title'; playing = false; cams.set('orbit'); show(); }; g.append(mn);
 }
-$('r-again').onclick = start; $('r-next').onclick = () => { set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = () => { state = 'title'; cams.set('orbit'); show(); };
+$('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
+$('o-codebtn').onclick = () => { const msg = replayLoad($('o-code').value); if (msg) $('o-note').textContent = msg; };
+$('r-again').onclick = () => { replayStop(); start(); }; $('r-next').onclick = () => { replayStop(); set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = () => { replayStop(); state = 'title'; cams.set('orbit'); show(); };
 window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT') return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } if (e.key === '[' || e.key === ']') { if (cams.mode === 'enemy' || cams.mode === 'troops') cams.cycle(battle.units, e.key === ']' ? 1 : -1); } const n = '12345678'.indexOf(e.key); if (n >= 0) { const m = CAMERA_MODES[n]; if (!m.spectator || set.spectator) { cams.set(m.key); buildBar(); } } });
 
 // crew talk: each volley's record carries the lines the crew spoke and when; play them as their moment comes.
@@ -241,13 +285,13 @@ function frameBody(now) {
   const raw = Math.max(0, (now - last) / 1000), dt = Math.min(0.1, raw); last = now; scene.rawMs = raw * 1000;   /* raw is never negative: the first frame's clock can read earlier than the page's */ worst = Math.max(worst, raw * 1000); if (raw > 0.05) slow++;
   frameDt = dt;
   const tSim = performance.now(), tCpu = tSim;
-  if (state === 'play' && playing && !(!battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) advance(dt * speed);
+  if (state === 'play' && playing && !(!replay && !battle.tank.alive && ended && battle.t > battle.volleys[battle.volleys.length - 1].tEnd + 8)) advance(replay ? Math.max(0, Math.min(dt * speed, replay.T - battle.t)) : dt * speed);
   if (state !== 'play') tNow = battle.t; place(); volleys.update(Math.min(tNow, battle.t), dt * (state === 'play' && playing ? speed : 0)); mainGun(); machineGuns(dt); trackDust(dt); { const c = ctx(), b = c.aim ? Math.atan2(c.aim.e - shown.e, c.aim.n - shown.n) * 180 / Math.PI : c.threatBrg != null ? c.threatBrg : shown.h; const sdt = state === 'play' && playing ? dt * speed : dt; tank.aim(b, shown.h, sdt); tank.animate(state === 'play' && playing ? dt * speed : 0, battle.tank.v); tank.aimStation(volleys.aimAt, sdt); } simMs = Math.max(simMs * 0.98, performance.now() - tSim);
   { const on = state === 'play' && cams.mode === 'gnr' && !mapOpen, sg = $('sight'); if (sg.hidden === on) sg.hidden = !on; tank.group.visible = !on;   /* the sight looks out from the turret roof: the vehicle's own model would only block it */
     if (on) { const rf = battle._rf, fl = landing[landing.length - 1], T = battle.tank, R = rf ? rf.R : fl ? Math.hypot(fl.to.e - fl.from.e, fl.to.n - fl.from.n) : null, wait = rf ? Math.max(0, rf.at - battle.t) : 0;
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
-  drawCrew(dt);
+  drawCrew(dt); drawReplay(dt);
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (sound.ctx && state === 'play' && playing && speed <= 2.01) voices();

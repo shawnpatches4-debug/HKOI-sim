@@ -16,6 +16,12 @@ export class VolleyView {
     const end = th.viz.end; if (end.type === 'ground' && tv >= end.t - 0.6) y = lerp(y, W.h(e, n), Math.min(1, (tv - (end.t - 0.6)) / 0.6));
     return out.set(e, y, -n); }
   dispose() { this.s.scene.remove(this.group); }
+  // After a jump in time (replay): everything that has already happened in the current engagement is taken as seen, so old explosions and
+  // muzzle flashes do not all go off at once.
+  skipTo(t) { const B = this.b, v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null; for (const m of this.live.values()) this.group.remove(m); this.live.clear(); this.burning = null; if (!v) return; const tv = t - v.t0, rec = v.rec;
+    rec.threats.forEach(th => { if (tv >= th.viz.end.t) this.seen.add(v.i + ':' + th.idx); });
+    for (const b of rec.bursts) for (const r of b.rounds || []) { const tb = r.t_burst != null ? r.t_burst : r.t_pass, rk = v.i + ':' + b.idx + ':' + r.t_fire; if (tv >= r.t_fire) this.seen.add(rk + 'm'); if (tv >= tb) this.seen.add(rk); }
+    for (const a of rec.aps || []) if (tv >= a.t) this.seen.add(v.i + ':aps:' + a.t); }
   update(t, dt) {
     this.info.length = 0;
     const B = this.b, HKe = window.HK, v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null; if (!v) return;

@@ -28,14 +28,15 @@
   // clean shot (s); coord = share of the teams he wants ready before opening, and how well shots are timed; misfire = chance per launch;
   // nerve = steadiness (low nerve: bolts after one shot); notice = chance of seeing the tank's gun turn onto the team; lost = how long a
   // team sits without a view of the vehicle before it moves to get one (s); scoot = chance it judges that its own launch has given it away and
-  // moves after a single shot; adapt = how far the force changes tactics once it sees missiles
+  // moves after a single shot; jitter = how unsteadily a missile gunner holds his aim, in mrad (the old simulator used 3 for everyone, which
+  // makes most long shots miss on their own; better crews are steadier: assumed 3 / 2 / 1 / 0.6); adapt = how far the force changes tactics once it sees missiles
   // beaten (0 never, 1 fires in pairs, 2 also times rockets and drones with missiles); breakAt = share of teams still able to fight at which
   // the force breaks contact; pilot = FPV pilot level handed to the engine. All assumed values.
   const SKILL = {
-    green: { aim: 1.5, open: 15, coord: 0.3, misfire: 0.1, nerve: 0.5, notice: 0.35, lost: 30, scoot: 0.1, adapt: 0, breakAt: 0.6, pilot: 'novice' },
-    trained: { aim: 1.0, open: 25, coord: 0.7, misfire: 0.04, nerve: 0.75, notice: 0.6, lost: 15, scoot: 0.4, adapt: 1, breakAt: 0.5, pilot: 'trained' },
-    expert: { aim: 0.8, open: 35, coord: 0.95, misfire: 0.02, nerve: 0.9, notice: 0.8, lost: 10, scoot: 0.7, adapt: 2, breakAt: 0.35, pilot: 'expert' },
-    veteran: { aim: 0.7, open: 40, coord: 1.0, misfire: 0.01, nerve: 0.97, notice: 0.9, lost: 8, scoot: 0.85, adapt: 2, breakAt: 0.25, pilot: 'expert' },
+    green: { aim: 1.5, open: 15, coord: 0.3, misfire: 0.1, nerve: 0.5, notice: 0.35, lost: 30, scoot: 0.1, jitter: 3, adapt: 0, breakAt: 0.6, pilot: 'novice' },
+    trained: { aim: 1.0, open: 25, coord: 0.7, misfire: 0.04, nerve: 0.75, notice: 0.6, lost: 15, scoot: 0.4, jitter: 2, adapt: 1, breakAt: 0.5, pilot: 'trained' },
+    expert: { aim: 0.8, open: 35, coord: 0.95, misfire: 0.02, nerve: 0.9, notice: 0.8, lost: 10, scoot: 0.7, jitter: 1, adapt: 2, breakAt: 0.35, pilot: 'expert' },
+    veteran: { aim: 0.7, open: 40, coord: 1.0, misfire: 0.01, nerve: 0.97, notice: 0.9, lost: 8, scoot: 0.85, jitter: 0.6, adapt: 2, breakAt: 0.25, pilot: 'expert' },
   };
   // seconds to pack up before a team can leave its position (assumed), and how far ahead a team that is about to have its shot joins an engagement
   const PACK = { kornet: 15, saclos: 15, rpg: 2, sal: 10, fpv: 8, fpv_fiber: 8 }, JOIN_WINDOW = 6;
@@ -68,6 +69,7 @@
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
         this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
+        this.raid = opt.raid || null;   /* { minR, window }: the old simulator's kind of raid: launchers no closer than minR metres, shots spread over window seconds */
         // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
         if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }
         this.units = [];
@@ -91,7 +93,7 @@
         for (const f of force) {
           const spec = TEAMS[f.type]; if (!spec) continue;
           let pool = []; if (spec.indirect) pool = this._hiddenSites(spec);
-          else for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; }
+          else for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, this.raid && spec.key !== 'rpg' ? this.raid.minR : 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; }
           for (let k = 0; k < (f.n || 1); k++) {
             let pick = pool.find(s => apart(s, 350)) || pool.find(s => apart(s, 200)) || pool.find(s => apart(s, 120));
             if (!pick) { const extra = concealed(spec, anchors[k % anchors.length]); pick = extra.find(s => apart(s, 200)) || extra.find(s => apart(s, 80)) || extra[0]; if (pick) pool = pool.concat(extra); }
@@ -154,14 +156,18 @@
       }
       // The driver's plan for a volley: hold until the first warning plus a reaction time, then make for the nearest ground that
       // hides the vehicle from where the warnings point. Returns the path the engine will use: [[t, east, north, heading, speed], ...]
-      _drivePlan(at, warnT, observers, tEnd, firstImpact) {
+      _drivePlan(at, warnT, observers, tEnd, firstImpact, holdForHkoi) {
         const W = this.world, path = [], T0 = -3, PDT = 0.1; let e = 0, n = 0, h = at.h, v = at.v || 0, goal = null, reached = false;
         const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2;
         let cover = null;
         if (warnT != null && observers.length) { const c = W.coverFrom(at.e, at.n, observers, { radius: 260, step: 24 }).filter(q => this._drivable(at.e, at.n, q.e, q.n)); cover = c.length ? c[0] : null;
           // Go only for cover that hides the hull from every firer AND can be reached before the first missile arrives. Otherwise hold still:
           // HKOI gets a long clean engagement and Trophy's good side stays toward the threat (Shawn's decision 9).
-          if (cover && firstImpact != null && (!cover.all || react + 2 + cover.d / 5 > firstImpact)) { this._holdWhy = cover.all ? 'cover is too far to reach before impact' : 'no cover in reach hides the hull from every firer'; cover = null; } else this._holdWhy = null; }
+          // HKOI builds its cloud on the line between the launcher and the vehicle. If the vehicle drives off that line the cloud is in the wrong
+          // place: measured in the engine, one Kornet from 2,500 m is stopped by HKOI 43% of the time from the halt and 4% if the vehicle dashes.
+          // So when HKOI can do its work the commander keeps still and lets it.
+          if (cover && holdForHkoi) { this._holdWhy = 'HKOI can blind this missile only if the vehicle keeps still'; cover = null; }
+          else if (cover && firstImpact != null && (!cover.all || react + 2 + cover.d / 5 > firstImpact)) { this._holdWhy = cover.all ? 'cover is too far to reach before impact' : 'no cover in reach hides the hull from every firer'; cover = null; } else this._holdWhy = null; }
         for (let t = T0; t <= tEnd + 8; t += PDT) {
           if (!goal && cover && t >= react) goal = { e: cover.e - at.e, n: cover.n - at.n };
           if (goal && !reached) {
@@ -358,12 +364,13 @@
         if (how.atWill) { const m = Math.min(...launches.map(l => l.t0)); for (const l of launches) l.t0 -= m; v_mode = 'each team firing on its own'; }
         else if (S.coord > 0.9) { for (const l of launches) l.t0 = (l.lead || 0) + r.random() * 0.6; const m = Math.min(...launches.map(l => l.t0)); for (const l of launches) l.t0 -= m; v_mode = 'launched together on the signal, to the second'; }   /* not timed to ARRIVE together: holding the near shots back only gives the vehicle warning and time to reach cover */
         else if (S.coord > 0.6) { for (const l of launches) l.t0 = r.random() * 2.2; const m = Math.min(...launches.map(l => l.t0)); for (const l of launches) l.t0 -= m; v_mode = 'fired on a signal'; }
+        if (this.raid && !how.atWill) { for (const l of launches) l.t0 = r.random() * this.raid.window; const m = Math.min(...launches.map(l => l.t0)); for (const l of launches) l.t0 -= m; v_mode = `spread over about ${this.raid.window} s, as in the old simulator's raids`; }
         // pass 1: the engine tells us when the crew is warned; the driver plans from that
         let order = null;
         const mk = (path, masks) => {
           const c = CAMP.applyState(JSON.parse(JSON.stringify(this.cfg0)), T.st);
           c.seed = this.seed * 1000 + this.volleys.length;
-          c.vehicle.hull_deg = at.h; c.enemy.drone_skill = S.pilot;
+          c.vehicle.hull_deg = at.h; c.enemy.drone_skill = S.pilot; c.enemy.gunner_jitter_mrad = S.jitter;
           if (exposed === 'hull') c.vehicle.half_h *= 0.5;   // hull-down: only the turret is there to hit (approximation: the target is half as tall)
           c.enemy.fixed = launches.map((l, i) => ({ key: l.key, R: Math.max(60, l.R), brg: l.brg, t0: l.t0, id: l.u.id, uid: l.u.id, los_clear: l.los, mask: masks ? masks[i] : null, jit_k: masks ? l.jit_k : null, mask_by: masks ? l.mask_by : null }));
           if (path) { c.ext = { path }; if (order) c.ext.order = order; }
@@ -378,7 +385,12 @@
         // the display gets a frame in between and the launch does not cause a visible pause.
         this._pending = () => {
         const observers = launches.map(l => ({ e: l.u.e, n: l.u.n, agl: l.u.spec.agl }));
-        const imp = p1.rec.threats.map(th => th.impact).filter(x => x != null), plan = this._drivePlan(at, warnT, observers, tEnd, imp.length ? Math.min(...imp) : null);
+        const imp = p1.rec.threats.map(th => th.impact).filter(x => x != null);
+        // can HKOI handle this on its own terms? Missiles it can blind (beam riders and command-guided), launched from far enough out to give it time,
+        // and no more than two arriving close together (three at once swamp it: 2% stopped in the engine against 44% when six seconds apart)
+        const blindable = launches.filter(l => (l.key === 'kornet' || l.key === 'saclos') && l.R >= 1000), others = launches.filter(l => !blindable.includes(l) && l.key !== 'rpg');
+        const holdForHkoi = this.cfg0.hkoi_enabled !== false && (T.st.obs == null || T.st.obs >= 12) && blindable.length >= 1 && blindable.length <= 2 && others.length === 0;
+        const plan = this._drivePlan(at, warnT, observers, tEnd, imp.length ? Math.min(...imp) : null, holdForHkoi);
         // which guided missiles lose their gunner's sight line because the vehicle got behind something
         const masks = launches.map((l, i) => {
           if (!l.u.spec.needsLos) return null;

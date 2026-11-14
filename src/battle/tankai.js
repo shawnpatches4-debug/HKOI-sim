@@ -159,7 +159,7 @@
       let free = 0;
       for (const o of order) { const { l, i, th } = o, u = l.u, placed = u.known ? l.t0 + 1.0 : th.track != null ? th.track + 0.5 : null; if (placed == null) continue;
         if (!W.los(at.e, at.n, 2.5, u.e, u.n, 0.8).clear) continue;
-        const slew = Math.abs(angDiff(l.brg, A.crows.brg)) / M.slew, ts = Math.max(placed + M.acquire + slew, free); if (ts >= th.impact - 0.5) continue;
+        const onIt = A.crows.tgt === u.id, slew = Math.abs(angDiff(l.brg, A.crows.brg)) / M.slew, ts = Math.max(placed + (onIt ? 0.3 : M.acquire) + slew, free);   /* a gun already laid on that team answers almost at once */ if (ts >= th.impact - 0.5) continue;
         const heavy = l.R <= M.heavy, rate = heavy ? S.duck : S.duck * 0.3; let td = null; for (let t = ts + 1; t < th.impact - 0.2; t += 1) if (this.rng.random() < rate) { td = t; break; }
         const frac = clamp((th.impact - ts) / Math.max(0.5, th.impact - l.t0), 0, 1), v = (root.HK || {}).THREATS ? root.HK.THREATS[l.key].speed : 250;
         if (td != null && masks[i] == null) { masks[i] = Math.max(10, (th.impact - td) * v * 0.55); l.mask_by = 'counter_fire'; this.say(this.t + td, 'enemy', u.id, `${u.spec.name} #${u.id + 1}: gunner ducks under .50 fire and loses his missile.`, `accurate machine-gun fire on a ${this.skill} crew: about ${Math.round(rate * 100)}% a second`); }
