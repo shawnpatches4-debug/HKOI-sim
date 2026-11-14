@@ -63,7 +63,17 @@ async def main():
             await ev('void ((() => { let n = 0; while (__beta.bank()[1] < %f && n++ < 400) __beta.advance(0.02); })())' % (s['t1'] + 0.4)); await pg.wait_for_timeout(4000)
             h = json.loads(await js('{cls: document.getElementById("fpv").className, warn: document.querySelector("#fpv .warn").textContent, bc: document.querySelector("#fpv .bc").textContent, filter: document.getElementById("view").style.filter}')); print('hit: after impact', h); await pg.screenshot(path=shot + '_hit_frozen.png')
             if 'frozen' not in h['cls'] or 'impact' not in h['bc']: bad.append('after a hit the feed does not freeze on its last frame')
-        if not hits: print('NOTE: no drone hit the vehicle in this battle, so the frozen last frame was not exercised')
+        if not hits and 'hit' in PART and sorties:
+            # No drone reached the vehicle in this battle. To exercise the frozen last frame all the same, one flight's ending is
+            # rewritten IN THE TEST PAGE ONLY from "shot down" to "hit" (the 3D scene still shows what really happened).
+            s = sorties[0]; print('NOTE: no drone hit the vehicle in this battle; forcing the record of flight', s, 'to a hit to exercise the frozen last frame')
+            await goto(s['t1'] - 1.0, s['uid'], 500)
+            await ev('void (__beta.battle.events.filter(e => e.type === "end" && e.uid === %d && Math.abs(e.t - %f) < 0.01).forEach(e => { e.how = "hit"; }))' % (s['uid'], s['t1']))
+            await ev('void ((() => { let n = 0; while (__beta.bank()[1] < %f && n++ < 400) __beta.advance(0.02); })())' % (s['t1'] - 0.2)); await pg.wait_for_timeout(6000)
+            g = json.loads(await js('{grabbed: __beta.fpvFeed.frozenKey, phase: __beta.fpvFeed.info.phase}')); print('just before impact', g)
+            await ev('void ((() => { let n = 0; while (__beta.bank()[1] < %f && n++ < 400) __beta.advance(0.02); })())' % (s['t1'] + 0.4)); await pg.wait_for_timeout(4000)
+            h = json.loads(await js('{cls: document.getElementById("fpv").className, warn: document.querySelector("#fpv .warn").textContent, bc: document.querySelector("#fpv .bc").textContent, filter: document.getElementById("view").style.filter, px: (() => { const d = document.getElementById("fpv-freeze").getContext("2d").getImageData(0, 0, 640, 360).data; let n = 0; for (let i = 0; i < d.length; i += 4001) if (d[i] + d[i + 1] + d[i + 2] > 30) n++; return n; })()}')); print('forced hit: after impact', h); await pg.screenshot(path=shot + '_hit_frozen_forced.png')
+            if 'frozen' not in h['cls'] or 'impact' not in h['bc'] or h['px'] < 20: bad.append('after a (forced) hit the feed does not freeze on its last frame')
         # the team menu: a drone crew has a line for its drone's camera; a click on it rides it, a click on another team leaves
         if sorties and 'menu' in PART:
             s = sorties[0]; await ev('void (__beta.setView("troops"))'); await pg.wait_for_timeout(2500)

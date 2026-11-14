@@ -27,13 +27,13 @@ const CSS = `
   @keyframes fpvroll { from { top: -20%; } to { top: 102%; } }
   #fpv.black .lines { background: #000; } #fpv.wait .lines, #fpv.wait .rollbar { display: none; }
   #fpv .t { position: absolute; white-space: pre; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 0 0 4px #000; }
-  #fpv .tl { left: max(5.5%, 280px); top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: 21%; } #fpv .br { right: 5.5%; bottom: 21%; text-align: right; }
+  #fpv .tl { left: max(5.5%, 280px); top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: 26%; } #fpv .br { right: 5.5%; bottom: 26%; text-align: right; }   /* clear of the control bar and the replay bar */
   #fpv .tc { left: 50%; top: 15%; transform: translateX(-50%); text-align: center; font-size: 12px; opacity: .9; }
-  #fpv .bc { left: 50%; bottom: 21%; transform: translateX(-50%); text-align: center; }
+  #fpv .bc { left: 50%; bottom: 26%; transform: translateX(-50%); text-align: center; }
   #fpv .warn { left: 50%; top: 62%; transform: translateX(-50%); text-align: center; font-size: 17px; color: #ffd24a; background: rgba(0, 0, 0, .55); padding: 2px 10px; } #fpv .warn:empty { display: none; }
   body.fpv-on #marks { display: none; }   /* the spectator's name tags do not belong in a camera picture */
   #fpv .warn.alarm { color: #ff5a4a; animation: fpvblink .5s steps(2) infinite; } @keyframes fpvblink { 50% { opacity: .25; } }
-  #fpv .cap { position: absolute; left: 50%; bottom: 16.5%; transform: translateX(-50%); font: 500 11px var(--mono, monospace); letter-spacing: .06em; color: #d6dbd0; opacity: .85; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+  #fpv .cap { position: absolute; left: 50%; top: calc(15% + 22px); transform: translateX(-50%); font: 500 11px var(--mono, monospace); letter-spacing: .06em; color: #d6dbd0; opacity: .85; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 2px #000; }
   #fpv svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   #fpv .bars { display: inline-block; vertical-align: -1px; margin-left: 8px; } #fpv .bars i { display: inline-block; width: 4px; margin-right: 2px; background: #fff; box-shadow: 1px 1px 0 #000; opacity: .25; } #fpv .bars i.on { opacity: 1; }
   @media (prefers-reduced-motion: reduce) { #fpv .warn.alarm, #fpv .rollbar { animation: none; } }
