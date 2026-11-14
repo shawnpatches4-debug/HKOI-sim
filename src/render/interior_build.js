@@ -419,9 +419,10 @@ export function buildInterior(labels) {
 export const SEATS = {
   in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 360, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38, near: 0.58, nearUp: 0.95,   /* with his head up in the cupola the outside model's own cupola fittings (nearer than 0.95 m) are left out, or they would fill the ports */
     // with the hatch open-protected his eye is in the gap between the cupola's ring (0.907 with its seal) and the raised lid (its underside
-    // 0.886 + 0.12 = 1.006), 0.37 m above the outside roof (0.59), and he leans 0.16 m toward the side he looks at; open, his head and
-    // shoulders are out, the eye 1.25 (0.66 m above the roof, at the windows of the shield panels round the cupola) and he looks down 35 degrees at most
-    slot: (DIM.CUPTOP + 0.012 + DIM.CUPTOP - 0.009 + DIM.CUPLIFT) / 2, lean: 0.16, out: 1.25, outPitch: -35, headOutY: DIM.CUPTOP - 0.04 },
+    // 0.886 + 0.12 = 1.006), 0.37 m above the outside roof (0.59), and he leans 0.16 m toward the side he looks at; open, he stands up
+    // in it, the eye 1.47 (0.88 m above the roof, over the tops of the shield panels round the cupola, 1.39, so that he sees over them and is seen
+    // from outside: at 1.25 his head was hidden behind their dark windows) and he looks down 35 degrees at most
+    slot: (DIM.CUPTOP + 0.012 + DIM.CUPTOP - 0.009 + DIM.CUPLIFT) / 2, lean: 0.16, out: 1.47, outPitch: -35, headOutY: DIM.CUPTOP - 0.04 },
   in_gnr: { g: 'tur', name: 'Gunner', eye: [0.63, 0.2, -0.5], yaw0: 0, pitch0: -3, yawLim: 115, pitch: [-55, 35], fov: 70 },
   in_ldr: { g: 'tur', name: 'Loader', eye: [-0.66, 0.34, 0.3], yaw0: 52, pitch0: -14, yawLim: 175, pitch: [-60, 50], fov: 80 },
   in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.12, DIM.DZ + 0.22], yaw0: 0, pitch0: -19, yawLim: 85, pitch: [-62, 26], fov: 74, near: 2.3 },   /* back in the reclined seat: the T-bar and its grips in the foreground, displays either side, the vision blocks above */
