@@ -73,9 +73,18 @@ export class Scene3D {
     for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== Q.samples) { rt.samples = Q.samples; rt.dispose(); }
     if (this.sun.shadow.mapSize.x !== Q.shadow) { this.sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
     this.bloom.enabled = Q.bloom; this.precip.mesh.geometry.setDrawRange(0, Q.precip * 2);
-    this.post = !Q.plain; this.sun.castShadow = !Q.plain; this.renderer.shadowMap.needsUpdate = true;
+    this.post = !Q.plain || !!this.thermal; this.sun.castShadow = !Q.plain; this.renderer.shadowMap.needsUpdate = true;
     this.applySize();
   }
+  // Thermal picture for the sights. mode 0 off, 1 white hot, -1 black hot. Warm things (crews, vehicles, missiles) are made to glow by how
+  // warm their group says they are (userData.heat, 0 to 1; assumed values), the sky goes cold, and the picture is shown as brightness only.
+  setThermal(mode) {
+    mode = mode || 0; const was = this.thermal || 0; this.thermal = mode; this.grade.uniforms.thermal.value = mode; this.post = !this.Q.plain || mode !== 0;
+    if (!!mode !== !!was) { if (mode) { this._thSky = this.sky.visible; this._thBg = this.scene.background; this._thFog = this.scene.fog.color.clone(); this._thExp = this.renderer.toneMappingExposure; this.sky.visible = false; this.scene.background = new THREE.Color('#1c1f1d'); this.scene.fog.color.set('#3a3e3a'); this.renderer.toneMappingExposure = 0.5; }
+      else { this.sky.visible = this._thSky; this.scene.background = this._thBg; this.scene.fog.color.copy(this._thFog); this.renderer.toneMappingExposure = this._thExp; } }
+    this._heat(mode !== 0); this._heatAt = this.clock + 2;
+  }
+  _heat(on) { const walk = (o, heat) => { if (o.userData && o.userData.heat != null) heat = o.userData.heat; if (o.isMesh && o.material) for (const m of [].concat(o.material)) { if (!m || !m.emissive) continue; if (m.userData.e0 == null) { m.userData.e0 = m.emissive.getHex(); m.userData.ei0 = m.emissiveIntensity; } if (on) { m.emissive.setScalar(1); m.emissiveIntensity = heat * 3.2; } else { m.emissive.setHex(m.userData.e0); m.emissiveIntensity = m.userData.ei0; } } for (const c of o.children) walk(c, heat); }; walk(this.units, 0.5); }
   // which graphics chip the browser is actually using (a 'SwiftShader', 'llvmpipe' or 'Basic Render' answer means none: it is drawing on the processor)
   gpu() { if (this._gpu) return this._gpu; const gl = this.renderer.getContext(), e = gl.getExtension('WEBGL_debug_renderer_info'); this._gpu = String(e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); return this._gpu; }
   get software() { return /swiftshader|llvmpipe|basic render|software/i.test(this.gpu()); }
@@ -120,7 +129,7 @@ export class Scene3D {
     this.fx.update(dt, this.wind); for (const l of this.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } if (this.trees.userData.update) this.trees.userData.update(this.camera.position, this.Q.near, this.Q.mid, this.Q.far); this.fx.mat.uniforms.scale.value = this.renderer.domElement.height * 0.9;
     // the shadow map follows the point of interest so that detail stays sharp where the camera is looking
     this.sun.target.position.copy(this.focus); this.sun.position.copy(this.focus).addScaledVector(this.sunDir, 1200);
-    this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset();
+    this.clock += dt; ENV.time.value = this.clock; this.renderer.info.reset(); if (this.thermal && this.clock > (this._heatAt || 0)) { this._heat(true); this._heatAt = this.clock + 2; }   /* models that arrived since: make them glow too */
     // shadows are redrawn every frame on the highest setting, every second frame otherwise: the eye does not see the difference at walking pace
     this.frameN++; if (this.Q.shadowEvery <= 1 || this.frameN % this.Q.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
     // hold the frame rate by resolution (auto only). rawMs is the true time since the last frame.
