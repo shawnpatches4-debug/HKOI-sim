@@ -6,16 +6,17 @@
 // y up, and the gun pointing along -z. The two groups this returns are turned half a circle when hung on the vehicle model, whose
 // own frame has x to the left and z forward.
 //
-// ASSUMPTIONS: heights are fitted to the supplied outside model (its turret roof is 0.60 m above the turning point and its
-// cupola 0.91 m), not to drawings of the real vehicle. The HKOI control panel is the owner's own system: its place (right wall, at the
+// ASSUMPTIONS: heights are fitted to the supplied outside model, measured in the page (turret roof 0.60 m above the turning point,
+// cupola top 0.91 m, gun axis 0.19 m, hull top 0.20 m below it at the ring and 0.43 m below over the driver), not to drawings of the
+// real vehicle. That leaves the driver only 0.69 m between floor and roof: he lies well back, as he does in the real vehicle. The HKOI control panel is the owner's own system: its place (right wall, at the
 // commander's right hand) and its layout are invented here.
 import * as THREE from 'three';
 import { Kit, K, part } from './interior_parts.js';
 
 export const DIM = {
   FL: -0.98,      // turret basket floor
-  HF: -1.07,      // hull floor
-  HR: -0.07,      // underside of the hull roof (the turret ring sits in it)
+  HF: -1.14,      // hull floor
+  HR: -0.24,      // underside of the hull roof (the turret ring sits in it). MEASURED on the outside model: its hull top is 0.20 m below the turning point at the ring and slopes to 0.43 m below over the driver
   RF: 0.54,       // underside of the turret roof
   RFF: 0.43,      // the same at the front wall (the roof slopes down toward the gun)
   GY: 0.20,       // height of the gun's axis
@@ -23,7 +24,7 @@ export const DIM = {
   HAT: [-0.60, 0.15], HATR: 0.33,    // loader's hatch
   BZ: 1.0,        // the bustle bulkhead (blast doors) is at this z
   DZ: -2.75,      // the driver sits here
-  DRF: -0.22,     // underside of the hull roof over the driver
+  DRF: -0.45,     // underside of the hull roof over the driver (the outside model's glacis is 0.37 to 0.43 m below the turning point there)
 };
 
 const P = K.PAINT, M = K.METAL;
