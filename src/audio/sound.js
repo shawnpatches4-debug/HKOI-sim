@@ -104,7 +104,7 @@ export class Sound {
     const c = this.ctx, M = this.mix, B = this.bed, t = c.currentTime, set = (p, v, tc = 0.12) => p.setTargetAtTime(v, t, tc);
     const seat = st.view != null ? (SEATS[st.view] || 'out') : st.inside ? 'in' : 'out';
     this.seat = seat; this.inside = seat === 'in'; this.lite = (st.rate || 1) > 2.01; this.camDist = st.camDist || 0;
-    M.setSeat(seat); this.icom.listen(seat !== 'out');
+    M.setSeat(seat); this.icom.listen(seat !== 'out'); this.icom.leak(st.camDist || 0, seat === 'out' && st.view !== 'title' && (st.camDist || 0) < 45 && st.alive !== false);
     // --- what the interior reports (src/render/interior.js, read only): the intercom volume knob, the warning-tone switch,
     // and what a hit did inside. Heard only from a seat inside.
     const I = st.interior && st.interior.inside ? st.interior : null, FX = I && I.fxS;

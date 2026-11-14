@@ -128,9 +128,13 @@ async function talk() {
   // the same line asked for again and again: the take must change
   s = await render('talk_repeats', 30, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: Array.from({ length: 6 }, (_, i) => [0.5 + i * 4.6, x => { x.cue('GNR', 'ontheway', 1); x.cue('LDR', 'up', 1, { delay: 2, ttl: 3 }); }]) }); save('talk_repeats', s);
   // from outside the vehicle the crew is not heard
-  s = await render('talk_from_outside', 8, { voices: true, state: st('orbit'), setup: x => x.mix.setBus('world', 0), acts: [[0.5, x => x.cue('GNR', 'ready', 0)], [4, x => x.cue('CDR', 'cease', 1)]] }); save('talk_from_outside', s);
+  // from outside: faint and dull through the hull close by (a shout carries further than a calm word), nothing from far off
+  for (const [name, view, d] of [['talk_outside_8m', 'orbit', 8], ['talk_outside_25m', 'chase', 25], ['talk_outside_60m', 'orbit', 60], ['talk_from_enemy_1500m', 'enemy', 1500], ['talk_inside_same_lines', 'in_gnr', 2]]) {
+    s = await render(name, 9, { voices: true, state: () => ({ view, cond: 'none', alive: true, speed: 0, camDist: d, drones: [], talking: false }), setup: x => { x.mix.setBus('world', 0); x.mix.setBus('vehicle', 0); x.mix.setBus('ui', 0); },
+      acts: [[0.5, x => x.cue('GNR', 'ready', 0)], [4, x => x.cue('CDR', 'hit', 2, { pri: 3, ttl: 3 })]] }); save(name, s);
+  }
   // every clip of the release list once, one a second and a half apart, for the speech recogniser (crew3_index.json)
-  const idx = JSON.parse(fs.readFileSync(path.join(ASSETS, 'crew3_index.json'), 'utf8')), all = [];
+  const idx = JSON.parse(fs.readFileSync(path.join(ASSETS, fs.existsSync(path.join(ASSETS, 'crew4_index.json')) ? 'crew4_index.json' : 'crew3_index.json'), 'utf8')), all = [];
   for (const who in idx.e) for (const ev in idx.e[who]) idx.e[who][ev].forEach((x, i) => all.push([who, ev, i, x]));
   let tt = 0.3; const plan = all.map(a => { const at = tt; tt += a[3][2] / 0.95 + 0.9; return [at, a]; });
   s = await render('talk_every_clip', tt + 1, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: plan.map(([at, a]) => [at, x => { x.icom.lastAsk = {}; const L = x.icom.index.e[a[0]][a[1]]; x.icom.lastClip[a[0] + '.' + a[1]] = []; const keep = L.slice(); L.length = 0; L.push(keep[a[2]]); x.cue(a[0], a[1], keep[a[2]][3], { ttl: 0.5 }); x.icom.update(); L.length = 0; keep.forEach(k => L.push(k)); }]) });

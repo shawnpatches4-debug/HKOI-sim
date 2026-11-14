@@ -25,7 +25,12 @@ export function engineLine(who, s, lastOrder) {
   if (who === 'CDR') {
     if (/^we.re hit/i.test(s)) return { ev: 'hit', pri: 3, ttl: 2.5 };
     if (/^fire[,!] fire/i.test(s)) return null;                       /* the killing hit: no line is honest here; the crew goes quiet */
-    if (/smoke/i.test(s)) return { cue: 'smoke' };
+    if (/smoke/i.test(s)) return { ev: 'smoke', pri: 2, ttl: 1.5, cue: 'smoke' };
+    { const m = /^(missile|drone)[,!]?\s+(\d+)\s+o.clock/i.exec(s); if (m) return { ev: m[1].toLowerCase() + '_' + (+m[2]), pri: 3, ttl: 1.5 }; }
+    if (/hold here|^Nothing to hide|^NOWHERE TO GO/i.test(s)) return { ev: 'hold', pri: 1, ttl: 2 };
+    if (/^All stations, report|^Everyone okay/i.test(s)) return { ev: 'report', report: true };
+    if (/^Good work|^That was close/i.test(s)) return { ev: 'good', pri: 0, ttl: 4 };
+    if (/^It went wide|^It missed/i.test(s)) return { ev: 'wide', pri: 1, ttl: 1.5 };
     if (/cease fire|BURNING/i.test(s)) return { ev: 'cease', pri: 1, ttl: 3 };
     if (/^Miss[.!]|^MISSED/.test(s)) return { ev: 'reengage_doubt', pri: 1, ttl: 2 };
     if (/Re-engage|HIT HIM AGAIN/i.test(s)) return { ev: 'reengage', pri: 1, ttl: 2 };
@@ -39,7 +44,7 @@ export function engineLine(who, s, lastOrder) {
       if (/\bstop\b/i.test(s)) return { ev: 'drv_stop', pri: 2, ttl: 1.5, order: 'stop' };
       if (/ahead|forward|move/i.test(s)) return { ev: 'drv_fwd', pri: 2, ttl: 1.5, order: 'fwd' };
     }
-    return null;   /* "Missile, 3 o'clock", "Hold here", "All stations, report", "Good work": the pack has no such lines */
+    return null;
   }
   if (who === 'GNR') {
     if (/on the way/i.test(s)) return { ev: 'ontheway', pri: 1, ttl: 0.8 };
@@ -47,12 +52,24 @@ export function engineLine(who, s, lastOrder) {
     if (/gunner up|^Gunner.s good/i.test(s)) return { ev: 'ready', report: true };
     if (/jam/i.test(s)) return { ev: 'misfire', pri: 2, ttl: 2 };
     if (/^Gun.s clear|^CLEAR!/.test(s)) return { ev: 'gun_back', pri: 1, ttl: 2 };
-    return null;   /* "Identified", "Beam's cut", "No cut", "Steady", ammunition counts */
+    if (/^Identified|^I SEE IT/i.test(s)) return { ev: 'identified', pri: 1, ttl: 1.2 };
+    if (/steady/i.test(s)) return { ev: 'steady', pri: 1, ttl: 1.2 };
+    if (/^No cut|DIDN.T WORK/i.test(s)) return { ev: 'nocut', pri: 2, ttl: 1.5 };
+    if (/back on the beam|^IT.S BACK/i.test(s)) return { ev: 'back', pri: 2, ttl: 1.5 };
+    if (/^Beam.s cut|^Cut!|^It.s cut/i.test(s)) return { ev: 'cut', pri: 1, ttl: 1.5 };
+    if (/^Obscurant.*fifty|FIFTY ROUNDS OF SMOKE/i.test(s)) return { ev: 'obs50', pri: 0, ttl: 4 };
+    if (/^HE.*fifty/i.test(s)) return { ev: 'he50', pri: 0, ttl: 4 };
+    if (/^HE.*out/i.test(s)) return { ev: 'heout', pri: 0, ttl: 4 };
+    return null;
   }
   if (who === 'LDR') {
     if (/^up[.!]/i.test(s)) return { ev: 'up', pri: 1, ttl: 1.2 };
     if (/^Loader( up|.s good)|I.m up/i.test(s)) return { ev: 'ready', report: true };
-    return null;   /* the Trophy calls: the double crack itself is the news */
+    if (/^Trophy, kill|^Trophy got it|TROPHY GOT IT/i.test(s)) return { ev: 'trophy_kill', pri: 1, ttl: 1.5 };
+    if (/no kill|^Trophy missed|^IT MISSED/i.test(s)) return { ev: 'trophy_miss', pri: 2, ttl: 1.5 };
+    if (/left side/i.test(s)) return { ev: 'left_empty', pri: 0, ttl: 4 };
+    if (/right side/i.test(s)) return { ev: 'right_empty', pri: 0, ttl: 4 };
+    return null;
   }
   if (who === 'DRV') {
     if (/^Driver(.s good| up)/.test(s)) return { ev: 'ready', report: true };
@@ -80,10 +97,12 @@ export class CrewTalk {
     const s = b.crewState(); if (!s.on) return null; const m = s.who[who.toLowerCase()]; if (!m) return null;
     return m.status === 'down' ? 'down' : /^frozen/.test(m.busy || '') ? 'frozen' : null;
   }
+  // a wounded man's cry, in his own voice when the strips have it (crew4), otherwise the pack's
+  _wound(t, who) { const o = { level: 2, pri: 3, ttl: 2 }; return this.net.has(who, 'wound') ? this._ask(t, who, 'wound', o) : this._ask(t, 'ANY', 'wound', o); }
   _ask(t, who, ev, opt) { opt = opt || {};
-    { const why = this._mute(who); if (why) { this.trace.push([+t.toFixed(2), who, ev + ' (' + why + ': he says nothing)', 'silent']); return false; } }
+    { const why = opt.evenFrozen ? (this._mute(who) === 'down' ? 'down' : null) : this._mute(who); if (why) { this.trace.push([+t.toFixed(2), who, ev + ' (' + why + ': he says nothing)', 'silent']); return false; } }
     /* each man's own stress (src/battle/crew.js) picks his take: a shaken loader sounds shaken while a steady commander does not. The battle-wide level still applies up to 'tense'; lines that are urgent by nature (hit, wounded) keep their own level. */
-    { const b = this.battle; if (who !== 'HQ' && opt.level != null && b && b.crewVoiceLevel && b.crewState && b.crewState().on) opt = Object.assign({}, opt, { level: Math.max(opt.level >= 2 && (ev === 'hit' || ev === 'wound' || ev === 'loader_down' || ev === 'contact') ? 2 : Math.min(1, opt.level), b.crewVoiceLevel(who) || 0) }); }
+    { const b = this.battle; if (who !== 'HQ' && opt.level != null && b && b.crewVoiceLevel && b.crewState && b.crewState().on) opt = Object.assign({}, opt, { level: Math.max(opt.level >= 2 && (ev === 'hit' || ev === 'wound' || ev === 'loader_down' || ev === 'contact' || ev === 'bail' || ev === 'freeze' || /_down$/.test(ev)) ? 2 : Math.min(1, opt.level), b.crewVoiceLevel(who) || 0) }); }
     const ok = this.net.request(who, ev, opt); this.trace.push([+t.toFixed(2), who, ev, ok ? 'said' : 'silent']); if (this.trace.length > 600) this.trace.splice(0, 200); return ok; }
   _silent(t, who, what) { this.trace.push([+t.toFixed(2), who, what, 'silent']); }
 
@@ -107,6 +126,7 @@ export class CrewTalk {
     if (this.pending.length > 1) this.pending.sort((x, y) => x.t - y.t);
     while (this.pending.length && this.pending[0].t <= t) { const e = this.pending.shift(); this._event(b, e, t - e.t > 2 || jumped, now, lvl, opts); }
     for (let i = this.later.length - 1; i >= 0; i--) if (this.later[i].t <= t) { const l = this.later.splice(i, 1)[0]; if (t - l.t < 2 && !jumped) l.run(); }
+    if (this.dead) { this.fx.warn && this.fx.warn(false, false); return; }   /* lost in this very step: nothing more is said */
     // ---- the mission start: the radio net sends the vehicle off, then the crew reports (once the sound files are in)
     if (!this.started && t < 8 && this.net.ready !== false && this.net.has('GNR', 'ready')) {
       this.started = true; const g = 'start';
@@ -137,7 +157,8 @@ export class CrewTalk {
         if (!(m != null && t - m < 30)) { const R = rf.R, near = RANGES.reduce((a, r) => Math.abs(r - R) < Math.abs(a - R) ? r : a, RANGES[0]); if (R <= 2050 && Math.abs(near - R) <= 60) this._ask(t, 'GNR', 'range_' + near, { level: 1, pri: 1, ttl: 2 }); else this._silent(t, 'GNR', 'range beyond the recorded calls'); }
       }
       if (this.loaded === false && T.loaded && ai.ldr && ai.ldr.ok) this._ask(t, 'LDR', 'up', { level: lvl, pri: 1, ttl: 1.2 });
-      if (ai.ldr && this.ldrUp === false && ai.ldr.up) this._ask(t, 'LDR', 'mg_ready', { level: lvl, pri: 1, ttl: 2 });
+      if (ai.ldr && this.ldrUp === false && ai.ldr.up) { this._ask(t, 'LDR', 'going_up', { level: lvl, pri: 1, ttl: 2 }); this._ask(t, 'LDR', 'mg_ready', { level: lvl, pri: 1, ttl: 5, delay: 2.5 }); }   /* he climbs to his machine gun */
+      if (ai.ldr && this.ldrUp === true && !ai.ldr.up && ai.ldr.ok) this._ask(t, 'LDR', 'coming_down', { level: lvl, pri: 1, ttl: 2 });
       if (ai.coax && this.coaxSaid != null && ai.coax.said !== this.coaxSaid && ai.coax.said >= 0) this._ask(t, 'GNR', 'mg', { level: lvl, pri: 1, ttl: 1.5 });
       if (this.moving === true && T.mode !== 'moving' && !(V.length && t <= V[V.length - 1].tEnd)) this._ask(t, 'CDR', 'drv_stop', { level: Math.min(1, lvl), pri: 0, ttl: 2 });
     }
@@ -174,7 +195,7 @@ export class CrewTalk {
   _engine(b, v, r, t, now) {
     const m = engineLine(r.who, r.text, this.lastOrder), lvl = r.lvl || 0;
     if (!m) { this._silent(t, r.who, 'engine: ' + r.text); return; }
-    if (m.cue === 'smoke') { if (!this.smoked.has(v)) { this.smoked.add(v); this.fx.smoke && this.fx.smoke(); this.trace.push([+t.toFixed(2), r.who, 'smoke dischargers (no voice)', 'cue']); } return; }
+    if (m.cue === 'smoke') { if (this.smoked.has(v)) return; this.smoked.add(v); this.fx.smoke && this.fx.smoke(); }
     if (m.order) { this.lastOrder = m.order; this.lastOrderEv = m.ev; }
     if (m.report) {   /* "X's good": part of a crew report. Not after every single engagement. */
       if (now > this.reportOpen) { if (now - this.lastReport < REPORT_EVERY) return; this.lastReport = now; this.reportOpen = now + 9; }
@@ -195,7 +216,7 @@ export class CrewTalk {
         if (e.by === 'hit') { this.lastHit = t; if (e.killing) { this.dead = true; this.net.flush('vehicle lost'); } else if (!stale) this._ask(t, 'CDR', 'hit', { level: 2, pri: 3, ttl: 2.5 }); }
         break;
       case 'loader_hit':
-        if (!stale) { this._ask(t, 'ANY', 'wound', { level: 2, pri: 3, ttl: 2 }); this._ask(t, 'CDR', 'loader_down', { level: 2, pri: 2, ttl: 5 }); }
+        if (!stale) { this._wound(t, 'LDR'); this._ask(t, 'CDR', 'loader_down', { level: 2, pri: 2, ttl: 5 }); }
         break;
       case 'located':
         this.lastContact = t;
@@ -206,7 +227,8 @@ export class CrewTalk {
         this._ask(t, 'GNR', 'ontheway', { level: Math.max(1, lvl), pri: 2, ttl: 0.7 });
         if (!e.hit) {
           this.miss.set(e.uid, t);
-          this.later.push({ t: t + e.tof + 0.4, run: () => {   /* a miss: the commander says so only if they are in fact going to fire again */
+          this.later.push({ t: t + e.tof + 0.2, run: () => this._ask(b.t, 'GNR', 'miss', { level: lvl, pri: 1, ttl: 1.2 }) });   /* the gunner senses the round */
+          this.later.push({ t: t + e.tof + 0.9, run: () => {   /* the commander says they will fire again only if they are in fact going to */
             const u = b.units.find(q => q.id === e.uid), k = T.known.find(q => q.id === e.uid);
             if (u && u.alive && u.state !== 'moving' && k && !k.done && T.main > 0) this._ask(b.t, 'CDR', 'reengage_doubt', { level: lvl, pri: 1, ttl: 2 });
             else this._silent(b.t, 'CDR', 'miss, target gone: nothing said');
@@ -235,12 +257,13 @@ export class CrewTalk {
         if (!stale && e.result === 'won') this._ask(t, 'HQ', opts.mission === 'advance' ? 'end_secure' : 'end_won', { level: 0, pri: 1, ttl: 10, delay: 1.5 }) || this._ask(t, 'HQ', 'end_won', { level: 0, pri: 1, ttl: 10, delay: 1.5 });
         break;
       case 'crew':   /* the crew model (src/battle/crew.js): a man wounded, a man down, the crew bailing out */
-        if (e.what === 'bail_out') { this.dead = true; this.net.flush('crew bails out'); break; }
+        if (e.what === 'bail_out') { this.net.flush('crew bails out'); if (!stale) this._ask(t, 'CDR', 'bail', { level: 2, pri: 3, ttl: 2 }); this.dead = true; break; }
         if (stale) break;
-        if (e.what === 'wounded') this._ask(t, 'ANY', 'wound', { level: 2, pri: 3, ttl: 2 });   /* he is hit but stays at his post: his own cry */
+        if (e.what === 'wounded') this._wound(t, String(e.who || '').toUpperCase());   /* he is hit but stays at his post: his own cry, in his own voice */
+        else if (e.what === 'freeze') this._ask(t, String(e.who || '').toUpperCase(), 'freeze', { level: 2, pri: 2, ttl: 1.5, evenFrozen: true });   /* the moment he locks up; after it he says nothing */
         else if (e.what === 'down' && e.who === 'ldr') this._ask(t, 'CDR', 'loader_down', { level: 2, pri: 2, ttl: 5, delay: 0.8 });
         else if (e.what === 'down' && e.who === 'cdr') this._ask(t, 'GNR', 'cdr_down', { level: 2, pri: 3, ttl: 5, delay: 1.0 });   /* crew.js: with the commander down the gunner gives the orders */
-        else if (e.what === 'down') this._silent(t, 'CDR', 'crewman down (' + e.who + '): the pack has no line');
+        else if (e.what === 'down') this._ask(t, 'CDR', e.who === 'gnr' ? 'gnr_down' : 'drv_down', { level: 2, pri: 2, ttl: 5, delay: 0.8 });
         break;
       default: break;   /* launch, hkoi_fire, trophy, move, wave: heard as sounds, not as speech */
     }
