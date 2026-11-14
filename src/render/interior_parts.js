@@ -30,6 +30,9 @@ export const SHARED = {
   uInd: { value: new Float32Array(NIND) },                 // brightness of each indicator light, 0 to 1
   uBack: { value: 0.35 },                                  // panel legend lighting
   uTime: { value: 0 },
+  uSimT: { value: 0 },                                     // the battle clock (what the hit effects run on)
+  uSmoke: { value: 0 }, uSmokeCol: { value: new THREE.Vector3(0.3, 0.3, 0.3) },   // smoke and dust hanging in the compartment
+  uGlitch: { value: 0 },                                   // displays tearing after a hit
 };
 
 const DEPTH_VS = /* glsl */`
@@ -60,7 +63,7 @@ const VS = /* glsl */`
 
 const FS = /* glsl */`
   uniform vec3 uLampPos[${NLAMP}]; uniform vec3 uLampCol[${NLAMP}]; uniform float uLampR[${NLAMP}];
-  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell;
+  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol;
   uniform sampler2D uWear; uniform sampler2D uTread;
   #ifdef LABELS
     uniform sampler2D uAtlas;
@@ -77,7 +80,12 @@ const FS = /* glsl */`
     vec3 v = normalize(cameraPosition - vW);
     float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb; float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
-      vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05; glow = uBack * 0.22;
+      vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05;
+      #ifdef NOGLOW
+        specK = 0.22; shin = 26.0;
+      #else
+        glow = uBack * 0.22;
+      #endif
     #else
       vec3 w3 = tri(uWear, vO, vON, 1.6);
       if (kind < 0.12) { alb *= 0.62 + 0.5 * w3.r; alb = mix(alb, vec3(0.16, 0.14, 0.12), (1.0 - w3.g) * 0.55); specK = 0.10 + 0.10 * w3.b; shin = 14.0; }
@@ -103,6 +111,7 @@ const FS = /* glsl */`
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
     vec3 col = alb * dif * low + spc * specK * low + alb * glow;
+    if (uSmoke > 0.001) { float sd = min(length(cameraPosition - vW), 2.6); col = mix(col, uSmokeCol, 1.0 - exp(-uSmoke * sd * 1.5)); }
     gl_FragColor = vec4(col * uExpo, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -134,32 +143,33 @@ function treadTexture() {
 let _wear = null, _tread = null;
 // The painted-and-worn material every solid part of the interior uses. shell = true for the walls, roof and hull tub (the parts
 // the cutaway view slices away); labels = the label sheet for the mesh that carries the placards.
-export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide } = {}) {
+export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide, glow = true } = {}) {
   _wear = _wear || wearTexture(); _tread = _tread || treadTexture();
   const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } };
   if (labels) u.uAtlas = { value: labels };
-  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: VS, fragmentShader: FS, side, defines: labels ? { LABELS: 1 } : {} });
+  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: VS, fragmentShader: FS, side, defines: labels ? (glow ? { LABELS: 1 } : { LABELS: 1, NOGLOW: 1 }) : {} });
 }
 
 // Glass of a display. map = what the interior draws on it (legends, reticle, numbers); live = an optional picture of the outside
 // rendered each frame; mode 0 colour picture, 1 green one-colour picture, -1 the same with light and dark swapped.
 export function screenMaterial(map, live = null) {
   const u = { uInside: SHARED.uInside, uExpo: SHARED.uExpo, uClip: SHARED.uClip, uClipOn: SHARED.uClipOn, uTime: SHARED.uTime,
-    uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
+    uGlitch: SHARED.uGlitch, uSimT: SHARED.uSimT, uWeak: { value: 0 }, uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; ${DEPTH_VS}
       void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; cabDepth(viewMatrix * w); }`,
-    fragmentShader: /* glsl */`uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint;
+    fragmentShader: /* glsl */`uniform float uGlitch; uniform float uWeak; uniform float uSimT; uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint;
       varying vec2 vUv; varying vec3 vW; ${CLIP_FS}
       void main() {
         cabClip(vW, 0.0);
+        float gl = clamp(max(uGlitch, uWeak), 0.0, 1.0); vec2 uvg = vUv; if (gl > 0.001) { float row = floor(vUv.y * 22.0) + floor(uSimT * 27.0) * 7.0; uvg.x += (fract(sin(row * 12.9898) * 43758.5453) - 0.5) * 0.22 * gl * step(0.45, fract(sin(row * 78.233) * 43758.5453)); }   /* torn rows */
         vec3 c = vec3(0.004, 0.008, 0.006);
         if (uHasLive > 0.5) {
-          vec3 l = texture2D(uLive, vUv).rgb * uGain; l = l / (l + vec3(0.6));
+          vec3 l = texture2D(uLive, uvg).rgb * uGain; l = l / (l + vec3(0.6));
           if (abs(uMode) > 0.5) { float g = dot(l, vec3(0.3, 0.55, 0.15)); g = smoothstep(0.02, 0.85, g); if (uMode < 0.0) g = 1.0 - g; l = uTint * g; }
           c = l * (0.92 + 0.08 * sin(vUv.y * 420.0));
         }
-        vec4 o = texture2D(uMap, vUv); c = mix(c, o.rgb, o.a);
+        vec4 o = texture2D(uMap, uvg); c = mix(c, o.rgb, o.a); c *= 1.0 - 0.55 * gl * step(0.6, fract(sin(floor(uSimT * 23.0) * 91.7) * 43758.5));
         gl_FragColor = vec4(c * uBright * 1.25 * uExpo, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

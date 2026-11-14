@@ -53,6 +53,29 @@ async def main():
             for i in range(4): await pg.wait_for_timeout(4500); print('drive', await pg.evaluate('JSON.stringify({t: +__beta.battle.t.toFixed(1), v: +(__beta.battle.tank.v || 0).toFixed(1), steer: +__beta.interior.st.steer.toFixed(2), throttle: +__beta.interior.st.thr.toFixed(2), gear: +__beta.interior.st.gear.toFixed(2), hk: __beta.interior.hkState})')); await pg.screenshot(path=os.path.join(out, f'{tag}_third_drv_moving_{i}.png'), timeout=180000)
             await pg.evaluate('void __beta.setPlaying(false)')
             print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
+        if which in ('hits', 'hitsnight'):   # what a hit does inside, and the crew. A real penetrating hit is looked for first; if the battle gives none in time, one is staged (and the file names say so)
+            await pg.evaluate("""void (window.stage = (age, kind) => { const b = __beta.battle, T = __beta.THREE; b.interiorHits = [{ T: b.t - age, pen: kind !== 'stop', kill: kind === 'kill', minor: false, s: kind === 'stop' ? 1 : kind === 'kill' ? 2 : 1.6, e: new T.Vector3(1.7, 0.35, -0.3), d: new T.Vector3(-1, -0.03, 0.1).normalize(), comps: kind === 'stop' ? {} : { gps: 'damaged', citv: 'destroyed' }, crew: kind === 'stop' ? {} : { gnr: kind === 'kill' ? 'killed' : 'wounded' }, idx: 7 }]; },
+              window.crewAs = o => { const b = __beta.battle; b._cs0 = b._cs0 || b.crewState.bind(b); b.crewState = () => { const s = b._cs0(); s.on = true; s.abandoned = false; for (const r in o) Object.assign(s.who[r], o[r]); return s; }; })""")
+            for name, js in [('rest_gnr', "lk('in_gnr', 20, -6, 1)"), ('rest_cdr', "lk('in_cdr', -20, -8, 1)"), ('rest_ldr', "lk('in_ldr', 0, 0, 1)"), ('rest_drv', "lk('in_drv', 0, 0, 1)"), ('rest_drv_shoulder', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])"), ('rest_cut_left', "cutv(-5.2, 2.4, 3.0)"), ('rest_cut_above', "cutv(-0.6, -1.5, 8.5)")]: await shot('crew_' + name, js)
+            if which == 'hits':
+                real = await pg.evaluate("(() => { const b = __beta.battle, I = __beta.interior; let n = 0, h = null; while (!h && b.tank.alive && n++ < 2500) { __beta.runTo(b.t + 0.2); h = I.hitsOf(b).find(x => x.pen && !x.minor); } return h ? { T: h.T, kill: h.kill, zone: h.zone, crew: h.crew, comps: h.comps, t: b.t } : null; })()")
+                print('real penetrating hit', json.dumps(real)); tagk = 'real' if real else 'staged'
+                for age in [0.06, 2, 20]:
+                    if real: await pg.evaluate(f"void __beta.runTo({real['T'] + age})")
+                    else: await pg.evaluate(f"void stage({age}, 'pen')")
+                    for seat, js in [('gnr', "lk('in_gnr', 30, -6, 1)"), ('cdr', "lk('in_cdr', 30, -10, 1)"), ('ldr', "lk('in_ldr', 0, 0, 1)"), ('drv', "lk('in_drv', 0, 0, 1)")]:
+                        if not real: await pg.evaluate(f"void stage({age}, 'pen')")
+                        await shot(f'hit_{tagk}_{seat}_{age}s', js)
+                    print('state', age, await pg.evaluate('JSON.stringify({smoke: +__beta.interior.smoke.toFixed(2), alarm: __beta.interior.alarm, pulse: __beta.interior.hitPulse, blood: __beta.interior.fxS && __beta.interior.fxS.blood, shake: __beta.interior.fxS && +__beta.interior.fxS.shake.toFixed(2)})'))
+                await shot(f'hit_{tagk}_cut_left_20s', "cutv(-5.2, 2.4, 3.0)")
+            await shot('hit_staged_stopped_by_armour_cdr', "(stage(0.08, 'stop'), lk('in_cdr', 30, -10, 1))"); await shot('hit_staged_penetration_cut_0.1s', "(stage(0.1, 'pen'), cutv(-5.2, 2.4, 3.0))")
+            await shot('crew_staged_gunner_wounded', "(stage(6, 'pen'), crewAs({ gnr: { status: 'wounded', state: 'shaken' } }), lk('in_cdr', -10, -30, 1))")
+            await shot('crew_staged_gunner_wounded_from_loader', "lk('in_ldr', 20, -6, 1)")
+            await shot('crew_staged_loader_down', "(crewAs({ ldr: { status: 'down' }, gnr: { status: 'ok', state: 'steady' } }), lk('in_cdr', -75, -22, 1))")
+            await shot('crew_staged_driver_panicked', "(crewAs({ drv: { state: 'panicked' }, ldr: { status: 'ok' } }), lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34]))")
+            await shot('crew_staged_all_shaken_cut', "(crewAs({ drv: { state: 'shaken' }, gnr: { state: 'shaken' }, cdr: { state: 'strained' }, ldr: { state: 'panicked' } }), cutv(5.2, 2.0, 3.0))")
+            await shot('hit_staged_killing_cdr_3s', "(stage(3, 'kill'), lk('in_cdr', 30, -10, 1))")
+            print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
         if which == 'cuts':   # the cutaway from every side, at rest and again with the turret laid on a target
             CU = [('left', "cutv(-5.2, 2.4, 3.0)"), ('right', "cutv(5.2, 2.0, 3.0)"), ('above', "cutv(-0.6, -1.5, 8.5)"), ('front_left', "cutv(-3.6, 5.2, 2.0)"), ('rear_right_high', "cutv(3.2, -3.4, 5.6)")]
             for name, js in CU: await shot('cut_' + name, js)
@@ -76,13 +99,6 @@ async def main():
             print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
         if which in ('all', 'consoles', 'everything'):
             for name, js in CONSOLES: await shot('close_' + name, js)
-        if which == 'crew':   # proposal pictures only (the page must be opened with crew=1): wait for the four figures, then look at them
-            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
-            for i in range(80):
-                if await pg.evaluate('!!(__beta.interior.crew && __beta.interior.crew.length)'): break
-                await pg.wait_for_timeout(1500)
-            print('crew figures', await pg.evaluate('__beta.interior.crew ? __beta.interior.crew.length : 0'))
-            for name, js in [('crew_from_ldr', "lk('in_ldr', 10, -8, 1)"), ('crew_from_cdr', "lk('in_cdr', -20, -24, 1)"), ('crew_from_gnr', "lk('in_gnr', 150, -5, 1)"), ('crew_cut_left', "cutv(-4.6, 2.0, 2.8)"), ('crew_cut_right_high', "cutv(3.2, -3.4, 5.6)"), ('crew_cut_front', "cutv(-2.5, 5.5, 3.0)")]: await shot(name, js)
         if which in ('all', 'live', 'everything'):
             # the main gun being laid on a located team, then just after the shot, then the reload seen from the loader's seat
             print('lay', await pg.evaluate('stepTo(b => !!b._rf)')); await shot('live_gnr_laying', "lk('in_gnr', 0, 0, 1.5)", 9000); await shot('live_cdr_laying', "lk('in_cdr', 30, -14, 1.3)")

@@ -10,6 +10,9 @@ import { SHARED, NLAMP, NIND, cabMaterial, screenMaterial, lampMaterial, glassMa
 import { buildInterior, SEATS, DIM, IND, COL } from './interior_build.js';
 import { CONDITIONS } from './scene3d.js';
 import { SeatUI } from '../app/seats.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { InteriorFx, hitList, fxState } from './interior_fx.js';
+import { CrewFigures, MEN } from './interior_crewfig.js';
 
 const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), ease = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
@@ -35,12 +38,20 @@ export class Interior {
     this.stats = { triangles: 0, meshes: 0, sightCalls: 0, controls: 0 };
     this.brt = { gps: 1, citv: 1, comp: 1, hkoi: 1, drv: 1, lp: 1, gas: 1 };   /* what the brightness knobs of the displays are set to */
     this.due = {}; this.plane = new THREE.Plane(); this.ext = null; this.citvYaw = null; this.sightT = 0; this.sightN = 0; this.keys = {};
-    // PROPOSAL ONLY: crew figures are parked by the owner. They are loaded only when the page address carries crew=1 (to take pictures for him to judge).
-    this.crewOn = typeof location !== 'undefined' && new URLSearchParams((location.hash || '').slice(1)).get('crew') === '1'; this.crew = null;
+    // Settings (the page can set these; they can also be turned off in the address: crew=0, graphic=0).
+    const Q = typeof location !== 'undefined' ? new URLSearchParams((location.hash || '').slice(1)) : null;
+    this.crewOn = !Q || Q.get('crew') !== '0';        // crew figures in the seats
+    this.graphic = !Q || Q.get('graphic') !== '0';    // "Graphic effects": blood on a wounded or killed crewman and on the surfaces behind him
+    this.hitPulse = null;        // for the sound module: the latest hit, Trophy shot or near miss { t (battle time), strength, penetrated }
+    this.alarm = false;          // for the sound module: the fire and penetration alarm is sounding
+    this.smoke = 0;              // 0 to 1: how thick the smoke inside is (for coughing, muffling)
+    this.fxS = null; this.simT = 0;
     this.ui = typeof document !== 'undefined' && scene3d && scene3d.canvas ? new SeatUI(scene3d.canvas, this) : null;
     if (scene3d && scene3d.renderer) scene3d.renderer.localClippingEnabled = true;   /* the cutaway view slices the outside model with a plane */
   }
   owns(mode) { return !!SEATS[mode]; }
+  // every hit, Trophy shot and near miss of a battle so far (see interior_fx.js): for the sound module, the debrief and the tests
+  hitsOf(battle) { return hitList(battle); }
 
   // ---------------------------------------------------------------- build (once, the first time an inside view is opened)
   _build() {
@@ -84,6 +95,14 @@ export class Interior {
       { g: 'hul', p: new THREE.Vector3(0, D.DRF - 0.1, D.DZ - 0.08), r: 0.6 },                 /* daylight through the driver's vision blocks */
       { g: 'tur', p: new THREE.Vector3(0.64, 0.2, -0.62), r: 0.5 } ];                          /* glow of the gunner's display */
     this.sightCam = new THREE.PerspectiveCamera(21, 1.6, 2, 30000); this.rt = {};
+    // what a hit does (sparks, blood) and the crew figures
+    const D2 = DIM, PI = Math.PI; this.fx = new InteriorFx(o => cabMaterial({ ...o, glow: false }), G, {
+      gnr: { g: 'tur', planes: [[0.6, -0.36, -0.336, 0.12, PI, 0, 0.3, 0.34], [1.196, 0.12, -0.36, 0, -PI / 2, 0, 0.46, 0.36], [0.6, -0.588, -0.5, -PI / 2, 0, 0, 0.3, 0.28]] },
+      cdr: { g: 'tur', planes: [[0.58, -0.1, 0.632, -0.1, PI, 0, 0.32, 0.36], [0.62, 0.2, D2.BZ - 0.058, 0, PI, 0, 0.5, 0.38], [0.58, -0.328, 0.46, -PI / 2, 0, 0, 0.32, 0.28]] },
+      ldr: { g: 'tur', planes: [[-0.66, -0.393, 0.42, -PI / 2, 0, 0, 0.3, 0.28], [-1.196, -0.1, 0.3, 0, PI / 2, 0, 0.5, 0.22], [-0.62, D2.FL + 0.003, 0.14, -PI / 2, 0, 0, 0.5, 0.5]] },
+      drv: { g: 'hul', planes: [[0.496, D2.HF + 0.36, D2.DZ + 0.08, 0, -PI / 2, 0, 0.5, 0.4], [-0.496, D2.HF + 0.36, D2.DZ + 0.2, 0, PI / 2, 0, 0.42, 0.36], [0, D2.HF + 0.002, D2.DZ + 0.02, -PI / 2, 0, 0, 0.6, 0.5]] },
+    }, g => mergeGeometries(g, false)); meshes += 5;
+    this.crewFig = new CrewFigures(() => cabMaterial(), G, () => new Kit(labels)); meshes += 16;
     this.stats.triangles = Math.round(tris); this.stats.meshes = meshes; this.stats.controls = this.controls.length; this.built = true;
   }
 
@@ -153,8 +172,6 @@ export class Interior {
     if (!this.built) this._build();
     if (!this.active || this.mode !== mode || (this.tank.turret && this.tur.parent !== this.tank.turret)) this._enter(mode);   /* also when the vehicle's model has only just arrived */
     this.pendingLook = null; this.pendingOff = null; this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
-    if (this.crewOn && !this.crewAsked && s.volleys && s.volleys.assetBase) { this.crewAsked = true; import('./interior_crew.js').then(m => m.seatCrew(this, s.volleys.assetBase)).then(list => { this.crew = list; }).catch(e => console.warn('crew figures not shown:', e && e.message)); }
-    if (this.crew) for (const c of this.crew) c.group.visible = c.key !== mode;   /* the viewer has taken that man's seat */
     const B = s.battle, T = B.tank, st = T.st || {}, info = (s.volleys && s.volleys.info) || [], A = T.ai || {}, P = this.part, L = this.last, sdt = s.playing ? dt * (s.speed || 1) : 0, D = DIM;
     const cond = CONDITIONS[s.cond] || CONDITIONS.day, night = !!cond.night;
     if (!this.domeUser) { const want = night ? 2 : 1; if (want !== this.domeMode) { this.domeMode = want; for (const c of this.controls) if (c.key === 'dome') { c.state = want; this._poseControl(c); } } }
@@ -169,9 +186,12 @@ export class Interior {
     this.st.door = ease(this.st.door, loading && f > 0.02 && f < 0.6 ? 1 : 0, 5, sdt || dt * 0.5); P.door.position.x = P.door.userData.home.x + this.st.door * 0.96; P.knee.position.z = P.knee.userData.home.z + (loading && f < 0.6 ? 0.012 : 0);
     this.st.block = ease(this.st.block, !T.loaded && r > 0.5 ? 1 : 0, 8, sdt || dt * 0.5); P.block.position.y = -0.2 * this.st.block;
     { const R = P.round, slot = Math.max(0, Math.min(17, T.main - 1)), p = this.rackSlot(-1, slot);                                          /* the round: out of its tube, then on the loading tray, then rammed */
-      if (loading && f > 0.1 && f < 0.36) { R.visible = true; R.position.set(p[0], p[1], p[2] + 0.45 - 0.75 * clamp((f - 0.1) / 0.22, 0, 1)); }
-      else if (loading && f >= 0.5 && f < 0.82) { R.visible = true; R.position.set(0, D.GY, 0.25 - 1.05 * clamp((f - 0.56) / 0.24, 0, 1)); }
-      else R.visible = false;
+      // the round's path through the drill: out of its tube, carried across to the tray behind the breech, rammed home
+      const out0 = 0.45, rack = _v2.set(p[0], p[1], p[2] - 0.3), tray = _v.set(0, D.GY, 0.25); let rp = null;
+      if (loading && f > 0.1 && f < 0.34) rp = R.position.set(p[0], p[1], p[2] + out0 - (out0 + 0.3) * clamp((f - 0.1) / 0.22, 0, 1));
+      else if (loading && f >= 0.34 && f < 0.56) { const u = (f - 0.34) / 0.22, e = u * u * (3 - 2 * u); rp = R.position.copy(rack).lerp(tray, e); rp.y += Math.sin(e * Math.PI) * 0.06; }
+      else if (loading && f >= 0.56 && f < 0.82) rp = R.position.set(0, D.GY, 0.25 - 1.05 * clamp((f - 0.58) / 0.22, 0, 1));
+      R.visible = !!rp && (this.crewOn || f < 0.34 || f >= 0.56);   /* without a loader figure the carry across is not shown: nothing floats */ this.roundAt = rp ? rp : null; this.loadF = loading ? f : -1;
       const nReady = clamp(T.main - (T.loaded ? 0 : 0), 0, 18) - (loading && f > 0.1 ? 1 : 0), nSemi = clamp(T.ap == null ? 18 : T.ap, 0, 18);
       if (nReady !== this._nR || nSemi !== this._nS) { this._nR = nReady; this._nS = nSemi; const z = _m.makeScale(0, 0, 0); for (let i = 0; i < 36; i++) { const here = i < 18 ? i < nReady : i - 18 < nSemi; if (here) { const q = this.rackSlot(i < 18 ? -1 : 1, i % 18); this.rounds.setMatrixAt(i, _m.makeTranslation(q[0], q[1], q[2])); } else this.rounds.setMatrixAt(i, z.makeScale(0, 0, 0)); } this.rounds.instanceMatrix.needsUpdate = true; } }
     this.st.arm = ease(this.st.arm, T.loaded ? 1 : 0, 6, dt); P.armLever.quaternion.copy(P.armLever.userData.q0).multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), 0.5 - this.st.arm));
@@ -184,6 +204,8 @@ export class Interior {
     this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.set(0, 0, -(Math.PI / 2 + 0.16)); P.throttle.rotateY(-this.st.thr * 1.3);   /* twist grip: more power, more twist */
     this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.z = -this.st.gear * 0.6;
     this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose();
+    // ---- hits: everything from the battle's records and the battle clock
+    this.simT = B.t; SHARED.uSimT.value = B.t; const FX = this.fxS = fxState(hitList(B), B.t); this.hitPulse = FX.pulse; this.alarm = FX.alarm; this.smoke = Math.max(FX.smoke, FX.dust);
     // head: leans against acceleration and jolts with the main gun
     { const H = this.head; let left = Math.min(dt, 0.1); while (left > 1e-5) { const h = Math.min(left, 1 / 120); H.vz += (-90 * H.z - 13 * H.vz + acc * 0.9) * h; H.z = clamp(H.z + H.vz * h, -0.06, 0.06); H.vx += (-90 * H.x - 13 * H.vx - this.st.steer * Math.abs(v) * 0.5) * h; H.x = clamp(H.x + H.vx * h, -0.04, 0.04); left -= h; } }
 
@@ -200,7 +222,7 @@ export class Interior {
     const I = SHARED.uInd.value, blink = (this.clock * 2.2) % 1 < 0.55 ? 1 : 0, set = (n, val) => { if (IND[n] != null) I[IND[n]] = val; }, rf = B._rf, wait = rf ? rf.at - B.t : 0;
     this.lampTestT = Math.max(0, this.lampTestT - dt);
     if (this.lampTestT > 0) I.fill(1); else {
-      I.fill(0); const w = this.warning ? blink : 0; set('gnrWarn', w); set('cdrWarn', w); set('ldrWarn', w); set('drvWarn', w);
+      I.fill(0); const w = this.warning || this.alarm ? blink : 0; set('gnrWarn', w); set('cdrWarn', w); set('ldrWarn', w); set('drvWarn', w);
       set('ammo2', 1); set('gunReady', T.loaded && T.main > 0 && T.alive ? 1 : 0); set('laser', rf && wait > 0 && wait < 3 ? blink : 0.15);
       set('hkRadar', hk === 'OFF' ? 0 : 1); set('hkTrack', hk === 'TRACKING' || hk === 'LAYING' || hk === 'FIRING' ? 1 : 0); set('hkFire', hk === 'FIRING' ? 1 : 0); set('hkArmed', T.alive ? 1 : 0);
       set('ldrSafe', T.loaded ? 0 : 1); set('ldrArmed', T.loaded ? 1 : 0); set('turPwr', T.alive ? 1 : 0); set('smkL', 0.8); set('smkR', 0.8); set('apsL', st.apsL == null || st.apsL > 0 ? 1 : 0); set('apsR', st.apsR == null || st.apsR > 0 ? 1 : 0);
@@ -220,13 +242,22 @@ export class Interior {
     const LP = SHARED.uLampPos.value, LC = SHARED.uLampCol.value, LR = SHARED.uLampR.value, dome = DOME[this.domeMode], dayK = (night ? 0.05 : 0.55 + 0.25 * Math.min(1.5, cond.hemiI || 1));
     if (this._skyOf !== s.cond) { this._skyOf = s.cond; const c = new THREE.Color(cond.sky || '#ffffff'); this._sky = new THREE.Vector3(0.6 + 0.4 * c.r, 0.6 + 0.4 * c.g, 0.6 + 0.4 * c.b); } _v.copy(this._sky);
     for (let i = 0; i < NLAMP; i++) { const l = this.lamps[i]; LP[i].copy(l.p).applyMatrix4((l.g === 'tur' ? this.tur : this.hul).matrixWorld); LR[i] = l.r; }
-    const dead = !T.alive, flick = dead ? (Math.sin(this.clock * 23) * Math.sin(this.clock * 7.3) > 0.2 ? 0.5 : 0.08) : 0;   /* knocked out: power gone, an emergency lamp flickers */
-    for (let i = 0; i < 3; i++) { if (dead) LC[i].set(1.6 * flick, 0.12 * flick, 0.08 * flick); else if (dome) LC[i].set(dome[0], dome[1], dome[2]); else LC[i].set(0, 0, 0); }
-    for (const k in this.brt) this.scr[k].uniforms.uBright.value = this.brt[k] * (dead ? 0.1 : 1);
+    const dead = !T.alive || FX.lightsOut, flick = dead ? (Math.sin(this.clock * 23) * Math.sin(this.clock * 7.3) > 0.2 ? 0.5 : 0.08) : 0;   /* knocked out: power gone, an emergency lamp flickers */
+    // lamps: flicker for a moment after any hit; a penetration may leave only the red emergency lamps; a killing hit puts them out
+    const fl = FX.flick > 0 ? ((Math.sin(B.t * 61) * Math.sin(B.t * 23.7) > -0.1 ? 1 : 0.12)) : 1;
+    for (let i = 0; i < 3; i++) { if (dead) LC[i].set(1.6 * flick, 0.12 * flick, 0.08 * flick); else if (FX.emergency) LC[i].set(1.3 * fl, 0.1 * fl, 0.07 * fl); else if (dome) LC[i].set(dome[0] * fl, dome[1] * fl, dome[2] * fl); else LC[i].set(0, 0, 0); }
+    SHARED.uGlitch.value = clamp(FX.glitch, 0, 1);
+    for (const k in this.brt) { const U = this.scr[k].uniforms; U.uBright.value = this.brt[k] * (dead || FX.dark[k] ? (FX.dark[k] ? 0 : 0.1) : 1); U.uWeak.value = FX.weak[k] ? 0.55 : 0; }
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
     LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * (1.3 + 1.2 * this.st.cup1 + 3.2 * this.st.cup2)); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
-    const a = dome && !dead ? 0.045 : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
+    const a = dome && !dead ? 0.045 * (FX.emergency ? 0.35 : 1) : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
+    // flash of the penetration, glow of a fire, and the smoke
+    if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
+    const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
+    { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.5, lit.x * k), Math.min(0.48, lit.y * k), Math.min(0.46, lit.z * k)); }
+    this.fx.update(FX, this.graphic);
+    this._crew(s, FX, info, seat, loading);
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
 
@@ -246,6 +277,27 @@ export class Interior {
 
   _cupPose() { const h = this.part.cupHatch; h.position.y = h.userData.home.y + 0.11 * this.st.cup1; h.rotation.x = 1.75 * this.st.cup2; }
   setCupolaHatch(state, now) { this.cupHatch = state; for (const c of this.controls || []) if (c.key === 'cdrHatch') c.state = state; if (now) { this.st.cup1 = state === 1 ? 1 : 0; this.st.cup2 = state === 2 ? 1 : 0; this._cupPose(); } }
+  // What each crewman is doing this moment, handed to the figures: where his head and hands are, how he is bearing up (from the battle's
+  // crew model), whether he is hurt (the damage reports), whether a hit is about to land.
+  _crew(s, FX, info, seat, loading) {
+    if (!this.crewOn) { if (this.crewFig._shown) { this.crewFig.update({}, 0); this.crewFig._shown = false; } return; } this.crewFig._shown = true;
+    const cs = this.crewS, P = this.part, T = s.battle.tank, gone = !!(cs && cs.abandoned), men = this._men || (this._men = { gnr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, cdr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, ldr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, drv: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] } });
+    const brace = info.some(m => m.range < (m.drone ? 150 : 400)) ? 1 : 0, flinch = clamp(FX.shake, 0, 1), KEY = { gnr: 'in_gnr', cdr: 'in_cdr', ldr: 'in_ldr', drv: 'in_drv' };
+    const grip = (part, x, y, z, out) => { part.updateMatrix(); _v.set(x, y, z).applyMatrix4(part.matrix); if (part.parent && part.parent !== this.tur && part.parent !== this.hul) { part.parent.updateMatrix(); _v.applyMatrix4(part.parent.matrix); } out[0] = _v.x; out[1] = _v.y; out[2] = _v.z; };
+    for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
+      M.on = !gone; M.bodyOnly = this.mode === KEY[r]; M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
+      M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
+      M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; }
+    if (this.cupHatch >= 1 && men.cdr.state === 'steady') men.cdr.head[1] += SEATS.in_cdr.up * 0.75;   /* looking out through the ports when the hatch is up */
+    grip(P.yoke, -0.135, 0.06, 0.01, men.gnr.hands[0]); grip(P.yoke, 0.135, 0.06, 0.01, men.gnr.hands[1]);
+    grip(P.tbar, -0.225, -0.036, 0.0, men.drv.hands[0]); grip(P.tbar, 0.225, -0.036, 0.0, men.drv.hands[1]);
+    men.cdr.hands[0][0] = 0.5; men.cdr.hands[0][1] = 0.16; men.cdr.hands[0][2] = 0.02; men.cdr.hands[1][0] = 0.96; men.cdr.hands[1][1] = 0.04; men.cdr.hands[1][2] = 0.14;
+    { const H = men.ldr.hands, ra = this.roundAt; if (ra && this.loadF >= 0.1) { H[0][0] = ra.x - 0.05; H[0][1] = ra.y - 0.03; H[0][2] = ra.z - 0.12; H[1][0] = ra.x + 0.04; H[1][1] = ra.y - 0.02; H[1][2] = ra.z + (this.loadF > 0.56 ? 0.5 : 0.3); }   /* left hand under the nose, right hand at the base: he rams with the right */
+      else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
+    if (s.battle.tank.ai && s.battle.tank.ai.ldr && s.battle.tank.ai.ldr.up && this.st.hatch > 0.6) { const M = men.ldr; M.head[0] = DIM.HAT[0]; M.head[1] = DIM.RF + 0.42; M.head[2] = DIM.HAT[1] - 0.05; M.hands[0] = [DIM.HAT[0] - 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; M.hands[1] = [DIM.HAT[0] + 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; }
+    if (gone) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); }   /* bailed out: hatches open, seats empty */
+    this.crewFig.update(men, s.battle.t); this.stats.crewTriangles = Math.max(this.stats.crewTriangles || 0, this.crewFig.triCount());
+  }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
@@ -253,8 +305,10 @@ export class Interior {
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
     _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
-    g.updateWorldMatrix(true, false); cam.position.copy(_v).applyMatrix4(g.matrixWorld);
-    g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4, 'YXZ'))); cam.up.set(0, 1, 0);
+    g.updateWorldMatrix(true, false);
+    { const sh = this.fxS ? Math.min(2.2, this.fxS.shake) : 0; if (sh > 0.02) { const t = Math.floor(this.simT * 40), n = k => (Math.sin((t + k * 17.3) * 127.1) * 43758.5453 % 1); _v.x += n(1) * sh * 0.022; _v.y += n(2) * sh * 0.02; _v.z += n(3) * sh * 0.016; this.shakeRoll = n(5) * sh * 0.04; } else this.shakeRoll = 0; }   /* the whole compartment jumps */
+    cam.position.copy(_v).applyMatrix4(g.matrixWorld);
+    g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4 + (this.shakeRoll || 0), 'YXZ'))); cam.up.set(0, 1, 0);
     const near = (S.near || 0.5) + (S.nearUp ? (S.nearUp - S.near) * H.up : 0); if (Math.abs(cam.near - near) > 0.004) { if (this.near0 == null) this.near0 = cam.near; cam.near = near; cam.updateProjectionMatrix(); }
     const fov = S.fov / L.zoom; if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = cams.snap ? fov : cam.fov + (fov - cam.fov) * Math.min(1, dt * 10); cam.updateProjectionMatrix(); }
     return true;

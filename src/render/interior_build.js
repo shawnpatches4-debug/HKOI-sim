@@ -346,18 +346,18 @@ export function buildInterior(labels) {
     // hatch ring above and behind his head
     H.ring('fit', 0.3, 0.022, C.steel, 0, DRF - 0.005, DZ + 0.42, Math.PI / 2, 0, 0, 24); H.cyl('fit', 0.012, 0.012, 0.2, C.yellow, 0.18, DRF - 0.05, DZ + 0.42, Math.PI / 2, 0, 0, 8); H.label('HATCH', 0.014, 0.18, DRF - 0.004, DZ + 0.6, Math.PI / 2, 0, 0, 'plate', { size: 22 });
     // reclined seat with headrest
-    H.box('fit', 0.44, 0.07, 0.46, C.cloth, 0, HF + 0.2, DZ + 0.42, 0.18); H.box('fit', 0.44, 0.66, 0.07, C.cloth, 0, HF + 0.42, DZ + 0.92, -0.95); H.box('fit', 0.22, 0.14, 0.07, C.cloth, 0, DRF - 0.33, DZ + 1.22, -0.8); H.box('fit', 0.3, 0.14, 0.5, C.creamD, 0, HF + 0.07, DZ + 0.5);
+    H.box('fit', 0.44, 0.05, 0.44, C.cloth, 0, HF + 0.085, DZ - 0.15, 0.12); H.box('fit', 0.44, 0.56, 0.06, C.cloth, 0, HF + 0.28, DZ + 0.33, -1.05); H.box('fit', 0.2, 0.12, 0.06, C.cloth, 0, DRF - 0.19, DZ + 0.46, -0.5); H.box('fit', 0.3, 0.05, 0.4, C.creamD, 0, HF + 0.026, DZ - 0.12);
     // the T-bar: a yoke hanging on a slim stem from a small box tucked up under the vision blocks, with two motorcycle-style handgrips at
     // hand height in front of his chest. It turns to steer; the right grip twists as the throttle; the gear selector sits on its hub.
-    H.box('fit', 0.09, 0.03, 0.06, C.blackP, 0, yb - 0.028, zb + 0.05); H.cyl('fit', 0.012, 0.012, 0.21, C.steel, 0, yb - 0.125, zb + 0.118, 0.66, 0, 0, 8);
+    H.box('fit', 0.09, 0.03, 0.06, C.blackP, 0, yb - 0.028, zb + 0.05); H.cyl('fit', 0.012, 0.012, 0.15, C.steel, 0, yb - 0.098, zb + 0.108, 0.72, 0, 0, 8);
     moving.tbar = { g: 'hul', build: k => {
       k.cyl('p', 0.028, 0.028, 0.04, C.gunm, 0, 0, 0, Math.PI / 2, 0, 0, 12); k.cyl('p', 0.02, 0.02, 0.006, C.black, 0, 0, 0.022, Math.PI / 2, 0, 0, 12);
       for (const sd of [-1, 1]) { k.cyl('p', 0.0105, 0.0105, 0.15, C.steel, sd * 0.098, -0.013, 0, 0, 0, -sd * (Math.PI / 2 + 0.16), 8); k.box('p', 0.02, 0.02, 0.026, C.gunm, sd * 0.165, -0.024, 0); k.cyl('p', 0.004, 0.004, 0.09, C.steel, sd * 0.2, -0.03, -0.03, 0, 0, -sd * (Math.PI / 2 + 0.1), 6); }   /* arms, lever perches and brake levers */
       k.cyl('p', 0.019, 0.019, 0.105, C.rubber, -0.225, -0.036, 0, 0, 0, Math.PI / 2 + 0.16, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, -0.185 - i * 0.02, -0.0296 - i * 0.0032, 0, 0, 0, Math.PI / 2 + 0.16, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, -0.2795, -0.0448, 0, 0, 0, Math.PI / 2 + 0.16, 10);
-      k.label('R  N  D', 0.009, 0, -0.012, 0.0256, 0, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.205, zb + 0.175] };
+      k.label('R  N  D', 0.009, 0, -0.012, 0.0256, 0, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.16, zb + 0.175] };
     moving.throttle = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.019, 0.019, 0.105, C.rubber, 0, 0, 0, 0, 0, 0, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, 0, -0.04 + i * 0.02, 0, 0, 0, 0, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, 0, 0.055, 0, 0, 0, 0, 10); k.box('p', 0.006, 0.09, 0.008, C.white, 0, 0, 0.0195); k.cyl('p', 0.024, 0.024, 0.012, C.steel, 0, -0.058, 0, 0, 0, 0, 10); }, pos: [0.225, -0.036, 0] };
     moving.gear = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.004, 0.004, 0.034, C.steel, 0, 0.017, 0, 0, 0, 0, 6); k.ball('p', 0.008, C.red, 0, 0.037, 0); }, pos: [0, 0.006, 0.027] };
-    H.push(0, yb - 0.215, zb + 0.215); ctl(H, 'hul', 'spot', 0, 0, 'T-bar: turn it to steer, twist the right grip for power, gear selector on the hub (the driver works it: watch it move)', { locked: true, r: 0.09 }); H.pop();
+    H.push(0, yb - 0.16, zb + 0.2); ctl(H, 'hul', 'spot', 0, 0, 'T-bar: turn it to steer, twist the right grip for power, gear selector on the hub (the driver works it: watch it move)', { locked: true, r: 0.09 }); H.pop();
     for (const [i, x] of [[0, -0.31], [1, 0], [2, 0.31]]) { H.push(x, (yb + DRF) / 2, zb + 0.05); ctl(H, 'hul', 'spot', 0, 0, `Driver's vision block: looks out ${['to the left front', 'straight ahead', 'to the right front'][i]}`, { r: 0.09 }); H.pop(); }
     // pedals
     H.box('fit', 0.2, 0.02, 0.14, C.floor, 0, HF + 0.16, DZ - 0.72, 0.9); H.box('fit', 0.04, 0.2, 0.03, C.steel, 0, HF + 0.08, DZ - 0.68, 0.5); H.box('fit', 0.09, 0.02, 0.2, C.floor, -0.28, HF + 0.1, DZ - 0.6, 0.5);
