@@ -45,7 +45,7 @@
     // Located enemy teams, most dangerous first. Each: { k (what the crew knows: place), u, R, los, danger }
     _targets() {
       if (this._tgT === this.t) return this._tg; const T = this.tank, W = this.world, out = [], v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null, live = v && this.t <= v.tEnd;
-      for (const k of T.known) { if (k.done) continue; const u = this.units.find(q => q.id === k.id); if (!u || !u.alive) { k.done = true; continue; }
+      for (const k of T.known) { if (k.done) continue; const u = this.units.find(q => q.id === k.id); if (!u || !u.alive) { k.done = true; continue; } if (u.gone) { if (W.los(T.e, T.n, 2.5, k.e, k.n, 0.8).clear) k.done = true; continue; }   /* gone: the crew sees the position is empty if it can see it */
         const R = Math.hypot(k.e - T.e, k.n - T.n), los = W.los(T.e, T.n, 2.5, k.e, k.n, 0.8).clear; let danger = 1;
         const guiding = live && v.launches.some(l => l.u === u && u.spec.needsLos && this.t >= v.t0 + l.t0 && (u.state === 'guiding'));
         const moving = u.state === 'moving' && this.t >= (u.packUntil || 0), recent = u.fired > 0 && this.t - (u.lastShotT || -1e9) < u.spec.reload;
@@ -82,7 +82,7 @@
     _scan() {
       const T = this.tank, W = this.world, A = this._crew(); if (this.t < A.scanAt) return; A.scanAt = this.t + 1;
       const see = SEEING[this.cond] == null ? 1 : SEEING[this.cond];
-      for (const u of this.units) { if (!u.alive || u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
+      for (const u of this.units) { if (!u.alive || u.gone || u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
         const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.15 : veg >= 2 ? 0.4 : 1, moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
         const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30;
         const p = 0.03 * Math.exp(-R / 1500) * cover * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1);   /* chance per second (assumed) */

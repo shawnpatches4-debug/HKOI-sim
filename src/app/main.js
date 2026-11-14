@@ -9,7 +9,7 @@ import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
-const VERSION = '0.27';
+const VERSION = '0.28';
 const $ = id => document.getElementById(id), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const store = { get(k, d) { try { const v = localStorage.getItem('hkoi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('hkoi.' + k, JSON.stringify(v)); } catch (e) { } } };
@@ -83,7 +83,7 @@ function place() {
   for (const p of props) p.view.group.visible = set.spectator || p.u.known;
   // enemy teams: drawn between simulation steps like the vehicle, facing the way they walk when moving and the vehicle when in position
   const fU = state === 'play' ? Math.max(0, Math.min(1, simBank / battle.dt)) : 1;
-  battle.units.forEach((u, i) => { const tv = teams[i]; const show = u.alive && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); tv.group.visible = show && !(cams.mode === 'enemy' && cams.unit === u);   /* looking through a team's own eyes, its figures would only block the picture */ if (!show) return;
+  battle.units.forEach((u, i) => { const tv = teams[i]; const show = u.alive && !u.gone && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); tv.group.visible = show && !(cams.mode === 'enemy' && cams.unit === u);   /* looking through a team's own eyes, its figures would only block the picture */ if (!show) return;
     const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
     tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); tv.update(frameDt * (state === 'play' && playing ? speed : 0), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', pos.distanceToSquared(scene.camera.position) < 300 * 300, teamInfo(u)); });
 }
@@ -96,7 +96,7 @@ function mark(i, cls, p, text) { let m = pool[i]; if (!m) { m = el('div', 'mk');
 function drawMarks() {
   let i = 0; if (state === 'play') {
     for (const m of volleys.info) { if (!m.cued && !set.spectator) continue; mark(i++, m.tracked ? 'threat tracked' : m.cued ? 'threat' : 'ghost', m.p, `${m.tt.name || m.th.key}  ${(m.range / 1000).toFixed(2)} km`); }
-    battle.units.forEach(u => { if (!u.alive) return; if (u.known) mark(i++, 'site', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} located`); else if (set.spectator && cams.mode !== 'enemy' && u !== cams.unit) mark(i++, 'ghost', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} #${u.id + 1} · ${u.state}`); });
+    battle.units.forEach(u => { if (!u.alive || u.gone) return; if (u.known) mark(i++, 'site', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} located`); else if (set.spectator && cams.mode !== 'enemy' && u !== cams.unit) mark(i++, 'ghost', scene.at(u.e, u.n, 1.5, new THREE.Vector3()), `${u.spec.name} #${u.id + 1} · ${u.state}`); });
   }
   for (; i < pool.length; i++) pool[i].hidden = true;
 }

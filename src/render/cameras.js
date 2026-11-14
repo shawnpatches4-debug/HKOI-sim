@@ -26,7 +26,7 @@ export class Cameras {
   constructor(scene3d) { this.s = scene3d; this.mode = 'orbit'; this.enemyId = null; this.unit = null; this.sightUp = false; this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.lastTank = null; this.fov = 50; this.topH = 700; this._d = new THREE.Vector3(); this.cdrYaw = null; this.snap = true; }
   set(mode) { this.mode = mode; this.snap = true; this.s.controls.enabled = mode === 'orbit' || mode === 'troops'; this.s.controls.minDistance = mode === 'troops' ? 1.5 : 4; if (mode !== 'enemy' && mode !== 'troops') this.unit = null; }
   // which enemy team the enemy views follow: the chosen one while it lives, otherwise the first team still alive
-  pick(units) { let u = units.find(x => x.id === this.enemyId && x.alive); if (!u) { u = units.find(x => x.alive) || null; this.enemyId = u ? u.id : null; } return u; }
+  pick(units) { let u = units.find(x => x.id === this.enemyId && x.alive && !x.gone); if (!u) { u = units.find(x => x.alive && !x.gone) || null; this.enemyId = u ? u.id : null; } return u; }
   choose(u) { if (u && u.id !== this.enemyId) { this.enemyId = u.id; this.snap = true; } }
   cycle(units, step) { const a = units.filter(x => x.alive); if (!a.length) return; const i = a.findIndex(x => x.id === this.enemyId); this.choose(a[(i + step + a.length) % a.length]); }
   // ctx: { tank: {e,n,h}, units: [...], missiles: [{p: Vector3, dir}], threatBrg (deg or null) }
