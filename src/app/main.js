@@ -219,40 +219,15 @@ $('o-codebtn').onclick = () => { const msg = replayLoad($('o-code').value); if (
 $('r-again').onclick = () => { replayStop(); start(); }; $('r-next').onclick = () => { replayStop(); set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = () => { replayStop(); state = 'title'; cams.set('orbit'); show(); };
 window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT') return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } if (e.key === '[' || e.key === ']') { if (cams.mode === 'enemy' || cams.mode === 'troops') cams.cycle(battle.units, e.key === ']' ? 1 : -1); } if (e.code === 'KeyT') cycleThermal(); const n = '123456789'.indexOf(e.key); if (n >= 0) { const m = CAMERA_MODES[n]; if (!m.spectator || set.spectator) { cams.set(m.key); buildBar(); } } });
 
-// crew talk: each volley's record carries the lines the crew spoke and when; play them as their moment comes.
-// From an enemy sight the crew cannot be heard; the enemy team's own calls are heard instead.
-let voiceV = null, voiceI = 0, voiceHits = 0, voiceB = null, voiceN = 0; const voiceQ = [];
-function voices() {
-  voiceLog(cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile');
-  const v = battle.volleys[battle.volleys.length - 1]; if (!v || !v.rec || !v.rec.radio) return; if (v !== voiceV) { voiceV = v; voiceI = 0; v.rec.radio.sort((a, b) => a.t - b.t); }
-  const R = v.rec.radio, tv = battle.t - v.t0, enemyView = cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile';
-  while (voiceI < R.length && R[voiceI].t <= tv) { const r = R[voiceI++]; if (tv - r.t > 1.2 || enemyView) continue; sound.say(r.who, [r.text], r.lvl || 0); }   /* the engine has already chosen the wording for the crew's stress at that moment */
-}
-// The battle layer reports what the crew does as log lines (who = CDR, GNR or LDR, plain words). Where the crew voice pack has a
-// line that says the same thing, that crewman says it on the intercom. Lines are spoken at their own time, never late.
-function voiceLog(enemyView) {
-  if (battle !== voiceB) { voiceB = battle; voiceN = 0; voiceQ.length = 0; } const L = battle.log; while (voiceN < L.length) voiceQ.push(L[voiceN++]);
-  for (let i = 0; i < voiceQ.length; i++) { const l = voiceQ[i]; if (l.t > battle.t) continue;
-    if (l.kind === 'setup' && !enemyView && battle.t < 5 && !voiceLine(l)) continue;   /* the crew report waits a moment for the sound files to arrive */
-    voiceQ.splice(i--, 1); if (l.kind !== 'setup' && !enemyView && battle.t - l.t <= 1.5) voiceLine(l); }
-}
-function voiceLine(l) { const s = l.text || '', q = { queue: true }; let m;
-  if (l.kind === 'setup') { const lo = { queue: true, low: true }; if (!sound.cue('GNR', 'ready', 0, { delay: 1, queue: true, low: true })) return false; sound.cue('LDR', 'ready', 0, lo); sound.cue('DRV', 'ready', 0, lo); sound.cue('CDR', 'ready', 0, lo); return true; }
-  if (l.kind !== 'tank') return false;
-  if ((m = /^Gunner lays on .*?, (\d+\.\d+) km/.exec(s))) { const R = +m[1] * 1000; return R <= 2050 && sound.cue('GNR', 'range_' + (R < 975 ? Math.max(300, Math.round(R / 50) * 50) : Math.round(R / 100) * 100), 1); }   /* the gunner calls the range */
-  if (/knocked out by/.test(s)) return sound.cue('GNR', 'target', 1);
-  if (/^Main gun round lands close/.test(s)) return sound.cue('CDR', 'reengage_doubt', 1);
-  if (l.who === 'GNR' && / engages? /.test(s)) return sound.cue('GNR', 'mg', 1);
-  if (/^Loader up on the M240/.test(s)) return sound.cue('LDR', 'mg_ready', 1);
-  if (/^Loader down: main gun/.test(s)) return sound.cue('CDR', 'reload', 1);
-  if (/^Loader hit/.test(s)) { sound.cue('ANY', 'wound', 2); return sound.cue('CDR', 'loader_down', 2, q); }
-  if (/^Commander breaks contact/.test(s)) return sound.cue('CDR', 'drv_back', 2);
-  if (/^Commander (moves|shifts|bounds|takes up)/.test(s)) return sound.cue('CDR', Math.random() < 0.5 ? 'moveout' : 'drv_fwd', 1) && sound.cue('DRV', 'ack_fwd', 1, q);
-  return false;
-}
+// Crew talk. The crew's lines are chosen by the sound engine itself (src/audio/crewtalk.js) from what happens in the battle:
+// its event list, the engine's crew talk for each engagement, and the tank's own state. Only human recordings are used; where
+// the voice pack has no line, the crewman says nothing. voices() is what the frame loop hands to sound.update for this.
+// From outside the vehicle the intercom is not heard; from an enemy sight the enemy team's own calls are heard instead.
+let voiceV = null, voiceHits = 0;
+function voices() { return { battle, talking: state === 'play' && playing && speed <= 2.01, mission: set.mission }; }
 function voiceEvent(type, o) { const enemyView = cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile';
   if (enemyView) { if (type === 'launch') sound.enemy(o.drone ? 'dlaunch' : 'fire', 0.15); else if (type === 'hit') sound.enemy(o.killing ? 'kill' : 'hit', 0.8); else if (type === 'pass' || type === 'explosion') sound.enemy('miss', 1.0); else if (type === 'airburst' && o.size >= 1) sound.enemy('lost', 0.8); return; }
-  if (type === 'hit') { voiceHits++; if (o.killing) { sound.scream('scream', 0.25); sound.scream('scream', 0.9, 0.7); } else { sound.react('CDR', 'hit', 0.5); sound.react(['GNR', 'LDR', 'DRV'][voiceHits % 3], 'panic', 2.2); } } }
+  if (type === 'hit') { voiceHits++; if (o.killing) { sound.scream('scream', 0.25); sound.scream('scream', 0.9, 0.7); } else sound.react('CDR', 'hit', 0.5); } }
 // the vehicle's own main gun: flash, dust and report at the muzzle, then the round arriving
 let shotI = 0; const landing = [];
 // machine-gun bursts: tracers from the coax and the commander's .50 to the target, strikes kicking up dust there, and the sound
@@ -344,8 +319,7 @@ function frameBody(now) {
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
-  if (sound.ctx && state === 'play' && playing && speed <= 2.01) voices();
-  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { inside: cams.mode === 'cdr' || cams.mode === 'gnr' || interior.inside, cond: set.cond, speed: act ? T.v : 0, alive: T.alive && state === 'play', camDist: camDist(tp), drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p), closing: cams.mode === 'cdr' || cams.mode === 'chase' || cams.mode === 'orbit' ? 25 : 0 })) : [] }); }
+  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } } else { scene.render(dt); drawMarks(); }
   cpuMs = Math.max(cpuMs * 0.97, performance.now() - tCpu);
   frames++; if (now - fpsT > 500) { fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; if (state === 'play') drawStatus();

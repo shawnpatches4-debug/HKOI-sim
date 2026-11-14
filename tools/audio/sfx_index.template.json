@@ -1,0 +1,15 @@
+{
+  "note": "Recordings in place of synthesised sounds. For any slot, list one or more recordings: { \"file\": \"sfx/name.mp3\", \"start\": seconds, \"len\": seconds, \"gain\": 1 }. start, len and gain are optional (whole file, gain 1). Several entries for one slot are picked at random. A slot with an empty list stays synthesised. Record close (5 to 15 m for weapons): the simulator adds the delay, the loss of highs and the level for distance itself, and the muffling inside the hull. Slots ending in _in are what is heard INSIDE the turret; _loop slots are continuous layers and must loop cleanly. See docs/ASSETS.md, 'Sound slots'.",
+  "base": "",
+  "slots": {
+    "gun30_out": [], "gun30_in": [],
+    "gun120_out": [], "gun120_in": [],
+    "mg50_out": [], "mg50_in": [], "mg762_out": [], "mg762_in": [],
+    "aps_out": [], "aps_in": [],
+    "launch_small": [], "launch_big": [], "flyby": [], "crack": [],
+    "explosion_small": [], "explosion_medium": [], "explosion_large": [], "airburst": [],
+    "hit_in": [], "smoke_discharge": [],
+    "turbine_in_loop": [], "turbine_out_loop": [], "tracks_loop": [],
+    "wind_loop": [], "rain_loop": [], "rain_roof_loop": []
+  }
+}
