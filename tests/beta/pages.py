@@ -35,5 +35,14 @@ async def main():
         print('numbers', r)
         if not r['take'] or r['tables'] < 3: bad.append('run the numbers did not finish with its tables')
         await pg.screenshot(path=os.environ.get('SHOT', '/tmp/pages') + '_numbers.png', full_page=False)
+        # map by map
+        await pg.evaluate('[...document.querySelectorAll("#numbers .seg button")].find(x => x.textContent === "Map by map").click()'); await pg.evaluate('[...document.querySelectorAll("#numbers .seg button")].find(x => x.textContent === "1,000").click()'); await pg.evaluate('[...document.querySelectorAll("#numbers .row button")].find(x => /^Run/.test(x.textContent)).click()')
+        for i in range(900):
+            if await pg.evaluate('[...document.querySelectorAll("#numbers .row button")].some(x => x.textContent === "Run again") && document.querySelectorAll("#numbers .pg-tbl").length >= 2 && !document.querySelector("#numbers .pg-take")'): break
+            await pg.wait_for_timeout(2000)
+        mr = json.loads(await pg.evaluate('JSON.stringify({rows: [...document.querySelectorAll("#numbers .pg-tbl")[0].querySelectorAll("tr")].map(x => x.textContent.slice(0, 90)), status: document.querySelector("#numbers .pg-note").textContent})'))
+        print('maps', mr)
+        if len(mr['rows']) < 5: bad.append('map by map did not give four maps')
+        await pg.screenshot(path=os.environ.get('SHOT', '/tmp/pages') + '_maps.png', full_page=False)
         print('console errors', errs[:5]); print('PAGES CHECK ' + ('PASSED' if not bad and not errs else 'FAILED: ' + '; '.join(bad + errs[:2]))); await b.close()
 asyncio.run(main())
