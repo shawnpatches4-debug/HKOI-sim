@@ -181,7 +181,7 @@ export class VolleyView {
           if (st.next < tv - 1.2) st.next = tv - 1.2;
           while (st.next <= tv && guard++ < 160) { const q = this.pos(v, th, l, st.next, this.tmp3);
             if (drone) fx.puff(q.x, q.y, q.z, 0, 0, 0, 1.6, 0.25, 0.9, 0.5, 0.52, 0.55, 0.1, 1, 0);
-            else { const a = st.next * 13.8 + th.idx, cr = tt.guidance === 'beam_rider' ? 0.4 : 0.12; fx.trail(q.x + this._an * Math.cos(a) * cr, q.y + Math.sin(a) * cr, q.z + this._ae * Math.cos(a) * cr, rpg ? 0.7 : th.v > 320 ? 0.75 : 1, rpg ? 0.86 : 0.8); }
+            else { const a = st.next * 13.8 + th.idx, cr = tt.guidance === 'beam_rider' ? 0.4 : 0.12; fx.trail(q.x + this._an * Math.cos(a) * cr, q.y + Math.sin(a) * cr, q.z + this._ae * Math.cos(a) * cr, rpg ? 0.7 : th.v > 320 ? 0.75 : 1, 0.9); }
             st.next += step; }
           this.pos(v, th, l, tv, this.tmp);   /* put the working values back for the lines below */
         } else st.next = tv;
@@ -271,7 +271,7 @@ export class VolleyView {
       const f = this.fly[i], a = t - f.t0, x = f.x + f.vx * a, z = f.z + f.vz * a, y = f.y + f.vy * a - 0.5 * 4.5 * a * a, g = W.h(x, -z);
       if (y <= g + 0.2 || a > 6) { const p = this.tmp.set(x, g + 0.3, z); fx.seed(f.seed); fx.explosion(p.x, p.y, p.z, 0.8, { surface: this._surf(p.x, p.z) }); this.emit('explosion', p, { size: 0.8 }); this.s.blast(p, 0.8); this.s.marks.add(p.x, p.z, 1.4, (px, pz) => W.h(px, -pz), { kind: MARK.CRATER }); this.group.remove(f.mesh); this.fly.splice(i, 1); continue; }
       f.mesh.position.set(x, y, z); f.mesh.lookAt(x + f.vx, y + f.vy - 4.5 * a, z + f.vz);
-      if (!f.next || f.next < a - 0.3) f.next = a; while (f.next <= a) { fx.trail(f.x + f.vx * f.next, f.y + f.vy * f.next - 2.25 * f.next * f.next, f.z + f.vz * f.next, 1, 0.8); f.next += 0.016; }
+      if (!f.next || f.next < a - 0.3) f.next = a; while (f.next <= a) { fx.trail(f.x + f.vx * f.next, f.y + f.vy * f.next - 2.25 * f.next * f.next, f.z + f.vz * f.next, 1, 0.9); f.next += 0.016; }
     }
   }
   // drones on their way in, before the engine takes them over at the terminal range: small, low, with a faint motor trail

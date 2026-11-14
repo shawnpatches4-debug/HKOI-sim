@@ -47,13 +47,13 @@ void main() {
   if (m < 0.004) discard;
   vec3 N = normalize(vec3(vUv + (vec2(n.b, n2) - 0.5) * 0.9, sqrt(max(0.04, 1.0 - r * r))));
   float sun = dot(N, sunV) * 0.5 + 0.5, soft = smoothstep(vB.w - 0.05, vB.w + 0.3 * vSoft.y, vSoft.x);
-  float a = vB.x * m * soft, edge = smoothstep(0.0, 0.12, m) * (1.0 - smoothstep(0.12, 0.42, m));   /* edge: 1 on the outer rim of the billow, 0 in the middle and outside */
+  float a = vB.x * m * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
   float sunL = max(max(sunColor.r, sunColor.g), sunColor.b);
   vec3 lit = vec3(0.86, 0.89, 0.92) * sunColor * (0.5 + 0.75 * sun) * (0.84 + 0.28 * n.a);
   lit = mix(lit, fogColor, vFog * 0.8);
-  // the highlight: a cool outline round each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
+  // the highlight: a cool tint in the soft fringe of each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
   // part of the cloud: it stays readable while the real cloud thins, and carries a little light of its own after dark.
-  float hA = vH * (edge * 0.55 + m * 0.05) * soft;
+  float hA = vH * (edge * 0.26 + m * 0.06) * soft;
   vec3 hC = tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night;
   if (thermal != 0.0) { lit = vec3(0.3 + 0.12 * sun); hC = vec3(0.6); }
   vec3 L = toneOut(lit), H = toneOut(hC);

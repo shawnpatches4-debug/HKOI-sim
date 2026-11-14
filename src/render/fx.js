@@ -56,7 +56,7 @@ void main() {
   else { float wk = kind < 1.5 ? 1.0 : 0.0; vec3 vInf = vec3(wind.x * wk, aS.w / k, wind.z * wk); float e = exp(-k * age);
     p = aP.xyz + vInf * age + (aV.xyz - vInf) * (1.0 - e) / k; vel = vInf + (aV.xyz - vInf) * e; }
   if (kind > 1.5 && kind < 3.5 && p.y < aK.w) { gl_Position = vec4(0.0, 0.0, 3.0, 1.0); return; }   /* sparks and clods stop at the ground */
-  float g = 1.0 - (1.0 - f) * (1.0 - f), size = kind > 4.5 ? aS.x : mix(aS.x, aS.y, g);
+  float g = pow(f, 0.45), size = kind > 4.5 ? aS.x : mix(aS.x, aS.y, g);   /* swells fast at first, then slowly, as smoke does */
   vec4 mv = viewMatrix * vec4(p, 1.0); float dist = length(mv.xyz), px = pix * max(-mv.z, 0.5);
   vec2 c = position.xy; vec2 off;
   if (kind > 4.5 || (kind > 1.5 && kind < 2.5)) {   /* tracers and sparks: a streak along the direction of flight */
@@ -92,7 +92,7 @@ void main() {
     float sun = dot(N, sunV) * 0.5 + 0.5, fadeIn = smoothstep(0.0, 0.07, age), fadeOut = pow(1.0 - f, 1.25);   /* appears within a few hundredths of a second, whatever its life */
     float soft = smoothstep(vSoft.y - 0.05, vSoft.y + 0.3 * vSoft.z + 0.05, vSoft.x);
     a = vCol.a * m * fadeIn * fadeOut * soft;
-    lit = vCol.rgb * (sunColor * (0.5 + 0.75 * sun) * (0.82 + 0.3 * n.a) + vFlare);
+    lit = vCol.rgb * (sunColor * (0.38 + 0.87 * sun) * (0.82 + 0.3 * n.a) + vFlare);
     lit = mix(lit, fogColor, vFog);
     if (thermal != 0.0) { lit = vec3(0.2 + 0.1 * sun); a *= 0.6; }
     if (kind > 0.5) {
@@ -215,9 +215,9 @@ export class Particles {
   flash(x, y, z, k = 1, delay = 0) { this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.09 + 0.02 * k, 3.5 * k, 16 * k, 1, 0.86, 0.6, 1, 0, 0, 9, delay); }
   // a ring of dust rolling outward over the ground
   dustRing(x, y, z, k = 1, speed = 9, col = null) {
-    const n = this.cnt(22 * Math.sqrt(k)), a0 = this.R() * TAU, c = col || [0.6, 0.53, 0.42];
+    const n = this.cnt(30 * Math.sqrt(k)), a0 = this.R() * TAU, c = col || [0.6, 0.53, 0.42];
     for (let i = 0; i < n; i++) { const a = a0 + i / n * TAU + (this.R() - 0.5) * 0.25, s = speed * (0.75 + this.R() * 0.5) * Math.sqrt(k);
-      this.spawn(KIND.SMOKE, x + Math.cos(a) * 0.8 * k, y + 0.35 * k, z + Math.sin(a) * 0.8 * k, Math.cos(a) * s, 0.3 + this.R() * 0.5, Math.sin(a) * s, 2.6 + this.R() * 2.2, 1.2 * k, 5.5 * k, c[0], c[1], c[2], 0.34, 2.0, 0.12, 0, 0); }
+      this.spawn(KIND.SMOKE, x + Math.cos(a) * 0.8 * k, y + 0.35 * k, z + Math.sin(a) * 0.8 * k, Math.cos(a) * s, 0.3 + this.R() * 0.5, Math.sin(a) * s, 3 + this.R() * 3, 1.6 * k, 7 * k, c[0], c[1], c[2], 0.4, 1.7, 0.12, 0, 0); }
   }
   dust(x, y, z, k = 1) {
     const n = this.cnt(7 * k);
@@ -245,58 +245,68 @@ export class Particles {
   // a shell or warhead bursting on the ground: flash, fireball that turns to smoke, a fountain of earth, a dust ring, drifting smoke
   // o.surface: 'wall' (masonry: grey dust and rubble) or 'trees' (splinters, leaves and a fire that burns for a while); default earth
   explosion(x, y, z, k = 1, o = {}) {
-    const dirt = o.dirt == null ? 1 : o.dirt, wall = o.surface === 'wall', trees = o.surface === 'trees', soil = o.soil || (wall ? [0.52, 0.5, 0.47] : [0.3, 0.25, 0.18]);
-    this.spawn(KIND.FLASH, x, y + 0.8 * k, z, 0, 0, 0, 0.12, 6 * k, 30 * k, 1, 0.9, 0.7, 1, 0, 0, 14, 0);
-    this.fireball(x, y, z, k, 12 * k, 7 * Math.sqrt(k), 5.5, [0.13, 0.125, 0.12], 0.2);
-    this.sparks(x, y + 0.4, z, 0, 0.8, 0, 26 * k, 26 * Math.sqrt(k), 1.3, 0.9);
+    const dirt = o.dirt == null ? 1 : o.dirt, wall = o.surface === 'wall', trees = o.surface === 'trees', soil = o.soil || (wall ? [0.52, 0.5, 0.47] : [0.3, 0.25, 0.18]), rk = Math.sqrt(k);
+    this.spawn(KIND.FLASH, x, y + 1.0 * k, z, 0, 0, 0, 0.12, 5 * k, 24 * k, 1, 0.9, 0.7, 1, 0, 0, 14, 0);
+    // the fireball: a hot core that is gone in half a second, wrapped in flame that cools to black-brown smoke and rolls upward
+    for (let i = 0, n = this.cnt(9 * k); i < n; i++) { const a = this.R() * TAU, e = this.R() * 1.3, s = (2 + this.R() * 7) * rk;
+      this.spawn(KIND.FIRE, x, y + 0.8 * k, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 2, Math.sin(a) * Math.cos(e) * s, 0.35 + this.R() * 0.3, 2.6 * k, 6.5 * k, 0, 0, 0, 0, 2.5, 2, 1, 0); }
+    for (let i = 0, n = this.cnt(22 * k); i < n; i++) { const a = this.R() * TAU, e = (this.R() - 0.15) * 1.4, s = (3 + this.R() * 9) * rk;
+      this.spawn(KIND.FIRE, x + Math.cos(a) * 0.6 * k, y + 0.6 * k + this.R() * 1.2 * k, z + Math.sin(a) * 0.6 * k, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 2.5, Math.sin(a) * Math.cos(e) * s, 5 + this.R() * 5, 2.0 * k, 7.5 * k, 0.11, 0.1, 0.09, 0.8, 2.2, 1.6, 0.06 + this.R() * 0.05, 0); }
+    this.sparks(x, y + 0.4, z, 0, 0.8, 0, 30 * k, 30 * rk, 1.3, 0.9);
     if (dirt > 0) {
-      const n = this.cnt(14 * k * dirt);   /* the fountain: jets of earth thrown up that fall back */
-      for (let i = 0; i < n; i++) { const a = this.R() * TAU, e = 0.75 + this.R() * 0.7, s = (8 + this.R() * 11) * Math.sqrt(k);
-        this.spawn(KIND.SMOKE, x, y + 0.3, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, 1.5 + this.R() * 1.3, 0.9 * k, 3.6 * k, soil[0], soil[1], soil[2], 0.85, 1.5, -11, 0, 0); }
-      this.clods(x, y, z, 26 * k * dirt, 17 * Math.sqrt(k), 0.22 * Math.sqrt(k), soil, 1);
-      this.dustRing(x, y, z, k * (wall ? 1.5 : 1), 10, wall ? [0.66, 0.64, 0.6] : null);
+      // the fountain: jets of earth thrown up in streaks that fall back, clods flying further, and dust rolling out along the ground
+      const jets = this.cnt(7 * rk * dirt);
+      for (let j = 0; j < jets; j++) { const a = this.R() * TAU, e = 0.85 + this.R() * 0.6, top = (16 + this.R() * 15) * rk, ca = Math.cos(a) * Math.cos(e), sa = Math.sin(a) * Math.cos(e), se = Math.sin(e);
+        for (let i = 0; i < 7; i++) { const s = top * (0.3 + i * 0.12) * (0.92 + this.R() * 0.16);
+          this.spawn(KIND.SMOKE, x, y + 0.3, z, ca * s, se * s, sa * s, 1.9 + this.R() * 1.3, (1.3 - i * 0.13) * k, (3.6 - i * 0.36) * k, soil[0] * 0.7, soil[1] * 0.7, soil[2] * 0.7, 0.95, 1.25, -11, 0, 0); } }
+      this.clods(x, y, z, 44 * k * dirt, 20 * rk, 0.24 * rk, soil, 1);
+      this.dustRing(x, y, z, k * (wall ? 1.5 : 1.15), 12, wall ? [0.66, 0.64, 0.6] : null);
     }
+    for (let i = 0, n = this.cnt(15 * k); i < n; i++) { const a = this.R() * TAU, s = this.R() * 2.2 * k;   /* smoke that hangs and drifts off on the wind */
+      this.spawn(KIND.SMOKE, x + Math.cos(a) * s, y + 1 + this.R() * 2.5 * k, z + Math.sin(a) * s, Math.cos(a) * 1.6, 1 + this.R() * 4, Math.sin(a) * 1.6, 12 + this.R() * 14, 2.6 * k, (7 + this.R() * 5) * k, 0.17, 0.16, 0.15, 0.5, 0.5 + this.R() * 0.6, 0.15 + this.R() * 0.75, 0, 0.3 + this.R() * 0.4); }
     if (wall) for (let i = 0; i < this.cnt(10 * k); i++) { const a = this.R() * TAU, s = 1 + this.R() * 3; this.spawn(KIND.SMOKE, x, y + 1 + this.R() * 2, z, Math.cos(a) * s, 0.6 + this.R() * 1.5, Math.sin(a) * s, 8 + this.R() * 8, 2.4 * k, 10 * k, 0.66, 0.64, 0.6, 0.4, 1.2, 0.2, 0, 0.1); }
     if (trees) { this.clods(x, y + 1, z, 30 * k, 15, 0.16, [0.24, 0.2, 0.11], 1); this.clods(x, y + 2, z, 40 * k, 9, 0.1, [0.2, 0.3, 0.1], 1.2); this.fire(x, y + 0.3, z, 30, 0.45 * k); }
-    const n2 = this.cnt(9 * k);   /* smoke that hangs and drifts off on the wind */
-    for (let i = 0; i < n2; i++) { const a = this.R() * TAU, s = this.R() * 1.6 * k;
-      this.spawn(KIND.SMOKE, x + Math.cos(a) * s, y + 0.8 + this.R() * 1.8 * k, z + Math.sin(a) * s, Math.cos(a) * 0.8, 1.2 + this.R() * 2.2, Math.sin(a) * 0.8, 9 + this.R() * 9, 2.2 * k, 9 * k, 0.2, 0.19, 0.18, 0.42, 0.9, 0.55, 0, 0.25); }
   }
-  // a burst in the air: flash, a grey puff, fragments streaking away; those that go down kick dust off the ground
+  // a burst in the air: flash, a dark grey puff with a hot heart, fragments streaking away; those that go down kick dust off the ground
   airburst(x, y, z, k = 1, o = {}) {
-    this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.1, 3 * k, 16 * k, 1, 0.9, 0.68, 1, 0, 0, 10, 0);
-    const n = this.cnt(7 * k), col = o.smoke || [0.3, 0.3, 0.3];
-    for (let i = 0; i < n; i++) this.spawn(KIND.FIRE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, (this.R() - 0.5) * 7, (this.R() - 0.5) * 5, (this.R() - 0.5) * 7, 3.5 + this.R() * 3, 1.1 * k, 4.6 * k, col[0], col[1], col[2], 0.6, 2.4, 0.1, 0.06, 0);
-    this.sparks(x, y, z, 0, -0.25, 0, 22 * k, 60, 2, 0.5, [1, 0.8, 0.45], 4);
-    if (this.ground) { const gy = this.ground(x, z), h = y - gy; if (h > 0.5 && h < 40) { const m = this.cnt(5 * k);
+    this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.1, 3 * k, 15 * k, 1, 0.9, 0.68, 1, 0, 0, 10, 0);
+    const col = o.smoke || [0.2, 0.2, 0.2];
+    for (let i = 0, n = this.cnt(5 * k); i < n; i++) this.spawn(KIND.FIRE, x, y, z, (this.R() - 0.5) * 9, (this.R() - 0.5) * 7, (this.R() - 0.5) * 9, 0.25 + this.R() * 0.2, 1.4 * k, 3.6 * k, 0, 0, 0, 0, 3, 0, 1, 0);
+    for (let i = 0, n = this.cnt(13 * k); i < n; i++) this.spawn(KIND.FIRE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, (this.R() - 0.5) * 11, (this.R() - 0.5) * 8, (this.R() - 0.5) * 11, 4.5 + this.R() * 5, 1.5 * k, (4.5 + this.R() * 2.5) * k, col[0], col[1], col[2], 0.72, 2.6, 0.12, 0.04, 0);
+    this.sparks(x, y, z, 0, -0.25, 0, 30 * k, 70, 2, 0.5, [1, 0.8, 0.45], 4);
+    if (this.ground) { const gy = this.ground(x, z), h = y - gy; if (h > 0.5 && h < 40) { const m = this.cnt(7 * k);
       for (let i = 0; i < m; i++) { const a = this.R() * TAU, d = h * (0.2 + this.R() * 1.1), gx = x + Math.cos(a) * d, gz = z + Math.sin(a) * d;
-        this.spawn(KIND.SMOKE, gx, this.ground(gx, gz) + 0.2, gz, 0, 1.2, 0, 1.6 + this.R(), 0.4, 2.2, 0.58, 0.52, 0.42, 0.4, 2, 0.1, 0, Math.hypot(h, d) / 60); } } }
+        this.spawn(KIND.SMOKE, gx, this.ground(gx, gz) + 0.2, gz, 0, 1.6, 0, 1.6 + this.R(), 0.5, 2.6, 0.58, 0.52, 0.42, 0.5, 2, 0.1, 0, Math.hypot(h, d) / 70); } } }
   }
-  // launch signature of a shoulder or tripod launcher: flash, a jet of flame and smoke out of the back, dust kicked up behind, a puff at the muzzle
+  // launch signature of a shoulder or tripod launcher: a flash that marks the position, a long jet of flame and grey-white smoke out
+  // of the back, dust lifted off the ground behind the tube, a puff rolling forward from the muzzle
   backblast(x, y, z, dx, dz, k = 1) {
-    this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.12, 2.5 * k, 13 * k, 1, 0.88, 0.62, 1, 0, 0, 11, 0);
-    const n = this.cnt(12 * k);
-    for (let i = 0; i < n; i++) { const s = 9 + this.R() * 24, j = (this.R() - 0.5) * 0.55;
-      this.spawn(KIND.FIRE, x - dx * 0.6, y + 0.1, z - dz * 0.6, -(dx + j * dz) * s, 0.4 + this.R() * 2.2, -(dz - j * dx) * s, 3 + this.R() * 3.5, 0.9 * k, 4.6 * k, 0.72, 0.7, 0.66, 0.5, 2.6, 0.25, 0.07, 0); }
-    const m = this.cnt(9 * k);   /* dust lifted off the ground behind the tube */
-    for (let i = 0; i < m; i++) { const d = 2 + this.R() * 7 * k, j = (this.R() - 0.5) * 0.6, gx = x - (dx + j * dz) * d, gz = z - (dz - j * dx) * d, gy = this.ground ? this.ground(gx, gz) : y - 1.2;
-      this.spawn(KIND.SMOKE, gx, gy + 0.3, gz, -dx * (2 + this.R() * 4), 0.8 + this.R() * 1.6, -dz * (2 + this.R() * 4), 4 + this.R() * 4, 1.2 * k, 5.5 * k, 0.6, 0.54, 0.44, 0.36, 1.6, 0.15, 0, 0.03 + d * 0.012); }
-    for (let i = 0; i < this.cnt(4 * k); i++) this.spawn(KIND.SMOKE, x + dx * 1.2, y, z + dz * 1.2, dx * (3 + this.R() * 5), 0.4 + this.R(), dz * (3 + this.R() * 5), 2.5 + this.R() * 2, 0.7 * k, 3.4 * k, 0.78, 0.77, 0.74, 0.4, 2.2, 0.2, 0, 0);
-    this.sparks(x, y, z, -dx, 0.1, -dz, 8 * k, 30, 0.4, 0.35);
+    this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.13, 3 * k, 15 * k, 1, 0.88, 0.62, 1, 0, 0, 12, 0);
+    for (let i = 0, n = this.cnt(7 * k); i < n; i++) { const s = 18 + this.R() * 40, j = (this.R() - 0.5) * 0.3;   /* the flame itself, gone in a quarter of a second */
+      this.spawn(KIND.FIRE, x - dx * 0.6, y, z - dz * 0.6, -(dx + j * dz) * s, (this.R() - 0.3) * 3, -(dz - j * dx) * s, 0.2 + this.R() * 0.2, 0.9 * k, 2.8 * k, 0, 0, 0, 0, 5, 0, 1, 0); }
+    for (let i = 0, n = this.cnt(24 * k); i < n; i++) { const s = 10 + this.R() * 46, j = (this.R() - 0.5) * 0.6;
+      this.spawn(KIND.FIRE, x - dx * 0.6, y + 0.1, z - dz * 0.6, -(dx + j * dz) * s, 0.4 + this.R() * 3.5, -(dz - j * dx) * s, 4 + this.R() * 5, 1.1 * k, (4.5 + this.R() * 3) * k, 0.74, 0.72, 0.68, 0.62, 2.8, 0.3, 0.03, 0); }
+    for (let i = 0, m = this.cnt(16 * k); i < m; i++) { const d = 2 + this.R() * 11 * k, j = (this.R() - 0.5) * 0.7, gx = x - (dx + j * dz) * d, gz = z - (dz - j * dx) * d, gy = this.ground ? this.ground(gx, gz) : y - 1.2;
+      this.spawn(KIND.SMOKE, gx, gy + 0.3, gz, -dx * (2 + this.R() * 5), 1 + this.R() * 2.4, -dz * (2 + this.R() * 5), 5 + this.R() * 5, 1.4 * k, (5 + this.R() * 3) * k, 0.6, 0.54, 0.44, 0.45, 1.5, 0.15, 0, 0.03 + d * 0.012); }
+    for (let i = 0; i < this.cnt(7 * k); i++) this.spawn(KIND.SMOKE, x + dx * 1.2, y, z + dz * 1.2, dx * (4 + this.R() * 8), 0.4 + this.R() * 1.4, dz * (4 + this.R() * 8), 3 + this.R() * 3, 0.8 * k, 4 * k, 0.8, 0.79, 0.76, 0.5, 2.2, 0.2, 0, 0);
+    this.sparks(x, y, z, -dx, 0.1, -dz, 12 * k, 36, 0.4, 0.35);
   }
-  // the tank's main gun: a long tongue of flame, a ball of smoke rolling forward, and (dustRing, called by the app) dust off the ground
+  // the tank's main gun: a long tongue of flame, a ball of grey smoke rolling forward and to the sides, sparks of unburnt powder
+  // (the dust the blast lifts off the ground round the tank is dustRing, called by the app)
   muzzleBlast(x, y, z, dx, dy, dz, k = 1) {
-    this.spawn(KIND.FLASH, x + dx * 1.5, y + dy * 1.5, z + dz * 1.5, 0, 0, 0, 0.11, 7 * k, 26 * k, 1, 0.86, 0.6, 1, 0, 0, 16, 0);
-    const n = this.cnt(14 * k);
-    for (let i = 0; i < n; i++) { const s = 12 + this.R() * 55, j = 0.16; this.spawn(KIND.FIRE, x, y, z, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s + 0.5, (dz + (this.R() - 0.5) * j) * s, 2.8 + this.R() * 3, 1.0 * k, 5.2 * k, 0.5, 0.48, 0.45, 0.5, 3.2, 0.3, 0.09 + this.R() * 0.05, 0); }
+    this.spawn(KIND.FLASH, x + dx * 1.5, y + dy * 1.5, z + dz * 1.5, 0, 0, 0, 0.11, 6 * k, 22 * k, 1, 0.86, 0.6, 1, 0, 0, 16, 0);
+    for (let i = 0, n = this.cnt(8 * k); i < n; i++) { const s = 30 + this.R() * 60, j = 0.1;   /* the tongue of flame */
+      this.spawn(KIND.FIRE, x, y, z, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s, (dz + (this.R() - 0.5) * j) * s, 0.16 + this.R() * 0.16, 1.2 * k, 3.4 * k, 0, 0, 0, 0, 6, 0, 1, 0); }
+    for (let i = 0, n = this.cnt(20 * k); i < n; i++) { const s = 12 + this.R() * 60, j = 0.22;
+      this.spawn(KIND.FIRE, x, y, z, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s + 0.8, (dz + (this.R() - 0.5) * j) * s, 3.5 + this.R() * 4, 1.3 * k, (5 + this.R() * 3) * k, 0.56, 0.55, 0.53, 0.6, 3.2, 0.35, 0.04, 0); }
     const px = -dz, pz = dx;   /* gas spilling sideways at the muzzle */
-    for (let i = 0; i < this.cnt(8 * k); i++) { const sd = i % 2 ? 1 : -1, s = 4 + this.R() * 9; this.spawn(KIND.FIRE, x, y, z, px * sd * s + dx * 3, (this.R() - 0.3) * 3, pz * sd * s + dz * 3, 2 + this.R() * 2, 0.8 * k, 3.6 * k, 0.55, 0.53, 0.5, 0.42, 3, 0.25, 0.05, 0); }
-    this.sparks(x, y, z, dx, dy, dz, 14 * k, 70, 0.22, 0.3, [1, 0.8, 0.5], 4);
+    for (let i = 0; i < this.cnt(10 * k); i++) { const sd = i % 2 ? 1 : -1, s = 5 + this.R() * 12; this.spawn(KIND.FIRE, x, y, z, px * sd * s + dx * 4, (this.R() - 0.3) * 5, pz * sd * s + dz * 4, 2.5 + this.R() * 2.5, 1 * k, 4.2 * k, 0.6, 0.59, 0.57, 0.5, 3, 0.3, 0.04, 0); }
+    this.sparks(x, y, z, dx, dy, dz, 22 * k, 80, 0.22, 0.3, [1, 0.8, 0.5], 4);
   }
   // one 30 mm round leaving the weapon station: a small sharp flash, a wisp of smoke, the empty case thrown out to the side
   muzzle30(x, y, z, dx, dy, dz, sx, sz) {
     this.spawn(KIND.FLASH, x + dx * 0.5, y + dy * 0.5, z + dz * 0.5, 0, 0, 0, 0.07, 0.8, 2.8, 1, 0.85, 0.55, 1, 0, 0, 6, 0);
-    for (let i = 0; i < this.cnt(3); i++) { const s = 4 + this.R() * 10; this.spawn(KIND.SMOKE, x, y, z, dx * s + (this.R() - 0.5) * 2, dy * s + 0.4, dz * s + (this.R() - 0.5) * 2, 1.4 + this.R() * 1.4, 0.35, 2.4, 0.66, 0.65, 0.63, 0.34, 3, 0.3, 0, 0); }
+    for (let i = 0; i < this.cnt(4); i++) { const s = 4 + this.R() * 12; this.spawn(KIND.SMOKE, x, y, z, dx * s + (this.R() - 0.5) * 2, dy * s + 0.4, dz * s + (this.R() - 0.5) * 2, 1.6 + this.R() * 1.6, 0.4, 3.2, 0.7, 0.69, 0.67, 0.5, 3, 0.3, 0, 0); }
     this.sparks(x, y, z, dx, dy, dz, 4, 40, 0.18, 0.18, [1, 0.8, 0.5], 3);
     this.spawn(KIND.DEBRIS, x - dx * 1.3, y - dy * 1.3 - 0.1, z - dz * 1.3, sx * (2.5 + this.R() * 1.5) - dx, 1.6 + this.R() * 1.2, sz * (2.5 + this.R() * 1.5) - dz, 2.2, 0.09, 0.09, 0.85, 0.66, 0.26, 1, 0.3, -9.8, 0.25, 0);
   }
@@ -319,16 +329,16 @@ export class Particles {
   // a warhead striking the vehicle: flash, sparks and spall thrown back the way it came, grey-black smoke
   vehicleHit(x, y, z, dx, dz, k = 1) {
     this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.14, 5 * k, 24 * k, 1, 0.9, 0.7, 1, 0, 0, 15, 0);
-    this.fireball(x, y, z, 0.8 * k, 10 * k, 6, 4.5, [0.1, 0.1, 0.1], 0.22, 2);
+    this.fireball(x, y, z, 0.9 * k, 16 * k, 8, 5, [0.1, 0.1, 0.1], 0.1, 2);
     this.sparks(x, y, z, -dx, 0.5, -dz, 60 * k, 34, 0.9, 1.0, [1, 0.74, 0.36], 6);
     this.sparks(x, y, z, 0, 1, 0, 24 * k, 20, 1.6, 1.4, [1, 0.6, 0.25], 5);
     this.clods(x, y, z, 14 * k, 12, 0.14, [0.16, 0.16, 0.15], 0.8, 0.5);
-    for (let i = 0; i < this.cnt(8 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * 2, y + this.R() * 1.5, z + (this.R() - 0.5) * 2, (this.R() - 0.5) * 2, 1.5 + this.R() * 2.5, (this.R() - 0.5) * 2, 7 + this.R() * 7, 1.8 * k, 8 * k, 0.1, 0.1, 0.1, 0.5, 0.8, 0.6, 0, 0.15);
+    for (let i = 0; i < this.cnt(16 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * 2.5, y + this.R() * 1.5, z + (this.R() - 0.5) * 2.5, (this.R() - 0.5) * 3, 1.2 + this.R() * 3.5, (this.R() - 0.5) * 3, 9 + this.R() * 11, 2 * k, (6 + this.R() * 4) * k, 0.09, 0.09, 0.09, 0.6, 0.5 + this.R() * 0.6, 0.2 + this.R() * 0.7, 0, 0.15 + this.R() * 0.6);
   }
   // ammunition or fuel going up after a kill: a jet of flame out of the roof, a shower of sparks, a ball of fire
   secondary(x, y, z, k = 1, delay = 0) {
     this.spawn(KIND.FLASH, x, y + 1, z, 0, 0, 0, 0.16, 6 * k, 26 * k, 1, 0.84, 0.55, 1, 0, 0, 14, delay);
-    for (let i = 0; i < this.cnt(12 * k); i++) { const s = 8 + this.R() * 20; this.spawn(KIND.FIRE, x + (this.R() - 0.5), y + 0.5, z + (this.R() - 0.5), (this.R() - 0.5) * 5, s, (this.R() - 0.5) * 5, 3.5 + this.R() * 3, 1.3 * k, 6 * k, 0.07, 0.07, 0.07, 0.75, 1.8, 1.2, 0.3 + this.R() * 0.15, delay + this.R() * 0.25); }
+    for (let i = 0; i < this.cnt(20 * k); i++) { const s = 8 + this.R() * 30; this.spawn(KIND.FIRE, x + (this.R() - 0.5), y + 0.5, z + (this.R() - 0.5), (this.R() - 0.5) * 6, s, (this.R() - 0.5) * 6, 5 + this.R() * 5, 1.5 * k, (6 + this.R() * 3) * k, 0.06, 0.06, 0.06, 0.82, 1.6, 1.4, 0.16 + this.R() * 0.1, delay + this.R() * 0.3); }
     const n = this.cnt(70 * k);
     for (let i = 0; i < n; i++) { const a = this.R() * TAU, e = 0.5 + this.R() * 1.05, s = 12 + this.R() * 30; this.spawn(KIND.SPARK, x, y + 1, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s, Math.sin(a) * Math.cos(e) * s, 1 + this.R() * 1.6, 0.09, 0.04, 1, 0.66 + this.R() * 0.2, 0.3, 1, 0.5, -9.8, 6, delay + this.R() * 0.5); }
   }
@@ -338,7 +348,7 @@ export class Particles {
   column(x, y, z, dur = 40, k = 1) { this.fire(x, y, z, dur, k, false); }
   _emit(e, dt) {
     const k = e.k, left = e.until - this.time, fade = left < 8 ? Math.max(0.15, left / 8) : 1;
-    if (e.flame) { e.a += dt * 16 * this.q * fade; while (e.a >= 1) { e.a -= 1; this.spawn(KIND.FIRE, e.x + (this.R() - 0.5) * 2.4 * k, e.y + this.R() * 0.8, e.z + (this.R() - 0.5) * 3 * k, (this.R() - 0.5) * 1.2, 2.2 + this.R() * 3, (this.R() - 0.5) * 1.2, 0.7 + this.R() * 0.6, 1.5 * k, 0.5 * k, 0, 0, 0, 0, 0.6, 1.5, 1, 0); } }
+    if (e.flame) { e.a += dt * 26 * this.q * fade; while (e.a >= 1) { e.a -= 1; this.spawn(KIND.FIRE, e.x + (this.R() - 0.5) * 2.6 * k, e.y - 0.6 + this.R() * 1.2, e.z + (this.R() - 0.5) * 3.2 * k, (this.R() - 0.5) * 1.2, 2 + this.R() * 3.2, (this.R() - 0.5) * 1.2, 0.8 + this.R() * 0.7, 2.1 * k, 0.7 * k, 0, 0, 0, 0, 0.6, 1.5, 1, 0); } }
     e.b += dt * (e.flame ? 5 : 3.2) * this.q * fade; const dark = e.flame ? 0.045 : 0.11;
     while (e.b >= 1) { e.b -= 1; this.spawn(KIND.SMOKE, e.x + (this.R() - 0.5) * 2 * k, e.y + 1.2, e.z + (this.R() - 0.5) * 2 * k, (this.R() - 0.5), 3.2 + this.R() * 2, (this.R() - 0.5), 16 + this.R() * 10, 2.2 * k, 13 * k, dark, dark, dark, e.flame ? 0.78 : 0.5, 0.22, 0.5, 0, 0); }
   }
@@ -358,7 +368,7 @@ export class Particles {
   apsLaunch(x, y, z, dx, dy, dz) {
     this.spawn(KIND.FLASH, x, y, z, 0, 0, 0, 0.08, 2.4, 9, 1, 0.92, 0.75, 1, 0, 0, 12, 0);
     this.sparks(x, y, z, dx, dy, dz, 46, 190, 0.1, 0.09, [1, 0.9, 0.7], 5);
-    for (let i = 0; i < this.cnt(6); i++) { const s = 3 + this.R() * 8; this.spawn(KIND.SMOKE, x, y, z, dx * s + (this.R() - 0.5) * 5, dy * s + (this.R() - 0.5) * 3 + 0.5, dz * s + (this.R() - 0.5) * 5, 1.8 + this.R() * 1.6, 0.5, 3, 0.75, 0.74, 0.72, 0.4, 3, 0.3, 0, 0); }
+    for (let i = 0; i < this.cnt(12); i++) { const s = 3 + this.R() * 12; this.spawn(KIND.FIRE, x, y, z, dx * s + (this.R() - 0.5) * 7, dy * s + (this.R() - 0.5) * 5 + 0.5, dz * s + (this.R() - 0.5) * 7, 2.2 + this.R() * 2.2, 0.8, 4.4, 0.6, 0.59, 0.57, 0.6, 3, 0.3, 0.04, 0); }
   }
   // a missile broken up in the air: flash, burning pieces that carry on along its path (vx, vy, vz) and fall, a dark puff
   breakup(x, y, z, vx, vy, vz, k = 1) {
@@ -370,7 +380,7 @@ export class Particles {
     for (let i = 0; i < this.cnt(6 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, vx * 0.03 + (this.R() - 0.5) * 4, (this.R() - 0.5) * 3, vz * 0.03 + (this.R() - 0.5) * 4, 4 + this.R() * 4, 1.2 * k, 6 * k, 0.16, 0.16, 0.16, 0.55, 2, 0.15, 0, 0);
   }
   // one puff of a missile's smoke trail
-  trail(x, y, z, k = 1, c = 0.8) { this.spawn(KIND.SMOKE, x, y, z, (this.R() - 0.5) * 0.8, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.8, 4.5 + this.R() * 3.5, 0.7 * k, (3.2 + this.R() * 1.4) * k, c, c, c * 0.98, 0.5, 1, 0.12, 0, 0); }
+  trail(x, y, z, k = 1, c = 0.9) { this.spawn(KIND.SMOKE, x, y, z, (this.R() - 0.5) * 0.8, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.8, 4.5 + this.R() * 3.5, 0.7 * k, (3.2 + this.R() * 1.4) * k, c, c, c * 0.98, 0.75, 1, 0.12, 0, 0); }
   // old name kept for callers that still use it: the cloud is now drawn by the obscurant layer, so this is only the fuze pop
   cloud(x, y, z) { this.cloudPop(x, y, z); }
 }
