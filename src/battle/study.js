@@ -76,10 +76,27 @@
     return c;
   }
   function raidStart(HK, base, sc, n) { const S = {}; for (const st of SETUPS) { const cfg = raidConfig(HK, base, sc, st); cfg.seed = 1; S[st.key] = { cfg, lookup: st.hkoi ? HK.meetLookup(cfg) : {}, n: 0, surv: 0, killed: new Uint8Array(n), sums: {} }; } return { S, n, i: 0 }; }
-  // fight raids i .. i + count - 1 under all four setups
+  // PER MAP: the opening engagement on real ground. For K battle seeds the real battle is set up on that map (the enemy's own choice of
+  // firing positions, the tank's own choice of position and facing) and run until the enemy's first volley; that volley's exact engine
+  // input (who fires, from what range and bearing, what the ground hides, the tank's planned move) is kept. Raids then replay those
+  // openings with fresh dice under the four setups. A placement where the enemy never gets a shot in ten minutes is counted as quiet.
+  // Limits: it is the first volley only, and the tank's move is the one it planned with both defences fitted.
+  function mapStart(deps, opts, n, K) { const HK = deps.HK, cfgB = cfgFor(HK, opts.cfg || HK.defaultConfig(), SETUPS[0]), S = {};
+    for (const st of SETUPS) S[st.key] = { cfgs: [], st, lookup: null, n: 0, surv: 0, killed: new Uint8Array(n), sums: {} };
+    return { S, n, i: 0, map: { deps, opts, cfgB, lookup: HK.meetLookup(cfgB), K: K || 24, seed: 0, quiet: 0, R: [], keys: {}, hullDown: 0 } }; }
+  function mapPrepare(run) { const M = run.map, HK = M.deps.HK; M.seed++;
+    const b = new M.deps.Battle(Object.assign({}, M.opts, { cfg: M.cfgB, lookup: M.lookup, seed: M.seed, waves: 1 })); let g = 0;
+    while (!b.volleys.length && b.tank.alive && !b.over && b.t < 600 && g++ < 7000) b.step();
+    if (!b.volleys.length) M.quiet++; else { const v = b.volleys[0]; if (v.exposed === 'hull') M.hullDown++; for (const l of v.launches) { M.R.push(Math.round(l.R)); M.keys[l.key] = (M.keys[l.key] || 0) + 1; }
+      for (const st of SETUPS) { const c = JSON.parse(JSON.stringify(v.cfg)); c.hkoi_enabled = !!st.hkoi; if (c.aps) c.aps.enabled = !!st.aps; const A = run.S[st.key]; A.cfgs.push(c); A.lookup = st.hkoi ? M.lookup : {}; } }
+    if (M.seed >= M.K) { M.ready = true; if (!run.S.both.cfgs.length) run.n = 0; } }
+  function mapInfo(run) { const M = run.map, R = M.R.slice().sort((a, b) => a - b), q = f => R.length ? R[Math.min(R.length - 1, Math.floor(f * R.length))] : 0, got = M.seed - M.quiet;
+    return { placements: M.seed, quiet: M.quiet, openings: got, launchesPerOpening: got ? R.length / got : 0, nearest: R[0] || 0, median: q(0.5), farthest: R[R.length - 1] || 0, hullDown: got ? M.hullDown / got : 0, keys: M.keys }; }
+  // fight raids i .. i + count - 1 under all four setups (for a map run, the first calls prepare one placement each)
   function raidStep(HK, run, count) {
+    if (run.map && !run.map.ready) { mapPrepare(run); return false; }
     const end = Math.min(run.n, run.i + count);
-    for (; run.i < end; run.i++) for (const st of SETUPS) { const A = run.S[st.key], m = HK.runMission(A.cfg, new HK.RNG(HK.seedFor(A.cfg.seed, run.i)), A.lookup, null); A.n++; if (m.killed) A.killed[run.i] = 1; else A.surv++; for (const k in m) if (typeof m[k] === 'number') A.sums[k] = (A.sums[k] || 0) + m[k]; }
+    for (; run.i < end; run.i++) for (const st of SETUPS) { const A = run.S[st.key], cfg = A.cfgs ? A.cfgs[run.i % A.cfgs.length] : A.cfg, m = HK.runMission(cfg, new HK.RNG(HK.seedFor(cfg.seed, run.i)), A.lookup, null); A.n++; if (m.killed) A.killed[run.i] = 1; else A.surv++; for (const k in m) if (typeof m[k] === 'number') A.sums[k] = (A.sums[k] || 0) + m[k]; }
     return run.i >= run.n;
   }
   const BY = [['hkoi', 'Stopped by HKOI'], ['aps', 'Stopped by Trophy'], ['gunner', 'Enemy gunner missed'], ['smoke', 'Crew smoke'], ['other', 'Other'], ['hit', 'Hit the vehicle']];
@@ -94,6 +111,6 @@
   // raid by raid: where did adding HKOI change the outcome? z is how many standard errors the net effect is from zero (over 2 is clear, over 3 is beyond doubt)
   function paired(withH, without) { let saved = 0, cost = 0; const n = Math.min(withH.n, without.n); for (let i = 0; i < n; i++) { if (without.killed[i] && !withH.killed[i]) saved++; else if (!without.killed[i] && withH.killed[i]) cost++; } return { n, saved, cost, net: n ? (saved - cost) / n : 0, z: saved + cost ? (saved - cost) / Math.sqrt(saved + cost) : 0 }; }
 
-  const api = { SETUPS, BUCKETS, run, one, summarise, range95, cfgFor, bucketOf, raidConfig, raidStart, raidStep, raidSummary, paired, BY };
+  const api = { SETUPS, BUCKETS, run, one, summarise, range95, cfgFor, bucketOf, raidConfig, raidStart, raidStep, raidSummary, paired, BY, mapStart, mapInfo };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.HKStudy = api;
 })(typeof window !== 'undefined' ? window : globalThis);
