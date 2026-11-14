@@ -7,7 +7,7 @@ import { XRayView, XRAY_COLOURS } from '../render/xray.js';
 
 const CSS = `
   #xr { position: fixed; z-index: 6; right: 12px; top: 96px; width: 392px; max-width: calc(100vw - 24px); padding: 10px 12px 10px; font-size: 13px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
-  #xr.big { right: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+  #xr.big { background: #0a0f0e; right: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
   #xr .xr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } #xr .xr-head b { font: 700 12px/1 var(--mono); letter-spacing: .1em; color: var(--accent); }
   #xr .xr-head span { color: var(--dim); font: 12px var(--mono); flex: 1; } #xr .xr-head .btn { padding: 3px 9px; }
   #xr .xr-body { display: block; } #xr.big .xr-body { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, 1fr); gap: 14px; align-items: start; }
