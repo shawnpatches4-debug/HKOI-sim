@@ -1,146 +1,229 @@
-// Sound engine. Everything here is synthesised (no recordings needed): the 30 mm gun, explosions, launches, drones, the turbine,
-// tracks, wind and rain. Recordings can replace any of these later through `samples`. Two listening positions:
-// outside (open air, sounds arrive late and dull with distance) and inside the hull (the world heavily muffled, the vehicle's
-// own machinery and the gun felt through the armour).
-const C_SOUND = 343;
+// Sound engine: the one object the rest of the simulator talks to.
+//
+//   mixer.js     buses, limiter, inside/outside treatment, distance, the building blocks, recordings in place of synthesis
+//   effects.js   the one-shot sounds (30 mm, 120 mm, machine guns, Trophy, launches, blasts, strikes)
+//   intercom.js  the crew's voices: recorded human clips only, queued and keyed like an intercom
+//   crewtalk.js  who says what and when, from the battle's events
+//   this file    start-up, the continuous layers (engine, tracks, turret, weather, wildlife, far battle, drones,
+//                warning tones) and the calls other code uses
+//
+// Everything except the voices is synthesised until recordings arrive. Nobody has listened to any of it in the
+// workspace: it was rendered to files and measured (tests/audio/). Recordings replace a sound by naming a file for its
+// slot in assets/sfx_index.json; no code changes are needed (docs/ASSETS.md, "Sound slots").
+import { Mixer, C_SOUND } from './mixer.js';
+import { Effects, SLOTS } from './effects.js';
+import { Intercom } from './intercom.js';
+import { CrewTalk, engineLine } from './crewtalk.js';
+
+// where the listener's head is in each camera view: 'in' behind armour, 'hatch' head out in a helmet, otherwise outside.
+// Both 'in' and 'hatch' hear the intercom. A view not listed here is outside.
+export const SEATS = { cdr: 'hatch', ldr: 'hatch', gnr: 'in', citv: 'in', hkoi: 'in', drv: 'in' };
+// looped layers a recording can replace, besides the one-shot slots in effects.js
+export const BED_SLOTS = ['turbine_in_loop', 'turbine_out_loop', 'tracks_loop', 'wind_loop', 'rain_loop', 'rain_roof_loop'];
+export { SLOTS };
+
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
 
 export class Sound {
-  constructor() { this.ctx = null; this.on = true; this.inside = false; this.drones = new Map(); this.vol = 0.8; this.cond = 'day'; this.speed = 0; this.ring = 0; }
-  // must be called from a click or key press: browsers do not allow sound before that
-  start() {
-    if (this.ctx) { this.ctx.resume(); return; }
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; const c = this.ctx = new AC();
-    this.master = c.createGain(); this.master.gain.value = this.on ? this.vol : 0;
-    const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.22; this.master.connect(comp); comp.connect(c.destination);
-    this.world = c.createGain(); this.worldLP = c.createBiquadFilter(); this.worldLP.type = 'lowpass'; this.worldLP.frequency.value = 18000; this.world.connect(this.worldLP); this.worldLP.connect(this.master);   // everything outside the hull
-    this.own = c.createGain(); this.own.connect(this.master);   // the vehicle's own machinery, heard directly
-    // two seconds of noise, reused by every effect
-    const n = c.sampleRate * 2, buf = this.noise = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0); let b = 0; for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    const bb = this.brown = c.createBuffer(1, n, c.sampleRate), e = bb.getChannelData(0); for (let i = 0; i < n; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; e[i] = b * 3.5; }
+  constructor() {
+    this.ctx = null; this.on = true; this.vol = 0.8; this.seat = 'out'; this.inside = false; this.lite = false;
+    this.drones = new Map(); this.lastShot = -1e9; this.thr = 0.25; this.prev = null; this.next = {};
+    this._get = url => fetch(url).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  }
+  // Must be called from a click or key press: browsers do not allow sound before that. (Tests pass their own context.)
+  start(ctx) {
+    if (this.ctx) { if (this.ctx.resume) this.ctx.resume(); return; }
+    if (!ctx) { const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext); if (!AC) return; ctx = new AC(); }
+    this.ctx = ctx; this.mix = new Mixer(ctx, this.vol); this.mix.setVolume(this.vol, this.on);
+    this.icom = new Intercom(this.mix);
+    this.talk = new CrewTalk(this.icom, { warn: (l, r) => this._warn(l, r), blip: k => this.blip(k), smoke: () => this.smoke(this.camDist || 0) });
     this._beds();
   }
-  setOn(v) { this.on = v; if (this.master) this.master.gain.setTargetAtTime(v ? this.vol : 0, this.ctx.currentTime, 0.05); }
-  _loop(buffer, dest, { type = 'lowpass', f = 800, q = 0.7, gain = 0 } = {}) { const c = this.ctx, s = c.createBufferSource(); s.buffer = buffer; s.loop = true; const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = c.createGain(); g.gain.value = gain; s.connect(fl); fl.connect(g); g.connect(dest); s.start(0, Math.random() * 1.5); return { s, fl, g }; }
-  // continuous layers: wind, rain, turbine, tracks
+  setOn(v) { this.on = v; if (this.mix) this.mix.setVolume(this.vol, v); }
+
+  // ------------------------------------------------------------------ continuous layers
   _beds() {
-    const c = this.ctx; this.wind = this._loop(this.brown, this.world, { f: 420, gain: 0.0 }); this.rain = this._loop(this.noise, this.world, { type: 'highpass', f: 2400, gain: 0 }); this.rainIn = this._loop(this.noise, this.own, { type: 'bandpass', f: 1800, q: 0.8, gain: 0 });
-    // turbine: a broadband rush plus a thin high whine; both rise a little with speed
-    this.rush = this._loop(this.noise, this.own, { type: 'bandpass', f: 520, q: 0.6, gain: 0 }); this.rushOut = this._loop(this.noise, this.world, { type: 'bandpass', f: 900, q: 0.5, gain: 0 });
-    this.whine = c.createOscillator(); this.whine.type = 'sine'; this.whine.frequency.value = 2650; this.whineG = c.createGain(); this.whineG.gain.value = 0; this.whine.connect(this.whineG); this.whineG.connect(this.own); this.whine.start();
-    this.hum = c.createOscillator(); this.hum.type = 'sawtooth'; this.hum.frequency.value = 62; const hl = c.createBiquadFilter(); hl.type = 'lowpass'; hl.frequency.value = 160; this.humG = c.createGain(); this.humG.gain.value = 0; this.hum.connect(hl); hl.connect(this.humG); this.humG.connect(this.own); this.hum.start();
-    this.tracks = this._loop(this.brown, this.own, { f: 240, gain: 0 }); this.trackLfo = c.createOscillator(); this.trackLfo.frequency.value = 6; const lg = c.createGain(); lg.gain.value = 0; this.trackLfoG = lg; this.trackLfo.connect(lg); lg.connect(this.tracks.g.gain); this.trackLfo.start();
-    this.earRing = c.createOscillator(); this.earRing.frequency.value = 4300; this.earG = c.createGain(); this.earG.gain.value = 0; this.earRing.connect(this.earG); this.earG.connect(this.master); this.earRing.start();
+    const c = this.ctx, M = this.mix, B = this.bed = {};
+    const osc = (type, f, dest, gain = 0) => { const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = f; g.gain.value = gain; o.connect(g); g.connect(dest); o.start(); return { o, g }; };
+    // --- world
+    B.wind = M.bed('world', { color: 'pink', f: 480 }); B.windHi = M.bed('world', { color: 'pink', type: 'bandpass', f: 1500, q: 0.8 });
+    B.rain = M.bed('world', { color: 'white', type: 'highpass', f: 2300 });
+    B.rainRoof = M.bed('world', { direct: true, color: 'pink', type: 'bandpass', f: 1500, q: 0.7 });
+    // --- the vehicle. Inside (direct): rumble through the seat, the turbine's rush and whine. Outside (air): exhaust roar and whine.
+    B.rush = M.bed('vehicle', { direct: true, color: 'pink', type: 'bandpass', f: 520, q: 0.6 });
+    B.rushOut = M.bed('vehicle', { color: 'pink', type: 'bandpass', f: 900, q: 0.5 });
+    B.roarOut = M.bed('vehicle', { color: 'brown', f: 220 });
+    B.whine = osc('sine', 2650, M.bus.vehicle.direct); B.whine2 = osc('sine', 3990, M.bus.vehicle.direct);
+    B.whineOut = osc('sine', 2650, M.bus.vehicle.air);
+    const humLP = c.createBiquadFilter(); humLP.type = 'lowpass'; humLP.frequency.value = 170; humLP.connect(M.bus.vehicle.direct);
+    B.hum = osc('sawtooth', 62, humLP);
+    // tracks: a low clatter chopped at the rate the track links meet the ground, and a squeal when the vehicle turns
+    B.tracks = M.bed('vehicle', { direct: true, color: 'brown', f: 300 }); B.tracksOut = M.bed('vehicle', { color: 'brown', f: 700 });
+    B.clat = c.createOscillator(); B.clat.type = 'square'; B.clat.frequency.value = 8; B.clatG = c.createGain(); B.clatG.gain.value = 0; B.clat.connect(B.clatG);
+    B.clatG.connect(B.tracks.g.gain); B.clatG2 = c.createGain(); B.clatG2.gain.value = 0; B.clat.connect(B.clatG2); B.clatG2.connect(B.tracksOut.g.gain); B.clat.start();
+    B.squeal = M.bed('vehicle', { color: 'white', type: 'bandpass', f: 2400, q: 14 });
+    // the turret: traverse drive whir, heard inside
+    const whirLP = c.createBiquadFilter(); whirLP.type = 'lowpass'; whirLP.frequency.value = 1400; whirLP.connect(M.bus.vehicle.direct);
+    B.whir = osc('sawtooth', 240, whirLP); B.whirN = M.bed('vehicle', { direct: true, color: 'white', type: 'bandpass', f: 3100, q: 3 });
+    // --- warning tones in the headset: laser warning (fast beeps), radar or launch warning (slow two-tone)
+    B.lwr = osc('square', 1250, M.bus.ui.direct); B.lwrLfo = osc('square', 7, B.lwr.g.gain, 0);
+    B.rwr = osc('sine', 820, M.bus.ui.direct); B.rwrLfo = osc('square', 2.5, B.rwr.o.frequency, 0); B.rwrLfo.g.gain.value = 110;
+    B.icomFloor = M.bed('ui', { direct: true, color: 'pink', type: 'bandpass', f: 1800, q: 0.4 });
+    this.warnL = false; this.warnR = false;
   }
-  // a shaped burst of noise: the building block for cracks, blasts and whooshes
-  _burst(dest, when, { dur = 0.3, f0 = 4000, f1 = 300, gain = 0.5, type = 'lowpass', q = 0.7, attack = 0.002, brown = false }) { const c = this.ctx, s = c.createBufferSource(); s.buffer = brown ? this.brown : this.noise; const fl = c.createBiquadFilter(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(Math.max(30, f0), when); fl.frequency.exponentialRampToValueAtTime(Math.max(30, f1), when + dur); const g = c.createGain(); g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), when + attack); g.gain.exponentialRampToValueAtTime(0.0001, when + dur); s.connect(fl); fl.connect(g); g.connect(dest); s.start(when, Math.random() * 1.5, dur + 0.05); }
-  _thump(dest, when, { f0 = 90, f1 = 35, dur = 0.4, gain = 0.6 }) { const c = this.ctx, o = c.createOscillator(); o.frequency.setValueAtTime(f0, when); o.frequency.exponentialRampToValueAtTime(f1, when + dur); const g = c.createGain(); g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), when + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, when + dur); o.connect(g); g.connect(dest); o.start(when); o.stop(when + dur + 0.05); }
-  // how loud and how dull a sound is after travelling `d` metres, and how late it arrives
-  _far(d, size = 1) { return { delay: d / C_SOUND, gain: Math.min(1, size * 26 / (26 + d)), cut: Math.max(220, 9000 / (1 + d / 260)) }; }
-  // ------------------------------------------------------------------ one-shot events (d = metres from the listener)
-  explosion(d, size = 1) { if (!this.ctx || !this.on) return; const c = this.ctx, a = this._far(d, size * 1.6), t = c.currentTime + a.delay, out = this.world;
-    this._burst(out, t, { dur: 0.09, f0: Math.min(9000, a.cut * 2), f1: a.cut * 0.5, gain: a.gain * 0.9 });   // the crack
-    this._thump(out, t, { f0: 75, f1: 26, dur: 0.7 * Math.sqrt(size), gain: a.gain * 1.1 });                   // the body
-    this._burst(out, t + 0.03, { dur: 1.6 + size, f0: a.cut * 0.6, f1: 60, gain: a.gain * 0.5, brown: true }); // the roll-off
-    if (d > 300) this._burst(out, t + 0.5 + d / 2000, { dur: 1.2, f0: 300, f1: 60, gain: a.gain * 0.2, brown: true });   // a late echo off the ground
-    if (this.inside && d < 40) { this._thump(this.own, c.currentTime + a.delay, { f0: 55, f1: 24, dur: 0.5, gain: 0.7 * size }); this._rattle(c.currentTime + a.delay + 0.03, Math.min(1, size * 14 / (14 + d))); } }
-  // fragments and loose kit rattling on and inside the hull
-  _rattle(when, k = 1) { for (let i = 0; i < 7 * k; i++) this._burst(this.own, when + Math.random() * 0.5, { dur: 0.03 + Math.random() * 0.05, f0: 2500 + Math.random() * 3500, f1: 900, gain: 0.12 * k, type: 'bandpass', q: 5 }); }
-  hit(killing) { if (!this.ctx || !this.on) return; const c = this.ctx, t = c.currentTime; this._thump(this.own, t, { f0: 110, f1: 22, dur: 1.1, gain: 1.2 }); this._burst(this.own, t, { dur: 0.25, f0: 6000, f1: 300, gain: 1 }); this._burst(this.own, t + 0.01, { dur: 0.6, f0: 3200, f1: 1800, gain: 0.5, type: 'bandpass', q: 9 }); this._rattle(t + 0.05, 2);
-    // ears ring and the world goes dull for a few seconds
-    this.earG.gain.cancelScheduledValues(t); this.earG.gain.setValueAtTime(0.11, t + 0.05); this.earG.gain.exponentialRampToValueAtTime(0.0001, t + (killing ? 9 : 5)); this.world.gain.cancelScheduledValues(t); this.world.gain.setValueAtTime(0.12, t); this.world.gain.linearRampToValueAtTime(1, t + (killing ? 8 : 4)); }
-  // one 30 mm round leaving the gun. Outside: a hard crack and a chesty thump. Inside: a thud through the armour and the feed clacking.
-  gun30(d) { if (!this.ctx || !this.on) return; const c = this.ctx;
-    if (this.inside) { const t = c.currentTime; this._thump(this.own, t, { f0: 95, f1: 38, dur: 0.16, gain: 0.85 }); this._burst(this.own, t, { dur: 0.05, f0: 900, f1: 250, gain: 0.35 }); this._burst(this.own, t + 0.035, { dur: 0.03, f0: 3800, f1: 2200, gain: 0.16, type: 'bandpass', q: 6 }); this._burst(this.own, t + 0.085, { dur: 0.035, f0: 2600, f1: 1500, gain: 0.12, type: 'bandpass', q: 6 }); return; }
-    const a = this._far(d, 2.6), t = c.currentTime + a.delay; this._burst(this.world, t, { dur: 0.05, f0: Math.min(12000, a.cut * 2.2), f1: a.cut * 0.7, gain: a.gain * 1.0, attack: 0.001 }); this._thump(this.world, t, { f0: 150, f1: 48, dur: 0.14, gain: a.gain * 1.0 }); this._burst(this.world, t + 0.02, { dur: 0.5, f0: a.cut * 0.5, f1: 90, gain: a.gain * 0.28, brown: true }); }
-  // the 120 mm main gun: enormous outside, a slam and a breech clang inside
-  gun120(d) { if (!this.ctx || !this.on) return; const c = this.ctx; if (this.inside) { const t = c.currentTime; this._thump(this.own, t, { f0: 70, f1: 22, dur: 0.6, gain: 1.3 }); this._burst(this.own, t, { dur: 0.12, f0: 1500, f1: 200, gain: 0.7 }); this._burst(this.own, t + 0.25, { dur: 0.08, f0: 3000, f1: 1500, gain: 0.3, type: 'bandpass', q: 7 }); this._burst(this.own, t + 0.55, { dur: 0.06, f0: 2200, f1: 1200, gain: 0.25, type: 'bandpass', q: 7 }); this._rattle(t + 0.05, 1); return; }
-    const a = this._far(d, 5), t = c.currentTime + a.delay; this._burst(this.world, t, { dur: 0.08, f0: Math.min(12000, a.cut * 2.5), f1: a.cut * 0.6, gain: a.gain * 1.2, attack: 0.001 }); this._thump(this.world, t, { f0: 95, f1: 24, dur: 0.9, gain: a.gain * 1.3 }); this._burst(this.world, t + 0.03, { dur: 2.4, f0: a.cut * 0.6, f1: 50, gain: a.gain * 0.6, brown: true }); }
-  // one machine-gun round: heavy = the .50 calibre (slower, deeper), otherwise the 7.62 mm coax
-  mg(d, heavy) { if (!this.ctx || !this.on) return; const c = this.ctx; if (this.inside) { const t = c.currentTime; this._thump(this.own, t, { f0: heavy ? 120 : 190, f1: 60, dur: heavy ? 0.07 : 0.04, gain: heavy ? 0.4 : 0.22 }); this._burst(this.own, t, { dur: 0.02, f0: 2400, f1: 900, gain: heavy ? 0.12 : 0.08, type: 'bandpass', q: 4 }); return; }
-    const a = this._far(d, heavy ? 1.5 : 0.9), t = c.currentTime + a.delay; this._burst(this.world, t, { dur: heavy ? 0.05 : 0.03, f0: Math.min(11000, a.cut * 2.2), f1: a.cut * 0.6, gain: a.gain * (heavy ? 0.75 : 0.5), attack: 0.001 }); this._thump(this.world, t, { f0: heavy ? 150 : 240, f1: heavy ? 55 : 90, dur: heavy ? 0.09 : 0.05, gain: a.gain * (heavy ? 0.6 : 0.3) }); }
-  airburst(d, size = 0.5) { if (!this.ctx || !this.on) return; const a = this._far(d, size * 1.4), t = this.ctx.currentTime + a.delay; this._burst(this.world, t, { dur: 0.07, f0: Math.min(10000, a.cut * 2), f1: a.cut * 0.6, gain: a.gain * 0.8 }); this._thump(this.world, t, { f0: 120, f1: 45, dur: 0.22, gain: a.gain * 0.5 }); this._burst(this.world, t + 0.02, { dur: 0.7, f0: a.cut * 0.5, f1: 80, gain: a.gain * 0.22, brown: true }); }
-  // Trophy: a very sharp double report right on the turret
-  aps(d) { if (!this.ctx || !this.on) return; const c = this.ctx, a = this._far(d, 3), t = c.currentTime + a.delay, out = this.inside ? this.own : this.world, k = this.inside ? 0.7 : a.gain; this._burst(out, t, { dur: 0.04, f0: 11000, f1: 2500, gain: k, attack: 0.001 }); this._thump(out, t, { f0: 170, f1: 50, dur: 0.18, gain: k }); this._burst(out, t + 0.045, { dur: 0.3, f0: 5000, f1: 200, gain: k * 0.6 }); if (this.inside) this._rattle(t + 0.03, 0.8); }
-  launch(d, big) { if (!this.ctx || !this.on) return; const a = this._far(d, big ? 2 : 1.2), t = this.ctx.currentTime + a.delay; this._burst(this.world, t, { dur: 0.08, f0: a.cut * 1.5, f1: a.cut * 0.5, gain: a.gain * 0.7 }); this._burst(this.world, t + 0.03, { dur: big ? 1.6 : 0.9, f0: Math.min(2400, a.cut), f1: 240, gain: a.gain * 0.5, type: 'bandpass', q: 0.8 }); this._thump(this.world, t, { f0: 80, f1: 40, dur: 0.3, gain: a.gain * 0.5 }); }
-  // a missile going past or arriving: a rising tearing rush, cut off at the end
-  whoosh(dur = 0.6, gain = 0.5) { if (!this.ctx || !this.on) return; const t = this.ctx.currentTime; this._burst(this.world, t, { dur, f0: 500, f1: 3600, gain, type: 'bandpass', q: 1.4, attack: dur * 0.7 }); }
+  _swapBeds() {
+    const M = this.mix, B = this.bed; if (!B) return;
+    M.bedSample('turbine_in_loop', B.rush); M.bedSample('turbine_out_loop', B.rushOut); M.bedSample('tracks_loop', B.tracks);
+    M.bedSample('wind_loop', B.wind); M.bedSample('rain_loop', B.rain); M.bedSample('rain_roof_loop', B.rainRoof);
+  }
+  _warn(laser, radar) { this.warnL = !!laser; this.warnR = !!radar; }
+  // a short signal in the headset. kind: 'rf' (the detector has picked up a drone's control link)
+  blip(kind = 'rf') {
+    if (!this._live() || this.seat === 'out') return; const M = this.mix, v = M.voice('ui', { direct: true });
+    for (let i = 0; i < 3; i++) M.tone(v.in, v.t + i * 0.09, { f0: kind === 'rf' ? 1650 : 1100, dur: 0.05, gain: 0.07, attack: 0.002, type: 'triangle' });
+  }
+
   // ------------------------------------------------------------------ every frame
-  // st: { inside, cond, speed (m/s), alive, drones: [{ id, d (m), closing (m/s) }] }
+  // st: { view (camera mode) or inside, cond, biome, speed (m/s), heading, turret (degrees), alive, camDist (m to own vehicle),
+  //       rate (simulation speed), drones: [{ id, d }], battle, talking, mission }
   update(dt, st) {
-    if (!this.ctx) return; const c = this.ctx, t = c.currentTime, tc = 0.12, set = (p, v) => p.setTargetAtTime(v, t, tc);
-    this.inside = !!st.inside; set(this.worldLP.frequency, this.inside ? 380 : 18000);
-    const rainy = st.cond === 'rain', windy = st.cond === 'snow' || st.cond === 'fog' ? 0.5 : rainy ? 0.9 : st.cond === 'night' ? 0.35 : 0.6;
-    set(this.wind.g.gain, 0.16 * windy * (this.inside ? 0.6 : 1)); set(this.rain.g.gain, rainy ? 0.07 : 0); set(this.rainIn.g.gain, rainy && this.inside ? 0.035 : 0);
-    const sp = Math.min(1, Math.abs(st.speed || 0) / 11), run = st.alive ? 1 : 0;
-    set(this.rush.g.gain, run * (this.inside ? 0.11 + 0.07 * sp : 0)); set(this.rush.fl.frequency, 480 + 380 * sp); set(this.rushOut.g.gain, run * (this.inside ? 0 : (0.2 + 0.2 * sp) * Math.min(1, 30 / (30 + (st.camDist || 20))))); set(this.rushOut.fl.frequency, 800 + 700 * sp);
-    set(this.whineG.gain, run * (this.inside ? 0.012 + 0.008 * sp : 0)); set(this.whine.frequency, 2500 + 900 * sp); set(this.humG.gain, run * (this.inside ? 0.09 + 0.05 * sp : 0)); set(this.hum.frequency, 58 + 26 * sp);
-    set(this.tracks.g.gain, run * sp * (this.inside ? 0.3 : 0.14)); set(this.trackLfoG.gain, run * sp * 0.12); set(this.trackLfo.frequency, 3 + 14 * sp);
-    // drones: an angry buzz per aircraft, pitch bent by how fast it is closing
+    if (!this.ctx || !this.mix) return; st = st || {};
+    const c = this.ctx, M = this.mix, B = this.bed, t = c.currentTime, set = (p, v, tc = 0.12) => p.setTargetAtTime(v, t, tc);
+    const seat = st.view != null ? (SEATS[st.view] || 'out') : st.inside ? 'in' : 'out';
+    this.seat = seat; this.inside = seat === 'in'; this.lite = (st.rate || 1) > 2.01; this.camDist = st.camDist || 0;
+    M.setSeat(seat); this.icom.listen(seat !== 'out');
+    const inH = seat === 'in', hatch = seat === 'hatch', heard = seat !== 'out';
+    // --- crew talk
+    if (st.battle && st.talking && !this.lite) this.talk.update(st.battle, t, { mission: st.mission });
+    this.icom.update();
+    const lw = this.warnL && heard && st.talking ? 0.022 : 0;   /* the beeper's gain swings between 0 and twice this, 7 times a second */
+    set(B.lwr.g.gain, lw, 0.01); set(B.lwrLfo.g.gain, lw, 0.01);
+    set(B.rwr.g.gain, this.warnR && !this.warnL && heard && st.talking ? 0.035 : 0, 0.03);
+    set(B.icomFloor.g.gain, heard ? 0.006 : 0);
+    // --- weather
+    const cond = st.cond || 'day', rainy = cond === 'rain', windy = cond === 'snow' || cond === 'fog' ? 0.5 : rainy ? 0.9 : cond === 'night' ? 0.35 : 0.6;
+    const gust = 0.75 + 0.25 * Math.sin(t * 0.23) * Math.sin(t * 0.071 + 1);
+    set(B.wind.g.gain, 0.2 * windy * gust, 0.4); set(B.wind.fl.frequency, 380 + 240 * gust, 0.4); set(B.windHi.g.gain, 0.035 * windy * gust * gust, 0.4);
+    set(B.rain.g.gain, rainy ? 0.09 : 0); set(B.rainRoof.g.gain, rainy && inH ? 0.05 : rainy && hatch ? 0.02 : 0);
+    if (rainy && heard && !this.lite && t >= (this.next.drop || 0)) {   /* single heavy drops on the armour or the helmet */
+      this.next.drop = t + rnd(0.02, 0.12); const v = M.voice('world', { direct: true });
+      M.noise(v.in, v.t, { dur: 0.012, type: 'bandpass', f0: rnd(1800, 4200), q: 4, gain: rnd(0.01, 0.035) });
+    }
+    // --- the vehicle
+    const sp = clamp(Math.abs(st.speed || 0) / 11, 0, 1), run = st.alive === false ? 0 : 1, P = this.prev || { speed: st.speed || 0, heading: st.heading, turret: st.turret };
+    const acc = dt > 0 ? ((st.speed || 0) - P.speed) / dt : 0;
+    const want = run * clamp(0.25 + 0.6 * sp + clamp(acc * 0.25, 0, 0.3), 0, 1); this.thr += (want - this.thr) * clamp(dt * 2.2, 0, 1);   /* the turbine spools up and down, it does not jump */
+    const thr = this.thr, near = Math.min(1, 28 / (28 + (st.camDist || 20)));
+    set(B.rush.g.gain, run * (inH ? 0.1 + 0.1 * thr : hatch ? 0.05 + 0.05 * thr : 0)); set(B.rush.fl.frequency, 420 + 520 * thr);
+    set(B.rushOut.g.gain, run * (inH ? 0 : (0.16 + 0.3 * thr) * near)); set(B.rushOut.fl.frequency, 700 + 900 * thr);
+    set(B.roarOut.g.gain, run * (inH ? 0 : (0.1 + 0.3 * thr) * near));
+    const wf = 1750 + 1500 * thr;
+    set(B.whine.o.frequency, wf); set(B.whine2.o.frequency, wf * 1.507); set(B.whine.g.gain, run * (inH ? 0.006 + 0.008 * thr : 0)); set(B.whine2.g.gain, run * (inH ? 0.002 + 0.004 * thr : 0));
+    set(B.whineOut.o.frequency, wf); set(B.whineOut.g.gain, run * (inH ? 0 : (0.004 + 0.012 * thr) * near));
+    set(B.hum.o.frequency, 52 + 34 * thr); set(B.hum.g.gain, run * (inH ? 0.1 + 0.06 * thr : hatch ? 0.04 : 0));
+    if (B.rush.swapped) B.rush.src.playbackRate.setTargetAtTime(0.8 + 0.5 * thr, t, 0.2);
+    if (B.rushOut.swapped) B.rushOut.src.playbackRate.setTargetAtTime(0.8 + 0.5 * thr, t, 0.2);
+    // tracks: link pitch 0.19 m, so the clatter rate is speed / 0.19 (capped: above that it blurs into a roar anyway)
+    const v = Math.abs(st.speed || 0), moving = run * clamp(v / 2, 0, 1), trk = run * moving * (0.35 + 0.65 * sp);
+    set(B.clat.frequency, clamp(v / 0.19, 2, 46)); set(B.tracks.g.gain, trk * (inH ? 0.3 : hatch ? 0.2 : 0)); set(B.clatG.gain, trk * (inH ? 0.2 : hatch ? 0.13 : 0));
+    set(B.tracksOut.g.gain, trk * (inH ? 0 : 0.22 * near)); set(B.clatG2.gain, trk * (inH ? 0 : 0.14 * near));
+    let turn = 0, slew = 0;
+    if (dt > 0 && st.heading != null && P.heading != null) turn = Math.abs(angDiff(st.heading, P.heading)) / dt;
+    if (dt > 0 && st.turret != null && P.turret != null) slew = Math.abs(angDiff(st.turret - (st.heading || 0), P.turret - (P.heading || 0))) / dt;
+    this.turnS = (this.turnS || 0) + (Math.min(turn, 60) - (this.turnS || 0)) * clamp(dt * 4, 0, 1); this.slewS = (this.slewS || 0) + (Math.min(slew, 60) - (this.slewS || 0)) * clamp(dt * 8, 0, 1);
+    set(B.squeal.g.gain, run * moving * clamp((this.turnS - 6) / 25, 0, 1) * (inH ? 0 : 0.05 * near)); set(B.squeal.fl.frequency, 2100 + 600 * Math.sin(t * 3.1));
+    const sl = run * clamp(this.slewS / 30, 0, 1);
+    set(B.whir.o.frequency, 190 + 260 * sl, 0.05); set(B.whir.g.gain, inH ? 0.035 * sl : 0, 0.05); set(B.whirN.g.gain, inH ? 0.02 * sl : 0, 0.05);
+    if (moving > 0.3 && heard && !this.lite && t >= (this.next.creak || 0)) {   /* the suspension and the hull working */
+      this.next.creak = t + rnd(1.2, 4.5) / (0.4 + sp); const w = M.voice('vehicle', { direct: true, cabin: 0.3 }), f = rnd(140, 420);
+      M.tone(w.in, w.t, { f0: f, f1: f * rnd(0.7, 1.25), dur: rnd(0.12, 0.35), gain: rnd(0.015, 0.05), attack: 0.03, type: 'triangle' });
+      if (Math.random() < 0.4) M.noise(w.in, w.t + 0.05, { dur: 0.03, type: 'bandpass', f0: rnd(900, 2600), q: 5, gain: 0.03 });
+    }
+    this.prev = { speed: st.speed || 0, heading: st.heading, turret: st.turret };
+    // --- the living world, when nobody is shooting: birds by day, insects at dusk and night; a battle far away
+    if (!this.lite) this._world(t, cond, st.biome || 'farmland', rainy);
+    // --- drones: a motor whine per aircraft. It is higher while it closes (Doppler, from its true closing speed) and rises
+    // further in the last few hundred metres (ASSUMPTION: full throttle in the terminal dive).
     const seen = new Set();
-    for (const dr of st.drones || []) { seen.add(dr.id); let v = this.drones.get(dr.id); if (!v) { const o1 = c.createOscillator(), o2 = c.createOscillator(), fl = c.createBiquadFilter(), g = c.createGain(); o1.type = 'sawtooth'; o2.type = 'square'; fl.type = 'bandpass'; fl.frequency.value = 900; fl.Q.value = 0.9; g.gain.value = 0; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(this.world); o1.start(); o2.start(); v = { o1, o2, g, base: 172 + Math.random() * 30 }; this.drones.set(dr.id, v); }
-      const dop = C_SOUND / Math.max(200, C_SOUND - (dr.closing || 0)), f = v.base * dop * (1 + 0.03 * Math.sin(t * 9 + v.base)); set(v.o1.frequency, f); set(v.o2.frequency, f * 2.01); set(v.g.gain, Math.min(0.2, 5 / (12 + dr.d))); }
-    for (const [id, v] of this.drones) if (!seen.has(id)) { v.g.gain.setTargetAtTime(0, t, 0.03); v.o1.stop(t + 0.2); v.o2.stop(t + 0.2); this.drones.delete(id); }
+    for (const dr of st.drones || []) {
+      seen.add(dr.id); let q = this.drones.get(dr.id);
+      if (!q) {
+        const o1 = c.createOscillator(), o2 = c.createOscillator(), fl = c.createBiquadFilter(), lp = c.createBiquadFilter(), g = c.createGain();
+        o1.type = 'sawtooth'; o2.type = 'square'; fl.type = 'bandpass'; fl.frequency.value = 900; fl.Q.value = 0.8; lp.type = 'lowpass'; g.gain.value = 0;
+        o1.connect(fl); o2.connect(fl); fl.connect(lp); lp.connect(g); g.connect(M.bus.weapons.air); o1.start(); o2.start();
+        q = { o1, o2, fl, lp, g, base: rnd(168, 204), d: dr.d, vc: 0 }; this.drones.set(dr.id, q);
+      }
+      if (dt > 0) q.vc += (clamp((q.d - dr.d) / dt, -80, 80) - q.vc) * clamp(dt * 3, 0, 1); q.d = dr.d;
+      const a = M.far(dr.d, 0.5), dop = C_SOUND / (C_SOUND - q.vc), f = q.base * dop * (1 + 0.3 * clamp(1 - dr.d / 300, 0, 1)) * (1 + 0.02 * Math.sin(t * 9 + q.base));
+      set(q.o1.frequency, f, 0.05); set(q.o2.frequency, f * 2.01, 0.05); set(q.fl.frequency, clamp(f * 5, 500, 2400), 0.05); set(q.lp.frequency, a.cut, 0.1); set(q.g.gain, Math.min(0.22, a.gain * 0.35), 0.08);
+    }
+    for (const [id, q] of this.drones) if (!seen.has(id)) { q.g.gain.setTargetAtTime(0, t, 0.03); q.o1.stop(t + 0.2); q.o2.stop(t + 0.2); this.drones.delete(id); }
   }
+  _world(t, cond, biome, rainy) {
+    const M = this.mix, N = this.next, calm = t - this.lastShot > 14, outside = this.seat !== 'in';
+    const day = cond === 'day' || cond === 'dawn' || cond === 'overcast', dark = cond === 'dusk' || cond === 'night';
+    if (calm && outside && !rainy && day && biome !== 'desert' && cond !== 'snow' && t >= (N.bird || 0)) {   /* small birds: a few quick falling notes */
+      N.bird = t + rnd(1.5, 7) * (biome === 'forest' ? 0.6 : biome === 'town' ? 1.6 : 1) * (cond === 'dawn' ? 0.5 : 1);
+      const a = M.far(rnd(25, 120), 0.5), v = M.voice('world', { far: a, space: 0.25, pan: rnd(-0.8, 0.8) }), n = Math.floor(rnd(2, 7)), f = rnd(2600, 5200);
+      for (let i = 0; i < n; i++) M.tone(v.in, v.t + i * rnd(0.07, 0.13), { f0: f * rnd(0.9, 1.25), f1: f * rnd(0.6, 0.9), dur: rnd(0.04, 0.09), gain: 0.05, attack: 0.008 });
+    }
+    if (calm && outside && !rainy && dark && cond !== 'snow' && biome !== 'town' && t >= (N.bug || 0)) {   /* crickets: a train of thin pulses */
+      N.bug = t + rnd(0.5, 2.2); const a = M.far(rnd(8, 50), 0.4), v = M.voice('world', { far: a, pan: rnd(-0.9, 0.9) }), f = rnd(4100, 4900), n = Math.floor(rnd(4, 12));
+      for (let i = 0; i < n; i++) M.tone(v.in, v.t + i * 0.055, { f0: f, dur: 0.02, gain: 0.025, attack: 0.004 });
+    }
+    if (t >= (N.far || rnd(4, 12))) {   /* somebody else's battle, kilometres off: only the low end gets here */
+      N.far = t + rnd(7, 24); const a = M.far(rnd(4000, 9000), 3), v = M.voice('world', { gain: a.gain, cut: a.cut, space: 0.5, pan: rnd(-0.6, 0.6) }), n = Math.random() < 0.3 ? 3 : 1;
+      for (let i = 0; i < n; i++) { const dt = i * rnd(0.25, 0.7); M.tone(v.in, v.t + dt, { f0: rnd(45, 60), f1: 24, dur: 0.6, gain: 1 }); M.noise(v.in, v.t + dt, { dur: rnd(1.5, 3), color: 'brown', f0: 160, f1: 45, gain: 0.9 }); }
+    }
+  }
+
   // ------------------------------------------------------------------ voices
-  // Crew lines come from recorded clips (one sound file per crew member, cut by a time index). One voice at a time on the intercom;
-  // a line that could not start within a second and a half of its moment is dropped, never queued up behind others.
+  // Loads the crew voice pack, the enemy calls and screams (both human recordings), and the list of recordings for
+  // sound slots when there is one. The older machine-made crew voices (voice_cdr / gnr / ldr / drv / panic) are no longer loaded.
   async loadVoices(base) {
-    if (this.VI || this.CV || !base) return; this.base = base; this.bufs = {}; this.busyUntil = 0;
-    // The owner's crew voice pack (crewvoice_*.mp3, cut and indexed by tools/audio/build_strips.py) is used first. The older
-    // recordings stay as the fallback: for every line the pack does not have, and for everything when the pack's index is missing.
-    try { const r = await fetch(base + 'crewvoice_index.json'); this.CV = r.ok ? await r.json() : null; if (this.CV && !(this.CV.e && this.CV.strips)) this.CV = null; } catch (e) { this.CV = null; }
-    try { this.VI = await (await fetch(base + 'voice_index.json')).json(); } catch (e) { this.VI = null; }
-    if (!this.VI && !this.CV) return;
-    const c = this.ctx; this.icom = c.createGain(); this.icom.gain.value = 0.9; const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 330; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3300; const sh = c.createWaveShaper(), cv = new Float32Array(257); for (let k = 0; k < 257; k++) { const x = k / 128 - 1; cv[k] = Math.tanh(x * 2.2) / Math.tanh(2.2); } sh.curve = cv; this.icomIn = hp; hp.connect(lp); lp.connect(sh); sh.connect(this.icom); this.icom.connect(this.master);
-    this.open = c.createGain(); this.open.connect(this.world);   // voices heard in the open air (enemy teams)
-    const get = (k, file) => fetch(base + file).then(r => r.ok ? r.arrayBuffer() : null).then(a => a && c.decodeAudioData(a)).then(b => { if (b) this.bufs[k] = b; }).catch(() => { });
-    if (this.VI) for (const [k, f] of [['cdr', 'voice_cdr'], ['gnr', 'voice_gnr'], ['ldr', 'voice_ldr'], ['drv', 'voice_drv'], ['panic', 'voice_panic'], ['screams', 'screams'], ['ru', 'voice_ru']]) get(k, f + '.mp3');
-    if (this.CV) for (const k in this.CV.strips) get('cv_' + k, this.CV.strips[k]);
+    if (this._loading || !base || !this.ctx) return; this._loading = true; this.base = base; this.bufs = {};
+    const c = this.ctx, json = async name => { try { const a = await this._get(base + name); return a ? JSON.parse(new TextDecoder().decode(a)) : null; } catch (e) { return null; } };
+    const buf = async (k, file) => { try { const a = await this._get(base + file); if (a) this.bufs[k] = await c.decodeAudioData(a); } catch (e) { /* stays silent */ } };
+    const jobs = [this.icom.load(base, this._get)];
+    jobs.push(json('voice_index.json').then(vi => { this.VI = vi; return vi ? Promise.all([buf('ru', 'voice_ru.mp3'), buf('screams', 'screams.mp3')]) : null; }));
+    jobs.push(json('sfx_index.json').then(m => (m ? this.mix.loadSlots(m, base + (m.base || ''), this._get) : 0)).then(() => this._swapBeds()));
+    await Promise.all(jobs); this.CV = this.icom.index; this.voicesReady = true;
   }
-  // One line from the crew voice pack, by event name (the names are in tools/audio/*.map.json; the built list is CV.e[who][event],
-  // each entry [strip, start s, length s, delivery 0..2, clip number, words]). The take whose delivery is nearest the crew's
-  // stress is used, never the same take twice running. opt.delay: seconds from now; opt.queue: wait for the intercom instead of
-  // being dropped when it is busy; opt.low: routine talk, cut short as soon as anything else needs the intercom. Returns false when the pack has no such line (or its sound file has not arrived yet).
+  // One line by event name (the names are in tools/audio/crew_release.json). opt.delay: seconds from now; opt.queue: may wait
+  // longer for the net; opt.low: routine talk. Returns false when the pack has no such line.
   cue(who, ev, level = 1, opt = {}) {
-    const L = this.CV && this.CV.e[who] && this.CV.e[who][ev]; if (!L || !L.length || !this.ctx || !this.on || !this.icomIn || !this.bufs['cv_' + L[0][0]]) return false;
-    const c = this.ctx, now = c.currentTime, last = this.lastCue; if (last && last.who === who && last.ev === ev && now - last.t < 3) return true;   /* just said: once is enough */
-    if (!opt.low) this._cutLow(); if (!opt.queue && this.busyUntil - now > 1.5) return false;
-    let best = 9; for (const x of L) best = Math.min(best, Math.abs(x[3] - level)); let pool = L.filter(x => Math.abs(x[3] - level) === best); if (pool.length < 2 && L.length > 1) pool = L.filter(x => Math.abs(x[3] - level) <= best + 1);
-    const fresh = pool.filter(x => !last || x[4] !== last.clip), pick = fresh.length ? fresh : pool, x = pick[Math.floor(Math.random() * pick.length)];
-    const at = Math.max(now + 0.03 + (opt.delay || 0), this.busyUntil + 0.12); this._key(true); this.busyUntil = this._clip('cv_' + x[0], x[1], x[2], { when: at, gain: 1.4 }) || at;
-    if (opt.low) (this.lowQ || (this.lowQ = [])).push({ s: this.lastSrc, end: this.busyUntil });
-    this.lastCue = { who, ev, clip: x[4], text: x[5], t: now, at }; return true;
+    if (!this._live() || !this.icom) return false;
+    return this.icom.request(who, ev, { level, pri: opt.pri != null ? opt.pri : opt.low ? 0 : 1, ttl: opt.ttl != null ? opt.ttl : opt.queue ? 8 : 1.5, delay: opt.delay || 0, group: opt.group || null });
   }
-  // stop routine talk (the crew report at the start) so an urgent line is never held up behind it
-  _cutLow() { const Q = this.lowQ; if (!Q || !Q.length) return; const now = this.ctx.currentTime; let cut = false; for (const q of Q) if (q.end > now) { cut = true; try { q.s.stop(); } catch (e) { } } Q.length = 0; if (cut) this.busyUntil = now; }
-  // which pack line stands for a line written by the engine (null: the pack has nothing that says it; the older recording is used)
-  _event(who, s) {
-    if (!s) return null;
-    if (who === 'CDR') return /cease fire|BURNING/i.test(s) ? 'cease' : /^Miss[.!]|^MISSED/.test(s) ? 'reengage_doubt' : /Re-engage|HIT HIM AGAIN/i.test(s) ? 'reengage' : /sabot/i.test(s) ? 'load_sabot' : /^We.re hit/i.test(s) ? 'hit'
-      : /^fire[,!] fire.*(evacuate|get out)/i.test(s) ? 'fire' : /back up|JUST GO|Get us out/i.test(s) ? 'drv_back' : /hard left/i.test(s) ? 'left' : /hard right/i.test(s) ? 'right' : /^Driver, stop|^STOP! STOP/.test(s) ? 'drv_stop'
-      : /^Driver, (forward|move)|^Driver! MOVE|^(FORWARD|MOVE OUT|MOVE)! |Driver, (find|move) us/.test(s) ? 'drv_fwd' : null;
-    if (who === 'GNR') return /on the way/i.test(s) ? 'ontheway' : /^Target|^GOT IT/.test(s) ? 'target' : /gunner up|^Gunner.s good/i.test(s) ? 'ready' : /jam/i.test(s) ? 'misfire' : /^Gun.s clear|^CLEAR!/.test(s) ? 'gun_back' : null;
-    if (who === 'LDR') return /^up[.!]/i.test(s) ? 'up' : /^sabot/i.test(s) ? 'ready' : /^Loader( up|.s good|. I.m up)/i.test(s) ? 'ready' : null;
-    if (who === 'DRV') return /^Moving|^Going! Going|Yeah, going/.test(s) ? 'ack_fwd' : /left/i.test(s) ? 'ack_left' : /right/i.test(s) ? 'ack_right' : /^Driver(.s good| up)/.test(s) ? 'ready' : null;
-    return null;
+  // A line in the engine's wording: lines = [calm, tense, panic] (or just one); level picks one. The crewman says the pack's
+  // line for it when there is one that is true of it; otherwise he says nothing (no machine speech any more).
+  say(who, lines, level = 0) {
+    if (!this._live() || !this.icom || !lines || !lines.length || lines[0] == null) return false;
+    const m = engineLine(who, lines[Math.min(level, lines.length - 1)], this.talk.lastOrder);
+    if (!m || !m.ev) return false;
+    return this.icom.request(who, m.ev, { level, pri: m.pri != null ? m.pri : 1, ttl: m.ttl || 1.5 });
   }
-  _clip(key, start, dur, { dest, gain = 1, rate = 1, when = 0 } = {}) { const b = this.bufs && this.bufs[key]; if (!b || !this.on) return 0; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), t = Math.max(c.currentTime + 0.02, when); s.buffer = b; s.playbackRate.value = rate; g.gain.value = gain; s.connect(g); g.connect(dest || this.icomIn); s.start(t, start, dur); this.lastSrc = s; return t + dur / rate; }
-  _key(on) { if (!this.ctx || !this.on || !this.icomIn) return; const t = this.ctx.currentTime; this._burst(this.icomIn, t, { dur: 0.025, f0: 2500, f1: 1200, gain: on ? 0.25 : 0.18, type: 'bandpass', q: 3 }); }
-  // who: CDR | GNR | LDR | DRV; txt: the three versions of the line [calm, tense, panic]; level 0..2 picks one
-  say(who, txt, level = 0) {
-    if (!this.ctx || !this.on || !txt || !txt.length || txt[0] == null) return false; this._cutLow(); const c = this.ctx, now = c.currentTime; if (this.busyUntil - now > 1.5) return false;
-    if (this.CV) { const ev = this._event(who, txt[Math.min(level, txt.length - 1)]); if (ev && this.cue(who, ev, level)) return true; }   /* the voice pack first */
-    if (!this.VI) return false;
-    let hit = null; for (const lv of [level, 1, 0, 2]) { const line = txt[Math.min(lv, txt.length - 1)]; hit = this.VI.v[`${who}|${lv}|${line}`] || this._near(who, lv, line); if (hit) break; } if (!hit) return false;
-    const at = Math.max(now + 0.03, this.busyUntil + 0.12); this._key(true); this.busyUntil = this._clip(hit[0], hit[1], hit[2], { when: at, rate: level === 2 ? 1.06 : 1 }) || at; return true;
+  // a crewman's reaction: 'hit' (the commander calls the hit) or 'wound'. Other kinds have no human recording and stay silent.
+  react(who, kind, delay = 0) {
+    if (kind === 'hit') return this.cue('CDR', 'hit', 2, { delay, pri: 3, ttl: 2.5 });
+    if (kind === 'wound') return this.cue('ANY', 'wound', 2, { delay, pri: 3, ttl: 2 });
+    return false;
   }
-  // lines written by the new battle layer have no recording of their own: use the nearest recorded order
-  _near(who, lv, line) { const V = this.VI.v, sfx = lv === 0 ? '.' : lv === 1 ? '! Now!' : '!', pick = stem => V[`${who}|${lv}|${stem}${sfx}`] || V[`${who}|${lv}|${stem}!`] || V[`${who}|0|${stem}.`];
-    if (who === 'CDR' && /driver/i.test(line) || who === 'CDR' && /GO GO GO/.test(line)) return /behind|back up/i.test(line) ? pick('Driver, back up') : /left/i.test(line) ? pick('Driver, hard left') : /right/i.test(line) ? pick('Driver, hard right') : /ahead/i.test(line) ? pick('Driver, forward') : pick('Driver, move out') || V['CDR|1|Driver! MOVE!'];
-    if (who === 'CDR' && /hold|nowhere/i.test(line)) return pick('Driver, stop'); return null; }
-  // the user's sound pack: raw reactions to being hit, wounded or panicked
-  react(who, kind, delay = 0) { if (kind === 'hit' && this.cue(who, 'hit', 2, { delay })) return; const L = this.VI && this.VI.p && this.VI.p[who] && this.VI.p[who][kind]; if (!L || !this.ctx) return; const c = L[Math.floor(Math.random() * L.length)], now = this.ctx.currentTime; this.busyUntil = Math.max(this.busyUntil, this._clip('panic', c[0], c[1], { when: now + delay, gain: 1.1 }) || 0); }
-  scream(kind = 'scream', delay = 0, gain = 0.9) { const L = this.VI && this.VI.s && this.VI.s[kind]; if (!L || !this.ctx) return; const c = L[Math.floor(Math.random() * L.length)]; this._clip('screams', c[0], c[1], { when: this.ctx.currentTime + delay, gain, dest: this.own }); }
-  // an enemy team's voice (Russian pack), heard in the open at the listener's position. kind: spot | fire | track | hit | kill | miss | lost | dlaunch | dspot | dhit | dlost
-  enemy(kind, delay = 0) { const L = this.VI && this.VI.r && this.VI.r[kind]; if (!L || !this.ctx) return; const now = this.ctx.currentTime; if ((this.ruUntil || 0) - now > 0.8) return; const c = L[Math.floor(Math.random() * L.length)]; this.ruUntil = this._clip('ru', c[0], c[1], { when: now + delay, gain: 1, dest: this.open }) || 0; }
+  _strip(key, start, dur, v, gain) { const b = this.bufs && this.bufs[key]; if (!b) return; const c = this.ctx, s = c.createBufferSource(), g = c.createGain(); s.buffer = b; g.gain.value = gain; s.connect(g); g.connect(v.in); s.start(v.t, start, dur); }
+  // the crew's cries on a killing hit (human recordings). Inside they are close; from outside, faint through the hull.
+  scream(kind = 'scream', delay = 0, gain = 0.9) {
+    const L = this.VI && this.VI.s && this.VI.s[kind]; if (!L || !this._live()) return; const x = L[Math.floor(Math.random() * L.length)];
+    const v = this.seat === 'out' ? this.mix.voice('voices', { far: this.mix.far(this.camDist || 20, 0.35), cut: 900, delay }) : this.mix.voice('voices', { direct: true, cabin: 0.4, delay });
+    this._strip('screams', x[0], x[1], v, gain);
+  }
+  // an enemy team's voice (human recordings, Russian), heard in the open beside the listener.
+  // kind: spot | fire | track | hit | kill | miss | lost | dlaunch | dspot | dhit | dlost
+  enemy(kind, delay = 0) {
+    const L = this.VI && this.VI.r && this.VI.r[kind]; if (!L || !this._live()) return; const now = this.ctx.currentTime; if ((this.ruUntil || 0) - now > 0.8) return;
+    const x = L[Math.floor(Math.random() * L.length)], v = this.mix.voice('voices', { far: this.mix.far(3, 1), space: 0.12, delay });
+    this._strip('ru', x[0], x[1], v, 1); this.ruUntil = v.t + x[1];
+  }
 }
+Object.assign(Sound.prototype, Effects);
