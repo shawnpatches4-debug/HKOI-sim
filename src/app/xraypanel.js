@@ -91,7 +91,8 @@ export class XRayPanel {
   }
   _draw() {
     const w = this.cv.clientWidth, hh = this.cv.clientHeight; if (!w || !hh) return; if (this.w !== w || this.h !== hh) { this.w = w; this.h = hh; this.view.resize(w, hh); }
-    if (!this.drag) { this.spin += 1 / 60; this.view.az += Math.cos(this.spin * 0.5) * 0.0022; }   /* a slow sway, so the depth can be read */
+    const now = performance.now(); if (!this.drag && now - (this.drawn || 0) < 30) return; this.drawn = now;   /* about thirty pictures a second is plenty for a slow sway */
+    if (!this.drag) { this.spin += 1 / 30; this.view.az += Math.cos(this.spin * 0.5) * 0.0022; }   /* a slow sway, so the depth can be read */
     this.view.render();
   }
 
