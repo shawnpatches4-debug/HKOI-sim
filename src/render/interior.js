@@ -123,9 +123,9 @@ export class Interior {
     else if (k === 'gpsBrt') this.brt.gps = BRT[c.state]; else if (k === 'citvBrt') this.brt.citv = BRT[c.state]; else if (k === 'compBrt') this.brt.comp = BRT[c.state]; else if (k === 'hkBrt') this.brt.hkoi = BRT[c.state]; else if (k === 'drvBrt') this.brt.drv = BRT[c.state];
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
   }
-  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
+  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; this.eyeOff = null; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
   // for tests and pictures: point the head (degrees from the seat's own forward) and set the zoom; survives a change of seat made in the same breath
-  setLook(yaw, pitch, zoom = 1) { this.look.yaw = yaw; this.look.pitch = pitch; this.look.zoom = zoom; this.pendingLook = { yaw, pitch, zoom }; }
+  setLook(yaw, pitch, zoom = 1, off = null) { this.look.yaw = yaw; this.look.pitch = pitch; this.look.zoom = zoom; this.pendingLook = { yaw, pitch, zoom }; this.eyeOff = off; this.pendingOff = off; }   /* off: [x, y, z] metres from the seat's eye, for a picture taken from beside the crewman's place; yaw and pitch are then unlimited */
   zoomBy(d) { this.look.zoom = clamp(this.look.zoom * Math.exp(-d * 0.0012), 1, 3.4); }
 
   // ---------------------------------------------------------------- entering and leaving
@@ -133,6 +133,7 @@ export class Interior {
     const tk = this.tank, tur = tk.turret || tk.group, body = tk.body || tk.group; if (this.tur.parent !== tur) tur.add(this.tur); if (this.hul.parent !== body) body.add(this.hul);
     if (tk.turret) this.hul.position.copy(tk.turret.position); else { this.hul.position.set(0, 1.617, -0.025); this.tur.position.copy(this.hul.position); }
     const cut = mode === 'cut'; if (cut) this._near(); SHARED.uInside.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
+    this.eyeOff = this.pendingOff || null; this.pendingOff = null;
     if (this.pendingLook) { Object.assign(this.look, this.pendingLook); this.pendingLook = null; } else { this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; } this.head.z = this.head.vz = this.head.x = this.head.vx = 0; this.head.up = 0; this.mode = mode; this.active = true;
     this._marks(cut);   /* the floating map markers of the outside views would hang in front of the walls */
     if (this.ui && !cut) this.ui.show(`${SEATS[mode].name}'s seat · drag to look around, wheel to lean in, click a switch. The crew runs the vehicle; your clicks only change harmless things.`, 6500);
@@ -151,7 +152,7 @@ export class Interior {
     if (!on) { if (this.active) this._leave(); return; }
     if (!this.built) this._build();
     if (!this.active || this.mode !== mode || (this.tank.turret && this.tur.parent !== this.tank.turret)) this._enter(mode);   /* also when the vehicle's model has only just arrived */
-    this.pendingLook = null; this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
+    this.pendingLook = null; this.pendingOff = null; this.inside = !!seat; this.clock += dt; SHARED.uTime.value = this.clock;
     if (this.crewOn && !this.crewAsked && s.volleys && s.volleys.assetBase) { this.crewAsked = true; import('./interior_crew.js').then(m => m.seatCrew(this, s.volleys.assetBase)).then(list => { this.crew = list; }).catch(e => console.warn('crew figures not shown:', e && e.message)); }
     if (this.crew) for (const c of this.crew) c.group.visible = c.key !== mode;   /* the viewer has taken that man's seat */
     const B = s.battle, T = B.tank, st = T.st || {}, info = (s.volleys && s.volleys.info) || [], A = T.ai || {}, P = this.part, L = this.last, sdt = s.playing ? dt * (s.speed || 1) : 0, D = DIM;
@@ -230,7 +231,13 @@ export class Interior {
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
 
     // ---- cutaway: the cutting plane faces the viewer
-    if (cut) { const c = _v.set(0, 0.15, 0).applyMatrix4(this.tur.matrixWorld), n = _v2.copy(this.s.camera.position).sub(c).normalize(); const d0 = n.dot(c) + 0.12; SHARED.uClip.value.set(n.x, n.y, n.z, -d0); this.plane.normal.copy(n).negate(); this.plane.constant = d0; }
+    // ---- cutaway: one straight cut, fixed to the vehicle, so the section is clean and nothing is left hanging. From the side the near
+    // half is taken off along the hull's length (a hand's width to the viewer's side of the centre line, so the gun stays whole on its
+    // mount); from high above the turret roof is lifted off instead. The choice has some give in it so it does not flicker.
+    if (cut) { const lc = _v.copy(this.s.camera.position); this.hul.worldToLocal(lc); const el = Math.atan2(lc.y - 0.2, Math.hypot(lc.x, lc.z)) / DEG;
+      if (this.cutTop ? el < 46 : el > 56) this.cutTop = !this.cutTop; if (!this.cutSide || lc.x * this.cutSide < -0.35) this.cutSide = lc.x >= 0 ? 1 : -1;
+      const n = _v2, p = _v; if (this.cutTop) { n.set(0, 1, 0); p.set(0, DIM.RF - 0.12, 0); } else { n.set(this.cutSide, 0, 0); p.set(this.cutSide * 0.22, 0, 0); }
+      p.applyMatrix4(this.hul.matrixWorld); n.transformDirection(this.hul.matrixWorld); const d0 = n.dot(p); SHARED.uClip.value.set(n.x, n.y, n.z, -d0); this.plane.normal.copy(n).negate(); this.plane.constant = d0; }
 
     // ---- displays
     this._sights(dt, s, seat, cut); this._draw(dt, s, hk, info);
@@ -244,7 +251,7 @@ export class Interior {
     const yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch;
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
-    _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z);   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
+    _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
     g.updateWorldMatrix(true, false); cam.position.copy(_v).applyMatrix4(g.matrixWorld);
     g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4, 'YXZ'))); cam.up.set(0, 1, 0);
     const near = (S.near || 0.5) + (S.nearUp ? (S.nearUp - S.near) * H.up : 0); if (Math.abs(cam.near - near) > 0.004) { if (this.near0 == null) this.near0 = cam.near; cam.near = near; cam.updateProjectionMatrix(); }
