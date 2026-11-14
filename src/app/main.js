@@ -160,11 +160,34 @@ window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagNa
 
 // crew talk: each volley's record carries the lines the crew spoke and when; play them as their moment comes.
 // From an enemy sight the crew cannot be heard; the enemy team's own calls are heard instead.
-let voiceV = null, voiceI = 0, voiceHits = 0;
+let voiceV = null, voiceI = 0, voiceHits = 0, voiceB = null, voiceN = 0; const voiceQ = [];
 function voices() {
+  voiceLog(cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile');
   const v = battle.volleys[battle.volleys.length - 1]; if (!v || !v.rec || !v.rec.radio) return; if (v !== voiceV) { voiceV = v; voiceI = 0; v.rec.radio.sort((a, b) => a.t - b.t); }
   const R = v.rec.radio, tv = battle.t - v.t0, enemyView = cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile';
   while (voiceI < R.length && R[voiceI].t <= tv) { const r = R[voiceI++]; if (tv - r.t > 1.2 || enemyView) continue; sound.say(r.who, [r.text], r.lvl || 0); }   /* the engine has already chosen the wording for the crew's stress at that moment */
+}
+// The battle layer reports what the crew does as log lines (who = CDR, GNR or LDR, plain words). Where the crew voice pack has a
+// line that says the same thing, that crewman says it on the intercom. Lines are spoken at their own time, never late.
+function voiceLog(enemyView) {
+  if (battle !== voiceB) { voiceB = battle; voiceN = 0; voiceQ.length = 0; } const L = battle.log; while (voiceN < L.length) voiceQ.push(L[voiceN++]);
+  for (let i = 0; i < voiceQ.length; i++) { const l = voiceQ[i]; if (l.t > battle.t) continue;
+    if (l.kind === 'setup' && !enemyView && battle.t < 5 && !voiceLine(l)) continue;   /* the crew report waits a moment for the sound files to arrive */
+    voiceQ.splice(i--, 1); if (l.kind !== 'setup' && !enemyView && battle.t - l.t <= 1.5) voiceLine(l); }
+}
+function voiceLine(l) { const s = l.text || '', q = { queue: true }; let m;
+  if (l.kind === 'setup') { const lo = { queue: true, low: true }; if (!sound.cue('GNR', 'ready', 0, { delay: 1, queue: true, low: true })) return false; sound.cue('LDR', 'ready', 0, lo); sound.cue('DRV', 'ready', 0, lo); sound.cue('CDR', 'ready', 0, lo); return true; }
+  if (l.kind !== 'tank') return false;
+  if ((m = /^Gunner lays on .*?, (\d+\.\d+) km/.exec(s))) { const R = +m[1] * 1000; return R <= 2050 && sound.cue('GNR', 'range_' + (R < 975 ? Math.max(300, Math.round(R / 50) * 50) : Math.round(R / 100) * 100), 1); }   /* the gunner calls the range */
+  if (/knocked out by/.test(s)) return sound.cue('GNR', 'target', 1);
+  if (/^Main gun round lands close/.test(s)) return sound.cue('CDR', 'reengage_doubt', 1);
+  if (l.who === 'GNR' && / engages? /.test(s)) return sound.cue('GNR', 'mg', 1);
+  if (/^Loader up on the M240/.test(s)) return sound.cue('LDR', 'mg_ready', 1);
+  if (/^Loader down: main gun/.test(s)) return sound.cue('CDR', 'reload', 1);
+  if (/^Loader hit/.test(s)) { sound.cue('ANY', 'wound', 2); return sound.cue('CDR', 'loader_down', 2, q); }
+  if (/^Commander breaks contact/.test(s)) return sound.cue('CDR', 'drv_back', 2);
+  if (/^Commander (moves|shifts|bounds|takes up)/.test(s)) return sound.cue('CDR', Math.random() < 0.5 ? 'moveout' : 'drv_fwd', 1) && sound.cue('DRV', 'ack_fwd', 1, q);
+  return false;
 }
 function voiceEvent(type, o) { const enemyView = cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'missile';
   if (enemyView) { if (type === 'launch') sound.enemy(o.drone ? 'dlaunch' : 'fire', 0.15); else if (type === 'hit') sound.enemy(o.killing ? 'kill' : 'hit', 0.8); else if (type === 'pass' || type === 'explosion') sound.enemy('miss', 1.0); else if (type === 'airburst' && o.size >= 1) sound.enemy('lost', 0.8); return; }
