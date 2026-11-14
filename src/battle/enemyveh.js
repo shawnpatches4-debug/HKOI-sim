@@ -266,6 +266,7 @@
 
     // ================================================================ one step
     _vehStep(dt) {
+      if (this._teamStep) this._teamStep(dt);   /* enemycdr.js: the teams' own judgement, with or without vehicles or a commander */
       if (!this._vxs) return;
       const X = this._vxs, T = this.tank;
       // launches by a vehicle that the tank crew places from the flash or the radar track: keep them off the list of located TEAMS
@@ -347,16 +348,16 @@
     // look for ground near the vehicle with a sight line onto a place, hull-down if it can be had. A handful of samples, never a map-wide search.
     _vehSeek(v, B, why, opt) {
       const W = this.world, r = this._vxs.rng, K = v.K; opt = opt || {}; let best = null;
-      const far = Math.hypot(B.e - v.e, B.n - v.n), lo = Math.max(150, opt.lo || K.lo * 0.6), hi = Math.max(lo + 200, opt.hi || K.hi), reach = opt.reach || 400, brg0 = brgOf(B.e, B.n, v.e, v.n);
+      const far = Math.hypot(B.e - v.e, B.n - v.n), lo = Math.max(150, opt.lo || K.lo * 0.6), hi = Math.max(lo + 200, opt.hi || K.hi), reach = opt.reach || 400, brg0 = opt.brg0 != null ? opt.brg0 : brgOf(B.e, B.n, v.e, v.n);
       for (let q = 0; q < 30; q++) {
         let e, n;
-        if (opt.local || q % 2) { const a = r.random() * 6.283, d = 60 + r.random() * reach; e = v.e + Math.sin(a) * d; n = v.n + Math.cos(a) * d; }
-        else { const a = (brg0 + (r.random() - 0.5) * 110) * DEG, d = lo + r.random() * (Math.min(hi, Math.max(far, lo + 200)) - lo); e = B.e + Math.sin(a) * d; n = B.n + Math.cos(a) * d; }
+        if (opt.local || (q % 2 && opt.brg0 == null)) { const a = r.random() * 6.283, d = 60 + r.random() * reach; e = v.e + Math.sin(a) * d; n = v.n + Math.cos(a) * d; }
+        else { const a = (brg0 + (r.random() - 0.5) * (opt.brg0 != null ? 50 : 110)) * DEG, d = lo + r.random() * (Math.min(hi, Math.max(far, lo + 200)) - lo); e = B.e + Math.sin(a) * d; n = B.n + Math.cos(a) * d; }
         if (!W.inside(e, n) || !W.passable(e, n, true)) continue;
         const R = Math.hypot(B.e - e, B.n - n); if (R < lo || R > hi) continue;
         if (!W.los(e, n, K.agl, B.e, B.n, 2.2).clear) continue;
         const df = W.defilade(B.e, B.n, 2.4, e, n), veg = W.veg(e, n).cls;
-        const s = (df === 'hull' ? 1.5 : 0) + (veg >= 3 && veg <= 5 ? 0.6 : 0) - Math.hypot(e - v.e, n - v.n) / 1500 + r.random() * 0.3;
+        const s = (df === 'hull' ? (opt.brg0 != null ? 3 : 1.5) : 0) + (veg >= 3 && veg <= 5 ? 0.6 : 0) - Math.hypot(e - v.e, n - v.n) / (opt.brg0 != null ? 3000 : 1500) + r.random() * 0.3;   /* sent to a flank by the commander: hull-down counts double and a longer drive is accepted */
         if (!best || s > best.s) best = { e, n, s, df };
       }
       if (!best && opt.advance && far > lo + 150) {   /* nothing found from the map: drive toward the place and halt when the vehicle comes into view */
@@ -461,7 +462,8 @@
     },
     _xIntent(u) {
       if (u.ride) { const R = u.ride, o = R.ordered ? `ordered to ${R.flank ? 'the ' + R.flank + ' flank' : 'new ground'} by the commander; ` : ''; return o + ({ pack: 'packing up to ride', toVeh: 'walking back to the vehicle', load: 'loading the vehicle', drive: 'riding', unload: 'dismounting' })[R.phase]; }
-      if (u.cdrOrder && this._cdrIntent) return this._cdrIntent(u);
+      if (u.cdrOrder && this._cdrIntent) { const x = this._cdrIntent(u); if (x) return x; }
+      if (this._teamIntent) return this._teamIntent(u);
       return null;
     },
 
@@ -474,6 +476,7 @@
     // called as an engagement is put together. A tank's round is a draw: a miss is settled here and now, a hit goes to the engine as its
     // `ke` threat (the engine has no way to make a `ke` round from a fixed launcher miss). Everything else passes through untouched.
     _vehVolley(teams) {
+      if (this._cdrTot) this._cdrTot(teams);   /* enemycdr.js: the commander times the launches so the missiles arrive together */
       if (!this._vxs || !teams.some(u => u.veh)) return teams;
       const X = this._vxs, T = this.tank, W = this.world, out = [];
       for (const u of teams) {

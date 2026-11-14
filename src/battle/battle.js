@@ -74,7 +74,7 @@
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
         this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
-        this.xOpt = { commander: opt.commander || false };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle); off by default */
+        this.xOpt = { commander: opt.commander || false, ai: opt.enemyAI === 'classic' ? 'classic' : 'v2' };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle), off by default; enemyAI 'classic' switches off the teams' newer judgement (kept for the tests that compare with stored battles) */
         this.raid = opt.raid || null;   /* { minR, window }: the old simulator's kind of raid: launchers no closer than minR metres, shots spread over window seconds */
         // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
         if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }

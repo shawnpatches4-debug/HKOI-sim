@@ -22,7 +22,7 @@ const bad = (...a) => { fail++; console.log('FAIL', ...a); };
 // ---------------------------------------------------------------- 1. model off = the battles from before
 const CASES = []; for (let i = 0; i < 16; i++) CASES.push({ biome: BIOMES[i % 4], mapSeed: 3 + (i % 3) * 4, seed: i + 1, skill: SKILLS[(i >> 1) % 4], mission: MISSIONS[i % 3], waves: 1 + (i % 2), force: Object.values(FORCES)[i % 2] });
 const digest = b => ({ summary: b.summary(), log: b.log.length, events: (b.events || []).length, over: b.over ? b.over.result : null, last: b.log.length ? b.log[b.log.length - 1].text : '' });
-const runCase = (c, extra) => { const b = new Battle.Battle(Object.assign({ cfg, lookup }, c, extra || {})); b.run(360); return b; };
+const runCase = (c, extra) => { const b = new Battle.Battle(Object.assign({ cfg, lookup, enemyAI: 'classic' /* the enemy teams' newer judgement (enemycdr.js) is switched off here: these battles are compared with battles stored before it existed */ }, c, extra || {})); b.run(360); return b; };
 if (REBASE) { fs.writeFileSync(BASE, JSON.stringify(CASES.map(c => digest(runCase(c, { crewStress: false }))), null, 1)); console.log('baseline rewritten:', BASE); process.exit(0); }
 {
   const base = JSON.parse(fs.readFileSync(BASE, 'utf8')); let same = 0;
