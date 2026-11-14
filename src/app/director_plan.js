@@ -81,7 +81,7 @@ export class Plan {
   // once the vehicle is lost the film ends on it: nothing new is filmed or said after that
   _late(t) { return this.lostAt != null && t > this.lostAt + 2.5; }
   _cand(c) { c.id = this.seq++; c.min = c.min || LIMITS.shotMin; if (c.b - Math.max(c.a, c.known) >= c.min && (c.rig === 'hold' || !this._late(c.a))) this.cands.push(c); return c; }
-  _cap(t, known, pri, text, v, idx) { if (this._late(t) && pri < 10) return; this.caps.push({ t, known: Math.max(known, t), pri, text, v, idx, id: this.seq++ }); }
+  _cap(t, known, pri, text, v, idx) { if (this._late(t) && pri < 9) return;   /* after the loss only a further hit is still told */ this.caps.push({ t, known: Math.max(known, t), pri, text, v, idx, id: this.seq++ }); }
 
   _event(e, i) {
     if (e.v != null) { if (!this.seenV.has(e.v)) { this.seenV.add(e.v); this._volley(this.b.volleys[e.v]); } return; }
@@ -118,6 +118,7 @@ export class Plan {
     if (rec.killed) this.lostAt = t0 + (rec.kill_t != null ? rec.kill_t : rec.t_end);
     let hits = []; try { if (DMG) hits = DMG.report(rec, v.cfg); } catch (err) { hits = []; }
     if (this.apsTotal == null) { const a = v.cfg && v.cfg.aps; this.apsTotal = a && a.mag_L != null ? a.mag_L + a.mag_R : a && a.mag_per_side ? 2 * a.mag_per_side : 0; }
+    let slowed = false;   /* slow motion once per engagement for the missile being followed (its cut, or its Trophy intercept), and at every hit */
     let again = null;   /* the moment of this engagement worth an instant replay: a hit first, else a cut by the cloud, else a Trophy intercept */
     const out = [];   /* the endings near the vehicle, to be merged into one low wide shot when they come close together */
     // which missile the film follows from launch to ending when several are in the air: the one with the most to show
@@ -141,7 +142,7 @@ export class Plan {
         const first = b.rounds.filter(r => !r.extra), more = b.rounds.filter(r => r.extra), tF = t0 + b.rounds[0].t_fire, res = b.res || {};
         if (b.kind === 'obs') {
           this._cap(tF, K, 4 + 2 * bonus, `HKOI fires ${word(first.length || b.rounds.length)} obscurant round${(first.length || b.rounds.length) === 1 ? '' : 's'}`, v.i, th.idx);
-          if (more.length && first.length) this._cap(t0 + more[0].t_fire, K, 2 + 2 * bonus, `HKOI fires ${word(more.length)} more obscurant rounds to thicken the cloud`, v.i, th.idx);
+          if (more.length && first.length) this._cap(t0 + more[0].t_fire, K, 2 + 2 * bonus, `HKOI fires ${word(more.length)} more obscurant round${more.length === 1 ? '' : 's'} to thicken the cloud`, v.i, th.idx);
         } else this._cap(tF, K, 4 + 2 * bonus, `HKOI fires ${word(b.rounds.length)} high-explosive round${b.rounds.length === 1 ? '' : 's'} at the ${name}`, v.i, th.idx);
         this._cand(Object.assign({ a: tF - 1.0, b: tF + 1.3, known: K, pri: 6 + bonus * 0.5, min: 1.5, rig: 'gun', label: 'HKOI firing' }, id));
         if (b.kind !== 'obs' || !b.puffs || !b.puffs.length) return;
@@ -151,7 +152,7 @@ export class Plan {
         if (tCut != null && res.outcome === 'drift_hit') this._cap(tCut, K, 5, `The cloud cuts its guidance only ${range(res.sever || 0)} out: too late to throw it off`, v.i, th.idx);
         else if (tCut != null) {
           this._cap(tCut, K, 8, guide === 'radio_saclos' ? 'The cloud hides the missile from its launcher: it is blind' : 'The cloud cuts the guidance beam: the missile is blind', v.i, th.idx);
-          this.slows.push([tCut - 0.2, tCut + 0.3, K]);
+          if (th === star && !slowed) { slowed = true; this.slows.push([tCut - 0.2, tCut + 0.3, K]); }
           if (!again || again.w < 2) again = { w: 2, from: tCut - 2.4, to: Math.min(tE + 1.2, tCut + 5), shot: Object.assign({ rig: 'cloud', high: true, x: xs / b.puffs.length, span: x1 - x0, label: 'the cut again, from the other side' }, id) };
         } else if (j === bursts.length - 1 && by !== 'hkoi_he') {
           const why = res.reason === 'cloud_thin' ? 'The cloud is too thin to break the beam' : res.reason === 'fuze_miss' ? 'The rounds burst off the line of sight: the beam stays clear' : res.reason === 'saclos_unaffected' ? 'The cloud does not blind this missile' : null;
@@ -162,8 +163,13 @@ export class Plan {
       const hkoi = /^hkoi/.test(by); let text = null, pri = 4;
       if (by === 'hit') {
         const h = hits.find(x => x.idx === th.idx), tried = (rec.aps || []).some(a => a.idx === th.idx && !a.kill) ? 'Trophy misses it. ' : ''; pri = 9;
-        text = tried + (h ? `${name} hits the ${h.zoneName.replace(/ \(.*/, '').toLowerCase()}: ${!h.penetrated ? 'the armour holds' : end.killing ? 'it goes through and the vehicle is lost' : 'it goes through, the vehicle fights on'}` : `${name} hits the vehicle`);
+        const wreck = this.lostAt != null && tE > this.lostAt + 0.5;   /* the vehicle was already lost when this one arrived */
+        if (wreck) text = `${name} hits the burning vehicle`; else text = tried + (h ? `${name} hits the ${h.zoneName.replace(/ \(.*/, '').toLowerCase()}: ${!h.penetrated ? 'the armour holds' : end.killing ? 'it goes through and the vehicle is lost' : 'it goes through, the vehicle fights on'}` : `${name} hits the vehicle`);
         this.slows.push([tE - 0.3, tE + 0.4, K]);
+        if (h && DMG && DMG.COMPS && !wreck) {
+          let seat = null, best = 1e9; for (const c of DMG.COMPS) { if (!c.crew) continue; const p = c.turret ? DMG.rot(c.p, -h.turA) : c.p, d = Math.hypot(p[0] - h.entry[0], p[1] - h.entry[1], p[2] - h.entry[2]); if (d < best) { best = d; seat = c.id; } }
+          if (seat) this._cand(Object.assign({ a: tE + 0.05, b: tE + 1.45, known: K, pri: 12, min: 1.2, cam: 'in_' + seat, inside: true, label: 'inside, at the seat nearest the hit' }, id));
+        }
         if (!again || again.w < 3) again = { w: 3, from: tE - 3.2, to: tE + 1.4, shot: Object.assign({ rig: 'replay', label: 'the hit again, from above' }, id) };
       }
       else if (by === 'aps') text = null;   /* told with the Trophy shot below */
@@ -188,7 +194,7 @@ export class Plan {
       const count = `Trophy fires: ${ordinal(this.aps)}${this.apsTotal ? ' of ' + word(this.apsTotal) : ''} shot${this.apsTotal ? 's' : ''}`;
       if (!a.kill && th && th.state === 'hit') continue;   /* told with the hit that followed */
       this._cap(t0 + a.t, K, 8, a.kill ? `${count}. ${name} destroyed${d != null ? ' ' + metres(d) + ' out' : ''}` : `${count}. It misses the ${name}`, v.i, a.idx);
-      this.slows.push([t0 + a.t - 0.25, t0 + a.t + 0.3, K]);
+      if (th === star && !slowed) { slowed = true; this.slows.push([t0 + a.t - 0.25, t0 + a.t + 0.3, K]); }
       if (a.kill && th && !again) again = { w: 1, from: t0 + a.t - 3, to: t0 + a.t + 1.3, shot: { rig: 'replay', v: v.i, idx: th.idx, brg: th.brg, label: 'the intercept again, from above' } };
     }
     // endings close together share one shot that turns from one to the next
@@ -219,7 +225,7 @@ export class Plan {
     }
     const cur = this.cur, age = cur ? t - cur.t0 : 1e9, over = !cur || t >= cur.end;
     let take = null;
-    if (over && !best && cur && !cur.idle && t - cur.t0 < 9) {   /* nothing due this instant, but something is within 2.5 s: hold the picture rather than cut away and back */
+    if (over && !best && cur && !cur.idle && !cur.inside && t - cur.t0 < 9) {   /* nothing due this instant, but something is within 2.5 s: hold the picture rather than cut away and back */
       let nx = null; for (const c of C) if (c.known <= t && c.a > t && c.a - t <= 2.5 && c.b - c.a >= c.min && (!nx || c.a < nx.a)) nx = c;
       if (nx) { cur.end = nx.a; cur.t1 = nx.a; }
     }
@@ -234,7 +240,7 @@ export class Plan {
     for (const c of P) if (c.known <= t && c.t > t && c.t - t < LIMITS.capMin && c.pri > soon) soon = c.pri;   /* the most important line due within the next moment (known ahead) */
     for (let i = P.length - 1; i >= 0; i--) {
       const c = P[i]; if (c.known > t || c.t > t) continue;
-      if (t - c.t > (c.pri >= 9 ? 4 : c.pri >= 5 ? 2 : 1.2) || c.pri < 10 && this._late(t)) { P.splice(i, 1); continue; }   /* too late to say now */
+      if (t - c.t > (c.pri >= 9 ? 4 : c.pri >= 5 ? 2 : 1.2) || c.pri < 9 && this._late(t)) { P.splice(i, 1); continue; }   /* too late to say now */
       if (soon >= c.pri + 1) continue;   /* a more important line is about to be due: do not start this one in its way */
       waiting++; const w = c.pri + (this.cur && c.v != null && this.cur.v === c.v && this.cur.idx === c.idx ? 1.5 : 0);
       if (!top || w > top.w || w === top.w && (c.t < top.c.t || c.t === top.c.t && c.id < top.c.id)) top = { c, w };

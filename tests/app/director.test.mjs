@@ -51,6 +51,7 @@ for (const s of cases) {
     for (const th of v.rec.threats) if (th.state === 'hit' && v.t0 + th.viz.end.t < T - 3) { const t = v.t0 + th.viz.end.t, sh = ref.shotAt(t);
       if (!C.some(c => / hits the /.test(c.text) && c.t0 - t > -0.1 && c.t0 - t < 1.6)) fail(tag, 'a hit with no caption within 1.5 s at', t.toFixed(1));
       if (!sh || sh.rig !== 'low' && sh.rig !== 'hold') fail(tag, 'a hit not filmed from the low wide angle at', t.toFixed(1), sh && (sh.rig || sh.cam));
+      { const lost = b0.volleys.filter(x => x.rec.killed).map(x => x.t0 + (x.rec.kill_t != null ? x.rec.kill_t : x.rec.t_end)).sort((a, c) => a - c)[0], ins = ref.shotAt(t + 0.7); if (!(lost != null && t > lost + 0.5) && !(ins && ins.inside && /^in_(cdr|gnr|ldr|drv)$/.test(ins.cam))) fail(tag, 'no cut to a crew seat after the hit at', t.toFixed(1), ins && (ins.cam || ins.rig)); }
       if (!ref.slowAt(t)) fail(tag, 'no slow motion at the hit', t.toFixed(1)); }
     for (const bu of v.rec.bursts) if (bu.res && bu.res.cut && bu.res.outcome !== 'drift_hit' && bu.res.t_cut != null && v.t0 + bu.res.t_cut < T - 3 && !C.some(c => /blind/.test(c.text) && c.t0 - v.t0 - bu.res.t_cut > -0.1 && c.t0 - v.t0 - bu.res.t_cut < 2.1)) fail(tag, 'a cut by the cloud with no caption within 2 s at', (v.t0 + bu.res.t_cut).toFixed(1));
   }
