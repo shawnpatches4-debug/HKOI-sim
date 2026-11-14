@@ -42,10 +42,11 @@ async def main():
             if ONLY and not any(k in name for k in ONLY):
                 return   # ONLY=a,b: a short run of just the pictures whose names contain one of these
             if not state['big']: state['big'] = True; await pg.set_viewport_size(FULL); await pg.wait_for_timeout(1500)
-            n0 = await pg.evaluate('__beta.scene.frameN'); await pg.evaluate('void (' + js + ')')
-            for i in range(120):   # the page draws slowly here: wait for four whole frames (camera, small outside views, displays), not for a time
-                await pg.wait_for_timeout(500)
-                if await pg.evaluate('__beta.scene.frameN') >= n0 + int(os.environ.get('FRAMES', '4')): break
+            for again in range(2 if 'lookThrough(__beta' in js else 1):   # an optic can only be taken up once the interior has seen the new seat (one frame later): ask twice
+                n0 = await pg.evaluate('__beta.scene.frameN'); await pg.evaluate('void (' + js + ')')
+                for i in range(120):   # the page draws slowly here: wait for four whole frames (camera, small outside views, displays), not for a time
+                    await pg.wait_for_timeout(500)
+                    if await pg.evaluate('__beta.scene.frameN') >= n0 + int(os.environ.get('FRAMES', '4')): break
             await pg.screenshot(path=os.path.join(out, f'{tag}_{name}.png'), timeout=180000)
         if which == 'third':   # the short set for the third pass: driver and T-bar, HKOI panel, every port, hatch, finish
             T3 = [('drv_forward', "lk('in_drv', 0, 0, 1)"), ('drv_tbar_close', "lk('in_drv', 0, -14, 1.9)"), ('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])")]
