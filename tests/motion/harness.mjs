@@ -41,9 +41,9 @@ export async function makeDriver(kind, groundName = 'flat') {
   const tv = new TeamView(kind, path.join(ROOT, 'assets') + '/'); for (let k = 0; k < 50 && !tv.loaded; k++) await new Promise(r => setTimeout(r, 5));
   if (!tv.loaded) throw new Error('team did not load');
   const scene = new THREE.Group(); scene.add(tv.group); const ground = GROUNDS[groundName]; tv.ground = ground;
-  const D = { tv, kind, ground, info: { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5 }, e: 0, n: 0, hdg: 90, t: 0,
+  const D = { tv, kind, ground, info: { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5, by: '', seed: 0, fireBrg: 0, deadFor: 0 }, e: 0, n: 0, hdg: 90, t: 0,
     pos() { return new THREE.Vector3(D.e, ground(D.e, -D.n), -D.n); },
-    reset() { D.e = 0; D.n = 0; D.hdg = 90; D.t = 0; Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5 }); tv._start(); tv.place(D.pos(), 0); tv._gx = null; tv.update(0.001, 'still', true, D.info); tv.settle(); },
+    reset() { D.e = 0; D.n = 0; D.hdg = 90; D.t = 0; Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5, by: '', seed: 0, fireBrg: 0, deadFor: 0 }); tv._start(); tv.place(D.pos(), 0); tv._gx = null; tv.update(0.001, 'still', true, D.info); tv.settle(); },
     step(dt, mode, spd, near) { const mv = mode === 'walk' || mode === 'run', h = D.hdg * Math.PI / 180; if (mv) { D.e += Math.sin(h) * spd * dt; D.n += Math.cos(h) * spd * dt; }
       if (D.info.reload > 0) D.info.reload = Math.max(0, D.info.reload - dt); if (D.info.pack > 0) D.info.pack = Math.max(0, D.info.pack - dt); if (D.info.setup > 0) D.info.setup = Math.max(0, D.info.setup - dt);
       if (!D.info.loaded && !D.info.firing && D.info.reloadT && D.info.reload <= 2) D.info.loaded = true;
@@ -92,6 +92,18 @@ if (cmd === 'metrics') {
       }
       if (worst > 9) fail(`${k} hips moved at ${worst.toFixed(1)} m/s (${where})`);
     } catch (e) { fail(k + ' random orders: ' + (e && e.stack || e).toString().slice(0, 400)); }
+  }
+  // a team knocked out: the same at every frame rate, on the ground, still and free of cost afterwards, right after a replay is moved or wound back
+  for (const k of ['kornet', 'rpg', 'fpv']) {
+    const D = await makeDriver(k, 'bumpy'), src = fs.readFileSync(path.join(ROOT, 'tests/motion/fall.js'), 'utf8');
+    const r = JSON.parse(await (new (Object.getPrototypeOf(async function () {}).constructor)('D', 'M', 'THREE', src))(D, globalThis.__motion, THREE));
+    for (const sc in r) { const o = r[sc], g = o.lowest_part_of_each_body_above_ground_cm, d = o.difference_from_240fps_cm;
+      if (Math.max(d.fps30, d.fps60, d.fps144) > 2) fail(`${k} ${sc}: bodies end up ${JSON.stringify(d)} cm apart at different frame rates`);
+      if (g[0] < -6 || g[1] > 9) fail(`${k} ${sc}: a body lies ${g} cm off the ground`);
+      if (!o.frozen || o.cost_once_still_ms > 0.002) fail(`${k} ${sc}: fallen figures still cost ${o.cost_once_still_ms} ms a frame`);
+      if (!o.replay_moved_on_bodies_down_at_once || !o.wound_back_alive_again) fail(`${k} ${sc}: wrong after the replay was moved`);
+      if (o.kit_on_the_ground.some(x => x.includes('still on a man'))) fail(`${k} ${sc}: kit left hanging on a fallen man`);
+      if (o.worst_change_of_speed_in_a_frame_m_s > 3.2) fail(`${k} ${sc}: jolt of ${o.worst_change_of_speed_in_a_frame_m_s} m/s going into the fall`); }
   }
   console.log(bad ? 'MOTION CHECKS FAILED' : 'MOTION CHECKS PASS'); process.exit(bad ? 1 : 0);
 } else if (cmd === 'look') {   /* node harness.mjs look <kind> <file.js or js text using D, M, THREE> [ground] : for looking into one thing */

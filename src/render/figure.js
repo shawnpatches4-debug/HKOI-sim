@@ -51,6 +51,8 @@ export const POSES = {
   buckle: { tip: 0.35, Spine: [0.1, 1, 0.5], Spine1: [0.12, 1, 0.7], Spine2: [0.12, 0.9, 0.9], Neck: [0.1, 0.6, 1], LeftUpLeg: [0.2, -0.5, 1], LeftLeg: [0, -1, -0.7], LeftFoot: [0, -0.3, 1], RightUpLeg: [-0.15, -0.8, 0.7], RightLeg: [0, -0.7, -1], RightFoot: [0, -0.5, 0.6], LeftArm: [0.5, -1, 0.3], LeftForeArm: [0.1, -1, 0.5], RightArm: [-0.5, -1, 0.2], RightForeArm: [-0.2, -0.8, 0.8] },
   // lying still, face down, limbs where they fell
   fallen: { tip: 1.56, Spine: [0.05, 0.02, 1], Spine1: [0.08, 0.03, 1], Spine2: [0.1, 0.03, 1], Neck: [0.5, 0.05, 1], LeftUpLeg: [0.3, 0, -1], LeftLeg: [0.5, 0, -1], LeftFoot: [0.6, -0.2, -1], RightUpLeg: [-0.12, 0, -1], RightLeg: [-0.05, 0, -1], RightFoot: [-0.4, -0.3, -1], LeftArm: [1, -0.1, 0.5], LeftForeArm: [0.3, 0, 1], RightArm: [-0.7, -0.1, -0.6], RightForeArm: [-0.2, 0, -1] },
+  // lying still on his side, knees drawn up a little
+  fallen_side: { tip: 1.5, roll: 1.2, Spine: [0.05, 0.02, 1], Spine1: [0.08, 0.02, 1], Spine2: [0.1, 0.03, 1], Neck: [0.25, 0.02, 1], LeftUpLeg: [0.75, -0.2, -1], LeftLeg: [-0.5, -0.1, -1], LeftFoot: [0.1, -0.05, -1], RightUpLeg: [0.45, -0.02, -1], RightLeg: [-0.35, 0, -1], RightFoot: [0, 0, -1], LeftArm: [0.8, -0.55, 0.35], LeftForeArm: [0.8, -0.45, 0.5], RightArm: [0.5, -0.1, 0.8], RightForeArm: [0.7, 0, 0.7] },
   // lying still on the back
   fallen_back: { tip: -1.5, Spine: [0, 0.03, -1], Spine1: [0.05, 0.03, -1], Spine2: [0.08, 0.04, -1], Neck: [0.3, 0.1, -1], LeftUpLeg: [0.25, 0, 1], LeftLeg: [0.1, 0.25, 1], LeftFoot: [0.5, 0.5, 0.5], RightUpLeg: [-0.3, 0, 1], RightLeg: [-0.5, 0.02, 1], RightFoot: [-0.6, 0.5, 0.4], LeftArm: [1, -0.05, -0.2], LeftForeArm: [0.6, 0, -1], RightArm: [-0.8, -0.05, 0.6], RightForeArm: [-0.9, 0, 0.3] },
 };

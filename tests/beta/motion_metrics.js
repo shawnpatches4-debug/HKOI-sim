@@ -19,7 +19,7 @@
     const last = F.map(() => names.map(() => null)), vel = F.map(() => names.map(() => null)), st = {}, p = [0, 0, 0];
     let slideAt = 0, slide = 0, slideSum = 0, stances = 0, floatMax = -1e9, floatMin = 1e9, t = 0;
     names.forEach(n => { res.jump_cm[n] = 0; res.dvel[n] = 0; res.where[n] = 0; });
-    D.reset(); Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false });
+    D.reset(); Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, by: '', deadFor: 0 });
     for (const s of story) {
       if (s.turn) D.hdg += s.turn; if (s.info) Object.assign(D.info, s.info);
       const n = Math.round(s.t * fps);
@@ -65,7 +65,7 @@
   }
   // cost of one team for one frame, in thousandths of a second, averaged over 200 calls
   function cost(D, mode, spd, dist, pre) {
-    D.reset(); Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: dist }); const near = dist < 300;
+    D.reset(); Object.assign(D.info, { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, by: '', deadFor: 0, dist: dist }); const near = dist < 300;
     for (let k = 0; k < (pre || 150); k++) D.step(1 / 60, mode, spd, near);
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()), t0 = now();
     for (let k = 0; k < 200; k++) D.step(1 / 240, mode, spd, near);

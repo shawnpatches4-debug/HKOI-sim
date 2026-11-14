@@ -7,7 +7,9 @@
 //   mode: 'still' (at the weapon), 'down' (flat under fire), 'walk' or 'run' (the map point is moving).
 //   info: loaded (a round is in the launcher), spare (a spare round lies ready), firing (launching or guiding),
 //         reload (seconds until ready again), pack (seconds of packing up left), setup (seconds of setting up left),
-//         dead (the team has been knocked out), dist (metres from the camera, as it appears through the lens).
+//         dead (the team has been knocked out), by (what did it: 'main' = a shell burst, anything else = machine-gun fire),
+//         fireBrg (compass bearing from the team to the gun that hit it), deadFor (seconds since), seed (a number of its own, for variety),
+//         dist (metres from the camera, as it appears through the lens).
 import * as THREE from 'three';
 import { POSES, setPose, bone, jointAt, RIG, NJ, J, UPPER, Wq, Wp, TQ, SD, SX, SO, sat, ease, mix, wrapPi, makeRig, lowest, solve, fk, poseTurns, reachQ,
   stiff, chase, chaseAngle, chaseJoint, Y_MOVING, Y_POSING, newGait, resetGait, stepGait, stridePose, clipPose } from './figure.js';
@@ -33,7 +35,7 @@ const peek = (t, every, len) => { const x = (t % every) / len; return x < 1 ? Ma
 export class TeamView {
   static use(helpers) { H = helpers; }
   constructor(kind, assetBase) {
-    this.kind = kind; this.ground = null; this.done = false;   /* done: knocked out, fallen, and lain there long enough to be taken away */
+    this.kind = kind; this.ground = null; this.done = false; this.frozen = false; this.fell = null;   /* done: knocked out before its models arrived (nothing to show) */
     const g = this.group = new THREE.Group(), cloth = new THREE.MeshStandardMaterial({ color: '#5a5b45', roughness: 0.95 }), dark = new THREE.MeshStandardMaterial({ color: '#2a2c26', roughness: 0.8 });
     // plain stand-in shapes until the models arrive
     const man = (x, z, crouch) => { const m = new THREE.Group(), body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, crouch ? 0.45 : 0.75, 3, 8), cloth), head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), dark); body.position.y = crouch ? 0.55 : 0.8; head.position.y = crouch ? 1.05 : 1.48; body.castShadow = head.castShadow = true; m.add(body, head); m.position.set(x, 0, z); g.add(m); return m; };
@@ -94,7 +96,7 @@ export class TeamView {
   // everything that is remembered about the figures and loads while they move
   _start() {
     const F = this.figures, R = TeamView.RPG;
-    this.anim = false; this.mode = 'still'; this.inner.position.set(0, 0, 0); this.group.updateMatrixWorld(true);
+    this.anim = false; this.mode = 'still'; this.inner.position.set(0, 0, 0); if (this.frozen) this._freeze(false); this.fell = null; this.group.updateMatrixWorld(true);
     if (F.some(f => !f.userData.rig)) return;               /* an unexpected skeleton: the figures stay as posed, without movement */
     const psi = this.group.rotation.y, G = this.group.position;
     F.forEach((f, i) => {
@@ -104,7 +106,7 @@ export class TeamView {
         cur: K[still.key].map(q => q.clone()), out: QS(), gp: K[still.key].map(q => q.clone()), from: QS(), w: RIG.map(() => V()),
         X: { x: 0, v: 0 }, Z: { x: 0, v: 0 }, Yw: { x: 0, v: 0 }, GX: { x: 0, v: 0 }, GZ: { x: 0, v: 0 }, GY: { x: 0, v: 0 }, tx: 0, tz: 0, tyaw: 0, place: still, slot: null, lx: h.x, lz: h.z, lyaw: h.yaw,
         g: newGait(), gy: { x: G.y, v: 0 }, seat: { x: 0, v: 0 }, seatOk: false, hx: 0, hz: 0, flat: 0, base: 0,
-        fp: V(), fq: Q(), cp: V(), cq: Q(), hands: [], clock: i * 7.3, calm: { x: 1, v: 0 }, rest: 0, settled: false, carry: 0 };
+        fp: V(), fq: Q(), cp: V(), cq: Q(), air: null, rootHalf: 0, hands: [], clock: i * 7.3, calm: { x: 1, v: 0 }, rest: 0, settled: false, carry: 0 };
       resetGait(a.g, rig);
     });
     // The loads. Each has named places it can be (on the ground, on a back, in the hands, seated on the launcher) and travels between them.
@@ -161,15 +163,17 @@ export class TeamView {
   // ---- every frame ----
   update(dt, mode, near, info) {
     if (!this.figures || !this.anim || this._err) { if (info && info.dead) this.done = true; return; }
-    if (this.hold && this._gx != null) {      /* the team's frame is being held where it is while the map point moves on: keep it there on every frame, however far away */
+    if (this.hold && this._gx != null && (this.group.position.x !== this._gx || this.group.position.z !== this._gz || this.group.position.y !== this._gy)) {      /* the team's frame is being held where it is while the map point moves on: keep it there on every frame, however far away */
       const G = this.group.position, L = this.lag; L.x += G.x - this._gx; L.y += G.y - this._gy; L.z += G.z - this._gz; this._gx = G.x; this._gy = G.y; this._gz = G.z;
       const cs = Math.cos(this._psi), sn = Math.sin(this._psi); this.inner.position.set(-(L.x * cs - L.z * sn), -L.y, -(L.x * sn + L.z * cs));
     }
+    if (this.frozen) { if (info && info.dead) return; this._freeze(false); }      /* fallen and settled: costs nothing (unless the battle is wound back to when they lived) */
     try { this._update(dt > 0 ? dt : 0, mode, near, info || TeamView.INFO); }
     catch (e) { this._err = e; console.error('enemy team animation stopped: ' + (e && e.stack || e)); }   /* a fault here must never stop the picture */
   }
   _update(dt, mode, near, info) {
     const I = this._info, moving = mode === 'walk' || mode === 'run';
+    I.by = info.by || ''; I.seed = info.seed || 0; I.fireBrg = info.fireBrg || 0; I.deadFor = info.deadFor || 0;
     I.loaded = info.loaded !== false; I.spare = info.spare !== false; I.firing = !!info.firing; I.reload = info.reload || 0; I.pack = info.pack || 0; I.setup = info.setup || 0; I.dead = !!info.dead;
     const dist = info.dist != null ? info.dist : near ? 20 : 400;
     this.mode = mode;
@@ -235,10 +239,10 @@ export class TeamView {
     if (s.W) { tx = s.W[0]; tz = s.W[1]; ty = s.W[2]; }
     if (striding && s.behind && this.trail.length) { this._behind(s.behind, s.side); tx = _v4.x; tz = _v4.z; ty = _v4.y; }   /* the men behind follow in the leader's footsteps */
     // the spot aimed for slides smoothly to a new place when he is given one (it keeps up exactly with a place that simply moves along)
-    const yg = stiff(striding ? 0.6 : 0.3);
+    const yg = stiff(striding ? 0.6 : a.rootHalf || 0.3);
     chase(a.GX, a.tx, tx, yg, h, 1); chase(a.GZ, a.tz, tz, yg, h, 1); a.tx = tx; a.tz = tz;
     // he chases it: trailing a little when walking (so he eases off the mark and eases to a halt), exactly when at his place
-    const y = stiff(striding ? 0.22 : 0.2);
+    const y = stiff(striding ? 0.22 : a.rootHalf || 0.2);
     chase(a.X, gx0, a.GX.x, y, h, striding ? 0 : 1); chase(a.Z, gz0, a.GZ.x, y, h, striding ? 0 : 1);
     if (striding) { const v = Math.hypot(a.X.v, a.Z.v), m = ease((v - 0.3) / 0.7); ty += wrapPi(Math.atan2(a.X.v, a.Z.v) - ty) * m; }
     chaseAngle(a.GY, a.tyaw, ty, stiff(striding ? 0.16 : 0.32), h, 1); a.tyaw = ty;
@@ -362,6 +366,7 @@ export class TeamView {
     a.lx = dx * cp - dz * sp; a.lz = dx * sp + dz * cp; a.lyaw = wy - psi;
     const cy = Math.cos(a.lyaw), sy = Math.sin(a.lyaw);
     a.fp.set(a.lx + ox * cy, baseY + oy, a.lz - ox * sy);
+    if (a.air) { a.air.t += dt; const u = a.air.t / a.air.dur; if (u >= 1) a.air = null; else a.fp.y += a.air.h * 16 * u * u * (1 - u) * (1 - u); }   /* thrown: off the ground for a moment */
     a.fq.setFromAxisAngle(AXY, a.lyaw);
     if (flat > 0.01 && (a.hx || a.hz)) {                                           /* lying down: the body follows the slope of the ground */
       _v1.set(-a.hx, 1, -a.hz).normalize(); _q1.setFromUnitVectors(AXY, _v1); _q2.identity().slerp(_q1, flat);
@@ -513,7 +518,7 @@ export class TeamView {
   // a new order from the battle
   _request(want) {
     const was = this.act, F = this.figures; this.want = want;
-    if (want === 'dead') { this._cancel(); this._fall(); return; }
+    if (want === 'dead') { this._cancel(); this._fall(); if (this._info.deadFor > 2.5) { this.fell = null; this._skip(4.5); } return; }
     if (was === 'dead') { this._start(); this.want = want; if (want !== 'weapon') this._request(want); return; }   /* (the battle was wound back: they are alive again) */
     if (want === 'move') {
       if (was === 'move') return;
@@ -579,26 +584,73 @@ export class TeamView {
     } else { F.forEach((f, i) => { const a = f.userData.a; this._to(i, a.still.key, a.still.post, a.still); }); this._upWeapon(0.1); }
   }
   // Knocked out: each man buckles and falls where he is, and what he carried drops beside him.
+  // No two falls alike, but the same fall every time for the same team (so a replay shows what was shown before).
+  _dice(seed) { let t = (Math.floor(seed) * 2654435761 + 0x9e3779b9) >>> 0; return () => { t = (t + 0x6d2b79f5) >>> 0; let r = Math.imul(t ^ (t >>> 15), t | 1); r ^= r + Math.imul(r ^ (r >>> 7), r | 61); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; }
+  // Knocked out. What each man does depends on what hit the team (info.by): a shell bursting among them ('main') throws them down and
+  // away from the burst; machine-gun fire (anything else) drops them where they stand or kneel. Each man goes at his own moment and
+  // in his own way, from whatever he was doing, and then lies where he fell for the rest of the battle. What they carried or served
+  // is thrown or knocked over and stays on the ground too. No blood, nothing torn: bodies and wrecked kit.
   _fall() {
-    const F = this.figures; this.act = 'dead'; this._deadT = 0; this.hold = true; this.setUp = false;   /* (hold: they lie where they fell, whatever the map point does) */
+    const F = this.figures, I = this._info, blast = I.by === 'main', rnd = this._dice((I.seed || 0) * 31 + 7), G = this.group.position;
+    this.act = 'dead'; this._deadT = 0; this.hold = true; this.setUp = false; this.goWhenPacked = false;   /* (hold: they lie where they fell, whatever the map point does) */
+    const b = (I.fireBrg || 0) * DEG, ax = -Math.sin(b), az = Math.cos(b);                                 /* the way the fire was going (away from the gun), on the map */
+    const frameY = G.y - this.lag.y, cs = Math.cos(this.P.x), sn = Math.sin(this.P.x), ox = G.x - this.lag.x, oz = G.z - this.lag.z;
+    let last = 0;
     F.forEach((f, i) => {
-      const a = f.userData.a, back = (i + (this._seed || 0)) % 2 === 1 && a.post !== 'flat', here = this._here(a, back ? -0.4 : 0.45); here.yaw += (i ? -0.5 : 0.35); here.W[2] += (i ? -0.5 : 0.35);
-      const keys = a.post === 'flat' ? [['fallen', 0.5]] : back ? [['buckle', 0.22 + 0.1 * i], ['fallen_back', 0.5]] : [['buckle', 0.2 + 0.1 * i], ['hands_knees', 0.28], ['fallen', 0.34]];
-      this._go(a, keys, here, back ? 'fallen_back' : 'fallen', 'flat');
+      const a = f.userData.a, delay = blast ? 0.03 + 0.1 * rnd() : i ? 0.18 + 0.42 * rnd() : 0.14 * rnd(), r1 = rnd(), r2 = rnd(), r3 = rnd(), r4 = rnd(); last = Math.max(last, delay);
+      this._at(delay, () => {
+        const back = r1 < (blast ? 0.55 : 0.35) && a.post !== 'flat', end = back ? 'fallen_back' : r2 < 0.45 ? 'fallen_side' : 'fallen';
+        let dx, dz, far, yaw, keys;
+        if (blast) {                                           /* thrown outward from the burst (the team's own spot) and on along the line of fire */
+          let ux = a.X.x - ox, uz = a.Z.x - oz; const n = Math.hypot(ux, uz) || 1; dx = ux / n * 0.7 + ax * 0.6 + (r3 - 0.5) * 0.6; dz = uz / n * 0.7 + az * 0.6 + (r4 - 0.5) * 0.6;
+          const m = Math.hypot(dx, dz) || 1; dx /= m; dz /= m; far = 0.8 + 1.0 * r3;
+          yaw = Math.atan2(dx, dz) + (back ? Math.PI : 0) + (r4 - 0.5) * 1.2;                             /* he lands head away from the burst, more or less */
+          keys = a.post === 'flat' ? [[end, 0.42]] : [['buckle', 0.14], [end, 0.4]];
+          a.air = { t: 0, dur: 0.5 + 0.1 * r2, h: (a.post === 'flat' ? 0.12 : 0.22) + 0.2 * r4 }; a.rootHalf = 0.17;
+        } else {                                               /* crumpling: forward onto his hands and face, over onto his side, or back off his knees */
+          const s = back ? -1 : 1; dx = Math.sin(a.Yw.x) * s; dz = Math.cos(a.Yw.x) * s; far = a.post === 'up' ? 0.35 + 0.3 * r3 : a.post === 'low' ? 0.12 + 0.2 * r3 : 0;
+          yaw = a.Yw.x + (r4 - 0.5) * (a.post === 'flat' ? 0.5 : 1.3);
+          keys = a.post === 'flat' ? [[end, 0.55 + 0.2 * r3]]
+            : a.post === 'low' ? (back ? [[end, 0.6 + 0.15 * r3]] : [['lunge', 0.24 + 0.1 * r3], [end, 0.42]])
+            : back ? [['buckle', 0.24 + 0.1 * r3], [end, 0.5]] : [['buckle', 0.22 + 0.1 * r3], ['hands_knees', 0.26], [end, 0.34]];
+          a.rootHalf = 0;
+        }
+        const here = this._here(a); here.W = [a.X.x + dx * far, a.Z.x + dz * far, yaw];
+        this._go(a, keys, here, end, 'flat');
+      });
     });
+    // what they carried or served: thrown clear by a burst, knocked over or dropped under fire (a tube seated on the launcher goes over with it)
     for (const l of this.loads) {
-      if (l.to.fig == null && l.e >= 1) continue;
-      this._frame(l.e >= 1 ? l.to : l.from, _P0, _Q0, _S0); const G = this.group.position, cs = Math.cos(this.P.x), sn = Math.sin(this.P.x), x = _P0.x + 0.25, z = _P0.z - 0.2;
-      l.places.dropped = { p: V(x, this._h(G.x - this.lag.x + x * cs + z * sn, G.z - this.lag.z - x * sn + z * cs) - (G.y - this.lag.y) + 0.09, z), q: _Q0.clone().premultiply(Q().setFromUnitVectors(_v1.set(0, 0, 1).applyQuaternion(_Q0), _v2.set(_v1.x, 0, _v1.z).normalize())), s: _S0.clone() };
-      if (l.name !== 'round') this._send(l, 'dropped', 0.55, 0);
+      if (l.name === 'round' || !l.obj.visible || (l.to.load && l.e >= 1) || (l.to.gnd && l.e >= 1 && l !== this.L.base && !blast)) continue;
+      const r1 = rnd(), r2 = rnd(), r3 = rnd(), served = l.to.gnd && l.e >= 1;
+      this._at(blast ? 0.02 + 0.06 * r1 : served ? 0.25 + 0.3 * r1 : last + 0.15, () => {
+        this._frame(l.e >= 1 ? l.to : l.from, _P0, _Q0, _S0);
+        const wx0 = ox + _P0.x * cs + _P0.z * sn, wz0 = oz - _P0.x * sn + _P0.z * cs, d = blast ? 0.7 + 1.4 * r2 : served ? 0.3 : 0.25, t = blast ? Math.atan2(ax, az) + (r3 - 0.5) * 2.2 : 6.283 * r3;
+        const wx = wx0 + Math.sin(t) * d, wz = wz0 + Math.cos(t) * d, x = (wx - ox) * cs - (wz - oz) * sn, z = (wx - ox) * sn + (wz - oz) * cs;
+        // lying on its side: its long axis level, tipped over the way it fell
+        const q = _Q0.clone(), up = _v1.set(0, 1, 0).applyQuaternion(q), over = _v2.set(Math.sin(t), 0.12, Math.cos(t)).applyQuaternion(_q1.setFromAxisAngle(AXY, -this.P.x)).normalize();
+        q.premultiply(Q().setFromUnitVectors(up, served || blast ? over : _v3.set(0, 1, 0)));
+        const fwd = _v1.set(0, 0, 1).applyQuaternion(q); q.premultiply(Q().setFromUnitVectors(fwd, _v2.set(fwd.x, 0, fwd.z).normalize()));
+        l.places.dropped = { p: V(x, this._h(wx, wz) - frameY + (l === this.L.base ? 0.2 : 0.09), z), q, s: _S0.clone() };
+        this._send(l, 'dropped', blast ? 0.5 + 0.15 * r2 : 0.5, blast ? 0.35 + 0.3 * r1 : served ? 0.02 : 0);
+        if (l.legs) l.foldT = l.fold.x;                        /* (the tripod stays as it was: open if it stood, folded if it was carried) */
+      });
     }
     if (this.round) this.round.visible = false;
+    this.fell = { by: I.by || '', blast };                     /* for whoever draws the effects: a team has just been hit (read once, then clear) */
+  }
+  // run the clock on by `sec` seconds at once (a replay was moved to a time when this had long happened)
+  _skip(sec) { const n = Math.ceil(sec * 30); for (let k = 1; k <= n; k++) { this._tick(1 / 30); if (k % 5 === 0 || k === n) this._poseAll(k % 5 === 0 ? 1 / 6 : (k % 5) / 30, 0); } }
+  // Fallen and still: nothing about them changes any more, so nothing is worked out for them any more.
+  _freeze(on) {
+    if (on) this.group.updateMatrixWorld(true);
+    this.inner.traverse(o => { o.matrixAutoUpdate = !on; }); this.inner.matrixAutoUpdate = true; this.frozen = on;
   }
 
   // the small scenes at the weapon that follow the battle's clock: firing, reloading
   _scenes(dt) {
     const I = this._info, L = this.L, F = this.figures;
-    if (this.act === 'dead') { this._deadT += dt; if (this._deadT > 45) this.done = true; return; }
+    if (this.act === 'dead') { this._deadT += dt; if (this._deadT > 3 && this._quiet()) { this._poseAll(dt, 0); this._freeze(true); } return; }
     if (I.firing !== this._firing) {
       this._firing = I.firing;
       if (I.firing) { this.kick.v += 54; this._awayUntil = this.clock + 1.1; for (const f of F) { f.userData.a.settled = false; f.userData.a.rest = 0; } }
@@ -658,7 +710,7 @@ export class TeamView {
     if (!this.anim) { this._psi = Math.PI - faceDeg * DEG; this.group.rotation.y = this._psi; }
   }
 }
-TeamView.INFO = { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false };
+TeamView.INFO = { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, by: '', seed: 0, fireBrg: 0, deadFor: 0 };
 TeamView.CLIPS = { walk: null, run: null };   /* recorded movements, if any are supplied: see readClip in figure.js */
 TeamView.LAUNCHER_YAW = -Math.PI / 2;
 TeamView.FILE = [{ x: 0, z: 0, yaw: 0 }, { x: 0, z: 0, yaw: 0, behind: 2.3, side: 0.45 }];   /* places in the marching file: the gunner leads, the second man follows 2.3 m behind and a little to one side */
