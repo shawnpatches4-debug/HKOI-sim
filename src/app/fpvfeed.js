@@ -48,7 +48,7 @@ export class FpvFeed {
   constructor() { this.on = false; this.unit = null; this.snowT = 0; this.tear = 0; this.rs = 12345; this.last = null; this.sig = {}; this.frozenKey = null; this.grabKey = null; this.info = null; this.losKey = ''; this.masked = false; this._v = null; }
 
   _dom() {
-    if (this.el) return; const mk = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+    if (this.el) return; if (window.__beta) window.__beta.fpvFeed = this;   /* for the page tests */ const mk = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     const el = this.el = mk('div'); el.id = 'fpv'; el.hidden = true;
     this.freeze = mk('canvas'); this.freeze.id = 'fpv-freeze'; this.freeze.width = 640; this.freeze.height = 360;

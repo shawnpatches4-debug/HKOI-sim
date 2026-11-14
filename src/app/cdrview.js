@@ -36,9 +36,9 @@ const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ==
 function symbolOf(kind) {
   if (kind === 'rpg') return 'rocket';
   if (kind === 'fpv' || kind === 'fpv_fiber') return 'drone';
-  if (kind === 'bmp2' || kind === 'bmp') return 'bmp';
+  if (kind === 'bmp2' || kind === 'bmp' || kind === 'ifv') return 'bmp';
   if (kind === 't72' || kind === 't90' || kind === 'tank') return 'tank';
-  if (kind === 'uaz' || kind === 'light') return 'light';
+  if (kind === 'uaz' || kind === 'light' || kind === 'truck') return 'light';
   return 'missile';
 }
 // Who an order or a sector is for: { uid } or { vid }, or a bare id (under 100 a team, 100 and up a vehicle). 'all' gives null.
@@ -109,34 +109,38 @@ export class CommanderView {
     if (jump) { this.anim.clear(); this.pos.clear(); this.bel = null; }
     const F = this._forces(battle, C), spectator = !!st.showAll, M = this.map, P = (e, n) => M.toScreen(e, n);
 
-    // positions ease toward where the battle has them (it moves them in steps)
+    // Positions ease toward where the battle has them (it moves them in steps). Every eased value first moves toward the target it
+    // had LAST frame for this frame's time, and only then takes the new target: so a change is followed from the frame it was seen in,
+    // and the result does not depend on how long the frames are.
     const byKey = new Map();
-    for (const f of F) { let p = this.pos.get(f.key); if (!p) { p = { e: f.e, n: f.n }; this.pos.set(f.key, p); } p.e += (f.e - p.e) * kp; p.n += (f.n - p.n) * kp; f.pe = p.e; f.pn = p.n; byKey.set(f.key, f); }
+    for (const f of F) { let p = this.pos.get(f.key); if (!p) { p = { e: f.e, n: f.n, te: f.e, tn: f.n }; this.pos.set(f.key, p); } p.e += (p.te - p.e) * kp; p.n += (p.tn - p.n) * kp; p.te = f.e; p.tn = f.n; f.pe = p.e; f.pn = p.n; byKey.set(f.key, f); }
     for (const f of F) if (f.riding && byKey.has(f.riding)) { const v = byKey.get(f.riding); f.pe = v.pe; f.pn = v.pn; }
 
     // orders: each has an eased arrow that grows out when the order is given and fades when it is done or withdrawn
     const plan = Array.isArray(C.plan) ? C.plan : [], lost = C.alive === false || C.radio === false;
-    for (const a of this.anim.values()) a.live = false;
-    for (const o of plan) {
+    for (const [id, a] of this.anim) {   /* this frame's step, toward last frame's targets */
+      if (a.live) { a.a += (1 - a.a) * ki; a.g += (1 - a.g) * ki; } else { a.a += (0 - a.a) * ko; if (a.a < 0.02) { this.anim.delete(id); continue; } }
+      a.sx += (a.tsx - a.sx) * kp; a.sn += (a.tsn - a.sn) * kp; a.dx += (a.tdx - a.dx) * kp; a.dn += (a.tdn - a.dn) * kp; a.live = false; }
+    for (const o of plan) {              /* this frame's targets */
       const id = String(o.id), who = byKey.get(refKey(o.to)), src = who ? [who.pe, who.pn] : o.to === 'all' && C.e != null ? [C.e, C.n] : (o.from || [C.e, C.n]), dst = o.dest || src;
-      let a = this.anim.get(id); if (!a) { a = { a: 0, g: jump ? 1 : 0, sx: src[0], sn: src[1], dx: dst[0], dn: dst[1] }; this.anim.set(id, a); }
-      a.o = o; a.who = who; a.live = !o.done; a.sx += (src[0] - a.sx) * kp; a.sn += (src[1] - a.sn) * kp; a.dx += (dst[0] - a.dx) * kp; a.dn += (dst[1] - a.dn) * kp;
+      let a = this.anim.get(id); if (!a) { if (o.done && !jump) continue; a = { a: jump && !o.done ? 1 : 0, g: jump ? 1 : 0, sx: src[0], sn: src[1], dx: dst[0], dn: dst[1] }; this.anim.set(id, a); }
+      a.o = o; a.who = who; a.live = !o.done; a.tsx = src[0]; a.tsn = src[1]; a.tdx = dst[0]; a.tdn = dst[1];
     }
-    for (const [id, a] of this.anim) { if (a.live) { a.a += (1 - a.a) * ki; a.g += (1 - a.g) * ki; } else { a.a += (0 - a.a) * ko; if (a.a < 0.02) this.anim.delete(id); } }
+    if (jump) for (const [id, a] of this.anim) if (!a.live) this.anim.delete(id);
 
     // his picture of the tank eases too, so a new report slides the marker instead of jumping it
     const pic = C.picture;
-    if (pic) { const age = !lost && pic.t != null ? Math.max(0, t - pic.t) : (pic.age || 0), fresh = Math.max(0.32, 1 - Math.max(0, age - 30) / 220); if (!this.bel) this.bel = { e: pic.e, n: pic.n, r: pic.r_m || 0, a: fresh };
-      const b = this.bel; b.e += (pic.e - b.e) * kp; b.n += (pic.n - b.n) * kp; b.r += ((pic.r_m || 0) - b.r) * kp; b.a += (fresh - b.a) * kp; b.age = age; } else this.bel = null;
+    if (pic) { const age = !lost && pic.t != null ? Math.max(0, t - pic.t) : (pic.age || 0), fresh = Math.max(0.32, 1 - Math.max(0, age - 30) / 220); if (!this.bel) this.bel = { e: pic.e, n: pic.n, r: pic.r_m || 0, a: fresh, te: pic.e, tn: pic.n, tr: pic.r_m || 0, ta: fresh };
+      const b = this.bel; b.e += (b.te - b.e) * kp; b.n += (b.tn - b.n) * kp; b.r += (b.tr - b.r) * kp; b.a += (b.ta - b.a) * kp; b.te = pic.e; b.tn = pic.n; b.tr = pic.r_m || 0; b.ta = fresh; b.age = age; } else this.bel = null;
 
     this.labels.length = 0; x.save(); x.lineCap = x.lineJoin = 'round';
     this._sectors(x, C, byKey, P, dpr);
-    this._belief(x, C, st, t, P, dpr, spectator);
     const sel = this.sel != null && this.anim.has(String(this.sel)) ? String(this.sel) : null;
     for (const [id, a] of this.anim) if (id !== sel) this._order(x, a, C, byKey, t, P, dpr, sel ? 0.45 : 1, false, spectator);
     if (sel) this._order(x, this.anim.get(sel), C, byKey, t, P, dpr, 1, true, spectator);
+    this._belief(x, C, st, t, P, dpr, spectator);   /* after the arrows, so his mark for the tank is never buried under them */
     for (const f of F) { if (f.riding && byKey.has(f.riding)) continue; const [a, b] = P(f.pe, f.pn), held = plan.some(o => !o.done && o.kind === 'hold_fire' && (o.to === 'all' ? f.key[0] === 'u' : refKey(o.to) === f.key)), riders = F.filter(q => q.riding === f.key).map(q => q.name);
-      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing ? ' · ' + f.doing : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
+      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
     if (!C.with && C.e != null) { const [a, b] = P(C.e, C.n); this._symbol(x, a, b, 'cdr', dpr, { dead: C.alive === false, cdr: true }); this._label(a, b + 15 * dpr, 'Commander' + (C.alive === false ? ' · killed' : C.radio === false ? ' · radio out' : ''), '#ffd9d3', 0); }
     if (lost) { const cv = this.map.cv; this._banner(x, cv.width / 2, 78 * dpr, C.alive === false ? 'Commander lost: teams act on their own' : 'Commander has lost his radio: teams act on their own', dpr); }
     this._labels(x, dpr); this._legend(x, dpr, spectator); x.restore();
@@ -171,10 +175,10 @@ export class CommanderView {
     // the truth, for the spectator only
     if (spectator && T) {
       const [a, c] = P(T.e, T.n), h = (T.h || 0) * DEG;
-      if (b) { const [p, q] = P(b.e, b.n), off = Math.hypot(T.e - b.e, T.n - b.n); x.strokeStyle = 'rgba(10,10,10,.75)'; x.lineWidth = 1.2 * dpr; x.setLineDash([3 * dpr, 3 * dpr]); x.beginPath(); x.moveTo(p, q); x.lineTo(a, c); x.stroke(); x.setLineDash([]);
-        this._label((a + p) / 2, (c + q) / 2, `his picture is ${Math.round(off)} m off`, off > Math.max(150, b.r) ? '#ffcf70' : '#c8f5dd', 2); }
+      if (b) { const [p, q] = P(b.e, b.n), off = Math.hypot(T.e - b.e, T.n - b.n); x.strokeStyle = 'rgba(10,10,10,.75)'; x.lineWidth = 1.2 * dpr; x.setLineDash([3 * dpr, 3 * dpr]); x.beginPath(); x.moveTo(p, q); x.lineTo(a, c); x.stroke(); x.setLineDash([]); }
       x.save(); x.translate(a, c); x.rotate(h); x.fillStyle = '#39d98a'; x.strokeStyle = '#03130b'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(7 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-7 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore();
-      this._label(a, c + 16 * dpr, 'Tank (true position)', '#c8f5dd', 2);
+      const off = b ? Math.hypot(T.e - b.e, T.n - b.n) : null;
+      this._label(a, c + 16 * dpr, 'Tank (true position)' + (off != null ? ` · his picture is ${Math.round(off)} m off` : ''), off != null && off > Math.max(150, b.r) ? '#ffcf70' : '#c8f5dd', 2);
     }
   }
   _nameOf(ref) { const k = refKey(ref), B = this.battle; if (!k || !B) return null; if (k[0] === 'u') { const u = (B.units || []).find(q => q.id === +k.slice(1)); return u ? `${u.spec ? u.spec.name : 'Team'} #${u.id + 1}` : null; } let V = []; try { V = B.vehicles ? B.vehicles() : []; } catch (e) { V = []; } const v = V.find(q => String(q.id) === k.slice(1)); return v ? v.name || String(v.kind).toUpperCase() : null; }
@@ -275,10 +279,10 @@ export class CommanderView {
   // a small key, bottom right
   _legend(x, dpr, spectator) {
     const rows = [['sym', 'missile', 'Missile team'], ['sym', 'rocket', 'Rocket team'], ['sym', 'drone', 'Drone crew'], ['sym', 'bmp', 'BMP'], ['sym', 'tank', 'Tank'], ['sym', 'light', 'Light vehicle'], ['sym', 'cdrflag', 'Commander is here'], ['sym', 'hold', 'Ordered to hold fire'],
-      ['arr', 'move', 'Move on foot'], ['arr', 'ride', 'Ride in the UAZ'], ['arr', 'strike', 'Strike'], ['arr', 'fix', 'Fix (pin it)'], ['arr', 'break', 'Break contact'], ['arr', 'watch', 'Watch a sector'], ['arr', 'bel', 'Where he thinks the tank is'], ['arr', 'pred', 'Where he expects it to go']];
-    if (spectator) rows.push(['arr', 'true', 'True tank, and his error']);
-    const cv = this.map.cv, cols = 2, per = Math.ceil(rows.length / cols), cw = 196 * dpr, rh = 19 * dpr, W = cols * cw + 14 * dpr, H = per * rh + 14 * dpr, x0 = cv.width - W - 12 * dpr, y0 = cv.height - H - 12 * dpr;
-    x.fillStyle = 'rgba(8,10,12,.82)'; x.fillRect(x0, y0, W, H); x.font = `${11 * dpr}px ui-monospace, Menlo, monospace`; x.textBaseline = 'middle';
+      ['arr', 'move', 'Move on foot'], ['arr', 'ride', 'Ride in the UAZ'], ['arr', 'strike', 'Strike'], ['arr', 'fix', 'Fix (pin it)'], ['arr', 'break', 'Break contact'], ['arr', 'watch', 'Watch a sector'], ['arr', 'bel', 'Tank, where he thinks it is'], ['arr', 'pred', 'Where he expects it to go']];
+    if (spectator) rows.push(['arr', 'true', 'True tank and his error']);
+    const cv = this.map.cv, cols = 2, per = Math.ceil(rows.length / cols), cw = 222 * dpr, rh = 19 * dpr, W = cols * cw + 14 * dpr, H = per * rh + 14 * dpr, x0 = cv.width - W - 12 * dpr, y0 = cv.height - H - 12 * dpr;
+    x.fillStyle = 'rgba(8,10,12,.93)'; x.fillRect(x0, y0, W, H); x.font = `${11 * dpr}px ui-monospace, Menlo, monospace`; x.textBaseline = 'middle';
     rows.forEach((r, i) => { const cx = x0 + 10 * dpr + Math.floor(i / per) * cw + 16 * dpr, cy = y0 + 7 * dpr + (i % per + 0.5) * rh, k = r[1], A = [cx - 15 * dpr, cy], B = [cx + 15 * dpr, cy];
       x.save();
       if (r[0] === 'sym') { x.translate(cx, cy); x.scale(0.72, 0.72); this._symbol(x, 0, 0, k === 'cdrflag' || k === 'hold' ? 'missile' : k, dpr, { cdr: k === 'cdrflag', hold: k === 'hold' }); }
