@@ -324,8 +324,8 @@ export function treeMaterials() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vLeaf; varying vec3 vWp; varying float vUpN; uniform float uSnow;')
       /* in snow the leaf trees stand nearly bare: only the thickest clumps and the twigs remain, and what remains turns brown */
       .replace('#include <alphatest_fragment>', `
+        if (uSnow > 0.0 && vLeaf.y > 0.5) { diffuseColor.a *= smoothstep(0.55 + 0.25 * uSnow, 0.98, diffuseColor.a); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.6, 0.3, 0.1))) * vec3(1.5, 1.0, 0.6), 0.85 * uSnow); }
         { vec2 tx = vMapUv * 2048.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.35 * lod)); }   /* keep crowns full as they shrink with distance */
-        if (uSnow > 0.0 && vLeaf.y > 0.5) { if (diffuseColor.a < 0.4 + 0.47 * uSnow) discard; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.6, 0.3, 0.1))) * vec3(1.5, 1.0, 0.6), 0.85 * uSnow); diffuseColor.a = 1.0; }
         #include <alphatest_fragment>
         { float snow = uSnow * smoothstep(0.25, 0.8, vUpN + (fract(sin(dot(floor(vWp.xz * 3.0), vec2(12.9, 78.2))) * 43758.5) - 0.5) * 0.5) * (vLeaf.y > 0.5 ? 0.35 : 0.8) * step(0.001, vLeaf.x + vLeaf.y);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.89, 0.94), snow); }`)

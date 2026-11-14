@@ -63,7 +63,7 @@ function coverSheet() {
 const VERT_PARS = /* glsl */`
   attribute vec4 aSeed;
   uniform highp sampler2D hkHeight; uniform sampler2D hkCol; uniform sampler2D hkC1; uniform sampler2D hkC2;
-  uniform vec4 hkGrid; uniform vec2 hkCellN; uniform vec2 hkCentre; uniform vec3 hkPatch; uniform float hkTime; uniform vec3 hkWind; uniform float uSnow; uniform float hkDry;
+  uniform vec4 hkGrid; uniform vec2 hkCellN; uniform vec2 hkCentre; uniform vec3 hkPatch; uniform float hkTime; uniform vec3 hkWind; uniform float uSnow; uniform float uWet; uniform float hkDry;
   uniform vec3 hkClear[${MAX_CLEAR}];
   varying vec3 vTint; varying vec3 vWp; varying float vUp;
   float hkGround(vec2 xz){
@@ -86,7 +86,7 @@ const VERT_BODY = /* glsl */`
     float crop = max(low, tall); wxz += rdir * snap * crop;
     // what grows here, how thick and how tall
     float open = clamp(1.0 - c1.r * 1.6 - c2.b * 0.75, 0.0, 1.0);
-    float thick = mix(mix(open * hkDry, 0.38, wood), 1.0, crop);
+    float thick = mix(mix(open * hkDry, 0.38, wood), 1.0, crop) * (1.0 - 0.8 * uSnow);   /* under snow only scattered stalks still show */
     float tram = abs(mod(rc + 4.0, 21.0) - 10.5);
     float there = step(aSeed.z, thick) * smoothstep(2.9, 3.6, rd) * (1.0 - crop * step(abs(tram - 0.9), 0.3));
     float h = mix(mix(0.14 + 0.24 * aSeed.w + 0.25 * c2.g, 0.35 + 0.3 * aSeed.w, wood), mix(0.55 + 0.35 * aSeed.w, 1.75 + 0.35 * aSeed.w, tall), crop);
@@ -96,7 +96,7 @@ const VERT_BODY = /* glsl */`
     float edge = 1.0 - smoothstep(R * 0.62, R, distance(wxz, hkCentre));
     float trod = 1.0; for (int i = 0; i < ${MAX_CLEAR}; i++) { vec3 q = hkClear[i]; float r = max(q.z, 0.01); trod *= mix(1.0, smoothstep(r * 0.55, r, distance(wxz, q.xy)), step(0.0, q.z)); }
     float sc = there * edge * hkPatch.z * (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
-    h *= sc * mix(1.0, 0.18, 1.0 - trod); w *= step(0.02, sc);
+    h *= sc * mix(1.0, 0.18, 1.0 - trod) * (1.0 - 0.45 * uSnow * crop); w *= step(0.02, sc);
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
     vec3 lp = vec3(position.x * ca * w - position.z * sa * w, position.y * h, position.x * sa * w + position.z * ca * w);
     float gy = hkGround(wxz) - 0.04;
@@ -105,7 +105,8 @@ const VERT_BODY = /* glsl */`
     float tip = position.y * position.y * h * (0.10 + 0.07 * sway) * hkWind.y;
     lp.xz += vec2(hkWind.x, hkWind.z) * tip;
     transformed = vec3(wxz.x + lp.x, gy + lp.y, wxz.y + lp.z);
-    vTint = mc.rgb * (0.8 + 0.5 * aSeed.z) * mix(0.6, 1.12, position.y);
+    vTint = mc.rgb * (0.8 + 0.5 * aSeed.z) * mix(0.6, 1.12, position.y) * (1.0 - 0.3 * uWet);
+    vTint = mix(vTint, vec3(dot(vTint, vec3(0.4, 0.5, 0.1))) * vec3(1.25, 1.0, 0.62), 0.8 * uSnow);   /* winter: what still stands is dead and straw-coloured */
     vUp = position.y; vWp = transformed;
     vMapUv = (uv * 0.96 + 0.02 + vec2(mod(kind, 2.0), floor(kind / 2.0))) * 0.5; vMapUv.y = (floor(kind / 2.0) + 1.0 - (uv.y * 0.96 + 0.02)) * 0.5;
   }
@@ -124,7 +125,7 @@ export class GroundCover {
     g.instanceCount = 0;
     this.uniforms = {
       hkHeight: { value: null }, hkCol: { value: null }, hkC1: { value: null }, hkC2: { value: null }, hkGrid: { value: new THREE.Vector4(1, 0, 4000, 8000) }, hkCellN: { value: new THREE.Vector2(15.6, 513) },
-      hkCentre: { value: new THREE.Vector2() }, hkPatch: { value: new THREE.Vector3(90, 45, 1) }, hkTime: ENV.time, hkWind: ENV.wind, uSnow: ENV.snow, hkDry: { value: 1 },
+      hkCentre: { value: new THREE.Vector2() }, hkPatch: { value: new THREE.Vector3(90, 45, 1) }, hkTime: ENV.time, hkWind: ENV.wind, uSnow: ENV.snow, uWet: ENV.wet, hkDry: { value: 1 },
       hkClear: { value: Array.from({ length: MAX_CLEAR }, () => new THREE.Vector3(0, 0, -1)) },
     };
     const mat = new THREE.MeshStandardMaterial({ map: coverSheet(), alphaTest: 0.36, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
@@ -135,7 +136,7 @@ export class GroundCover {
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   /* lit like the ground it grows from, so it blends into it */
         .replace('#include <begin_vertex>', VERT_BODY);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vTint; varying vec3 vWp; varying float vUp; uniform float uSnow;')
-        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 2.7; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
+        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 2.4; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
           { vec2 tx = vMapUv * 1024.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.4 * lod)); }`)
         .replace('#include <normal_fragment_begin>', 'vec3 normal = normalize(vNormal); vec3 nonPerturbedNormal = normal;');
     };

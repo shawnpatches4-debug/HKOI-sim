@@ -7,5 +7,5 @@ shift
 pkill -f "http.server $PORT" 2>/dev/null || true
 bash tools/serve_csp.sh "$ROOT/.cache/package" "$PORT" >/dev/null
 export BASE="http://localhost:$PORT/index.html"
-python3 tests/beta/lookset.py "$@" 2>&1 | grep -v "GPU stall"
+python3 tests/beta/lookset.py "$@" 2>&1 | grep --line-buffered -v "GPU stall"
 pkill -f "http.server $PORT" 2>/dev/null || true
