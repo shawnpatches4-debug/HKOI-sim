@@ -128,9 +128,20 @@ async def main():
             ov = await js('(() => { const ids = ["status", "engleft", "engright", "bar", "caption", "subs"], R = ids.map(i => document.getElementById(i).getBoundingClientRect()), out = []; for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { const a = R[i], b = R[j]; if (a.width && b.width && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(ids[i] + " over " + ids[j]); } return out; })()')
             print('engineer display: overlaps', ov); need(not ov, 'engineer boxes overlap: ' + ', '.join(ov))
             await shot('engineer', 3000)
+            # later in the fight: the crew's own lines in the log (their own style), and what was spoken as subtitles if the sound runs here
+            crew = False
+            for k in range(700):
+                await ev('__beta.playFor(0.5)')
+                if await ev('__beta.battle.log.some(l => l.kind === "crew" && l.t <= __beta.battle.t) || !__beta.battle.tank.alive || !!__beta.battle.over'): crew = await ev('__beta.battle.log.some(l => l.kind === "crew" && l.t <= __beta.battle.t)'); break
+            await pg.wait_for_timeout(5000)
+            c = await js('({ t: __beta.battle.t, crewLines: document.querySelectorAll("#log .k-crew").length, line: (document.querySelector("#log .k-crew") || {}).textContent, audio: __beta.sound.ctx ? __beta.sound.ctx.state : "not started", said: __beta.sound.icom ? __beta.sound.icom.said.length : null, subs: document.getElementById("subs").textContent, men: document.getElementById("crewmen").textContent.slice(0, 300) })')
+            print('engineer display, later:', c)
+            need(not crew or c['crewLines'] >= 1, 'crew lines are in the battle log but not in the event log box with their own style')
+            await shot('engineer_late', 2500)
 
         if 'hud' in PARTS: await part(part_6)
         async def part_7():
+            if await ev('__beta.state()') != 'play': await pg.wait_for_timeout(6000); await pg.click('#r-again'); await pg.wait_for_timeout(1500)   # the fight above may have ended
             if await ev('__beta.hud()') != 'engineer': await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
             await ev('__beta.setPlaying(false)')
             names = []
