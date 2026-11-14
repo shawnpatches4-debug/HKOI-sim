@@ -134,6 +134,7 @@ export class Hud {
   // (spectator) the rest is listed too, marked as not yet seen.
   threatList(s) {
     const out = [], T = s.shown, now = s.battle.t, v = s.battle.volleys[s.battle.volleys.length - 1], tv = v ? (s.now == null ? now : s.now) - v.t0 : 0;
+    if (!s.battle.tank.alive || s.battle.over) return out;   /* nothing to warn a destroyed or abandoned vehicle of: the banner goes */
     for (const m of s.volleys.info) {
       if (!m.cued && !s.spectator) continue;
       const brg = Math.atan2(m.p.x - T.e, -m.p.z - T.n) * 180 / Math.PI, rel = ((brg - T.h) % 360 + 360) % 360;

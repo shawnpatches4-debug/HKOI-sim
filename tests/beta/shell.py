@@ -85,7 +85,7 @@ async def main():
 
         if 'title' in PARTS: await part(part_3)
         async def part_4():
-            await pg.click('#o-setup'); await pg.wait_for_timeout(500)
+            await ev('document.querySelector("#o-setup").click()'); await pg.wait_for_timeout(500)
             v = await vis('setup', 't-main'); n = await js('({ crew: document.querySelectorAll("#o-crew button").length, stress: document.querySelectorAll("#o-stress button").length, hud: document.querySelectorAll("#o-hud button").length, ground: document.querySelectorAll("#o-biome button").length, cond: document.querySelectorAll("#o-cond button").length, force: document.querySelectorAll("#o-force button").length, skill: document.querySelectorAll("#o-skill button").length, waves: document.querySelectorAll("#o-waves button").length, mission: document.querySelectorAll("#o-mission button").length, fits: document.querySelector("#setup .card").getBoundingClientRect().bottom <= innerHeight })')
             print('setup:', v, n)
             need(v['setup'] and n['crew'] == 4 and n['stress'] == 2 and n['hud'] == 2 and n['ground'] == 4 and n['cond'] == 8 and n['force'] >= 5 and n['skill'] == 4 and n['waves'] == 3 and n['mission'] == 3, 'the setup panel is missing choices')
@@ -95,11 +95,11 @@ async def main():
             c = await js('({ crew: __beta.set.crew, stress: __beta.set.stress, battle: __beta.battle.crewOpt, saved: JSON.parse(localStorage.getItem("hkoi.setup")), sum: document.getElementById("t-sum").textContent })'); print('setup: crew choice', c['crew'], c['stress'], c['battle'], '|', c['sum'])
             need(c['crew'] == 'veteran' and c['stress'] is False and c['battle'] == {'on': False, 'quality': 'veteran'} and c['saved']['crew'] == 'veteran' and c['saved']['stress'] is False, 'crew level and crew stress did not reach the battle or were not remembered')
             await ev('[...document.querySelectorAll("#o-crew button")].find(x => x.textContent === "Trained").click()'); await ev('[...document.querySelectorAll("#o-stress button")].find(x => x.textContent === "On").click()'); await pg.wait_for_timeout(600)
-            await pg.click('#s-done'); await pg.wait_for_timeout(400); need(not (await vis('setup'))['setup'] and (await vis('go'))['go'], 'Done did not close the setup panel')
+            await ev('document.querySelector("#s-done").click()'); await pg.wait_for_timeout(400); need(not (await vis('setup'))['setup'] and (await vis('go'))['go'], 'Done did not close the setup panel')
 
         if 'setup' in PARTS: await part(part_4)
         async def part_5():
-            await pg.click('#go'); await pg.wait_for_timeout(1500)
+            await ev('document.querySelector("#go").click()'); await pg.wait_for_timeout(1500)
             need(await ev('__beta.state()') == 'play' and await ev('__beta.hud()') == 'engineer', 'Play did not start the battle in the engineer display')
             need(await ev('__beta.battle.crewOpt.quality') in ('trained', None) and await ev('__beta.battle.crewOpt.on') is True, 'the default crew is not trained with stress on')
 
@@ -139,10 +139,10 @@ async def main():
             ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap with a missile inbound: ' + ', '.join(ov))
             await shot('eng_missile' + TAG, 3000)
             # ---- folding a panel is remembered
-            await pg.click('#engright .pan:first-child h3'); await pg.wait_for_timeout(400)
+            await ev('document.querySelector("#engright .pan:first-child h3").click()'); await pg.wait_for_timeout(400)
             f = await js('({ shut: document.querySelector("#engright .pan").classList.contains("shut"), body: getComputedStyle(document.getElementById("defences")).display, saved: localStorage.getItem("hkoi.panels") })'); print('  fold:', f)
             need(f['shut'] and f['body'] == 'none' and f['saved'] and '"def":true' in f['saved'], 'a click on a panel title did not fold it and remember it')
-            await pg.click('#engright .pan:first-child h3'); await pg.wait_for_timeout(300)
+            await ev('document.querySelector("#engright .pan:first-child h3").click()'); await pg.wait_for_timeout(300)
             # ---- several threats at once; a crewman shaken (from the battle if it has one by then, otherwise set by this check and said so)
             await ev('__beta.setPlaying(true)'); n3 = 0
             for k in range(400):
@@ -183,7 +183,7 @@ async def main():
             await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
         if 'log' in PARTS: await part(part_6b)
         async def part_7():
-            if await ev('__beta.state()') != 'play': await pg.wait_for_timeout(6000); await pg.click('#r-again'); await pg.wait_for_timeout(1500)   # the fight above may have ended
+            if await ev('__beta.state()') != 'play': await pg.wait_for_timeout(6000); await ev('document.querySelector("#r-again").click()'); await pg.wait_for_timeout(1500)   # the fight above may have ended
             if await ev('__beta.hud()') != 'engineer': await pg.keyboard.press('h'); await pg.wait_for_timeout(600)
             await ev('__beta.setPlaying(false)')
             await ev('[...document.querySelectorAll("#bar .barrow:last-child button")].find(x => x.textContent.startsWith("View")).click()'); await pg.wait_for_timeout(300)
@@ -219,19 +219,19 @@ async def main():
             need(r['state'] == 'result' and v['result'] and v['r-glance'] and r['res'] and r['score'].isdigit() and len(r['saved']) > 20 and r['fits'], 'the result screen does not show the result, the score and what HKOI saved in one window')
             need(v['r-replay'] and v['r-again'] and v['r-next'] and not v['r-nextrung'] and v['r-numbers'] and v['r-menu'] and not v['bar'] and not v['sline'], 'the result screen has the wrong buttons for a battle outside the ladder')
             await shot('result', 2500)
-            await pg.click('#r-numbers'); await pg.wait_for_timeout(700); need(await ev('!document.getElementById("numbers").hidden && document.getElementById("result").hidden'), 'Run the numbers did not open from the result screen')
+            await ev('document.querySelector("#r-numbers").click()'); await pg.wait_for_timeout(700); need(await ev('!document.getElementById("numbers").hidden && document.getElementById("result").hidden'), 'Run the numbers did not open from the result screen')
             await ev('[...document.querySelectorAll("#numbers .row button")].find(x => x.textContent === "Back").click()'); await pg.wait_for_timeout(700); need(await ev('!document.getElementById("result").hidden && __beta.state() === "result"'), 'Back from the numbers did not return to the result')
-            await pg.click('#r-again'); await pg.wait_for_timeout(1500); need(await ev('__beta.state() === "play" && __beta.battle.t < 20'), 'Again did not restart the battle')
+            await ev('document.querySelector("#r-again").click()'); await pg.wait_for_timeout(1500); need(await ev('__beta.state() === "play" && __beta.battle.t < 20'), 'Again did not restart the battle')
             await ev('[...document.querySelectorAll("#bar button")].find(x => x.textContent === "Menu").click()'); await pg.wait_for_timeout(1200); need(await ev('__beta.state() === "title" && !document.getElementById("title").hidden'), 'Menu did not go back to the title')
             # a ladder raid: the result offers the next rung, and it starts
-            await pg.click('#o-ladder'); await pg.wait_for_timeout(600); await ev('document.querySelectorAll("#ladder .pg-rung button")[0].click()'); await pg.wait_for_timeout(1500); await ev('__beta.runTo(1800)')
+            await ev('document.querySelector("#o-ladder").click()'); await pg.wait_for_timeout(600); await ev('document.querySelectorAll("#ladder .pg-rung button")[0].click()'); await pg.wait_for_timeout(1500); await ev('__beta.runTo(1800)')
             for i in range(120):
                 if await ev('__beta.state() === "result"'): break
                 await pg.wait_for_timeout(1000)
             v = await vis('r-nextrung', 'r-next'); print('ladder result:', v, await ev('document.getElementById("r-grade").textContent'), '| crew', await js('__beta.battle.crewOpt'))
             need(v['r-nextrung'] and not v['r-next'], 'a ladder result does not offer the next rung')
             await shot('result_ladder', 2500)
-            await pg.click('#r-nextrung'); await pg.wait_for_timeout(1500); need(await ev('__beta.state() === "play" && __beta.set.custom && __beta.set.custom.rung === "r2"'), 'Next rung did not start rung 2')
+            await ev('document.querySelector("#r-nextrung").click()'); await pg.wait_for_timeout(1500); need(await ev('__beta.state() === "play" && __beta.set.custom && __beta.set.custom.rung === "r2"'), 'Next rung did not start rung 2')
             await ev('[...document.querySelectorAll("#bar button")].find(x => x.textContent === "Menu").click()'); await pg.wait_for_timeout(800)
             need(await ev('document.getElementById("errbar").hidden'), 'the red error bar is showing: ' + (await ev('document.getElementById("errbar").textContent'))[:200])
 
