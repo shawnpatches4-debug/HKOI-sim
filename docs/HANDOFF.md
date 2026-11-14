@@ -25,10 +25,13 @@ WAVE 1 (running; branches are the worktrees listed by `git worktree list`):
 - Effects: the HKOI engagement made readable (tracers, blooms, highlighted cloud, guidance line that is cut), missiles and drones (incl. drones flying in), Trophy, explosions, marks (fx.js, volleyview.js). Port 8773.
 - Interior: the old page's turret and hull interior and the four crew seats plus cutaway, ported from src/cab*.js to an ES module, WITHOUT crew figures (parked; proposal pictures only). Port 8774.
 - Lead: battles in waves with lulls (multi-minute), pacing and balance, the "run the numbers" engine (four setups on the same battles).
+- Sound (added 14 Nov, Shawn: "push the sound, make the crews sound human, the old ones were quite robotic"): human recordings only for the tank crew (the pack), no machine speech, intercom processing and queue, lines driven by battle.events, a proper mixer with an inside state; effects stay synthesised behind a slot manifest until his packs arrive. Port 8775.
+- Animation (added 14 Nov, Shawn: "buttery smooth"): flow, feet on real ground, the listed faults, life at the weapon, reload and pack-up shown. Port 8776. Told Shawn the real jump needs motion-capture clips (Mixamo) for the same skeleton: he may send some.
+- Lead, done so far: waves with lulls (opt.waves; setup "Battle length"), stalemate rule, src/battle/study.js (run the numbers engine; tests/battle/study.js), src/battle/ladder.js (ten rungs + debrief score; tests/battle/ladder.js), battle.events (structured event list for director, captions, voices, debrief).
+SHAWN'S TIME BOX: "work non stop for 16 hours and I'll give feedback" (said about 02:15 UTC 14 Nov). HELD by him: support calls (artillery, wingman).
 WAVE 2 (after wave 1 is merged): film director with captions, slow motion and replays from another angle; title screen over a live
 battle, clean HUD, simple and engineer modes (this helper will own src/app/main.js and index.tpl.html); armour and damage model with
-X-ray of the hit; run-the-numbers page, debrief with score, ladder of ten raids; sound once Shawn's packs arrive (only the crew voice
-pack has arrived so far).
+X-ray of the hit; run-the-numbers page, debrief with score, ladder of ten raids; (sound moved into wave 1, see above).
 THEN: merge everything, full check on every mission, force, terrain and condition, performance figures, ONE publish, Notion entry.
 If a helper's branch exists and is not merged, review its report (it is in the session transcript only: if lost, read the branch's
 commits and its sheets under the scratchpad) and merge it by hand.
