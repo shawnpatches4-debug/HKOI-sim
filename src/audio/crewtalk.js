@@ -102,7 +102,7 @@ export class CrewTalk {
   _ask(t, who, ev, opt) { opt = opt || {};
     { const why = opt.evenFrozen ? (this._mute(who) === 'down' ? 'down' : null) : this._mute(who); if (why) { this.trace.push([+t.toFixed(2), who, ev + ' (' + why + ': he says nothing)', 'silent']); return false; } }
     /* each man's own stress (src/battle/crew.js) picks his take: a shaken loader sounds shaken while a steady commander does not. The battle-wide level still applies up to 'tense'; lines that are urgent by nature (hit, wounded) keep their own level. */
-    { const b = this.battle; if (who !== 'HQ' && opt.level != null && b && b.crewVoiceLevel && b.crewState && b.crewState().on) opt = Object.assign({}, opt, { level: Math.max(opt.level >= 2 && (ev === 'hit' || ev === 'wound' || ev === 'loader_down' || ev === 'contact' || ev === 'bail' || ev === 'freeze' || /_down$/.test(ev)) ? 2 : Math.min(1, opt.level), b.crewVoiceLevel(who) || 0) }); }
+    { const b = this.battle; if (who !== 'HQ' && opt.level != null && b && b.crewVoiceLevel && b.crewState && b.crewState().on) opt = Object.assign({}, opt, { level: Math.max(opt.level >= 2 && (ev === 'hit' || ev === 'wound' || ev === 'loader_down' || ev === 'contact' || ev === 'bail' || ev === 'freeze' || /^(cdr|gnr|drv)_down$/.test(ev)) ? 2 : Math.min(1, opt.level), b.crewVoiceLevel(who) || 0) }); }
     const ok = this.net.request(who, ev, opt); this.trace.push([+t.toFixed(2), who, ev, ok ? 'said' : 'silent']); if (this.trace.length > 600) this.trace.splice(0, 200); return ok; }
   _silent(t, who, what) { this.trace.push([+t.toFixed(2), who, what, 'silent']); }
 

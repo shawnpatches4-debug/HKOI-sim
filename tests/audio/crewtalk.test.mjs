@@ -88,13 +88,13 @@ for (const quality of ['green', 'trained', 'expert']) {
     const asked = [], net = { ready: true, has: (who, ev) => !!(REL[who] && REL[who][ev]), request(who, ev, o) { if (!this.has(who, ev)) return false; asked.push({ t: b.t, who, ev, level: o.level, v: b.volleys.length }); return true; }, flush() {} };
     const talk = new CrewTalk(net, { warn() {}, blip() {}, smoke() {} }); let n0 = 0;
     while (b.t < 600 && !(b.over && b.t > (b._overT || (b._overT = b.t)) + 5)) {
-      b.step(); talk.update(b, b.t, { mission: 'hold' }); const S = b.crewState();
+      const S0 = b.crewState(); b.step(); talk.update(b, b.t, { mission: 'hold' }); const S = b.crewState();   /* S0: the states before this step (a man's state can change in the very step he speaks) */
       for (const a of asked.slice(n0)) {
         if (a.who === 'HQ' || a.who === 'ANY') continue; const m = S.who[a.who.toLowerCase()], lv = a.level == null ? 1 : a.level;
         byLevel[lv]++; const st = byState[m.state] || (byState[m.state] = [0, 0, 0]); st[lv]++;
         if (m.status === 'down' || (/^frozen/.test(m.busy || '') && a.ev !== 'freeze')) {   /* his one line as he locks up is allowed */ mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
         if (m.state === 'panicked' && lv !== 2) bad(quality, 'a panicked man was not given his shouted take', a.who, a.ev, lv);
-        if (m.state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down', 'gnr_down', 'drv_down', 'bail', 'freeze'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
+        if (m.state === 'steady' && S0.who[a.who.toLowerCase()].state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down', 'gnr_down', 'drv_down', 'bail', 'freeze'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
       }
       n0 = asked.length;
     }
