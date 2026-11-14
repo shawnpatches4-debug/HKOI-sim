@@ -297,7 +297,7 @@ export class Interior {
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
     LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * (1.3 + 1.2 * this.st.cup1 + 3.2 * this.st.cup2)); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
-    const a = (dome && !dead ? 0.045 * (FX.emergency ? 0.35 : 1) : 0.012) + (seat ? 0 : dayK * 0.5);   /* seen from outside (cutaway, a man in a hatch) daylight falls on it */ SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
+    const a = (dome && !dead ? 0.045 * (FX.emergency ? 0.35 : 1) : 0.012) + (seat && !this.headOut ? 0 : dayK * 0.5);   /* seen from outside (cutaway, a man in a hatch) daylight falls on it */ SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
     // flash of the penetration, glow of a fire, and the smoke
     if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
     const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
@@ -321,7 +321,7 @@ export class Interior {
     // ---- displays
     { const bx = SEATS[mode] && !cut ? (this.headOut ? (mode === 'in_ldr' ? 'hatch' : null) : mode) : mode === 'outside' && this.st.hatch > 0.02 ? 'hatch' : null; this._box(bx);
       this._cap(bx && bx !== 'hatch' ? 'hide' : !cut && this.st.cup1 + this.st.cup2 > 0.01 ? 'cut' : 'whole'); }   /* the outside model's own closed commander's lid: left out inside the seat box, cut away while the hatch is open */
-    this._sights(dt, s, seat, cut); if (mode === 'outside' || this.headOut) { this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
+    this._sights(dt, s, seat, cut); if (mode === 'outside' || (this.headOut && mode !== 'in_cdr')) {   /* the commander up in his cupola still sees the inside of it below him, lit by its own lamps and the daylight */ this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
   _cupPose() { const h = this.part && this.part.cupHatch; if (!h) return;   /* not built yet: the pose is applied when it is */
@@ -352,10 +352,12 @@ export class Interior {
     // the commander: his head where the viewer's eye is when the viewer is in his seat; otherwise seated with the hatch closed, standing with
     // his head in the gap under the raised lid when it is open-protected, head and shoulders out when it is open. Hands on his panels, on the
     // inside of the ring, or on top of it.
-    { const C = men.cdr, k1 = this._cupK(0), k2 = this._cupK(1), [CX, CZ] = DIM.CUP, me = this.mode === 'in_cdr' && !this.eyeOff && this.cdrEye, ok = C.status === 'ok' && C.state !== 'panicked';
+    { const C = men.cdr, k1 = this._cupK(0), k2 = this._cupK(1), [CX, CZ] = DIM.CUP, me = this.mode === 'in_cdr' && !this.eyeOff && this.cdrEye && k1 > 0.02, ok = C.status === 'ok' && C.state !== 'panicked';
       if (me) { C.head[0] = this.cdrEye.x; C.head[1] = this.cdrEye.y; C.head[2] = this.cdrEye.z; } else if (ok && k1 > 0) { this._cdrEye(1, 0, _v); C.head[0] = _v.x; C.head[1] = _v.y; C.head[2] = _v.z; }
       C.rise = ok || me ? Math.max(0.8 * k1, k2) : 0;
-      const hand = (i, x0, y0, z0, sx) => { const H = C.hands[i]; let x = x0 + (CX + sx * 0.26 - x0) * k1, y = y0 + (DIM.CUPTOP - 0.055 - y0) * k1, z = z0 + (CZ - 0.26 - z0) * k1; x += (CX + sx * 0.3 - x) * k2; y += (DIM.CUPTOP + 0.035 - y) * k2; z += (CZ - 0.24 - z) * k2; H[0] = x; H[1] = y; H[2] = z; };
+      const fy = me ? (((SEATS.in_cdr.yaw0 + this.look.yaw) % 360 + 540) % 360 - 180) : 0, fs = Math.sin(fy * DEG), fc = Math.cos(fy * DEG); if (me) C.face = fy;   /* up in his hatch his body turns with his head (it turns in the cupola), so his own arms never swing across his view */
+      const rim = (sx, a, f) => [CX + fc * sx * a + fs * f, 0, CZ - fc * f + fs * sx * a];   /* a point on the rim: a to his side, f ahead of him */
+      const hand = (i, x0, y0, z0, sx) => { const H = C.hands[i], p1 = rim(sx, 0.26, 0.26), p2 = rim(sx, 0.3, 0.24); let x = x0 + (p1[0] - x0) * k1, y = y0 + (DIM.CUPTOP - 0.055 - y0) * k1, z = z0 + (p1[2] - z0) * k1; x += (p2[0] - x) * k2; y += (DIM.CUPTOP + 0.035 - y) * k2; z += (p2[2] - z) * k2; H[0] = x; H[1] = y; H[2] = z; };
       hand(0, 0.5, 0.16, 0.02, -1); hand(1, 0.96, 0.04, 0.14, 1); }
     { const H = men.ldr.hands, ra = this.roundAt; if (ra && this.loadF >= 0.1) { H[0][0] = ra.x - 0.05; H[0][1] = ra.y - 0.03; H[0][2] = ra.z - 0.12; H[1][0] = ra.x + 0.04; H[1][1] = ra.y - 0.02; H[1][2] = ra.z + (this.loadF > 0.56 ? 0.5 : 0.3); }   /* left hand under the nose, right hand at the base: he rams with the right */
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }

@@ -148,7 +148,7 @@ async def main():
                 if '"crewReady":true' in st or '"crewFailed":true' in st: break
                 await pg.wait_for_timeout(1500)
             print('crew', st)
-            await pg.evaluate("void (window.cupv = (dist, up, off) => { const I = __beta.interior, s = __beta.scene, c = s.camera, V = __beta.THREE; const p = I.tur.localToWorld(new V.Vector3(0.52, 1.0, 0.36)); const a = ((I.turBrg || 0) + off) * Math.PI / 180; __beta.cams.mode = 'free'; s.controls.enabled = false; c.up.set(0, 1, 0); c.position.set(p.x + Math.sin(a) * dist, p.y + up, p.z - Math.cos(a) * dist); c.lookAt(p.x, p.y - 0.15, p.z); })")
+            await pg.evaluate("void (window.cupv = (dist, up, off) => { const s = __beta.scene, c = s.camera, V = __beta.THREE, tu = __beta.tank.turret; tu.updateWorldMatrix(true, false); const a = off * Math.PI / 180, p = tu.localToWorld(new V.Vector3(-0.52, 1.0, -0.36)), q = tu.localToWorld(new V.Vector3(-0.52 - Math.sin(a) * dist, 1.0 + up, -0.36 + Math.cos(a) * dist)); __beta.cams.mode = 'free'; s.controls.enabled = false; c.up.set(0, 1, 0); c.position.copy(q); c.lookAt(p.x, p.y - 0.15, p.z); })")
             for st, nm in [(0, 'closed'), (1, 'open_protected'), (2, 'open')]:
                 await pg.evaluate(f"void (__beta.interior.cupUser = true, __beta.interior.setCupolaHatch({st}, true))")
                 for vn, y, p in [('fwd', 0, 10), ('right', 90, 10), ('left', -90, 10), ('rear', 178, 10), ('down', 0, -30)]:
