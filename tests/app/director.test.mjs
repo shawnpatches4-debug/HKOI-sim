@@ -45,14 +45,14 @@ for (const s of cases) {
   for (let i = 0; i < C.length; i++) { const c = C[i];
     if (/[–—]|undefined|NaN|null|  /.test(c.text)) fail(tag, 'caption text', JSON.stringify(c.text));
     if (i && c.t0 < C[i - 1].t1 - 1e-6) fail(tag, 'two captions at once', c.t0, c.text);
-    if (i < C.length - 1 && C[i + 1].t0 - c.t0 < LIMITS.capMin - 1e-6) fail(tag, 'caption shown too briefly', c.t0, c.text); }
+    const gap = i < C.length - 1 ? C[i + 1].t0 - c.t0 : 9; if (gap < LIMITS.capFloor - 1e-6 || gap < LIMITS.capMin - 1e-6 && !/blind|Trophy fires| hits the |destroyed|shoots the|flies wide|into the ground/.test(C[i + 1].text)) fail(tag, 'caption shown too briefly', c.t0, c.text, gap.toFixed(1), '->', C[i + 1] && C[i + 1].text); }
   // every hit, every Trophy shot and every cut by the cloud is told, and filmed
   for (const v of b0.volleys) {
     for (const th of v.rec.threats) if (th.state === 'hit' && v.t0 + th.viz.end.t < T - 3) { const t = v.t0 + th.viz.end.t, sh = ref.shotAt(t);
-      if (!C.some(c => / hits the /.test(c.text) && Math.abs(c.t0 - t) < 6.5)) fail(tag, 'a hit with no caption at', t.toFixed(1));
+      if (!C.some(c => / hits the /.test(c.text) && c.t0 - t > -0.1 && c.t0 - t < 1.6)) fail(tag, 'a hit with no caption within 1.5 s at', t.toFixed(1));
       if (!sh || sh.rig !== 'low' && sh.rig !== 'hold') fail(tag, 'a hit not filmed from the low wide angle at', t.toFixed(1), sh && (sh.rig || sh.cam));
       if (!ref.slowAt(t)) fail(tag, 'no slow motion at the hit', t.toFixed(1)); }
-    for (const bu of v.rec.bursts) if (bu.res && bu.res.cut && bu.res.outcome !== 'drift_hit' && bu.res.t_cut != null && v.t0 + bu.res.t_cut < T - 3 && !C.some(c => /blind/.test(c.text) && Math.abs(c.t0 - v.t0 - bu.res.t_cut) < 6.5)) fail(tag, 'a cut by the cloud with no caption at', (v.t0 + bu.res.t_cut).toFixed(1));
+    for (const bu of v.rec.bursts) if (bu.res && bu.res.cut && bu.res.outcome !== 'drift_hit' && bu.res.t_cut != null && v.t0 + bu.res.t_cut < T - 3 && !C.some(c => /blind/.test(c.text) && c.t0 - v.t0 - bu.res.t_cut > -0.1 && c.t0 - v.t0 - bu.res.t_cut < 2.1)) fail(tag, 'a cut by the cloud with no caption within 2 s at', (v.t0 + bu.res.t_cut).toFixed(1));
   }
   const nT = b0.volleys.reduce((n, v) => n + (v.rec.aps || []).length, 0), cT = C.filter(c => /^Trophy fires/.test(c.text)).length; if (cT > nT) fail(tag, 'more Trophy captions than Trophy shots', cT, nT);
   if (show && s.force === 'standoff' && s.biome === 'farmland' && s.seed === 1) {

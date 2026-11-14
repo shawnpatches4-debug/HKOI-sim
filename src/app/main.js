@@ -7,6 +7,8 @@ import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { Interior } from '../render/interior.js';
 import { EnemyViews } from './enemyviews.js';
 import { initPages } from './pages.js';
+import { Director } from './director.js';
+import { XRayPanel } from './xraypanel.js';
 import { MapView } from './mapview.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
@@ -212,6 +214,7 @@ function buildBar() {
   const sd = el('button', 'btn' + (sound.on ? ' on' : ''), 'Sound'); sd.onclick = () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); }; g.append(sd);
   const lg = el('button', 'btn' + (showLog ? ' on' : ''), 'Log'); lg.onclick = () => { showLog = !showLog; store.set('log', showLog); buildBar(); show(); }; g.append(lg);
   const pf = el('button', 'btn' + (showPerf ? ' on' : ''), 'FPS'); pf.title = 'Frame rate and scene load'; pf.onclick = () => { showPerf = !showPerf; store.set('perf', showPerf); buildBar(); show(); }; g.append(pf);
+  g.append(director.button());
   const mn = el('button', 'btn', 'Menu'); mn.onclick = () => { replayStop(); state = 'title'; playing = false; cams.set('orbit'); show(); }; g.append(mn);
 }
 $('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
@@ -299,6 +302,9 @@ function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length
 const hkV = new THREE.Vector3();
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
+// the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
+const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, refresh() { if (state === 'play') buildBar(); } };
+const director = new Director(film), xray = new XRayPanel(film);
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
 function frame(now) {
@@ -317,6 +323,7 @@ function frameBody(now) {
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   drawCrew(dt); drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
+  director.update(dt); xray.update();
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else { /* slow turn around the vehicle behind the menus */ titleA += dt * 0.05; const T = battle.tank, r = 60; scene.camera.up.set(0, 1, 0); scene.camera.fov = 45; scene.camera.updateProjectionMatrix(); scene.camera.position.copy(scene.at(T.e + Math.sin(titleA) * r, T.n + Math.cos(titleA) * r, 0)); scene.camera.position.y = Math.max(scene.camera.position.y + 3, world.h(T.e, T.n) + 16); scene.camera.lookAt(scene.at(T.e, T.n, 2)); }
   if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
