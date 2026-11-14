@@ -27,21 +27,21 @@ const STATES = ['steady', 'strained', 'shaken', 'panicked'];
 // Shifts of the face bones for a channel at full strength (1.0): [bone, up, forward, outward] in millimetres, in the head's
 // own directions. A bone named without a side is used on both sides (R... and L...); "M..." bones sit on the centre line.
 export const SHIFT = {
-  browUp: [['InnerEyebrow', 5, 0.5, 0], ['MMiddleEyebrow', 3.5, 0.5, 0], ['OuterEyebrow', 2.5, 0, 0]],          // fear, surprise
-  browDown: [['InnerEyebrow', -3, 0.8, -2], ['MMiddleEyebrow', -2.2, 1, 0], ['OuterEyebrow', -0.8, 0, 0]],      // strain, pain
+  browUp: [['InnerEyebrow', 7.5, 0.8, 0], ['MMiddleEyebrow', 5.5, 0.8, 0], ['OuterEyebrow', 4, 0, 0]],          // fear, surprise
+  browDown: [['InnerEyebrow', -4.5, 1.2, -3], ['MMiddleEyebrow', -3.3, 1.5, 0], ['OuterEyebrow', -1.2, 0, 0]],      // strain, pain
   lid: [['EyeBlinkTop', -7.5, 0.6, 0], ['EyeBlinkBottom', 1.6, 0.2, 0]],                                        // eye shut (blink, flinch, dead)
   wide: [['EyeBlinkTop', 2.4, 0, 0], ['EyeBlinkBottom', -1.1, 0, 0]],                                           // eyes wide
   squeeze: [['Cheek', 2.8, 0.6, 0], ['EyeBlinkBottom', 1.4, 0.2, 0], ['InnerEyebrow', -2.2, 0.5, -1.5]],        // eyes screwed up
-  stretch: [['MouthCorner', -0.5, -1, 4]],                                                                      // mouth pulled wide
-  frown: [['MouthCorner', -3, 0, 0.8]],                                                                         // corners down
+  stretch: [['MouthCorner', -0.8, -1.5, 6.5]],                                                                      // mouth pulled wide
+  frown: [['MouthCorner', -5, 0, 1.2]],                                                                         // corners down
   snarl: [['MUpperLip', 2, 0.6, 0], ['Upperlip', 2.2, 0.6, 0]],                                                 // upper lip lifted (grimace)
-  tight: [['MUpperLip', -0.7, -0.9, 0], ['MBottomLip', 0.7, -0.9, 0], ['MouthCorner', 0, -0.4, -1]],            // lips pressed, jaw set
+  tight: [['MUpperLip', -1.1, -1.4, 0], ['MBottomLip', 1.1, -1.4, 0], ['MouthCorner', 0, -0.6, -1.8]],            // lips pressed, jaw set
 };
 // Turns at full strength, in radians: the jaw about the ear-to-ear line, the head and the eyes about the same line (pitch),
 // the upright line (yaw) and the nose line (roll). Shoulders: both collar bones lifted, in millimetres.
 export const TURN = { jaw: 0.3, eyeYaw: 0.38, eyePitch: 0.24, shoulders: 14 };
 // The limits every channel is held to, so no state can push the face past what the skin stands (found by looking at pictures).
-const LIMIT = { browUp: 1, browDown: 1, lid: 1, wide: 1, squeeze: 1, stretch: 1, frown: 1, snarl: 1, tight: 1, jaw: 1, pitch: 0.7, yaw: 0.5, roll: 0.4, eyeYaw: 1, eyePitch: 1, shoulders: 1.2, pallor: 1 };
+const LIMIT = { browUp: 1, browDown: 1, lid: 1, wide: 1, squeeze: 1, stretch: 1, frown: 1, snarl: 1, tight: 1, jaw: 1, pitch: 0.32, yaw: 0.5, roll: 0.4,   /* a head ducked further than 0.32 hides the face under the helmet */ eyeYaw: 1, eyePitch: 1, shoulders: 1.2, pallor: 1 };
 const CHANNELS = Object.keys(LIMIT);
 // how quickly each channel follows its target (per second; higher is quicker): lids snap, heads are heavy
 const SPEED = { lid: 34, squeeze: 26, wide: 16, jaw: 22, eyeYaw: 20, eyePitch: 20, pitch: 9, yaw: 7, roll: 7, shoulders: 9, pallor: 0.8 };
@@ -85,9 +85,9 @@ export class Faces {
       ROLES.forEach((r, i) => { this.men[r] = this.rig(cloneSkinned(src[MODEL[r]]), r, i); });
       // lit like the turret: a warm lamp above and in front, cool light off the displays from below and the side, little else
       const F = this.men.cdr.F, U = this.men.cdr.U, L = this.men.cdr.L;
-      this.scene.add(new THREE.HemisphereLight(0xb8c8bc, 0x141a16, 0.55));
-      const lamp = new THREE.DirectionalLight(0xffe2bd, 2.3); lamp.position.copy(F).multiplyScalar(1).addScaledVector(U, 1.3).addScaledVector(L, 0.7); this.scene.add(lamp);
-      const glow = new THREE.DirectionalLight(0x8fe6c8, 0.7); glow.position.copy(F).multiplyScalar(0.6).addScaledVector(U, -0.8).addScaledVector(L, -1); this.scene.add(glow);
+      this.scene.add(new THREE.HemisphereLight(0xc8d6cc, 0x2a322d, 1.25));
+      const lamp = new THREE.DirectionalLight(0xffe2bd, 3.4); lamp.position.copy(F).multiplyScalar(1).addScaledVector(U, 1.3).addScaledVector(L, 0.7); this.scene.add(lamp);
+      const glow = new THREE.DirectionalLight(0x8fe6c8, 1.1); glow.position.copy(F).multiplyScalar(0.6).addScaledVector(U, -0.8).addScaledVector(L, -1); this.scene.add(glow);
       this.ok = true;
     } catch (e) { this.failed = true; console.warn('crew portraits not available:', e && e.message); }
   }
@@ -120,7 +120,7 @@ export class Faces {
     const face = eyes.clone().sub(wp(head)), nodSign = _v.crossVectors(L, face.lengthSq() > 1e-8 ? face : F).dot(U) < 0 ? 1 : -1, yawSign = _v.crossVectors(U, F).dot(L) > 0 ? 1 : -1;
     // his own skin, so it can lose its colour; the commander's kit darker than the gunner's
     const skin = []; fig.traverse(o => { if (!o.isMesh) return; o.frustumCulled = false; o.castShadow = false; const mats = [].concat(o.material).map(m => { const c = m.clone(); c.metalness = 0; c.roughness = Math.max(0.7, c.roughness || 0); if (/head/i.test(m.name)) skin.push(c); else if (role === 'cdr' && /helmet|equipment/i.test(m.name)) c.color.multiplyScalar(0.55); return c; }); o.material = Array.isArray(o.material) ? mats : mats[0]; });
-    const cam = new THREE.PerspectiveCamera(27, W / H, 0.1, 6); cam.position.copy(eyes).addScaledVector(F, 0.86).addScaledVector(U, 0.02).addScaledVector(L, role === 'gnr' ? -0.07 : role === 'drv' ? 0.06 : 0.02); cam.up.copy(U); cam.lookAt(_v.copy(eyes).addScaledVector(U, -0.075)); cam.updateMatrixWorld(true);
+    const cam = new THREE.PerspectiveCamera(27, W / H, 0.1, 6); cam.position.copy(eyes).addScaledVector(F, 0.7).addScaledVector(U, 0.0).addScaledVector(L, role === 'gnr' ? -0.07 : role === 'drv' ? 0.06 : 0.02); cam.up.copy(U); cam.lookAt(_v.copy(eyes).addScaledVector(U, -0.045)); cam.updateMatrixWorld(true);
     return { role, i, seed: i * 1.7 + 1, g, head, rec, shifts, jaw, hd, eyeL, eyeR, clav, jawSign, nodSign, yawSign, skin, cam, U, F, L, sp: new Springs(), speak: 0 };
   }
 
@@ -132,7 +132,7 @@ export class Faces {
     if (hurt && (N.w == null || t < N.w)) N.w = t; if (!hurt && !down) N.w = null; if (down && (N.d == null || t < N.d)) N.d = t; if (!down) N.d = null;
     if (down) {   /* out of action or dead: the head sinks, the eyes close (a dead man's stay half open), the colour drains */
       const d = sat((t - N.d) / 1.6), side = M.i % 2 ? 1 : -1, dead = /killed/.test(m.busy || '');
-      return { lid: dead ? 0.62 : 0.95, jaw: 0.18 * d, pitch: 0.55 * d, roll: 0.26 * d * side, yaw: 0.14 * side * d, shoulders: -0.4 * d, pallor: dead ? d : 0.7 * d };
+      return { lid: dead ? 0.62 : 0.95, jaw: 0.18 * d, pitch: 0.24 * d, roll: 0.3 * d * side, yaw: 0.16 * side * d, shoulders: -0.4 * d, pallor: dead ? d : 0.7 * d };
     }
     const T = { browUp: 0.9 * fear, browDown: 0.85 * tense * (1 - fear), wide: 0.12 * tense + 0.8 * fear, lid: 0, squeeze: 0, jaw: 0.06 * fear, stretch: 0, frown: 0.25 * tense + 0.45 * fear, snarl: 0, tight: 0.8 * tense * (1 - fear),
       pitch: 0, yaw: 0, roll: 0, eyeYaw: 0, eyePitch: k === 0 ? 0.35 : 0.1, shoulders: 0, pallor: 0.25 * fear };
@@ -147,9 +147,9 @@ export class Faces {
     if (frozen) { T.wide = 1; T.browUp = 1; T.jaw = 0.24; T.eyeYaw = 0; T.eyePitch = 0; T.yaw = 0; T.lid = Math.abs(t % 6.3 - 3) < 0.09 ? 1 : 0; T.squeeze = 0; T.roll = 0.015 * Math.sin(t * 31 + sd); T.pitch = 0.06; }
     if (speaking) { const syl = Math.max(0, Math.sin(t * 19 + sd) * 0.6 + Math.sin(t * 31) * 0.4); T.jaw = Math.max(T.jaw, 0.1 + syl * (0.4 + fear * 0.3)); T.stretch = Math.max(T.stretch, fear * 0.4); T.tight = 0; }
     // a blast close by: flinch and screw the eyes up, then stare; a hit on the vehicle: thrown, mouth open
-    if (ev.near < 0.35) { T.squeeze = 1; T.lid = 1; T.wide = 0; T.pitch = 0.3; T.shoulders = 1; T.frown = 0.9; T.stretch = 0.6; }
+    if (ev.near < 0.35) { T.squeeze = 1; T.lid = 1; T.wide = 0; T.pitch = 0.2; T.shoulders = 1; T.frown = 0.9; T.stretch = 0.6; }
     else if (ev.near < 1.2 && k > 0) { T.wide = 1; T.browUp = 1; T.jaw = Math.max(T.jaw, 0.22); T.yaw = Math.sin(ev.near * 11 + sd) * 0.25; }
-    if (ev.hit < 0.45) { T.squeeze = 1; T.lid = 1; T.wide = 0; T.pitch = 0.5; T.roll = (M.i % 2 ? 0.25 : -0.25); T.shoulders = 1; T.jaw = 0.9; T.stretch = 1; }
+    if (ev.hit < 0.45) { T.squeeze = 1; T.lid = 1; T.wide = 0; T.pitch = 0.3; T.roll = (M.i % 2 ? 0.25 : -0.25); T.shoulders = 1; T.jaw = 0.9; T.stretch = 1; }
     else if (ev.hit < 2) { T.wide = 1; T.browUp = 1; T.jaw = 0.5; T.stretch = 0.5; T.yaw = Math.sin(ev.hit * 9 + sd * 2) * 0.3; T.shoulders = 0.8; }
     if (hurt) {   /* the grimace of a wound, with a gasp every few seconds */
       const age = t - N.w, gasp = ((t + sd) % 3.4) < 0.5;
@@ -208,15 +208,15 @@ export class Faces {
     const hurt = m.status === 'wounded', down = m.status === 'down', N = this.note[M.role] || {};
     if ((hurt || down) && s.graphic) {
       const age = Math.max(0, s.now - (N.w != null ? N.w : N.d != null ? N.d : s.now)), grow = sat(age / 9), sd = M.seed;
-      _v.setFromMatrixPosition(M.head.matrixWorld).addScaledVector(M.U, 0.115).addScaledVector(M.F, 0.09).addScaledVector(M.L, (M.i % 2 ? 0.035 : -0.035)).project(M.cam);
+      _v.setFromMatrixPosition(M.head.matrixWorld).addScaledVector(M.U, 0.098).addScaledVector(M.F, 0.085).addScaledVector(M.L, (M.i % 2 ? 0.05 : -0.05)).project(M.cam);   /* on the cheekbone, below the helmet's rim */
       const px = (_v.x + 1) / 2 * cv.width, py = (1 - _v.y) / 2 * cv.height, u = cv.height / 200;
       x.save(); x.lineCap = 'round';
-      x.fillStyle = 'rgba(96,6,6,.9)'; x.beginPath(); x.ellipse(px, py, 5 * u, 3.2 * u, 0.4, 0, 6.3); x.fill();
-      for (let k = 0; k < 3; k++) { const ox = (hash(k, sd) - 0.5) * 8 * u, len = (14 + 46 * hash(k, sd + 2)) * grow * u; x.strokeStyle = `rgba(${120 - k * 12},8,8,${0.85 - k * 0.12})`; x.lineWidth = (2.6 - k * 0.5) * u; x.beginPath(); x.moveTo(px + ox, py); x.quadraticCurveTo(px + ox + (hash(k, sd + 4) - 0.5) * 9 * u, py + len * 0.5, px + ox * 1.3 + (hash(k, sd + 6) - 0.5) * 7 * u, py + len); x.stroke(); }
-      x.fillStyle = 'rgba(110,8,8,.6)'; for (let k = 0; k < 7; k++) { x.beginPath(); x.arc(px + (hash(k, sd + 11) - 0.5) * 60 * u, py + (40 + hash(k, sd + 13) * 95) * u, (0.8 + hash(k, sd + 15) * 2.2) * u, 0, 6.3); x.fill(); }
+      x.fillStyle = 'rgba(70,4,4,.85)'; x.beginPath(); x.ellipse(px, py, 4 * u, 2.4 * u, 0.5, 0, 6.3); x.fill();
+      for (let k = 0; k < 3; k++) { const ox = (hash(k, sd) - 0.5) * 6 * u, len = (10 + 34 * hash(k, sd + 2)) * grow * u; x.strokeStyle = `rgba(${92 - k * 10},5,5,${0.8 - k * 0.14})`; x.lineWidth = (1.7 - k * 0.35) * u; x.beginPath(); x.moveTo(px + ox, py); x.quadraticCurveTo(px + ox + (hash(k, sd + 4) - 0.5) * 9 * u, py + len * 0.5, px + ox * 1.3 + (hash(k, sd + 6) - 0.5) * 7 * u, py + len); x.stroke(); }
+      x.fillStyle = 'rgba(84,6,6,.55)'; for (let k = 0; k < 7; k++) { x.beginPath(); x.arc(px + (hash(k, sd + 11) - 0.5) * 60 * u, py + (40 + hash(k, sd + 13) * 95) * u, (0.8 + hash(k, sd + 15) * 2.2) * u, 0, 6.3); x.fill(); }
       x.restore();
     }
-    if (down) { x.fillStyle = 'rgba(4,6,5,.5)'; x.fillRect(0, 0, cv.width, cv.height); }
+    if (down) { x.fillStyle = 'rgba(4,6,5,.3)'; x.fillRect(0, 0, cv.width, cv.height); }
   }
   // forget where the springs were (a new battle, a rewind)
   reset() { this.tLast = null; this.note = {}; this.acc = 0; }
