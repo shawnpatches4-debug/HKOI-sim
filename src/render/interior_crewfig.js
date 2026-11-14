@@ -113,7 +113,7 @@ export class CrewFigures {
     const yc = stiff(0.035); for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) { const s = r.hand[i][k], gk = M.hands[i][k]; if (first) { s.x = gk; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, gk, yc, dt, 1); s.g = gk; }
     r.fresh = false;
     // ---- stand him so that his eyes are at the eye point, then put his hands on the controls
-    fk(r.rig, r.draw); const ry = r.g.rotation.y, c = Math.cos(ry), s = Math.sin(ry), hp = Wp[J.Head], ex = hp.x, ey = hp.y + 0.075, ez = hp.z + 0.09;   /* his eyes: a little above and ahead of the head joint */
+    fk(r.rig, r.draw); const ry = r.g.rotation.y, c = Math.cos(ry), s = Math.sin(ry), hp = Wp[J.Head], ex = hp.x, ey = hp.y + 0.11 + (M.bodyOnly ? 0.03 : 0), ez = hp.z + 0.12 + (M.bodyOnly ? 0.06 : 0);   /* his eyes: above and ahead of the head joint (which sits at the top of the neck); for the viewer's own body a little more, so his collar and chest stay out of the picture */
     r.g.position.set(r.head[0].x - (c * ex + s * ez), r.head[1].x - ey, r.head[2].x - (-s * ex + c * ez));
     for (let i = 0; i < 2; i++) { const g = clamp(r.grip[i].x, 0, 1); if (g < 0.01) { r.handErr[i] = 0; continue; } const S = i ? 'Right' : 'Left', H = r.hand[i];
       const dx = H[0].x - r.g.position.x, dy = H[1].x - r.g.position.y, dz = H[2].x - r.g.position.z; _t.set(c * dx - s * dz, dy, s * dx + c * dz);                        /* the control, in his own frame */
