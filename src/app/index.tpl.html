@@ -118,7 +118,7 @@
       <div class="opt"><label>Graphics</label><div class="seg" id="o-gfx"></div></div>
     </div>
     <div class="row" style="margin-top:12px"><input id="o-code" placeholder="Paste a replay code here" style="flex:1;min-width:200px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:11px var(--mono)" aria-label="Replay code"><button class="btn" id="o-codebtn">Watch that replay</button></div>
-    <div class="row"><button class="btn primary" id="go">Start battle</button><button class="btn" id="o-mapbtn" style="padding:10px 16px">Map and position</button><div class="note" id="o-note"></div></div>
+    <div class="row"><button class="btn primary" id="go">Start battle</button><button class="btn" id="o-mapbtn" style="padding:10px 16px">Map and position</button><button class="btn" id="o-ladder" style="padding:10px 16px">Ladder</button><button class="btn" id="o-numbers" style="padding:10px 16px">Run the numbers</button><div class="note" id="o-note"></div></div>
   </div>
 </div>
 <div id="result" class="screen" hidden><div class="card panel"><h1 id="r-head"></h1><div class="sub" id="r-sub"></div><table id="r-table"></table><div class="row"><button class="btn primary" id="r-replay">Watch the replay</button><button class="btn" id="r-again">Same battle again</button><button class="btn" id="r-next">New enemy, same ground</button><button class="btn" id="r-menu">Main menu</button></div><div class="row" style="margin-top:10px"><button class="btn" id="r-code">Copy replay code</button><input id="r-codebox" readonly style="flex:1;min-width:180px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:11px var(--mono)" aria-label="Replay code"></div></div></div>
@@ -156,7 +156,7 @@
 </script>
 <script src="engine.js"></script><script>window.HK = window.HK || (typeof HK !== 'undefined' ? HK : null);</script>
 <script src="dmg.js"></script><script src="campaign.js"></script>
-<script src="world/world.js"></script><script src="battle/tankai.js"></script><script src="battle/battle.js"></script>
+<script src="world/world.js"></script><script src="battle/tankai.js"></script><script src="battle/battle.js"></script><script src="battle/study.js"></script><script src="battle/ladder.js"></script>
 <script type="module" src="app/main.js"></script>
 </body>
 </html>
