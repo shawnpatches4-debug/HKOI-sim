@@ -65,7 +65,7 @@ export function initPages(ctx) {
   // (does Trophy last through three waves?) but too few to settle small differences.
   const N = screen('numbers', true); let running = false, stop = false;
   function openNumbers() {
-    const c = N.c, sc = ctx.scenario(); c.textContent = ''; let kind = 'raids', preset = 'setup', n = 5000, nb = 25, nm = 2000;
+    const c = N.c, sc = ctx.scenario(); c.textContent = ''; let kind = 'raids', preset = 'setup', n = 5000, nb = 25, nm = 2000, armour = !!store.get('numArmour', false);
     const sub = el('div', 'sub'), opts = el('div'), status = el('div', 'pg-note'), bar = el('div', 'pg-bar'), fill = el('div'), out = el('div'); bar.append(fill);
     const seg = (items, get, set) => { const box = el('div', 'seg'); const draw = () => { box.textContent = ''; for (const [v, name, tip] of items) { const b = el('button', 'btn' + (get() === v ? ' on' : ''), name); if (tip) b.title = tip; b.onclick = () => { if (running) return; set(v); drawOpts(); }; box.append(b); } }; draw(); return box; };
     const opt = (label, box) => { const o = el('div', 'opt'); o.append(el('label', null, label), box); return o; };
@@ -75,21 +75,23 @@ export function initPages(ctx) {
         g.append(opt('Raids per setup', seg([[1000, '1,000'], [2000, '2,000'], [5000, '5,000'], [10000, '10,000']], () => n, v => { n = v; }))); }
       else if (kind === 'maps') g.append(opt('Raids per setup, each map', seg([[1000, '1,000'], [2000, '2,000'], [5000, '5,000']], () => nm, v => { nm = v; })));
       else g.append(opt('Battles per setup', seg([[10, '10'], [25, '25'], [50, '50'], [100, '100']], () => nb, v => { nb = v; })));
+      g.append(opt('What a hit does', seg([[false, 'Flat chance by weapon', 'The engine\'s rule: each weapon has one chance of knocking the vehicle out, the same from every side (Kornet 50%, RPG 30%, drone 15%).'], [true, 'The armour decides', 'The plate struck decides: front, side, rear or roof, hull-down or not, warhead against plate. Plate and warhead figures are open-source estimates; the chance that a penetration is vital is an assumption.']], () => armour, v => { armour = v; store.set('numArmour', v); })));
       opts.append(g);
       sub.textContent = kind === 'raids' ? (preset === 'old' ? 'The old simulator\'s raid: three threats over six seconds, Kornet-class launches from 2 km or more.' : `Raids by this setup's enemy: ${sc.raidText}.`) + ' Every raid is fought four times: with HKOI and Trophy, Trophy only, HKOI only, and neither.' : kind === 'maps' ? `${sc.mapText}. On each map the real battle is set up 24 times, the enemy's opening volley is captured from its real firing positions, and those openings are replayed under the four setups.` : `${sc.text}. Whole battles, each fought four times.`;
       status.textContent = kind === 'maps' ? `About ${Math.round(nm / 1000 * 1.5)} to ${Math.round(nm / 1000 * 4)} minutes for all four maps.` : kind === 'raids' ? `About ${Math.round(n / 5000 * 40)} to ${Math.round(n / 5000 * 90)} seconds for ${n.toLocaleString()} raids per setup. The page stays usable while it runs.` : 'Each battle takes about a second. With so few, only large differences show: use raids to settle small ones.'; };
     drawOpts();
+    const withArmour = cfg => { const c = JSON.parse(JSON.stringify(cfg || deps.HK.defaultConfig())); c.vehicle.armour = !!armour; return c; };
     const go = btn('Run', async () => {
       if (running) { stop = true; return; } running = true; stop = false; go.textContent = 'Stop'; out.textContent = ''; const t0 = performance.now(), prog = (d, tot, what) => { fill.style.width = (100 * d / tot).toFixed(1) + '%'; status.textContent = `${what} ${d.toLocaleString()} of ${tot.toLocaleString()} · ${Math.round((performance.now() - t0) / 1000)} s`; };
       try {
-        if (kind === 'raids') { const run = Study.raidStart(deps.HK, sc.cfg, preset === 'old' ? { preset: 'old' } : Object.assign({ preset: 'setup' }, sc.raid), n); await new Promise(r => setTimeout(r, 0));
+        if (kind === 'raids') { const run = Study.raidStart(deps.HK, withArmour(sc.cfg), preset === 'old' ? { preset: 'old' } : Object.assign({ preset: 'setup' }, sc.raid), n); await new Promise(r => setTimeout(r, 0));
           while (!stop && !Study.raidStep(deps.HK, run, 40)) { prog(run.i, n, 'Raid'); await new Promise(r => setTimeout(r, 0)); } prog(run.i, n, 'Raid'); if (run.i > 0) raidResults(out, run, preset === 'old' ? 'the old simulator\'s raid' : sc.raidText); }
         else if (kind === 'maps') { const done = []; for (let k = 0; k < sc.maps.length && !stop; k++) { const mp = sc.maps[k]; status.textContent = `${mp.name}: building the ground`; await new Promise(r => setTimeout(r, 30));
-            const run = Study.mapStart(deps, Object.assign({}, sc.mapOpts, { world: mp.make() }), nm, 24);
+            const run = Study.mapStart(deps, Object.assign({}, sc.mapOpts, { world: mp.make(), cfg: withArmour(sc.mapOpts.cfg) }), nm, 24);
             while (!stop && !Study.raidStep(deps.HK, run, 25)) { if (!run.map.ready) { fill.style.width = (100 * (k + 0.15 * run.map.seed / run.map.K) / sc.maps.length).toFixed(1) + '%'; status.textContent = `${mp.name}: setting up battle ${run.map.seed} of ${run.map.K} · ${Math.round((performance.now() - t0) / 1000)} s`; } else { fill.style.width = (100 * (k + 0.15 + 0.85 * run.i / Math.max(1, run.n)) / sc.maps.length).toFixed(1) + '%'; status.textContent = `${mp.name}: raid ${run.i.toLocaleString()} of ${run.n.toLocaleString()} · ${Math.round((performance.now() - t0) / 1000)} s`; } await new Promise(r => setTimeout(r, 0)); }
             if (run.map.ready) done.push({ mp, run }); mapResults(out, done, sc); } }
         else { const rows = {}, lookups = {}; for (const st of Study.SETUPS) rows[st.key] = []; const total = nb * Study.SETUPS.length; let done = 0;
-          for (let seed = 1; seed <= nb && !stop; seed++) for (const st of Study.SETUPS) { if (stop) break; rows[st.key].push(Study.one({ HK: deps.HK, Battle: deps.Battle }, sc.opts, st, seed, lookups)); done++; prog(done, total, 'Battle'); await new Promise(r => setTimeout(r, 0)); }
+          for (let seed = 1; seed <= nb && !stop; seed++) for (const st of Study.SETUPS) { if (stop) break; rows[st.key].push(Study.one({ HK: deps.HK, Battle: deps.Battle }, Object.assign({}, sc.opts, { cfg: withArmour(sc.opts.cfg) }), st, seed, lookups)); done++; prog(done, total, 'Battle'); await new Promise(r => setTimeout(r, 0)); }
           const res = {}; for (const st of Study.SETUPS) res[st.key] = Study.summarise(rows[st.key], st); if (res.both.n) battleResults(out, res, sc); } }
       catch (e) { status.textContent = 'The run stopped on an error: ' + (e && e.message); console.error(e); }
       running = false; go.textContent = 'Run again';
