@@ -43,7 +43,7 @@ async def main():
             if await pg.evaluate('__beta.teams().every(t => t.loaded)'): break
             await pg.wait_for_timeout(1000)
         await pg.evaluate('document.getElementById("go").click()'); await pg.wait_for_timeout(1500); await pg.evaluate('__beta.setPlaying(false)')
-        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight{display:none!important}'); await pg.evaluate('void (' + DRIVE + ')'); await pg.evaluate(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'motion_metrics.js')).read()); await pg.evaluate(f"__drv('{kind}')"); await pg.evaluate('__D.reset()')
+        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight,#crew,#replay{display:none!important}'); await pg.evaluate('void (' + DRIVE + ')'); await pg.evaluate(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'motion_metrics.js')).read()); await pg.evaluate(f"__drv('{kind}')"); await pg.evaluate('__D.reset()')
         if os.environ.get('EVAL'):   # print the result of one expression (it can use __D, the driver) and stop
             print(json.dumps(await pg.evaluate(os.environ['EVAL']))); print('errors', errs[:5]); await b.close(); return
         if os.environ.get('NUM'):
