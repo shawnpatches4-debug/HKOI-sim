@@ -347,7 +347,7 @@ function gaitShape(g) {
 function stepGait(g, rig, mx, mz, dyaw, dt, wantRun) {
   if (dt > 1e-5) {
     const k = 1 - Math.exp(-dt * 6); g.vx += (mx / dt - g.vx) * k; g.vz += (mz / dt - g.vz) * k; g.v = Math.hypot(g.vx, g.vz);
-    const want = Math.max(wantRun ? ease((g.v - 2.2) / 0.8) : 0, ease((g.v - 2.5) / 0.6));
+    const want = Math.max(wantRun ? ease((g.v - 2.2) / 0.8) : 0, ease((g.v - 2.7) / 0.5));
     g.run += (want - g.run) * (1 - Math.exp(-dt * 4));
   }
   gaitShape(g);
@@ -605,7 +605,7 @@ export class TeamView {
       if (this._ph === 'pack') {
         this._T += h; L.x += sx; L.y += sz;
         if (this._T >= this._packT || L.length() > this._lag0 + 2.2) this._stepOut();
-      } else if (this._ph === 'move') this._shrinkLag((Math.max(0.7, 0.35 * speed) + Math.max(0, L.length() - 3)) * h);
+      } else if (this._ph === 'move') this._shrinkLag((Math.max(0.3, 0.15 * speed) + Math.max(0, L.length() - 3)) * h);
       else if (this._ph === 'arrive') {
         this._T += h; this._shrinkLag(2.0 * h);
         const there = F.every(f => { const a = f.userData.a, s = a.slot; return !s || (Math.hypot(s.x - a.x, s.z - a.z) < 0.1 && Math.abs(wrapPi(s.yaw - a.yaw)) < 0.3); });
@@ -613,7 +613,7 @@ export class TeamView {
       }
       // turning toward the wanted heading at a man's pace (held while they are getting up, or lying where they dropped)
       let dpsi = 0;
-      if (this._ph !== 'pack' && !(this._ph === 'static' && this.away)) { const d = wrapPi(want - this._psi), lim = (this._ph === 'static' ? 0.5 : 3.2) * h; dpsi = Math.max(-lim, Math.min(lim, d * (1 - Math.exp(-h * 6)))); this._psi += dpsi; }
+      if (this._ph !== 'pack' && !(this._ph === 'static' && this.away)) { const d = wrapPi(want - this._psi), lim = (this._ph === 'static' ? 0.5 : 2.6) * h; dpsi = Math.max(-lim, Math.min(lim, d * (1 - Math.exp(-h * 6)))); this._psi += dpsi; }
       const back = n - k, px = G.x - sx * back, pz = G.z - sz * back;                 /* where the team was at this point of the frame */
       for (let i = 0; i < F.length; i++) this._walk(F[i].userData.a, h, dpsi, px, pz, mode === 'run');
     }
@@ -658,7 +658,7 @@ export class TeamView {
   _toStride(f, slot) {
     const a = f.userData.a; a.slot = slot;
     if (a.gen === 'stride') return;
-    const flat = a.tgt.prone; this._mark(a); a.gen = 'stride'; a.hwT = 1; a.bl = { t: 0, dur: flat ? 1.0 : 0.6, via: flat }; a.wx = null; resetGait(a.g, a.rig);
+    const flat = a.tgt.prone; this._mark(a); a.gen = 'stride'; a.hwT = 1; a.bl = { t: 0, dur: flat ? 1.0 : 0.7, via: flat }; a.wx = null; resetGait(a.g, a.rig);
   }
   _toStatic(f, S) {
     const a = f.userData.a, flat = a.gen === 'static' && a.tgt.prone;
@@ -690,15 +690,15 @@ export class TeamView {
     const a = f.userData.a, rig = a.rig, C = a.cur, striding = a.gen === 'stride';
     let riding = false; for (const l of this.loads) if (l.rider === i && (l.e !== l.at || l.e > 0 && l.e < 1)) riding = true;
     if (!striding && !a.bl && a.done && !riding) { if (near) this._idle(a, i); return; }      /* settled: only breathing and looking about */
-    const blending = !!a.bl, via = blending && a.bl.via, e = blending ? ease(a.bl.t / a.bl.dur) : 1; if (blending && a.bl.t >= a.bl.dur) a.bl = null;
+    const blending = !!a.bl, via = blending && a.bl.via, bx = blending ? a.bl.t / a.bl.dur : 1, e = ease(bx), w1 = ease(bx / 0.55), w2 = ease((bx - 0.4) / 0.6); if (blending && a.bl.t >= a.bl.dur) a.bl = null;
     if (!striding) { const S = a.tgt; if (blending) { a.x = mix(a.fx, S.x, e); a.z = mix(a.fz, S.z, e); a.yaw = a.fyaw + wrapPi(S.yaw - a.fyaw) * e; } else { a.x = S.x; a.z = S.z; a.yaw = S.yaw; } }
     // the pose aimed for: this instant of the stride, or a remembered arrangement
     let T, tox = 0, toy, toz = 0, tlow;
     if (striding) { stridePose(rig, a.g, a.hands.length > 0); solve(rig, SD, SX, TQ); T = TQ; tox = SO.x; toy = SO.y; toz = SO.z; tlow = lowest(); }
     else { T = a.tgt.q; toy = a.tgt.oy; tlow = a.tgt.low; }
     if (blending) {
-      const Fq = a.from, M = a.mid;
-      for (let k = 0; k < NJ; k++) { if (via) { _k1.slerpQuaternions(Fq[k], M[k], e); _k2.slerpQuaternions(M[k], T[k], e); C[k].slerpQuaternions(_k1, _k2, e); } else C[k].slerpQuaternions(Fq[k], T[k], e); }
+      const Fq = a.from, M = a.mid;                 /* by way of hands and knees: first onto them, then (overlapping, so there is no stop) on to the new pose */
+      for (let k = 0; k < NJ; k++) { if (via) C[k].slerpQuaternions(Fq[k], M[k], w1).slerp(T[k], w2); else C[k].slerpQuaternions(Fq[k], T[k], e); }
     } else for (let k = 0; k < NJ; k++) C[k].copy(T[k]);
     fk(rig, C); const low = lowest();
     if (blending) { a.ox = mix(a.fox, tox, e); a.oz = mix(a.foz, toz, e); a.oy = mix(a.foff, toy + tlow, e) - low; a.hw = mix(a.fhw, a.hwT, e); }   /* the lowest joint stays the right height off the ground all the way */
@@ -729,7 +729,7 @@ export class TeamView {
   // signs of life for a figure that is otherwise still: breathing, the second man looking about, a start when the weapon fires
   _idle(a, i) {
     const B = a.rig.bones, q = a.tgt.q, t = a.clock, x = this._kick / 0.07, jolt = x < 12 ? x * Math.exp(1 - x) : 0;
-    const breath = 0.011 * Math.sin(t * 1.7) - (this.weapon && i === 0 ? 0.05 : 0) * jolt;
+    const breath = 0.011 * Math.sin(t * 1.7) - (i === 0 ? (this.weapon ? 0.05 : 0.02) : 0.012) * jolt;
     B[J.Spine1].quaternion.copy(q[J.Spine1]).multiply(_k1.setFromAxisAngle(AXX, breath));
     if (i === 0 && !this.weapon) return;                                                /* the man at the sight keeps his head still */
     const look = i === 0 ? 0 : 0.24 * Math.sin(t * 0.37 + 1) + 0.14 * Math.sin(t * 0.83 + 2.2), duck = (i === 0 ? -0.06 : 0.22) * jolt;
