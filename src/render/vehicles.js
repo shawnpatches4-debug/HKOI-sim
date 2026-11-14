@@ -149,19 +149,27 @@ export class VehicleView {
 
   // ---- where it is: eased between the battle's samples ----
   _move(v, C, wreck) {
-    const hr = v.hull * DEG, sp = wreck ? 0 : (v.speed || 0), back = Math.min(0.5, Math.max(0, C.bt - C.t));   /* the sample is for the battle's clock, which runs a little ahead of the picture */
-    const ge = v.e - Math.sin(hr) * sp * back, gn = v.n - Math.cos(hr) * sp * back, g = this.g, dt = C.dt;
-    const jam = this.tFp != null || wreck, gt = jam && this.init ? g.t : (v.turret != null ? v.turret : v.hull) * DEG;
-    if (C.snap || !this.init || Math.hypot(ge - this.X.x, gn - this.N.x) > 12) {
-      this.X.x = ge; this.X.v = Math.sin(hr) * sp; this.N.x = gn; this.N.v = Math.cos(hr) * sp; this.H.x = hr; this.H.v = 0; this.T.x = (v.turret != null ? v.turret : v.hull) * DEG; this.T.v = 0; this.E.x = 0; this.E.v = 0;
+    // The battle gives a new sample every step (a tenth of a second). The picture runs up to one step behind, so the goal at any
+    // moment lies on the straight line between the last two samples: the same line whatever the frame rate.
+    const D = this.smp || (this.smp = { e0: 0, n0: 0, h0: 0, u0: 0, t0: 0, e1: 0, n1: 0, h1: 0, u1: 0, t1: -1 }), first = C.snap || !this.init, g = this.g, dt = C.dt;
+    const hr1 = v.hull * DEG, tu1 = (v.turret != null ? v.turret : v.hull) * DEG;
+    if (first || C.bt !== D.t1) {
+      const leap = first || Math.hypot(v.e - D.e1, v.n - D.n1) > 12;
+      if (leap) { D.e0 = v.e; D.n0 = v.n; D.h0 = hr1; D.u0 = tu1; D.t0 = C.bt - 0.1; } else { D.e0 = D.e1; D.n0 = D.n1; D.h0 = D.h1; D.u0 = D.u1; D.t0 = D.t1; }
+      D.e1 = v.e; D.n1 = v.n; D.h1 = hr1; D.u1 = tu1; D.t1 = C.bt; if (leap && !first) this.init = false;
+    }
+    const span = D.t1 - D.t0, f = span > 1e-6 ? sat((C.t - D.t0) / span) : 1, ge = D.e0 + (D.e1 - D.e0) * f, gn = D.n0 + (D.n1 - D.n0) * f, hr = D.h0 + wrapPi(D.h1 - D.h0) * f;
+    const jam = this.tFp != null || wreck, gt = jam && this.init ? g.t : D.u0 + wrapPi(D.u1 - D.u0) * f, sp = wreck ? 0 : (v.speed || 0);
+    if (first || !this.init) {
+      this.X.x = ge; this.X.v = Math.sin(hr) * sp; this.N.x = gn; this.N.v = Math.cos(hr) * sp; this.H.x = hr; this.H.v = 0; this.T.x = D.u0 + wrapPi(D.u1 - D.u0) * f; this.T.v = 0; this.E.x = 0; this.E.v = 0;
       g.e = ge; g.n = gn; g.h = hr; g.t = this.T.x; this.init = true; this.A.vf = sp; this.A.p = this.A.pv = this.A.r = this.A.rv = this.A.y = this.A.yv = this.A.kp = this.A.kr = this.A.ky = 0; this.fwd = sp; this.warm = v.state === 'moving' ? 0.7 : 0.25; this._ground(true);
     } else if (dt > 0) {
-      const y = stiff(0.09);
-      chase(this.X, g.e, ge, y, dt, 1); chase(this.N, g.n, gn, y, dt, 1); chaseAngle(this.H, g.h, hr, stiff(0.12), dt, 1); chaseAngle(this.T, g.t, gt, stiff(0.1), dt, 1);
+      const y = stiff(0.07);
+      chase(this.X, g.e, ge, y, dt, 1); chase(this.N, g.n, gn, y, dt, 1); chaseAngle(this.H, g.h, hr, stiff(0.1), dt, 1); chaseAngle(this.T, g.t, gt, stiff(0.1), dt, 1);
       g.e = ge; g.n = gn; g.h = hr; g.t = gt;
       this.fwd = this.X.v * Math.sin(this.H.x) + this.N.v * Math.cos(this.H.x); this._ground(false, dt);
     }
-    if (this.throwOff) return;                                                                 /* a thrown vehicle is placed by its own fall (see _pose) */
+    if (this.throwOff) return;                                                                 /* a thrown vehicle is placed by its own fall (see _thrown) */
     this.group.position.set(this.X.x, this.y, -this.N.x); this.group.rotation.set(-this.P.x, Math.PI - this.H.x, this.R.x, 'YXZ'); this.groundU.value = this.y;
   }
   // the ground under its four corners gives its height, pitch and roll
@@ -344,7 +352,7 @@ export class VehicleView {
   }
   // a tank's turret blown off: straight up on the jet, turning over, down beside the hull on its roof
   _turretOff(a, a0, C, live) {
-    const id = this.id, T = this.turret, tau = a - 0.22, side = dice(id, 7) < 0.5 ? 1 : -1, v0 = 10.5 + dice(id, 8) * 2.5, vx = side * (2.6 + dice(id, 9) * 0.9), vz = -0.6 + (dice(id, 10) - 0.5) * 1.6, rest = 0.55 - this.turret0.y;
+    const id = this.id, T = this.turret, tau = a - 0.22, side = dice(id, 7) < 0.5 ? 1 : -1, v0 = 7.5 + dice(id, 8) * 2, vx = side * (2.0 + dice(id, 9) * 0.5), vz = -0.6 + (dice(id, 10) - 0.5) * 1.6, rest = 0.55 - this.turret0.y;
     if (tau <= 0) { T.position.copy(this.turret0); T.position.y += 0.03 * sat(a / 0.22); return; }
     const tl = (v0 + Math.sqrt(v0 * v0 - 2 * G * rest)) / G, u = Math.min(1, tau / tl), tt = Math.min(tau, tl);
     T.position.set(this.turret0.x + vx * tt, this.turret0.y + v0 * tt - 0.5 * G * tt * tt, this.turret0.z + vz * tt);
@@ -432,7 +440,7 @@ export class Vehicles {
     this.C = { t: 0, bt: 0, dt: 0, snap: true, all: false, cam: scene.camera.position, fovK: 1, q: 1, thermal: 0, fx: scene.fx, frustum: this._frustum, tank: { e: 0, n: 0, h: 0 } };
     scene.vehicles = this;
   }
-  // One frame. o: { t: the time being drawn (the battle's clock if left out), all: draw vehicles the tank crew has not located, teams: the
+  // One frame. o: { t: the time being drawn (the battle's clock if left out), bt: the time the vehicle list is for (battle.t if left out), all: draw vehicles the tank crew has not located, teams: the
   // team views in the order of battle.units (so a team that is aboard is not drawn twice) }. Never throws: a fault is counted and logged.
   update(battle, o) { try { this._update(battle, o || {}); } catch (e) { this.lastError = e; if (this.errors++ < 3) console.error('vehicles:', e); } }
   _update(battle, o) {
@@ -440,7 +448,7 @@ export class Vehicles {
     if (battle !== this._battle) { this.reset(); this._battle = battle; }
     if (!list || !list.length) { this._t = -1; return; }
     const sc = this.scene, C = this.C, t = o.t != null ? o.t : battle.t, snap = this._t < 0 || t < this._t - 1e-6 || t > this._t + 2.5;
-    C.t = t; C.bt = Math.max(t, battle.t); C.dt = snap ? 0 : t - this._t; C.snap = snap; C.all = !!o.all; C.fx = sc.fx; C.fovK = sc.camera.fov / 40; C.q = QF[sc.quality] || 0.85; C.thermal = sc.thermal || 0;
+    C.t = t; C.bt = o.bt != null ? o.bt : Math.max(t, battle.t); C.dt = snap ? 0 : t - this._t; C.snap = snap; C.all = !!o.all; C.fx = sc.fx; C.fovK = sc.camera.fov / 40; C.q = QF[sc.quality] || 0.85; C.thermal = sc.thermal || 0;
     C.units = battle.units; C.tank.e = battle.tank.e; C.tank.n = battle.tank.n; C.tank.h = battle.tank.h || 0; this._t = t;
     sc.camera.updateMatrixWorld(); this._frustum.setFromProjectionMatrix(this._pm.multiplyMatrices(sc.camera.projectionMatrix, sc.camera.matrixWorldInverse));
     if (snap) { this.todo.length = 0; this._evI = (battle.events || []).length; }

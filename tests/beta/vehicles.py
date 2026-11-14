@@ -15,7 +15,7 @@ SETUP = """void (() => {
   const b = window.__beta, B = b.battle, V = b.scene.vehicles; b.setPlaying(false);
   const uid = B.units.length ? B.units[0].id : 1, F = window.__vehFake({ e: B.tank.e, n: B.tank.n }, uid);
   window.__vt = 0; window.__F = F; B.vehicles = () => F(Math.ceil(window.__vt * 10 - 1e-6) / 10);
-  const orig = V.update.bind(V); V.update = (bt, o) => orig(bt, Object.assign({}, o, { t: window.__vt, all: true }));   /* the test's own clock (the real battle stays paused) */
+  const orig = V.update.bind(V); V.update = (bt, o) => orig(bt, Object.assign({}, o, { t: window.__vt, bt: Math.ceil(window.__vt * 10 - 1e-6) / 10, all: true }));   /* the test's own clock (the real battle stays paused) */
   window.__go = (to, fps = 60) => { while (window.__vt < to - 1e-9) { window.__vt = Math.min(to, window.__vt + 1 / fps); V.update(B, { teams: b.teams() }); b.scene.fx.update(1 / fps); } return window.__vt; };
   window.__jump = to => { window.__vt = to; V.update(B, { teams: b.teams() }); };
   /* look at slot i from `back` metres towards the tank, `side` metres along the row, `h` metres up */
