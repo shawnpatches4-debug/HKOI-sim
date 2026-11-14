@@ -11,6 +11,7 @@ for (const st of Study.SETUPS) { const r = Study.stressSummary(run, st.key);
   console.log(`\n${st.name}: threats survived before the vehicle is lost: typical ${r.median > max ? 'all ' + max : r.median - 1} (middle half ${r.q1 - 1} to ${r.q3 > max ? max : r.q3 - 1}); survived the whole attack ${pc(r.survivedAll)}`);
   console.log('   still alive after N threats: ' + r.curve.map(c => `${c.k}: ${pc(c.alive).trim()}`).join('  '));
   console.log('   what ended each threat, per 100: ' + Object.entries(r.by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(100 * v / r.threats).toFixed(1)}`).join(', '));
+  if (r.used) console.log(`   spent by the time it was lost (or the attack ended), on average: Trophy shots ${r.used.aps.toFixed(1)} of ${2 * run.S[st.key].cfg.aps.mag_per_side}, obscurant rounds ${r.used.obs.toFixed(0)} of ${run.S[st.key].cfg.gun.obscurant_rounds}, airburst rounds ${r.used.he.toFixed(0)} of ${run.S[st.key].cfg.gun.he_rounds}; hits taken ${r.used.hits.toFixed(1)}`);
   if (r.first.length) console.log('   what gave out, how often, and at which threat on average: ' + r.first.map(f => `${f.what.replace(/_/g, ' ')} in ${pc(f.share).trim()} of attacks at threat ${f.atThreat.toFixed(1)}`).join('; '));
   console.log('   the killing weapon: ' + r.killer.slice(0, 6).map(k => `${k.why} ${Math.round(100 * k.n / Math.max(1, r.lost))}%`).join(', '));
   if (r.whyH.length) console.log('   why HKOI did not stop the killer: ' + r.whyH.slice(0, 5).map(k => `${k.why} ${Math.round(100 * k.n / Math.max(1, r.lost))}%`).join(', '));
