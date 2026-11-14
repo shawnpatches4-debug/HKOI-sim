@@ -133,7 +133,8 @@ export class Interior {
   // ---- putting the eye to a periscope, a vision block or the auxiliary sight
   // lookThrough(control) moves the viewer's eye up to that optic over 0.4 s (the same path at any frame rate); lookThrough(null) sits him back.
   lookThrough(c) {
-    c = c || null; if (c === this.optic) return; if (c && (!c.optic || !SEATS[this.mode] || c.g !== SEATS[this.mode].g)) return;
+    c = c || null; if (c === this.optic) return; if (c && !c.optic) return; if (c && (!SEATS[this.mode] || c.g !== SEATS[this.mode].g)) { this.pendingOptic = c; return; }   /* the seat may be changing in this same breath: taken up when the seat is there */
+    this.opticNew = !!c;
     this.opFrom = this.opCur ? { ...this.opCur } : null; this.opT = this.opFrom ? 0 : 1;
     if (c && !this.optic) this.lookSeat = { ...this.look }; this.optic = c;
     if (c) { this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; this.lpYaw = 0; this.eyeOff = null; } else if (this.lookSeat) { Object.assign(this.look, this.lookSeat); this.lookSeat = null; }
@@ -382,7 +383,8 @@ export class Interior {
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
     _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
     // at an optic: the eye goes to a place just inside its glass and looks out along it; the move there and back is a fixed 0.4 s blend
-    if (this.opMode !== cams.mode) { this.opMode = cams.mode; this.optic = null; this.opT = 1; this.lookSeat = null; this.opCur = null; }
+    if (this.opMode !== cams.mode) { this.opMode = cams.mode; const keep = this.optic && this.opticNew && this.optic.g === S.g ? this.optic : this.pendingOptic && this.pendingOptic.g === S.g ? this.pendingOptic : null; this.optic = keep; this.pendingOptic = null; this.opT = 1; this.lookSeat = null; this.opCur = null; if (keep) { L.yaw = 0; L.pitch = 0; L.zoom = 1; this.lpYaw = 0; this.eyeOff = null; } }
+    this.opticNew = false;
     let fovT = S.fov / L.zoom; const O = this.optic;
     if (O || this.opT < 1) {
       if (O) { const k = O.optic, rt = k.kind !== 'block'; _on.set(0, 0, 1).applyQuaternion(O.quat); _v.copy(O.pos).addScaledVector(_on, k.dist || (k.kind === 'lp' ? 0.25 : k.kind === 'gas' ? 0.15 : 0.12));
@@ -421,14 +423,14 @@ export class Interior {
     const R = this.s.renderer, cam = this.sightCam, SZ = key === at ? (key === 'lp' ? [1280, 400] : [720, 720]) : { gps: [640, 400], citv: [640, 400], lp: [640, 200], gas: [256, 256] }[key];
     if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(SZ[0], SZ[1], { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; } else if (this.rt[key].width !== SZ[0]) this.rt[key].setSize(SZ[0], SZ[1]);
     cam.aspect = SZ[0] / SZ[1];
-    if (key === 'lp') { cam.position.set(DIM.HAT[0], DIM.RF + 0.32, DIM.HAT[1] - DIM.HATR - 0.2).applyMatrix4(this.tur.matrixWorld); const b = (this.turBrg - 20 + (this.lpYaw || 0)) * DEG; cam.fov = 12.5; _v.set(cam.position.x + Math.sin(b) * 300, cam.position.y - 14, cam.position.z - Math.cos(b) * 300); }   /* unity power: about 40 degrees wide, 12 high */
+    if (key === 'lp') { cam.position.set(DIM.HAT[0], DIM.RF + 0.42, DIM.HAT[1] - DIM.HATR - 0.3).applyMatrix4(this.tur.matrixWorld); const b = (this.turBrg - 20 + (this.lpYaw || 0)) * DEG; cam.fov = 12.5; _v.set(cam.position.x + Math.sin(b) * 300, cam.position.y - 14, cam.position.z - Math.cos(b) * 300); }   /* unity power: about 40 degrees wide, 12 high */
     else if (key === 'gas') { cam.position.set(0.41, DIM.GY + 0.35, -1.9).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = 8; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }   /* fixed 8 power, 8 degrees */
     else if (key === 'gps') { cam.position.set(0.66, DIM.RF + 0.3, -1.0).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = this.gpsMag === 10 ? 4.1 : 13.5; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
     else { cam.position.set(-0.55, DIM.RF + 0.55, -0.7).applyMatrix4(this.tur.matrixWorld); const b = this.citvYaw * DEG, Rg = ct ? Math.hypot(ct.e - T.e, ct.n - T.n) : 1200, ty = ct ? tw.h(ct.e, ct.n) + 1 : cam.position.y - Rg * 0.0117; cam.fov = this.citvMag === 10 ? 2.1 : 8.2; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
     cam.up.set(0, 1, 0); cam.lookAt(_v); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     const tv = this.tank.group.visible, prev = R.getRenderTarget(), c0 = R.info.render.calls, fxU = this.s.fx && this.s.fx.mat && this.s.fx.mat.uniforms.scale, sc0 = fxU ? fxU.value : 0;
-    this.tank.group.visible = false; if (fxU) fxU.value = 200 * 0.9;
-    try { R.setRenderTarget(this.rt[key]); R.render(this.s.scene, cam); } finally { R.setRenderTarget(prev); this.tank.group.visible = tv; if (fxU) fxU.value = sc0; }
+    const own = key === 'lp', bp = this.boxPl && this.boxPl[0], bc = bp ? bp.constant : 0; this.tank.group.visible = own; if (own) { this.tur.visible = this.hul.visible = false; if (bp) bp.constant = 1e6; }   /* the loader's periscope looks over his own turret roof: the vehicle is drawn whole (no box cut, no interior); the gun sights are in housings and draw without it */ if (fxU) fxU.value = 200 * 0.9;
+    try { R.setRenderTarget(this.rt[key]); R.render(this.s.scene, cam); } finally { R.setRenderTarget(prev); this.tank.group.visible = tv; if (own) { this.tur.visible = this.hul.visible = true; if (bp) bp.constant = bc; } if (fxU) fxU.value = sc0; }
     this.stats.sightCalls = R.info.render.calls - c0; this.scr[key].uniforms.uGain.value = (R.toneMappingExposure || 0.62) * 1.5;
   }
 
