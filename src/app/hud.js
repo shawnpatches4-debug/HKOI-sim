@@ -227,7 +227,7 @@ export class Hud {
       const word = dead ? 'killed' : down ? 'out of action' : /frozen/.test(m.busy || '') ? 'frozen' : m.state + (m.status === 'wounded' ? ', wounded' : '');
       this.put(x.word, word, 's' + k); if (x.dot._c !== 's' + k) { x.dot._c = 's' + k; x.dot.className = 's' + k; }
       this.width(x.fill, down ? 0 : m.stress); if (x.fill._c !== 's' + k) { x.fill._c = 's' + k; x.fill.className = 's' + k; }
-      this.put(x.tag, dead ? 'KILLED' : down ? 'OUT OF ACTION' : '', 'tag', true); const rc = 'man' + (down ? ' down' : ''); if (x.row._c !== rc) { x.row._c = rc; x.row.className = rc; }
+      this.put(x.tag, dead ? 'KILLED' : down ? 'OUT OF ACTION' : '', 'tag', true); const rc = 'man m' + k + (down ? ' down' : '') + (/frozen/.test(m.busy || '') ? ' frozen' : ''); if (x.row._c !== rc) { x.row._c = rc; x.row.className = rc; }
       const d = !sum.alive ? 'vehicle destroyed' : down ? (m.busy || 'out of action') : doing[r] || '-'; this.put(x.doing, d, 'do', true); if (x.doing.title !== d) x.doing.title = d;
       const [fx, tone] = this.effect(r, m, crew); this.put(x.fx, fx, 'fx ' + tone); if (x.fx.title !== fx) x.fx.title = fx;
       const why = !crew.on || down ? '' : m.why && m.why !== 'nothing yet' ? `Last: ${m.why}` : ''; this.put(x.why, why, 'why', true); if (x.why.title !== `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '')) x.why.title = `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '');

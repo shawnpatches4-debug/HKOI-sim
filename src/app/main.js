@@ -345,7 +345,7 @@ function buildBar() {
   const row = el('div', 'barrow'); bar.append(row); const grp = () => { const g = el('div', 'grp'); row.append(g); return g; };
   let g = grp(); g.append(btn(playing ? 'pause' : 'play', playing ? 'Pause' : 'Play', '', 'Pause or carry on (space bar)', () => { playing = !playing; buildBar(); }));
   if (!slim) { const rates = el('div', 'rates'); rates.title = 'Time rate'; for (const sp of [0.25, 1, 2, 4]) rates.append(btn(null, sp === 0.25 ? '¼×' : sp + '×', speed === sp ? 'on' : '', sp === 0.25 ? 'Quarter speed' : sp === 1 ? 'Real time' : sp + ' times faster', () => { speed = sp; buildBar(); })); g.append(rates); }
-  g = grp(); g.append(btn('view', 'View: ' + (cur ? cur.name : 'free'), (barOpen ? 'open' : ''), 'Choose where you watch from (keys 1 to 9)', () => { barOpen = !barOpen; buildBar(); }));
+  g = grp(); { const vb = btn('view', 'View: ' + (cur ? cur.name : 'free'), (barOpen ? 'open' : ''), 'Choose where you watch from: opens the list of views (keys 1 to 9)', () => { barOpen = !barOpen; buildBar(); }); vb.id = 'viewbtn'; vb.append(el('span', 'chev', barOpen ? '▾' : '▴')); g.append(vb); }
   if (seat) g.append(btn('out', 'Back outside', '', 'Leave the inside view (Esc)', () => setView(lastOutside)));
   if (SENSOR[cams.mode] || cams.mode === 'gnr') g.append(btn(null, 'Thermal: ' + (wantThermal() === 1 ? 'white hot' : wantThermal() === -1 ? 'black hot' : 'off'), 'on', 'Thermal picture for this sight (T)', cycleThermal));
   if (!slim) { g = grp(); g.append(btn('map', 'Map', '', 'Topographic map (M)', openMap));
@@ -354,6 +354,8 @@ function buildBar() {
   if (!slim) g.append(director.button());   /* film director on or off (key F) */
   if (!slim) g.append(btn('menu', 'Menu', '', 'Back to the title screen', toTitle));
 }
+// the view picker is a pop-up: a click anywhere else closes it
+window.addEventListener('pointerdown', e => { if (barOpen && !(e.target.closest && e.target.closest('#bar'))) { barOpen = false; buildBar(); } }, true);
 $('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
 $('o-codebtn').onclick = () => { const msg = replayLoad($('o-code').value); if (msg) { $('o-note').textContent = msg; $('s-msg').textContent = msg; } };
 $('r-again').onclick = () => { replayStop(); start(); }; $('r-next').onclick = () => { replayStop(); set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = toTitle; $('r-numbers').onclick = () => openPage('numbers');
