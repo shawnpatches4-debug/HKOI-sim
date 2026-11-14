@@ -4,7 +4,7 @@
 #   - the same movement at 30, 60, 144 and 240 frames a second (position, heading, spring pitch, dust puffs),
 #   - no fault in the vehicle drawing and nothing on the page's red error bar,
 #   - a rewind puts a blown-off turret back and a jump forward shows a settled wreck.
-# Env: SHOTS=comma list of picture names to take (default all), W, H, WAITMS (per picture, default 3500), NOFPS=1 skips the frame-rate check.
+# Env: QUICK=1 pictures only (no frame-rate, rewind or loop checks), SHOTS=comma list of picture names to take (default all), W, H, WAITMS (per picture, default 3500), NOFPS=1 skips the frame-rate check.
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=high&spectator=1&play=1&biome=desert&force=light&seed=3&speed=1'
@@ -26,6 +26,7 @@ SETUP = """void (() => {
 SHOTS = [
     (4.0, 'drive_uaz', '__cam(0, 24, 9, 2.2)'), (4.0, 'drive_bmp', '__cam(1, 28, 10, 2.6)'), (4.0, 'drive_t72', '__cam(2, 30, 11, 2.8)'), (4.0, 'drive_t90', '__cam(3, 30, -11, 2.8)'),
     (9.5, 'close_uaz', '__cam(8, 7, 4.5, 1.7)'), (9.5, 'close_bmp', '__cam(4, 10, 7, 2.3)'), (9.5, 'close_t72', '__cam(5, 11, 8, 2.6)'), (9.5, 'close_t90', '__cam(9, 11, -8, 2.6)'), (9.5, 'rear_t72', '__cam(5, -10, 7, 3.2)'),
+    (9.5, 'aboard_uaz', '__cam(0, 7, 4.5, 1.7)'), (9.5, 't72_800', '__cam(5, 800, 0, 5)'),
     (9.5, 'row_800', '__cam(4.5, 800, 0, 6)'), (9.5, 'row_250', '__cam(4.5, 250, 0, 8)'),
     (10.5, 'fire_bmp30', '__cam(1, 14, 9, 2.4)'), (11.03, 'fire_t72', '__cam(2, 16, 12, 2.8)'), (11.2, 'fire_t72_b', '__cam(2, 16, 12, 2.8)'),
     (12.9, 'uaz_dismount_a', '__cam(0, 6, 5, 1.7)'), (13.6, 'uaz_dismount_b', '__cam(0, 6, 5, 1.7)'), (14.8, 'uaz_dismount_c', '__cam(0, 6, 5, 1.7)'),
@@ -76,7 +77,8 @@ async def main():
             if st['ready'] == st['vehicles'] and st['vehicles'] > 0: break
             await pg.wait_for_timeout(500)
         print('MODELS', json.dumps(st), errs[:4])
-        if not os.environ.get('NOFPS'):
+        QUICK = os.environ.get('QUICK')
+        if not os.environ.get('NOFPS') and not QUICK:
             r = await pg.evaluate(FPS); print('FRAME RATES', json.dumps(r)); await pg.evaluate('__jump(0)')
             ok = r['worst']['pos'] < 0.05 and r['worst']['hdg'] < 0.01 and r['worst']['spring'] < 0.004 and max(r['dust']) - min(r['dust']) <= 2 and r['errors'] == 0
             print('FRAME RATE CHECK', 'PASS' if ok else 'FAIL')
@@ -84,6 +86,7 @@ async def main():
             if ONLY and not any(name.startswith(o) for o in ONLY): continue
             await pg.evaluate('__go(%s)' % s); await pg.evaluate(cam); await pg.wait_for_timeout(WAIT)
             await pg.screenshot(path=os.path.join(OUT, 'veh_%s.png' % name), timeout=120000); print(name, json.dumps(await pg.evaluate(CHECK)))
+        if QUICK: print('QUICK', json.dumps(await pg.evaluate(CHECK)), errs[:5]); await b.close(); return
         # rewind and jump: the state must come from the data and the time alone
         rw = await pg.evaluate("""(() => { const V = __beta.scene.vehicles, w = V.view(106), out = {}; __go(Math.max(window.__vt, 26)); out.offY = +w.turret.position.y.toFixed(2); out.offX = +w.turret.position.x.toFixed(2);
           __jump(9.5); out.backY = +(w.turret.position.y - w.turret0.y).toFixed(3); out.backX = +(w.turret.position.x - w.turret0.x).toFixed(3); out.scorchBack = w.scorch; out.settledBack = w.settled;
