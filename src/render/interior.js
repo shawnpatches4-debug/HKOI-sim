@@ -357,7 +357,9 @@ export class Interior {
   }
   // where the loader's head is at each moment of his climb (interior frame): at his station, then up through the middle of the opening
   // with a little bob of effort, to standing behind his gun
-  _ldrHead(U, out) { const e = SEATS.in_ldr.eye, k = sm((U - 0.4) / 0.36), tx = DIM.HAT[0] - 0.02, ty = DIM.RF + 0.5, tz = DIM.HAT[1] + 0.2; return out.set(e[0] + (tx - e[0]) * k, e[1] + (ty - e[1]) * k + 0.018 * Math.sin(k * Math.PI * 2) * (1 - k), e[2] + (tz - e[2]) * k); }
+  _ldrHead(U, out) { const e = SEATS.in_ldr.eye, k = sm((U - 0.4) / 0.36), g = this.mgGripT, p = this.mgPivT; let tx = DIM.HAT[0] - 0.02, ty = DIM.RF + 0.5, tz = DIM.HAT[1] + 0.2;
+    if (g && p && this.mgPivot) { let dx = g.x - p.x, dz = g.z - p.z; const d = Math.hypot(dx, dz); if (d > 0.05) { dx /= d; dz /= d; } else { dx = 0; dz = 1; } tx = g.x + dx * 0.3; tz = g.z + dz * 0.3; ty = Math.max(DIM.RF + 0.42, g.y + 0.2); }   /* behind the grips, along the gun's own line, wherever the outside model carries the gun */
+    return out.set(e[0] + (tx - e[0]) * k, e[1] + (ty - e[1]) * k + 0.018 * Math.sin(k * Math.PI * 2) * (1 - k), e[2] + (tz - e[2]) * k); }
   // The loader's machine gun on the outside model: found by name, hung on a pivot at its mount so that it can be traversed, shaken as it fires.
   _mg(B, T, sdt) {
     const tk = this.tank; if (!tk.turret) return;
@@ -369,7 +371,7 @@ export class Interior {
     let want = 0; if (recent && U > 0.8) want = clamp((((Math.atan2(mg.e - T.e, mg.n - T.n) / DEG - (this.turBrg || 0) + 540) % 360) - 180), -110, 110);
     this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, sdt); pv.rotation.y = -this.st.mgYaw * DEG;
     this.mgMesh.position.copy(this.mgHome); if (firing && U > 0.97) this.mgMesh.position.z -= 0.012 * (Math.sin(B.t * 75) > 0.2 ? 1 : 0);                         /* recoil of each round */
-    pv.updateWorldMatrix(true, false); this.mgGripT.copy(this.mgGrip).applyMatrix4(pv.matrixWorld); this.tur.worldToLocal(this.mgGripT);
+    pv.updateWorldMatrix(true, false); this.mgGripT.copy(this.mgGrip).applyMatrix4(pv.matrixWorld); this.tur.worldToLocal(this.mgGripT); (this.mgPivT || (this.mgPivT = new THREE.Vector3())).setFromMatrixPosition(pv.matrixWorld); this.tur.worldToLocal(this.mgPivT);
   }
   _mgRest() { if (this.mgPivot) { this.mgPivot.rotation.y = 0; this.mgMesh.position.copy(this.mgHome); this.st.mgYaw = 0; } }
   // in an outside view only the hatch lids, the dark of the open hatchways and the men who are up are left showing
@@ -378,7 +380,7 @@ export class Interior {
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
     let yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch; const U = cams.mode === 'in_ldr' ? this.st.ldrU : 0, upK = sm((U - 0.6) / 0.3);
-    if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + (10 - S.pitch0) * 0 + (-6 - S.pitch0) * upK * 0 + 8 * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun */
+    if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + (10 - S.pitch0) * 0 + (-6 - S.pitch0) * upK * 0 - 9 * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun */
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
     _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
@@ -475,7 +477,7 @@ export class Interior {
       this.boxed = list; }
     else if (!on && this.boxed) { for (const x of this.boxed) { x.m.clippingPlanes = x.cp || null; x.m.clipIntersection = !!x.ci; x.m.needsUpdate = true; } this.boxed = null; }
     if (!on) return; const drv = mode === 'in_drv', G = drv ? this.hul : this.tur, lo = drv ? [-0.8, -1.4, -5.2] : [-1.3, -1.3, -1.3], hi = drv ? [0.8, -0.2, DIM.DZ + 0.95] : [1.3, DIM.RF + 0.8, 1.75];
-    if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; lo[0] = hx - r; lo[1] = DIM.RF - 0.3; lo[2] = hz - r; hi[0] = hx + r; hi[1] = DIM.RF + 0.2; hi[2] = hz + r; }
+    if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; this._ldrHead(1, _on); lo[0] = Math.min(hx, _on.x) - r; lo[1] = DIM.RF - 0.3; lo[2] = Math.min(hz, _on.z) - r; hi[0] = Math.max(hx, _on.x) + r; hi[1] = DIM.RF + 0.3; hi[2] = Math.max(hz, _on.z) + r; }
     for (let i = 0; i < 6; i++) { const ax = i >> 1, sg = i & 1 ? 1 : -1; _v2.set(0, 0, 0).setComponent(ax, sg); _v.set(0, 0, 0).setComponent(ax, sg > 0 ? hi[ax] : lo[ax]); _v.applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); this.boxPl[i].setFromNormalAndCoplanarPoint(_v2, _v); }
   }
 }
