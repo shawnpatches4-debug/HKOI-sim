@@ -23,19 +23,34 @@ async def main():
         want = os.environ.get('DRONE', 'fpv')
         L = json.loads(await js('''(() => { const B = __beta.battle; let n = 0; const f = () => B.events && B.events.find(e => e.type === 'drone_launch' && B.units.find(u => u.id === e.uid).spec.key === '%s'); while (!f() && B.tank.alive && n++ < 6000) B.step(); __beta.runTo(B.t); return f() || null; })()''' % want))
         print('first %s drone launch' % want, L)
-        if L:
+        all_fpv = os.environ.get('FPV', '1') == '1'   # FPV=lost: only the picture after the end of the flight; FPV=0: none
+        if L and os.environ.get('FPV', '1') != '0':
             await ev('void (__beta.cams.enemyId = %d, __beta.setView("fpv"), __beta.runTo(%f))' % (L['uid'], L['t'] + 8)); await pg.wait_for_timeout(settle)
-            print('good link ', json.loads(await js(osd))); await pg.screenshot(path=shot + '_fpv_good.png')
+            print('good link ', json.loads(await js(osd)))
+            if all_fpv: await pg.screenshot(path=shot + '_fpv_good.png')
             E = json.loads(await js('''(() => { const B = __beta.battle; let n = 0; const f = () => B.events.filter(e => e.type === 'end' && e.uid === %d && e.t >= %f).sort((a, b) => a.t - b.t)[0]; while (!f() && B.tank.alive && n++ < 6000) B.step(); __beta.runTo(B.t); return f() || null; })()''' % (L['uid'], L['t'])))
             print('its flight ends', E)
             if E:
                 await ev('void (__beta.runTo(%f))' % (E['t'] - 1.2)); await pg.wait_for_timeout(settle)
-                print('weak link ', json.loads(await js(osd))); await pg.screenshot(path=shot + '_fpv_weak.png')
+                print('weak link ', json.loads(await js(osd)))
+                if all_fpv: await pg.screenshot(path=shot + '_fpv_weak.png')
                 await ev('void (__beta.runTo(%f))' % (E['t'] + 0.5)); await pg.wait_for_timeout(settle)
-                print('after end ', json.loads(await js(osd))); await pg.screenshot(path=shot + '_fpv_lost.png')
+                print('after end ', json.loads(await js(osd))); print('read-outs against the bars', json.loads(await js('{bar: Math.round(document.getElementById("bar").getBoundingClientRect().top), readout: Math.round(document.querySelector("#fpv .bl").getBoundingClientRect().bottom), b: document.getElementById("fpv").style.getPropertyValue("--fpv-b")}'))); await pg.screenshot(path=shot + '_fpv_lost.png')
             await ev('void (__beta.setView("orbit"))')
         if os.environ.get('MAP', '1') == '1':
             await ev('localStorage.removeItem("hkoi.cdrview")'); await ev('void (__beta.mapv.cdr.setOn(false), __beta.openMap())'); await pg.wait_for_timeout(2500); await pg.screenshot(path=shot + '_map_normal.png')
+            if os.environ.get('REAL') == '1':     # the battle's own commander: fight on, unseen, to the times asked for and look each time
+                await ev('document.getElementById("map-close").click()')
+                for i, t in enumerate(json.loads(os.environ.get('TIMES', '[60, 150]'))):
+                    await ev('void (__beta.runTo(%f), __beta.openMap())' % t)
+                    if i == 0: await ev('document.getElementById("map-cdr").click()')
+                    await pg.wait_for_timeout(3000); await pg.screenshot(path=shot + '_map_cdr_%ds.png' % t)
+                    print('real commander at', t, json.loads(await js('{t: __beta.battle.t, alive: __beta.battle.tank.alive, plan: (__beta.battle.commander() || {plan: []}).plan.map(o => o.kind + ":" + o.text), labels: __beta.mapv.cdr.state().labels.length}')))
+                    if i == 0: await ev('void (__beta.set.spectator = false)'); await pg.wait_for_timeout(2500); await pg.screenshot(path=shot + '_map_cdr_fog.png'); await ev('void (__beta.set.spectator = true)')
+                    await ev('document.getElementById("map-close").click()')
+                await ev('void (__beta.openMap())'); await pg.wait_for_timeout(2500)
+                await ev('(document.querySelector("#cdr-rows .cdr-row") || {click() {}}).click()'); await pg.wait_for_timeout(2500); await pg.screenshot(path=shot + '_map_real_picked.png')
+                print('console errors', errs[:5]); print('LOOK ' + ('DONE, no errors' if not errs else 'DONE WITH ERRORS')); await b.close(); return
             await ev(open(os.path.join(HERE, 'fake_commander.js')).read())
             await ev('void (__beta.battle.commander = window.__fakeCommander, __beta.battle.vehicles = window.__fakeVehicles)')
             await ev('document.getElementById("map-cdr").click()'); await pg.wait_for_timeout(2500); await pg.screenshot(path=shot + '_map_cdr.png')

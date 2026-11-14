@@ -47,6 +47,12 @@ function refKey(r) {
   if (typeof r === 'object') return r.uid != null ? 'u' + r.uid : r.vid != null ? 'v' + r.vid : null;
   return +r >= 100 ? 'v' + r : 'u' + r;
 }
+// an order in words: his own text, with the name of who it is for in front when the text does not say
+function orderText(o, who) {
+  const short = String(who).replace(/ #(\d+)$/, ' $1'), t = o.text ? String(o.text) : (KIND[o.kind] || o.kind).toLowerCase();
+  const names = t.toLowerCase(), w = short.toLowerCase().replace(/ \d+$/, '');
+  return names.includes(w) || names.includes('all teams') ? t : `${short}: ${t}`;
+}
 // how his belief of the tank's position came about, in plain words
 function sourceText(src, age) {
   if (src === 'plan') return 'the ambush was laid for this spot, nothing seen yet';
@@ -153,8 +159,8 @@ export class CommanderView {
   _fit(F, C, T, dpr) {
     const M = this.map, cv = M.cv, pts = F.filter(f => f.alive).map(f => [f.e, f.n]); if (C.picture) pts.push([C.picture.e, C.picture.n]); if (C.predict && C.predict.to) pts.push(C.predict.to); if (T) pts.push([T.e, T.n]); if (pts.length < 2) return;
     let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity; for (const p of pts) { e0 = Math.min(e0, p[0]); e1 = Math.max(e1, p[0]); n0 = Math.min(n0, p[1]); n1 = Math.max(n1, p[1]); }
-    const left = Math.min(340, cv.width / dpr * 0.3), wpx = cv.width / dpr - left - 60, hpx = cv.height / dpr - 230, sc = Math.max(0.02, Math.min(1.2, wpx / Math.max(400, e1 - e0), hpx / Math.max(400, n1 - n0)));
-    M.scale = sc; M.k = sc * dpr; M.cx = (e0 + e1) / 2 - (left / 2) / sc; M.cn = (n0 + n1) / 2 - 20 / sc;
+    const left = Math.min(340, cv.width / dpr * 0.3), wpx = cv.width / dpr - left - 60, hpx = cv.height / dpr - 70 - 270,   /* clear of the top bar, and of the key and the control bar at the bottom */ sc = Math.max(0.02, Math.min(1.2, wpx / Math.max(400, e1 - e0), hpx / Math.max(400, n1 - n0)));
+    M.scale = sc; M.k = sc * dpr; M.cx = (e0 + e1) / 2 - (left / 2) / sc; M.cn = (n0 + n1) / 2 - 100 / sc;
   }
 
   // ------------------------------------------------------------------ pieces of the picture
@@ -227,7 +233,7 @@ export class CommanderView {
     x.globalAlpha = 1;
     if (mid && alpha > 0.3) {
       const who = a.who ? a.who.name : o.to === 'all' ? 'All teams' : 'Team', left = o.t_eta != null ? o.t_eta - t : null;
-      let text = o.text ? String(o.text) : `${who}: ${(KIND[kind] || kind).toLowerCase()}`; if (left != null) text = text.replace(/,?\s*(about\s*)?\d+(\.\d+)?\s*(min|s|sec)\.?$/i, '');
+      let text = orderText(o, who); if (left != null) text = text.replace(/,?\s*(about\s*)?\d+(\.\d+)?\s*(min|s|sec)\.?$/i, '');
       if (o.done) text += ' · done'; else if (left != null) text += left > 0.5 ? ` · ${o.by === 'uaz' ? 'by UAZ, ' : ''}arrives in ${mmss(left)}` : ' · arriving';
       if (spectator && o.wrong) text += ` · WRONG${o.off_m != null ? ', ' + Math.round(o.off_m) + ' m off' : ''}`;
       this._label(mid[0], mid[1], text, spectator && o.wrong ? '#ffcf70' : picked ? '#ffffff' : '#ffe3df', picked ? 3 : 1);
@@ -324,7 +330,7 @@ export class CommanderView {
     if (sig !== this.listSig) { this.listSig = sig; this.rows.textContent = ''; this.eta.clear();
       if (!sorted.length) { const e = document.createElement('div'); e.className = 'cdr-head'; e.textContent = 'No orders standing.'; this.rows.append(e); }
       for (const o of sorted) { const r = document.createElement('button'); r.className = 'btn cdr-row' + (o.done ? ' done' : '') + (String(o.id) === String(this.sel) ? ' on' : ''); r.dataset.id = o.id;
-        const who = byKey.get(refKey(o.to)), k = document.createElement('i'), tx = document.createElement('span'), em = document.createElement('em'); k.textContent = KIND[o.kind] || o.kind; tx.textContent = o.text || `${who ? who.name : o.to === 'all' ? 'All teams' : 'Team'}: ${(KIND[o.kind] || o.kind).toLowerCase()}`; r.append(k, tx, em); this.eta.set(String(o.id), em);
+        const who = byKey.get(refKey(o.to)), k = document.createElement('i'), tx = document.createElement('span'), em = document.createElement('em'); k.textContent = KIND[o.kind] || o.kind; tx.textContent = orderText(o, who ? who.name : o.to === 'all' ? 'All teams' : 'Team'); r.append(k, tx, em); this.eta.set(String(o.id), em);
         if (spectator && o.wrong) { const w = document.createElement('span'); w.className = 'wrong'; w.textContent = `Wrong: aimed at where he thinks the tank is${o.off_m != null ? ', ' + Math.round(o.off_m) + ' m from where it really is' : ''}`; r.append(w); }
         r.onclick = () => { this.sel = String(this.sel) === String(o.id) ? null : o.id; this.listSig = ''; }; this.rows.append(r); } }
     for (const o of sorted) { const em = this.eta.get(String(o.id)); if (!em) continue; const left = o.t_eta != null ? o.t_eta - t : null, s = o.done ? 'done' : left == null ? `given ${mmss(Math.max(0, t - (o.t_order || 0)))} ago` : left > 0.5 ? mmss(left) : 'arriving'; if (em.textContent !== s) em.textContent = s; }

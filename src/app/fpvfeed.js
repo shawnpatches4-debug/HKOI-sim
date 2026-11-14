@@ -27,9 +27,9 @@ const CSS = `
   @keyframes fpvroll { from { top: -20%; } to { top: 102%; } }
   #fpv.black .lines { background: #000; } #fpv.wait .lines, #fpv.wait .rollbar { display: none; }
   #fpv .t { position: absolute; white-space: pre; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 0 0 4px #000; }
-  #fpv .tl { left: max(5.5%, 280px); top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: 26%; } #fpv .br { right: 5.5%; bottom: 26%; text-align: right; }   /* clear of the control bar and the replay bar */
+  #fpv .tl { left: max(5.5%, 280px); top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: var(--fpv-b, 26%); } #fpv .br { right: 5.5%; bottom: var(--fpv-b, 26%); text-align: right; }   /* --fpv-b is kept just above the control bar and the replay bar (see _clear) */
   #fpv .tc { left: 50%; top: 15%; transform: translateX(-50%); text-align: center; font-size: 12px; opacity: .9; }
-  #fpv .bc { left: 50%; bottom: 26%; transform: translateX(-50%); text-align: center; }
+  #fpv .bc { left: 50%; bottom: var(--fpv-b, 26%); transform: translateX(-50%); text-align: center; }
   #fpv .warn { left: 50%; top: 62%; transform: translateX(-50%); text-align: center; font-size: 17px; color: #ffd24a; background: rgba(0, 0, 0, .55); padding: 2px 10px; } #fpv .warn:empty { display: none; }
   body.fpv-on #marks { display: none; }   /* the spectator's name tags do not belong in a camera picture */
   #fpv .warn.alarm { color: #ff5a4a; animation: fpvblink .5s steps(2) infinite; } @keyframes fpvblink { 50% { opacity: .25; } }
@@ -175,11 +175,17 @@ export class FpvFeed {
     // the 3D picture under the overlay: washed out like a cheap analogue camera, greyer as the link weakens; black once it is gone
     const sat = st.fiber ? 0.8 : Math.max(0.05, 0.6 - 0.55 * noise), f = dead && !frozen ? 'brightness(0)' : fly ? (st.fiber ? `saturate(${sat}) contrast(1.08) blur(.35px)` : `saturate(${sat.toFixed(2)}) contrast(1.25) blur(.45px)`) : '';
     if (this.sig.f !== f) { this.sig.f = f; cv.style.filter = f; }
+    this.clearT = (this.clearT || 0) - (o.dt || 0.016); if (this.clearT <= 0) { this.clearT = 0.25; this._clear(); }
     this.snowT += o.dt || 0.016; const tick = this.snowT >= 1 / 30; if (tick) this.snowT = 0;
     const so = noise > 0.02 ? Math.min(1, 0.25 + noise) : 0; if (this.sig.so !== so) { this.sig.so = so; this.snow.style.opacity = so; this.rollbar.style.opacity = Math.min(0.9, noise * 1.6); }
     if (tick && noise > 0.02) this._snow(noise);
     // tearing: now and then the whole picture slips sideways for a thirtieth of a second, more often the weaker the link
     if (tick) { const slip = fly && !dead && noise > 0.12 && this._rnd() < noise * 0.5 ? (this._rnd() - 0.5) * 60 * noise : 0, tr = slip ? `translateX(${slip.toFixed(1)}px) skewX(${(slip * 0.12).toFixed(2)}deg)` : ''; if (this.sig.tr !== tr) { this.sig.tr = tr; cv.style.transform = tr; } }
+  }
+  // keep the bottom read-outs above whatever bars the battle screen has up (the control bar, its second row, the replay bar)
+  _clear() {
+    let top = window.innerHeight; for (const id of ['replay', 'bar']) { const e = document.getElementById(id); if (!e || e.hidden) continue; const r = e.getBoundingClientRect(); if (r.height > 0) top = Math.min(top, r.top); }
+    const b = Math.round(window.innerHeight - top + 14) + 'px'; if (this.sig.b !== b) { this.sig.b = b; this.el.style.setProperty('--fpv-b', b); }
   }
   _rnd() { let s = this.rs; s ^= s << 13; s ^= s >>> 17; s ^= s << 5; this.rs = s; return (s >>> 0) / 4294967296; }
   _snow(noise) {

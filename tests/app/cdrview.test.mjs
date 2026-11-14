@@ -16,7 +16,7 @@ const mkEl = tag => { const o = { tag, hidden: false, style: {}, dataset: {}, ch
 globalThis.document = { head: mkEl('head'), body: mkEl('body'), getElementById: () => null, createElement: tag => tag === 'canvas' ? CV.createCanvas(4, 4) : mkEl(tag) };
 const mem = {}; globalThis.localStorage = { getItem: k => k in mem ? mem[k] : null, setItem(k, v) { mem[k] = String(v); } };
 globalThis.window = globalThis; window.devicePixelRatio = 1;
-const { HK, Battle } = require(path.join(ROOT, 'tests/battle/load.js'));
+const { HK, Battle, EnemyVeh } = require(path.join(ROOT, 'tests/battle/load.js'));
 const { MapView } = await import(path.join(ROOT, 'src/app/mapview.js'));
 // ---- a real battle, one minute in
 const cfg = HK.defaultConfig(), B = new Battle.Battle({ biome: 'farmland', mapSeed: 3, seed: 1, skill: 'trained', cfg, lookup: HK.meetLookup(cfg), force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 2 }, { type: 'rpg', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 1 }, { type: 'fpv_fiber', n: 1 }] });
@@ -83,6 +83,21 @@ M.fit(); FIT = true; M.cdr.setOn(false); M.cdr.setOn(true); M.draw(mapState(true
 { const out = B.units.filter(u => u.alive && !u.gone).map(u => M.toScreen(u.e, u.n)).filter(p => p[0] < 300 || p[0] > W - 10 || p[1] < 60 || p[1] > H - 60); console.log('automatic zoom: scale', M.scale.toFixed(3), 'px per metre; teams outside the clear part of the picture:', out.length); if (out.length) bad.push('the automatic zoom leaves teams outside the picture or under the list'); }
 // 12. switched off again: the ordinary map, nothing of the commander's on the page
 M.cdr.setOn(false); M.draw(mapState(true)); save('map_normal_after'); if (!M.cdr.list.hidden || !M.cdr.none.hidden || mem['hkoi.cdrview'] !== 'false') bad.push('switching the view off leaves its panels up');
+// 13. the REAL commander (src/battle/enemycdr.js), when this branch has him: a large group fought for five minutes, the view drawn all the way
+if (EnemyVeh && EnemyVeh.FORCES && realCdr === 'function') {
+  const kinds = new Set(), srcs = new Set(); let lost = false, wrong = 0, maxOrders = 0;
+  for (const [key, seed] of [['sprawling_defence', 1], ['mech_ambush', 2], ['armoured_counter', 1]]) {
+    const R = new Battle.Battle({ biome: 'farmland', mapSeed: 3, seed, skill: 'trained', cfg, lookup: HK.meetLookup(cfg), force: EnemyVeh.FORCES[key].force, commander: 'auto', mission: 'advance' });
+    const st = (sp, dt) => ({ tank: R.tank, showAll: sp, units: [], missiles: [], battle: R, t: R.t, dt, fit: true });
+    M.setWorld(R.world); M.fit(); M.cdr.setOn(true); let shots = 0;
+    for (let i = 0; i < 3000 && R.tank.alive && !R.over; i++) { R.step(); const C = R.commander(); if (!C) break; for (const o of C.plan) { kinds.add(o.kind + (o.by === 'uaz' ? ' by truck' : '')); if (o.wrong) wrong++; } if (C.picture) srcs.add(C.picture.src); if (!C.alive || !C.radio) lost = true; maxOrders = Math.max(maxOrders, C.plan.length);
+      M.draw(st(true, R.dt)); if (i % 300 === 299 || (C.plan.length >= 4 && shots < 2 && i % 50 === 0)) { shots++; M.cdr.seenAt = 0; M.draw(st(true, R.dt)); save(`cdr_real_${key}_${Math.round(R.t)}s`); } }
+    const C = R.commander(); console.log(`real commander, ${key}: fought to ${R.t.toFixed(0)} s; commander ${C ? (C.alive ? 'alive' : 'lost') : 'none'}; orders standing ${C ? C.plan.length : '-'}; labels on the map ${M.cdr.state().labels.length}`);
+    if (C) console.log('   ' + C.plan.map(o => o.text).slice(0, 6).join(' | ').slice(0, 300)); M.draw(st(false, R.dt)); if (M.cdr.state().labels.some(l => /true position|WRONG| off/.test(l))) bad.push('real commander, fog of war: the truth leaks');
+  }
+  console.log(`real commander: kinds of order seen ${[...kinds].join(', ')}; sources of his picture ${[...srcs].join(', ')}; wrong-order frames ${wrong}; most orders at once ${maxOrders}; commander lost in some battle: ${lost}`);
+  if (!kinds.size) bad.push('the real commander gave no orders in three battles');
+}
 console.log('battle.commander on this branch before the fake: ' + realCdr + '. Pictures in ' + OUT);
 console.log('CDRVIEW NODE CHECK ' + (bad.length ? 'FAILED: ' + bad.join('; ') : 'PASSED'));
 process.exit(bad.length ? 1 : 0);
