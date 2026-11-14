@@ -63,7 +63,7 @@ function coverSheet() {
 const VERT_PARS = /* glsl */`
   attribute vec4 aSeed;
   uniform highp sampler2D hkHeight; uniform sampler2D hkCol; uniform sampler2D hkC1; uniform sampler2D hkC2;
-  uniform vec4 hkGrid; uniform vec2 hkCellN; uniform vec2 hkCentre; uniform vec3 hkPatch; uniform float hkTime; uniform vec3 hkWind; uniform float uSnow; uniform float uWet; uniform float hkDry;
+  uniform vec4 hkGrid; uniform vec2 hkCellN; uniform vec2 hkCentre; uniform vec2 hkEye; uniform vec3 hkPatch; uniform float hkTime; uniform vec3 hkWind; uniform float uSnow; uniform float uWet; uniform float hkDry;
   uniform vec3 hkClear[${MAX_CLEAR}];
   varying vec3 vTint; varying vec3 vWp; varying float vUp;
   float hkGround(vec2 xz){
@@ -95,7 +95,7 @@ const VERT_BODY = /* glsl */`
     // fade out at the rim of the patch, and where something stands on it
     float edge = 1.0 - smoothstep(R * 0.62, R, distance(wxz, hkCentre));
     float trod = 1.0; for (int i = 0; i < ${MAX_CLEAR}; i++) { vec3 q = hkClear[i]; float r = max(q.z, 0.01); trod *= mix(1.0, smoothstep(r * 0.55, r, distance(wxz, q.xy)), step(0.0, q.z)); }
-    float sc = there * edge * hkPatch.z * (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
+    float sc = there * edge * smoothstep(1.0, 2.8, distance(wxz, hkEye)) * hkPatch.z *   /* nothing right against the lens */ (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
     h *= sc * mix(1.0, 0.18, 1.0 - trod) * (1.0 - 0.45 * uSnow * crop); w *= step(0.02, sc);
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
     vec3 lp = vec3(position.x * ca * w - position.z * sa * w, position.y * h, position.x * sa * w + position.z * ca * w);
@@ -125,7 +125,7 @@ export class GroundCover {
     g.instanceCount = 0;
     this.uniforms = {
       hkHeight: { value: null }, hkCol: { value: null }, hkC1: { value: null }, hkC2: { value: null }, hkGrid: { value: new THREE.Vector4(1, 0, 4000, 8000) }, hkCellN: { value: new THREE.Vector2(15.6, 513) },
-      hkCentre: { value: new THREE.Vector2() }, hkPatch: { value: new THREE.Vector3(90, 45, 1) }, hkTime: ENV.time, hkWind: ENV.wind, uSnow: ENV.snow, uWet: ENV.wet, hkDry: { value: 1 },
+      hkCentre: { value: new THREE.Vector2() }, hkEye: { value: new THREE.Vector2() }, hkPatch: { value: new THREE.Vector3(90, 45, 1) }, hkTime: ENV.time, hkWind: ENV.wind, uSnow: ENV.snow, uWet: ENV.wet, hkDry: { value: 1 },
       hkClear: { value: Array.from({ length: MAX_CLEAR }, () => new THREE.Vector3(0, 0, -1)) },
     };
     const mat = new THREE.MeshStandardMaterial({ map: coverSheet(), alphaTest: 0.36, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
@@ -162,7 +162,7 @@ export class GroundCover {
   update(camera, units) {
     if (!this.mesh.visible && !this.level) return;
     const u = this.uniforms, R = u.hkPatch.value.y, f = camera.getWorldDirection(this._fwd), p = camera.position;
-    u.hkCentre.value.set(p.x + f.x * R * 0.72, p.z + f.z * R * 0.72);
+    u.hkCentre.value.set(p.x + f.x * R * 0.72, p.z + f.z * R * 0.72); u.hkEye.value.set(p.x, p.z);
     // from high up the cover cannot be told from the ground's own texture: shrink it away rather than draw it for nothing
     const alt = this.world ? p.y - this.world.h(p.x, -p.z) : 0, k = 1 - Math.min(1, Math.max(0, (alt - 28) / 40));
     u.hkPatch.value.z = k; this.mesh.visible = this.level > 0 && k > 0;
