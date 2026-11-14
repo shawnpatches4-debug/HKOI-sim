@@ -7,7 +7,7 @@
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; D="$(mktemp -d)"; trap 'rm -rf "$D"' EXIT
 mkdir -p "$D/node_modules"; ln -s "$ROOT/.cache/package" "$D/node_modules/three"
 cp -r "$ROOT/src/render" "$D/render"; cp -r "$ROOT/src/app" "$D/app"; cp "$ROOT"/tests/interior/*.mjs "$D/"
-cd "$D"; rc=0
+cd "$D"; rc=0; export HK_ASSETS="${HK_ASSETS:-$ROOT/assets}"
 if [ "$1" != "frames" ]; then node overlap.test.mjs || rc=1; fi
 if [ "$1" != "overlap" ]; then node interior.test.mjs || rc=1; fi
 exit $rc

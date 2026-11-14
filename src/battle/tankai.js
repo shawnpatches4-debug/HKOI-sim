@@ -125,7 +125,7 @@
       const T = this.tank, W = this.world; if (!T.alive || this._pending) return; const A = this._crew(), S = this.skillOf();
       const hk = this._hkoiTurret();
       if (hk != null) { const d = angDiff(hk, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360; if (this._rf) { this._rf = null; } A.w.main = 'turret given to HKOI'; A.w.hkoi = 'engaging an incoming threat'; return; }
-      A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar silent, waiting for a warning';
+      A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar scanning, nothing in the air';   /* the radar scans all the time (Shawn, 14 Nov) */
       { const out = this._crewOut('gnr'); if (out) { this._rf = null; A.w.main = out; return; } }   /* crew.js: the gunner has frozen, or nobody is on the gun */
       const tg = this._targets(); let pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
       // the gunner finishes what he started: he leaves a target he is already laying on only for a more dangerous one
@@ -312,9 +312,35 @@
     },
     skillOf() { return this._SK[this.skill] || this._SK.trained; },
     // what the crew is doing, for the screen: [[who, text], ...]
+    // The same picture as tankStatus(), in pieces a display can lay out: one entry per station, each with a one-word state, a tone
+    // (ok / busy / warn / bad), a plain sentence, the target if there is one, what is left in the magazine, and short facts.
+    // Reads the battle only; decides nothing.
+    tankBoard() {
+      const T = this.tank, A = this._crew(), w = A.w, st = T.st || {}, t = this.t; if (!this._max) this._max = { main: Math.max(T.main || 0, 18), m2: Math.max(T.m2 || 0, 600), m240: Math.max(T.m240 || 0, 800), coax: Math.max(T.coax || 0, 0), obs: Math.max(st.obs || 0, 150), he: Math.max(st.he || 0, 150), aps: Math.max((st.apsL || 0), (st.apsR || 0), 4) };
+      const M = this._max, cs = this.crewState ? this.crewState() : null, man = k => cs && cs.on && cs.who && cs.who[k] ? cs.who[k] : null, km = R => R >= 1000 ? (R / 1000).toFixed(2) + ' km' : Math.round(R / 10) * 10 + ' m';
+      if (!T.alive) return [{ key: 'VEH', title: 'Vehicle', state: 'destroyed', tone: 'bad', line: 'The vehicle is knocked out.', facts: [] }];
+      let air = 0, nearest = null; for (const v of this.volleys.slice(-3)) if (v.rec && v.rec.threats && t >= v.t0 && t <= v.tEnd) for (const th of v.rec.threats) { const e = th.viz && th.viz.end; if (t >= v.t0 + th.t0 && (!e || t <= v.t0 + e.t)) { air++; const left = (e ? v.t0 + e.t : v.tEnd) - t; if (!nearest || left < nearest.left) nearest = { key: th.key, left }; } }
+      const word = (txt, map, dflt) => { for (const [re, wd, tone] of map) if (re.test(txt || '')) return [wd, tone]; return dflt; };
+      const tgt = txt => { const m = /^(.+? #\d+), ([\d.]+) (km|m)(?:: (.*))?$/.exec(txt || ''); return m ? { name: m[1], range: m[2] + ' ' + m[3], note: m[4] || '' } : null; };
+      const out = [], moving = T.mode === 'moving' || Math.abs(T.v || 0) > 0.5, cdr = man('cdr');
+      { const [stt, tone] = word(T.intent || A.intent, [[/frozen|no orders/i, 'frozen', 'bad'], [/mov|shift|advanc|hunt|driv/i, 'moving', 'busy'], [/hold|position|overwatch/i, 'holding', 'ok']], ['commanding', 'ok']);
+        out.push({ key: 'CDR', title: 'Commander', state: stt, tone, line: T.intent || A.intent || 'holding', facts: [moving ? `moving at ${Math.round(Math.abs(T.v || 0) * 3.6)} km/h` : 'halted', `hull facing ${String(Math.round(((T.h || 0) % 360 + 360) % 360)).padStart(3, '0')}`, cs && cs.buttoned ? 'hatches shut' : 'hatch open'], man: cdr }); }
+      { const txt = w.hkoi || 'radar scanning', [stt, tone] = word(txt, [[/engag|firing/i, 'engaging', 'busy'], [/track/i, 'tracking', 'busy'], [/drone/i, 'alerted', 'warn'], [/knocked|down|out of/i, 'out', 'bad']], ['searching', 'ok']);
+        out.push({ key: 'HKOI', title: 'HKOI 30 mm', state: stt, tone, line: txt, facts: [air ? `${air} threat${air === 1 ? '' : 's'} in the air${nearest ? ', nearest arrives in ' + Math.max(0, nearest.left).toFixed(1) + ' s' : ''}` : 'radar scanning all round'], ammo: [{ label: 'obscurant', n: st.obs || 0, max: M.obs }, { label: 'airburst', n: st.he || 0, max: M.he }] }); }
+      out.push({ key: 'APS', title: 'Trophy', state: (st.apsL || 0) + (st.apsR || 0) > 0 ? 'ready' : 'empty', tone: (st.apsL || 0) + (st.apsR || 0) === 0 ? 'bad' : (st.apsL || 0) === 0 || (st.apsR || 0) === 0 ? 'warn' : 'ok', line: (st.apsL || 0) === 0 && (st.apsR || 0) === 0 ? 'Both sides empty.' : (st.apsL || 0) === 0 ? 'Left side empty: threats from the left get through.' : (st.apsR || 0) === 0 ? 'Right side empty: threats from the right get through.' : 'Ready on both sides.', facts: [], ammo: [{ label: 'left', n: st.apsL || 0, max: M.aps }, { label: 'right', n: st.apsR || 0, max: M.aps }] });
+      { const txt = String(w.main || 'no target in view'), g = tgt(txt), rf = this._rf, lay = rf && rf.at > t ? rf.at - t : 0, [stt, tone] = word(txt, [[/given to HKOI/i, 'waiting', 'warn'], [/no multi|no rounds/i, 'empty', 'bad'], [/casualt|frozen|cannot/i, 'out', 'bad'], [/no target/i, 'scanning', 'ok']], [lay > 0 ? 'laying' : 'firing', 'busy']);
+        out.push({ key: 'MAIN', title: 'Main gun', state: !T.loaded && T.main > 0 && stt !== 'waiting' ? 'loading' : stt, tone, line: g ? `${g.name} at ${g.range}${g.note ? ': ' + g.note : ''}` : txt, target: g, facts: [T.loaded ? 'round in the breech' : T.main > 0 ? 'loading' : 'no round', lay > 0 ? `on target in ${lay.toFixed(1)} s` : null].filter(Boolean), ammo: [{ label: 'multi-purpose', n: T.main || 0, max: M.main }], man: man('gnr') }); }
+      { const txt = String(w.m2 || 'scanning'), g = tgt(txt), [stt, tone] = word(txt, [[/out of ammunition/i, 'empty', 'bad'], [/scanning/i, 'scanning', 'ok']], ['firing', 'busy']);
+        out.push({ key: 'M2', title: 'Commander\'s .50', state: stt, tone, line: g ? `${g.name} at ${g.range}${g.note ? ': ' + g.note : ''}` : txt, target: g, facts: [], ammo: [{ label: 'rounds', n: T.m2 || 0, max: M.m2 }] }); }
+      { const txt = String(w.m240 || 'loader inside'), g = tgt(txt), L = A.ldr || {}, [stt, tone] = word(txt, [[/casualt/i, 'out', 'bad'], [/inside/i, 'stowed', 'ok'], [/scanning/i, 'scanning', 'ok']], ['firing', 'busy']);
+        out.push({ key: 'M240', title: 'Loader\'s M240', state: stt, tone, line: g ? `${g.name} at ${g.range}` : txt, target: g, facts: [L.up ? 'loader up in his hatch: he cannot load the main gun' : 'loader inside, loading the main gun'], ammo: [{ label: 'rounds', n: T.m240 || 0, max: M.m240 }], man: man('ldr') }); }
+      out.push({ key: 'DRV', title: 'Driver', state: moving ? 'driving' : 'halted', tone: moving ? 'busy' : 'ok', line: moving ? `Driving at ${Math.round(Math.abs(T.v || 0) * 3.6)} km/h` : 'Halted, engine running.', facts: [], man: man('drv') });
+      for (const r of out) if (r.man) { r.crew = { state: r.man.state, stress: r.man.stress, why: r.man.why || '' }; delete r.man; } else delete r.man;
+      return out;
+    },
     tankStatus() {
       const T = this.tank, A = this._crew(), w = A.w; if (!T.alive) return [['VEHICLE', 'destroyed']];
-      return [['CDR', T.intent || A.intent], ['HKOI', w.hkoi || 'radar silent'], ['MAIN', `${w.main || 'no target'} · ${T.main} MP rounds${T.loaded ? '' : ', loading'}`], ['.50', `${w.m2 || 'scanning'} · ${T.m2} rounds`], ['M240', `${w.m240 || 'loader inside'} · ${T.m240} rounds`]];
+      return [['CDR', T.intent || A.intent], ['HKOI', w.hkoi || 'radar scanning'], ['MAIN', `${w.main || 'no target'} · ${T.main} MP rounds${T.loaded ? '' : ', loading'}`], ['.50', `${w.m2 || 'scanning'} · ${T.m2} rounds`], ['M240', `${w.m240 || 'loader inside'} · ${T.m240} rounds`]];
     },
   };
 

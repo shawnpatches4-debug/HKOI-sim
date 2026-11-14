@@ -44,6 +44,11 @@ reset(); P.block.position.y = -0.2; P.round.position.set(0, DIM.GY, 0.25); sweep
 reset(); for (let yaw = 0; yaw < 360; yaw += 7.5) { hullTurn.rotation.y = yaw * Math.PI / 180; sweep('turret turned ' + yaw + ' degrees over the hull', (a, b) => a.g !== b.g); } hullTurn.rotation.y = 0;
 // the hull's fittings must stay outside the circle the basket sweeps (radius 1.0 m): measured in plan from the turret axis
 const ringBad = []; { const p = new THREE.Vector3(); for (const r of I.audit) { if (r.g !== 'hul' || r.tag !== 'hull-tub' || r.h.y < 0.02) continue; const o = obb(r); p.set(0, o.c.y, 0); const d = pointDist(o, p); if (d < 1.02) ringBad.push(`HULL FITTING INSIDE THE BASKET'S CIRCLE  ${r.tag} piece near ${o.c.toArray().map(v => +v.toFixed(2))}: ${(d * 100).toFixed(0)} cm from the turret axis`); } }
+// nothing fixed to the turret may sit in the ring of space the hull's race ring and roof edge occupy as the turret turns
+// (between 1.05 and 1.15 m from the axis, from 12 cm below the ring plane to 2 cm above it)
+{ const p = new THREE.Vector3(), seen = new Set(); for (const r of I.audit) { if (r.g !== 'tur' || r.bucket === 'shell') continue; const o = obb(r); let hit = false;
+    for (let i = -2; i <= 2 && !hit; i++) for (let j = -2; j <= 2 && !hit; j++) for (let k = -2; k <= 2 && !hit; k++) { p.copy(o.c).addScaledVector(o.ax[0], o.h[0] * i / 2).addScaledVector(o.ax[1], o.h[1] * j / 2).addScaledVector(o.ax[2], o.h[2] * k / 2); const rad = Math.hypot(p.x, p.z); if (rad > 1.05 && rad < 1.15 && p.y > DIM.HR - 0.12 && p.y < DIM.HR + 0.02) hit = true; }
+    if (hit && !seen.has(r.tag)) { seen.add(r.tag); ringBad.push(`TURRET PART IN THE HULL RING'S SPACE  ${r.tag} near ${o.c.toArray().map(v => +v.toFixed(2))}`); } } }
 for (const x of ringBad) console.log(x);
 // eyes
 const eyeBad = []; reset(); const all = I.audit.map(r => ({ r, o: obb(r) }));
