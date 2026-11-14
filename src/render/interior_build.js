@@ -31,7 +31,7 @@ const P = K.PAINT, M = K.METAL;
 export const COL = {
   cream: [0xc6cdbd, P], creamD: [0xa7b1a0, P], hull: [0xcfcdbb, P], black: [0x1b1c1e, M], blackP: [0x232527, P], rubber: [0x111111, K.RUBBER],
   olive: [0x4f5640, P], oliveD: [0x3b4232, P], steel: [0x8b8f8d, M], gunm: [0x3c3f40, M], red: [0xb3160f, P], yellow: [0xd8ab2c, P],
-  brass: [0xb8913e, M], floor: [0x9c9a92, K.TREAD], cloth: [0x25261f, K.CLOTH], tan: [0x6b6247, K.CLOTH], case: [0x2c2d29, P], glass: [0x06090a, M], white: [0xe8e8e2, P],
+  brass: [0xb8913e, M], floor: [0x9c9a92, K.TREAD], cloth: [0x4a4b40, K.CLOTH], tan: [0x6b6247, K.CLOTH], case: [0x2c2d29, P], glass: [0x06090a, M], white: [0xe8e8e2, P],
 };
 
 // names of the indicator lights (the number is the slot in the shader's list)
@@ -350,7 +350,7 @@ export function buildInterior(labels) {
       k.cyl('p', 0.028, 0.028, 0.04, C.gunm, 0, 0, 0, Math.PI / 2, 0, 0, 12); k.cyl('p', 0.02, 0.02, 0.006, C.black, 0, 0, 0.022, Math.PI / 2, 0, 0, 12);
       for (const sd of [-1, 1]) { k.cyl('p', 0.0105, 0.0105, 0.15, C.steel, sd * 0.098, -0.013, 0, 0, 0, -sd * (Math.PI / 2 + 0.16), 8); k.box('p', 0.02, 0.02, 0.026, C.gunm, sd * 0.165, -0.024, 0); k.cyl('p', 0.004, 0.004, 0.09, C.steel, sd * 0.2, -0.03, -0.03, 0, 0, -sd * (Math.PI / 2 + 0.1), 6); }   /* arms, lever perches and brake levers */
       k.cyl('p', 0.019, 0.019, 0.105, C.rubber, -0.225, -0.036, 0, 0, 0, Math.PI / 2 + 0.16, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, -0.185 - i * 0.02, -0.0296 - i * 0.0032, 0, 0, 0, Math.PI / 2 + 0.16, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, -0.2795, -0.0448, 0, 0, 0, Math.PI / 2 + 0.16, 10);
-      k.label('R  N  D', 0.009, 0, -0.012, 0.0256, 0, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.215, zb + 0.19] };
+      k.label('R  N  D', 0.009, 0, -0.012, 0.0256, 0, 0, 0, 'panel', { size: 22 }); }, pos: [0, yb - 0.205, zb + 0.175] };
     moving.throttle = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.019, 0.019, 0.105, C.rubber, 0, 0, 0, 0, 0, 0, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, 0, -0.04 + i * 0.02, 0, 0, 0, 0, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, 0, 0.055, 0, 0, 0, 0, 10); k.box('p', 0.006, 0.09, 0.008, C.white, 0, 0, 0.0195); k.cyl('p', 0.024, 0.024, 0.012, C.steel, 0, -0.058, 0, 0, 0, 0, 10); }, pos: [0.225, -0.036, 0] };
     moving.gear = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.004, 0.004, 0.034, C.steel, 0, 0.017, 0, 0, 0, 0, 6); k.ball('p', 0.008, C.red, 0, 0.037, 0); }, pos: [0, 0.006, 0.027] };
     H.push(0, yb - 0.215, zb + 0.215); ctl(H, 'hul', 'spot', 0, 0, 'T-bar: turn it to steer, twist the right grip for power, gear selector on the hub (the driver works it: watch it move)', { locked: true, r: 0.09 }); H.pop();
@@ -386,5 +386,5 @@ export const SEATS = {
   in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 360, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38, near: 0.58, nearUp: 0.95 },   /* with his head up in the cupola the outside model's own cupola fittings (nearer than 0.95 m) are left out, or they would fill the ports */
   in_gnr: { g: 'tur', name: 'Gunner', eye: [0.63, 0.2, -0.5], yaw0: 0, pitch0: -3, yawLim: 115, pitch: [-55, 35], fov: 70 },
   in_ldr: { g: 'tur', name: 'Loader', eye: [-0.66, 0.34, 0.3], yaw0: 52, pitch0: -14, yawLim: 175, pitch: [-60, 50], fov: 80 },
-  in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.12, DIM.DZ + 0.22], yaw0: 0, pitch0: -14, yawLim: 85, pitch: [-62, 26], fov: 74, near: 0.8 },   /* back in the reclined seat: the T-bar and its grips in the foreground, displays either side, the vision blocks above */
+  in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.12, DIM.DZ + 0.22], yaw0: 0, pitch0: -19, yawLim: 85, pitch: [-62, 26], fov: 74, near: 0.8 },   /* back in the reclined seat: the T-bar and its grips in the foreground, displays either side, the vision blocks above */
 };
