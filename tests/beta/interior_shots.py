@@ -141,6 +141,23 @@ async def main():
                 ring = await pg.evaluate("(() => { const I = __beta.interior, m = (__beta.volleys || {}).info; const inf = (I.s && I.s.volleyInfo) || []; const b = __beta.battle, v = b.volleys[b.volleys.length - 1]; const l = v && v.launches && v.launches[0]; const brg = l ? l.brg : 0; return ((Math.round((((brg - (I.turBrg || 0)) % 360) + 360) % 360 / 45)) % 8); })()")
                 print('threat toward port', ring); await shot('optic_missile_through_cdr_port', opt('in_cdr', f"c.optic.ring === {ring}")); await shot('optic_missile_through_ldr_periscope', opt('in_ldr', "c.optic.kind === 'lp'")); await shot('optic_missile_drv_centre', opt('in_drv', "c.g === 'hul' && c.optic.yaw === 0"))
             await pg.evaluate("void __beta.interior.lookThrough(null)")
+        if which == 'cdrhatch':   # the commander's hatch in its three states: his own view forward, to each side and back, and close views of the cupola from outside
+            await pg.evaluate("void lk('in_cdr', 0, 10, 1)")
+            for i in range(80):
+                st = await pg.evaluate('JSON.stringify(__beta.interior.stats)')
+                if '"crewReady":true' in st or '"crewFailed":true' in st: break
+                await pg.wait_for_timeout(1500)
+            print('crew', st)
+            await pg.evaluate("void (window.cupv = (dist, up, off) => { const s = __beta.scene, c = s.camera, V = __beta.THREE, tu = __beta.tank.turret; tu.updateWorldMatrix(true, false); const a = off * Math.PI / 180, p = tu.localToWorld(new V.Vector3(-0.52, 1.0, -0.36)), q = tu.localToWorld(new V.Vector3(-0.52 - Math.sin(a) * dist, 1.0 + up, -0.36 + Math.cos(a) * dist)); __beta.cams.mode = 'free'; s.controls.enabled = false; c.up.set(0, 1, 0); c.position.copy(q); c.lookAt(p.x, p.y - 0.15, p.z); })")
+            for st, nm in [(0, 'closed'), (1, 'open_protected'), (2, 'open')]:
+                await pg.evaluate(f"void (__beta.interior.cupUser = true, __beta.interior.setCupolaHatch({st}, true))")
+                for vn, y, p in [('fwd', 0, 10), ('right', 90, 10), ('left', -90, 10), ('rear', 178, 10), ('down', 0, -30)]:
+                    await shot(f'cdr_{nm}_eye_{vn}', f"lk('in_cdr', {y}, {p}, 1)")
+                    if vn == 'fwd': print(nm, await pg.evaluate("JSON.stringify((() => { const I = __beta.interior, e = I.tur.worldToLocal(__beta.scene.camera.position.clone()); return { eye: [+e.x.toFixed(3), +e.y.toFixed(3), +e.z.toFixed(3)], headOut: I.headOut, near: __beta.scene.camera.near, cup1: +I.st.cup1.toFixed(2), cup2: +I.st.cup2.toFixed(2), cap: I.capMode, caps: (I.cap || []).length }; })())"))
+                await pg.evaluate('void __beta.runTo(__beta.battle.t + 2)')   # the figures move on the battle clock: let the commander get up (or down) before he is pictured from outside
+                for vn, d, u, o in [('front_right', 2.6, 0.9, 50), ('right', 2.4, 0.7, 100), ('rear_right', 2.6, 1.1, 150)]:
+                    await shot(f'cdr_{nm}_outside_{vn}', f"cupv({d}, {u}, {o})")
+            await pg.evaluate("void (__beta.interior.setCupolaHatch(0, true), __beta.interior.cupUser = false)")
         if which in ('ldrup', 'hatches'):
             await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
             for i in range(80):

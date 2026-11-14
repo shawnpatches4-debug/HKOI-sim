@@ -68,6 +68,12 @@ export class Interior {
       if (d.pos) g.position.fromArray(d.pos); if (d.quat) g.quaternion.copy(d.quat); if (d.rx) g.rotation.x = d.rx; if (d.out) g.userData.out = true; if (d.hole) g.userData.hole = true; g.userData.home = g.position.clone(); g.userData.q0 = g.quaternion.clone(); P[key] = g; }
     for (const [key, d] of Object.entries(B.moving)) if (P[key]) (d.parent ? P[d.parent] : G[d.g]).add(P[key]);
     P.round.visible = false;
+    // seen from outside in daylight the commander's lid, its post and the cupola's upper ring are lit like the outside model (the interior's own
+    // material is lit by its lamps, and a lid swung back away from them read as a black disc). The plane that never cuts: as on the outside model.
+    this.outMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.15 }); this.outMat.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e7)];
+    this.outMat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#ifdef USE_COLOR_ALPHA\n diffuseColor.rgb *= vColor.rgb;\n#endif'); };   /* the 4th number of each point's colour is the interior's kind of surface, not an opacity */
+    this.outMat.customProgramCacheKey = () => 'cab-out';
+    this.cupMeshes = []; for (const k of ['cupHatch', 'cupPost', 'cupHole']) for (const c of P[k].children) if (c.isMesh && c.material === M.fit) this.cupMeshes.push(c); this.cupStd = false;
     // dirty glass in the vision blocks (the world is seen through it)
     { const k = new Kit(labels), g = B.moving.glass; for (let i = 0; i < 8; i++) { const a = i * 45 * DEG; k.plane('g', 0.21, g.h, [0xffffff, 0], g.c[0] + Math.sin(a) * g.R, g.y, g.c[1] - Math.cos(a) * g.R, 0, -a + Math.PI, 0); } const m = k.mesh('g', M.glass); m.renderOrder = 50; this.tur.add(m); meshes++; tris += 16;
       const k2 = new Kit(labels), d = B.moving.dglass; for (const x of d.xs) k2.plane('g', d.w, d.h, [0xffffff, 0], x, d.y, d.z); const m2 = k2.mesh('g', M.glass); m2.renderOrder = 50; this.hul.add(m2); meshes++; tris += 6; }
@@ -189,7 +195,7 @@ export class Interior {
   _marks(show) { const m = typeof document !== 'undefined' && document.getElementById('marks'); if (m) m.style.visibility = show ? '' : 'hidden'; }
   // from a seat, the roof machine guns of the outside model are drawn from both sides (they are open shells: from below one saw sky through them)
   _dbl(on) { if (on && !this.dbl) { const list = [], seen = new Set(), root = this.tank.turret; if (!root) return; root.traverse(o => { if (!o.isMesh || !o.material) return; for (const m of [].concat(o.material)) if (m && /^M2|M240/.test(m.name || '') && !seen.has(m)) { seen.add(m); list.push([m, m.side]); m.side = THREE.DoubleSide; m.needsUpdate = true; } }); this.dbl = list; } else if (!on && this.dbl) { for (const [m, sd] of this.dbl) { m.side = sd; m.needsUpdate = true; } this.dbl = null; } }
-  _leave() { this._marks(true); this._near(); this._dbl(false); this._box(null); this._mgRest(); if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
+  _leave() { this._marks(true); this._near(); this._dbl(false); this._box(null); this._cap('whole'); this._mgRest(); if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
   // the cutaway: the outside model is sliced by a plane that always faces the viewer, and shown from both sides so the far half reads as a shell
   _cutOn() { if (this.ext) return; const seen = new Set(), list = []; const root = this.tank.model || this.tank.group; root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && !seen.has(m)) { seen.add(m); list.push({ m, side: m.side, cp: m.clippingPlanes }); m.side = THREE.DoubleSide; m.clippingPlanes = [this.plane]; m.needsUpdate = true; } }); this.ext = list; }
   _cutOff() { if (!this.ext) return; for (const x of this.ext) { x.m.side = x.side; x.m.clippingPlanes = x.cp || null; x.m.needsUpdate = true; } this.ext = null; }
@@ -201,7 +207,10 @@ export class Interior {
     // From outside, the interior is normally not there at all. The exception: a man with his head out. While the loader is up at his machine gun
     // (or the viewer has opened the commander's hatch) the hatch lids and those men are shown in every outside view, and nothing else of the interior.
     const lu0 = !!(s && s.on && s.battle && s.battle.tank.ai && s.battle.tank.ai.ldr && s.battle.tank.ai.ldr.up && s.battle.tank.alive);
-    const outside = !!(s && s.on && !seat && !cut && cm !== 'gnr' && cm !== 'citv' && cm !== 'hkoi' && cm !== 'drv' && this.tank.turret && (lu0 || (this.built && (this.st.ldrU > 0.004 || (this.cupUser && (this.cupHatch > 0 || this.st.cup1 + this.st.cup2 > 0.01))))));
+    // the crew's own state (four times a second, also while no inside view is open): shown on the HKOI panel's crew page; the commander's
+    // hatch follows whether the crew is closed down (closed) or not (open-protected) until the viewer moves its handle
+    if (s && s.on && s.battle) { this.crewT = (this.crewT || 0) - dt; if (this.crewT <= 0) { this.crewT = 0.25; this.crewS = s.battle.crewState ? s.battle.crewState() : null; if (!this.cupUser && this.crewS && this.crewS.on) { const want = this.crewS.buttoned ? 0 : 1; if (want !== this.cupHatch) this.setCupolaHatch(want); } } }
+    const outside = !!(s && s.on && !seat && !cut && cm !== 'gnr' && cm !== 'citv' && cm !== 'hkoi' && cm !== 'drv' && this.tank.turret && (lu0 || this.cupHatch > 0 || (this.built && (this.st.ldrU > 0.004 || this.st.cup1 + this.st.cup2 > 0.01))));   /* from outside the commander's lid and the man in his hatch are seen whenever the hatch is not closed */
     const mode = outside ? 'outside' : cm, on = !!(s && s.on && (seat || cut || outside));
     if (!on) { if (this.active) this._leave(); return; }
     if (!this.built) this._build();
@@ -261,8 +270,6 @@ export class Interior {
     const hk = !T.alive ? 'OFF' : this.hkFireT > 0 ? 'FIRING' : s.volleys && s.volleys.aimAt ? 'LAYING' : nTrk ? 'TRACKING' : info.some(m => m.cued) ? 'CUED' : 'SEARCH';   /* the radar scans all the time: with nothing found it is searching */
     this.hkState = hk; this.warning = T.alive && active && inbound; this.warnTone = this.warning && this.toneOn;
 
-    // the crew's own state (four times a second): shown on the HKOI panel's crew page; the commander's hatch follows whether the crew is closed down
-    this.crewT = (this.crewT || 0) - dt; if (this.crewT <= 0) { this.crewT = 0.25; this.crewS = B.crewState ? B.crewState() : null; if (!this.cupUser && this.crewS && this.crewS.on) { const want = this.crewS.buttoned ? 0 : 1; if (want !== this.cupHatch) this.setCupolaHatch(want); } }
     // ---- indicator lights
     const I = SHARED.uInd.value, blink = (this.clock * 2.2) % 1 < 0.55 ? 1 : 0, set = (n, val) => { if (IND[n] != null) I[IND[n]] = val; }, rf = B._rf, wait = rf ? rf.at - B.t : 0;
     this.lampTestT = Math.max(0, this.lampTestT - dt);
@@ -296,7 +303,7 @@ export class Interior {
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
     LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * (1.3 + 1.2 * this.st.cup1 + 3.2 * this.st.cup2)); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
-    const a = (dome && !dead ? 0.045 * (FX.emergency ? 0.35 : 1) : 0.012) + (seat ? 0 : dayK * 0.5);   /* seen from outside (cutaway, a man in a hatch) daylight falls on it */ SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
+    const a = (dome && !dead ? 0.045 * (FX.emergency ? 0.35 : 1) : 0.012) + (seat && !this.headOut ? 0 : dayK * 0.5);   /* seen from outside (cutaway, a man in a hatch) daylight falls on it */ SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
     // flash of the penetration, glow of a fire, and the smoke
     if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
     const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
@@ -318,12 +325,22 @@ export class Interior {
 
     { const lids = !(cut && this.cutTop); if (P.hatch.visible !== lids) P.hatch.visible = P.cupHatch.visible = lids; }   /* with the roof lifted off, the two hatch lids go with it */
     // ---- displays
-    this._box(SEATS[mode] && !cut ? (this.headOut ? (mode === 'in_ldr' ? 'hatch' : null) : mode) : mode === 'outside' && this.st.hatch > 0.02 ? 'hatch' : null);
-    this._sights(dt, s, seat, cut); if (mode === 'outside' || this.headOut) { this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
+    { const bx = SEATS[mode] && !cut ? (this.headOut ? (mode === 'in_ldr' ? 'hatch' : null) : mode) : mode === 'outside' && this.st.hatch > 0.02 ? 'hatch' : null; this._box(bx);
+      this._cap(bx && bx !== 'hatch' ? 'hide' : !cut && this.st.cup1 + this.st.cup2 > 0.01 ? 'cut' : 'whole'); }   /* the outside model's own closed commander's lid: left out inside the seat box, cut away while the hatch is open */
+    { const std = (mode === 'outside' || this.headOut) && !(mode === 'in_cdr' && this._cupK(1) < 0.5); if (std !== this.cupStd) { this.cupStd = std; for (const c of this.cupMeshes) c.material = std ? this.outMat : this.mat.fit; } }   /* (from his own eye in the gap the lid's underside keeps the interior's lighting) */
+    this._sights(dt, s, seat, cut); if (mode === 'outside' || (this.headOut && mode !== 'in_cdr')) {   /* the commander up in his cupola still sees the inside of it below him, lit by its own lamps and the daylight */ this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
   _cupPose() { const h = this.part && this.part.cupHatch; if (!h) return;   /* not built yet: the pose is applied when it is */
-    h.position.y = h.userData.home.y + 0.1 * Math.max(this.st.cup1, Math.min(1, this.st.cup2 * 3)); h.rotation.y = -2.5 * sm((this.st.cup2 - 0.3) / 0.7); }   /* up its post first, then swung aside round it */
+    h.position.y = h.userData.home.y + DIM.CUPLIFT * this._cupK(0); h.rotation.y = -2.5 * sm((this.st.cup2 - 0.3) / 0.7); }   /* up its post first, then swung aside round it */
+  // How far the commander's hatch is through its moves: i 0 = how far the lid is up its post (the same number puts his eye in the gap
+  // under it), i 1 = how far his head and shoulders are out (only once the lid is well on its way aside, so he never rises into it)
+  _cupK(i) { return i ? sm((this.st.cup2 - 0.4) / 0.6) : Math.max(this.st.cup1, Math.min(1, this.st.cup2 * 3)); }
+  // The commander's eye (interior frame) for how far he has his head up (hu 0 down at his displays, 1 up at the ports / in the gap / out)
+  // and which way he looks (yaw, degrees): seated, up at the ports (hatch closed), in the gap under the raised lid leaning toward the
+  // side he looks at, or head and shoulders out. Written into out.
+  _cdrEye(hu, yaw, out) { const S = SEATS.in_cdr, k1 = this._cupK(0), k2 = this._cupK(1), top = S.eye[1] + S.up + (S.slot - S.eye[1] - S.up) * k1 + (S.out - S.slot) * k2, u = Math.max(hu, k2), lean = S.lean * k1 * (1 - k2) * u;
+    return out.set(S.eye[0] + Math.sin(yaw * DEG) * lean, S.eye[1] + (top - S.eye[1]) * u, S.eye[2] - Math.cos(yaw * DEG) * lean); }
   setCupolaHatch(state, now) { this.cupHatch = state; for (const c of this.controls || []) if (c.key === 'cdrHatch') c.state = state; if (now) { this.st.cup1 = state === 1 ? 1 : 0; this.st.cup2 = state === 2 ? 1 : 0; this._cupPose(); } }
   // What each crewman is doing this moment, handed to the figures: where his head and hands are, how he is bearing up (from the battle's
   // crew model), whether he is hurt (the damage reports), whether a hit is about to land.
@@ -334,13 +351,22 @@ export class Interior {
     const brace = info.some(m => m.range < (m.drone ? 150 : 400)) ? 1 : 0, flinch = clamp(FX.shake, 0, 1), KEY = { gnr: 'in_gnr', cdr: 'in_cdr', ldr: 'in_ldr', drv: 'in_drv' };
     const grip = (part, x, y, z, out) => { part.updateMatrix(); _v.set(x, y, z).applyMatrix4(part.matrix); if (part.parent && part.parent !== this.tur && part.parent !== this.hul) { part.parent.updateMatrix(); _v.applyMatrix4(part.parent.matrix); } out[0] = _v.x; out[1] = _v.y; out[2] = _v.z; };
     for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
-      M.face = null; M.on = !gone && (this.mode !== 'outside' || (r === 'ldr' && this.st.ldrU > 0.45) || (r === 'cdr' && this.st.cup2 > 0.5)); M.up = 0; M.firing = false; M.aim = 0; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
+      M.face = null; M.on = !gone && (this.mode !== 'outside' || (r === 'ldr' && this.st.ldrU > 0.45) || (r === 'cdr' && this._cupK(0) > 0.5));   /* from outside: the commander with his head in the gap under the raised lid, or out */ M.up = 0; M.firing = false; M.aim = 0; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
       M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
       M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; M.rise = 0; }
-    if (this.cupHatch >= 1 && men.cdr.status === 'ok' && men.cdr.state !== 'panicked') { men.cdr.head[1] += SEATS.in_cdr.up * 0.75 * Math.max(this.st.cup1, this.st.cup2) + 0.5 * this.st.cup2; men.cdr.rise = this.st.cup2; }   /* up at the ports when the hatch is raised; head and shoulders out when it is open */
     grip(P.yoke, -0.135, 0.06, 0.01, men.gnr.hands[0]); grip(P.yoke, 0.135, 0.06, 0.01, men.gnr.hands[1]);
     grip(P.tbar, -0.225, -0.036, 0.0, men.drv.hands[0]); grip(P.tbar, 0.225, -0.036, 0.0, men.drv.hands[1]);
-    men.cdr.hands[0][0] = 0.5; men.cdr.hands[0][1] = 0.16; men.cdr.hands[0][2] = 0.02; men.cdr.hands[1][0] = 0.96; men.cdr.hands[1][1] = 0.04; men.cdr.hands[1][2] = 0.14;
+    // the commander: his head where the viewer's eye is when the viewer is in his seat; otherwise seated with the hatch closed, standing with
+    // his head in the gap under the raised lid when it is open-protected, head and shoulders out when it is open. Hands on his panels, on the
+    // inside of the ring, or on top of it.
+    { const C = men.cdr, k1 = this._cupK(0), k2 = this._cupK(1), [CX, CZ] = DIM.CUP, me = this.mode === 'in_cdr' && !this.eyeOff && this.cdrEye && k1 > 0.02, ok = C.status === 'ok' && C.state !== 'panicked';
+      if (me) { C.head[0] = this.cdrEye.x; C.head[1] = this.cdrEye.y; C.head[2] = this.cdrEye.z; } else if (ok && k1 > 0) { this._cdrEye(1, 0, _v); C.head[0] = _v.x; C.head[1] = _v.y; C.head[2] = _v.z; }
+      C.snap = this.mode === 'in_cdr' && !this.eyeOff;   /* his own body under the camera: it must never lag behind the eye (also while the battle is paused and the hatch is moved) */
+      C.rise = ok || me ? Math.max(0.8 * k1, k2) : 0;
+      const fy = me ? (((SEATS.in_cdr.yaw0 + this.look.yaw) % 360 + 540) % 360 - 180) : 0, fs = Math.sin(fy * DEG), fc = Math.cos(fy * DEG); if (me) C.face = fy;   /* up in his hatch his body turns with his head (it turns in the cupola), so his own arms never swing across his view */
+      const rim = (sx, a, f) => [CX + fc * sx * a + fs * f, 0, CZ - fc * f + fs * sx * a];   /* a point on the rim: a to his side, f ahead of him */
+      const hand = (i, x0, y0, z0, sx) => { const H = C.hands[i], p1 = rim(sx, 0.26, 0.26), p2 = rim(sx, 0.3, 0.24); let x = x0 + (p1[0] - x0) * k1, y = y0 + (DIM.CUPTOP - 0.055 - y0) * k1, z = z0 + (p1[2] - z0) * k1; x += (p2[0] - x) * k2; y += (DIM.CUPTOP + 0.035 - y) * k2; z += (p2[2] - z) * k2; H[0] = x; H[1] = y; H[2] = z; };
+      hand(0, 0.5, 0.16, 0.02, -1); hand(1, 0.96, 0.04, 0.14, 1); }
     { const H = men.ldr.hands, ra = this.roundAt; if (ra && this.loadF >= 0.1) { H[0][0] = ra.x - 0.05; H[0][1] = ra.y - 0.03; H[0][2] = ra.z - 0.12; H[1][0] = ra.x + 0.04; H[1][1] = ra.y - 0.02; H[1][2] = ra.z + (this.loadF > 0.56 ? 0.5 : 0.3); }   /* left hand under the nose, right hand at the base: he rams with the right */
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
     if (this.st.ldrU > 0.004) {   // the climb, acted: reach for the lid's handle, push it open, hands to the rim, up through the opening, onto the gun
@@ -395,15 +421,18 @@ export class Interior {
   }
   _mgRest() { if (this.mgPivot) { this.mgPivot.rotation.y = 0; this.mgCradle.rotation.x = 0; this.mgMesh.position.copy(this.mgHome); this.st.mgYaw = 0; this.mgPitch = 0; } }
   // in an outside view only the hatch lids, the dark of the open hatchways and the men who are up are left showing
-  _outsideOnly() { const lo = this.st.hatch > 0.25, co = this.st.cup2 > 0.25 || this.st.cup1 > 0.25; for (const g of [this.tur, this.hul]) for (const c of g.children) { if (c.userData.crew) continue; c.visible = !!c.userData.out && (!c.userData.hole || (c === this.part.ldrHole ? lo : co)) && (c === this.part.hatch || c === this.part.ldrHole ? this.st.hatch > 0.01 : !!this.cupUser); } }
+  // (the commander's lid, post and hatchway exactly while the outside model's own lid is cut away: see _cap)
+  _outsideOnly() { const lo = this.st.hatch > 0.25, co = this.st.cup1 + this.st.cup2 > 0.01; for (const g of [this.tur, this.hul]) for (const c of g.children) { if (c.userData.crew) continue; c.visible = !!c.userData.out && (!c.userData.hole || (c === this.part.ldrHole ? lo : co)) && (c === this.part.hatch || c === this.part.ldrHole ? this.st.hatch > 0.01 : co); } }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
     let yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch; const U = cams.mode === 'in_ldr' ? this.st.ldrU : 0, upK = sm((U - 0.6) / 0.3);
     if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + ((this.mgPitch || 0) - 8 - S.pitch0) * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun, a few degrees below its line */
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
+    const cdr = cams.mode === 'in_cdr'; if (cdr && S.out) { const k2 = this._cupK(1); if (k2 > 0) pitch = Math.max(pitch, S.pitch[0] + (S.outPitch - S.pitch[0]) * k2); }   /* head out: he looks round the battlefield, not down into his own hatch */
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
-    _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
+    if (cdr && S.out) { this._cdrEye(H.up, yaw, _v); _v.x += H.x; _v.y += Math.sin(this.clock * 1.3) * 0.0015; _v.z += H.z; (this.cdrEye || (this.cdrEye = new THREE.Vector3())).copy(_v); }   /* his eye: at the ports, in the gap under the raised lid, or out (see _cdrEye) */
+    else _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
     // at an optic: the eye goes to a place just inside its glass and looks out along it; the move there and back is a fixed 0.4 s blend
     if (this.opMode !== cams.mode) { this.opMode = cams.mode; const keep = this.optic && this.opticNew && this.optic.g === S.g ? this.optic : this.pendingOptic && this.pendingOptic.g === S.g ? this.pendingOptic : null; this.optic = keep; this.pendingOptic = null; this.opT = 1; this.lookSeat = null; this.opCur = null; if (keep) { L.yaw = 0; L.pitch = 0; L.zoom = 1; this.lpYaw = 0; this.eyeOff = null; } }
     this.opticNew = false;
@@ -415,7 +444,7 @@ export class Interior {
       this.opT = Math.min(1, this.opT + dt / 0.4);
     }
     { const c = this.opCur || (this.opCur = {}); c.x = _v.x; c.y = _v.y; c.z = _v.z; c.yaw = yaw; c.pitch = pitch; c.fov = fovT; }
-    { const out = _v.y > DIM.RF + 0.05 && !O && this.opT >= 1 ? 0 : 1; if (SHARED.uInside.value !== out) SHARED.uInside.value = SHARED.uInsideF.value = out; this.headOut = !out; }   /* once his eyes are above the roof the outside model is drawn in the ordinary way */   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
+    { const out = _v.y > (S.headOutY || DIM.RF + 0.05) && !O && this.opT >= 1 ? 0 : 1;   /* the commander only once his eye is up at the top of his cupola's ring: at the ports (hatch closed) he is inside */ if (SHARED.uInside.value !== out) SHARED.uInside.value = SHARED.uInsideF.value = out; this.headOut = !out; }   /* once his eyes are above the roof the outside model is drawn in the ordinary way */   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
     g.updateWorldMatrix(true, false);
     { const sh = this.fxS ? Math.min(2.2, this.fxS.shake) : 0; if (sh > 0.02) { const t = Math.floor(this.simT * 40), n = k => (Math.sin((t + k * 17.3) * 127.1) * 43758.5453 % 1); _v.x += n(1) * sh * 0.022; _v.y += n(2) * sh * 0.02; _v.z += n(3) * sh * 0.016; this.shakeRoll = n(5) * sh * 0.04; } else this.shakeRoll = 0; }   /* the whole compartment jumps */
     cam.position.copy(_v).applyMatrix4(g.matrixWorld);
@@ -493,11 +522,41 @@ export class Interior {
   _box(mode) {
     const on = !!mode; if (on && !this.boxed) { const seen = new Set(), list = []; const root = this.tank.model || this.tank.group;
       if (!this.boxPl) this.boxPl = Array.from({ length: 6 }, () => new THREE.Plane());
-      root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && !seen.has(m) && !/^M2|M240/.test(m.name || '')) { seen.add(m); list.push({ m, cp: m.clippingPlanes, ci: m.clipIntersection }); m.clippingPlanes = this.boxPl; m.clipIntersection = true; m.needsUpdate = true; } });
+      root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh || o.userData.cupCap) return; for (const m of [].concat(o.material)) if (m && !seen.has(m) && !/^M2|M240/.test(m.name || '')) { seen.add(m); list.push({ m, cp: m.clippingPlanes, ci: m.clipIntersection }); m.clippingPlanes = this.boxPl; m.clipIntersection = true; m.needsUpdate = true; } });
       this.boxed = list; }
     else if (!on && this.boxed) { for (const x of this.boxed) { x.m.clippingPlanes = x.cp || null; x.m.clipIntersection = !!x.ci; x.m.needsUpdate = true; } this.boxed = null; }
     if (!on) return; const drv = mode === 'in_drv', G = drv ? this.hul : this.tur, lo = drv ? [-0.8, -1.4, -5.2] : [-1.3, -1.3, -1.3], hi = drv ? [0.8, -0.2, DIM.DZ + 0.95] : [1.3, DIM.RF + 0.8, 1.75];
     if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; lo[0] = hx - r; lo[1] = DIM.RF - 0.3; lo[2] = hz - r; hi[0] = hx + r; hi[1] = DIM.RF + 0.3; hi[2] = hz + r; }   /* only the hatchway itself: the loader stands in it, his gun's ring is round it */
     for (let i = 0; i < 6; i++) { const ax = i >> 1, sg = i & 1 ? 1 : -1; _v2.set(0, 0, 0).setComponent(ax, sg); _v.set(0, 0, 0).setComponent(ax, sg > 0 ? hi[ax] : lo[ax]); _v.applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); this.boxPl[i].setFromNormalAndCoplanarPoint(_v2, _v); }
+  }
+  // The outside model's own commander's cupola top (its closed lid and the discs inside its ring) does not move. Every triangle of it that
+  // reaches into the column over the hatchway (0.445 m round the hatch's centre, from just above the roof, 0.6 m, to 1.0 m: under the
+  // shield panels) is moved, once, into a mesh of its own with its own copy of the material, so that it can be hidden (from a seat, inside
+  // the seat box) or cut away exactly inside the column (12 sides, 0.43 m across the flats, 0.62 to 0.98 m) while the hatch is open,
+  // without touching the loader's hatch cut or anything else. Measured on m1v3_turret.json: lid 0.78 to 0.91 inside 0.42 m, ring top
+  // 0.78 out to 0.48 m, roof 0.59 (kept: it is the floor of the hatchway under the man), shield panels from 1.05 m (kept).
+  _capSetup(tk) {
+    this.cap = []; this.capPl = Array.from({ length: 14 }, () => new THREE.Plane()); const toT = new THREE.Matrix4(), p = new THREE.Vector3(), [CX, CZ] = DIM.CUP; tk.turret.updateWorldMatrix(true, true); const inv = new THREE.Matrix4().copy(tk.turret.matrixWorld).invert(), list = [];
+    tk.turret.traverse(o => { let q = o; while (q) { if (q.userData && q.userData.cab) return; q = q.parent; } if (o.isMesh && !o.isSkinnedMesh && !o.isInstancedMesh && o.geometry && o.geometry.attributes.position && !o.geometry.groups.length && !Array.isArray(o.material) && !/^M2|M240/.test((o.material && o.material.name) || '') && !/m2|m240/i.test(o.name)) list.push(o); });
+    for (const o of list) { const g = o.geometry, pa = g.attributes.position, n = g.index ? g.index.count : pa.count, idx = g.index ? g.index.array : null; toT.copy(inv).multiply(o.matrixWorld); const inCol = new Uint8Array(pa.count);
+      for (let i = 0; i < pa.count; i++) { p.fromBufferAttribute(pa, i).applyMatrix4(toT); inCol[i] = Math.hypot(-p.x - CX, -p.z - CZ) < 0.445 && p.y > 0.6 && p.y < 1.0 ? 1 : 0; }   /* the interior's frame is the turret's turned half round: x and z change sign */
+      const keep = [], cap = [], P3 = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()], seg = (u, v) => { const ex = v.x - u.x, ez = v.z - u.z, l2 = ex * ex + ez * ez || 1e-9, s = clamp(((-CX - u.x) * ex + (-CZ - u.z) * ez) / l2, 0, 1); return Math.hypot(u.x + ex * s + CX, u.z + ez * s + CZ); };
+      const across = (a, b, c) => { P3[0].fromBufferAttribute(pa, a).applyMatrix4(toT); P3[1].fromBufferAttribute(pa, b).applyMatrix4(toT); P3[2].fromBufferAttribute(pa, c).applyMatrix4(toT); if (P3.some(q => q.y < 0.61 || q.y > 1.0)) return false;   /* a big flat piece with its corners outside the column but lying across it (not the roof: that is kept) */
+        if (Math.min(seg(P3[0], P3[1]), seg(P3[1], P3[2]), seg(P3[2], P3[0])) < 0.445) return true; let sg = 0; for (let k = 0; k < 3; k++) { const u = P3[k], v = P3[(k + 1) % 3]; sg += Math.sign((v.x - u.x) * (-CZ - u.z) - (v.z - u.z) * (-CX - u.x)); } return Math.abs(sg) === 3; };
+      for (let t = 0; t < n; t += 3) { const a = idx ? idx[t] : t, b = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2; (inCol[a] || inCol[b] || inCol[c] || across(a, b, c) ? cap : keep).push(a, b, c); }
+      if (!cap.length) continue;
+      const big = pa.count > 65535, mk = arr => new THREE.BufferAttribute(big ? new Uint32Array(arr) : new Uint16Array(arr), 1), cg = new THREE.BufferGeometry(); for (const k in g.attributes) cg.setAttribute(k, g.attributes[k]); cg.setIndex(mk(cap)); cg.computeBoundingSphere(); g.setIndex(mk(keep));
+      const m0 = o.material, cm = m0.clone(); cm.onBeforeCompile = m0.onBeforeCompile; cm.customProgramCacheKey = m0.customProgramCacheKey; cm.clippingPlanes = this.capPl; cm.clipIntersection = true; cm.userData = { ...m0.userData, cupCap: true };
+      const mesh = new THREE.Mesh(cg, cm); mesh.name = 'cupola-cap'; mesh.userData.cupCap = true; mesh.castShadow = o.castShadow; mesh.receiveShadow = o.receiveShadow; mesh.frustumCulled = o.frustumCulled; mesh.position.copy(o.position); mesh.quaternion.copy(o.quaternion); mesh.scale.copy(o.scale); o.parent.add(mesh); this.cap.push(mesh); }
+    this.capMode = null;
+  }
+  _cap(mode) {
+    const tk = this.tank; if (!tk.turret) return; if (this.capOf !== tk.turret) { this.capOf = tk.turret; this._capSetup(tk); }
+    if (!this.cap.length) return; const vis = mode !== 'hide'; if (this.capVis !== vis) { this.capVis = vis; for (const m of this.cap) m.visible = vis; }
+    const P = this.capPl; if (mode !== 'cut') { if (this.capMode !== mode) { this.capMode = mode; P[13].set(_v2.set(0, 1, 0), 1e6); P[12].set(_v2.set(0, -1, 0), 1e6); } return; }   /* (planes that nothing is inside of: the column is empty, nothing is cut) */
+    this.capMode = mode; const G = this.tur, [CX, CZ] = DIM.CUP, ap = 0.43;
+    for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; _v2.set(Math.cos(a), 0, Math.sin(a)); _v.set(CX + _v2.x * ap, 0.8, CZ + _v2.z * ap).applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); P[i].setFromNormalAndCoplanarPoint(_v2, _v); }
+    _v2.set(0, -1, 0); _v.set(CX, 0.62, CZ).applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); P[12].setFromNormalAndCoplanarPoint(_v2, _v);
+    _v2.set(0, 1, 0); _v.set(CX, 0.98, CZ).applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); P[13].setFromNormalAndCoplanarPoint(_v2, _v);
   }
 }

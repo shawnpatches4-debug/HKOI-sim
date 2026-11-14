@@ -21,6 +21,8 @@ export const DIM = {
   RFF: 0.43,      // the same at the front wall (the roof slopes down toward the gun)
   GY: 0.20,       // height of the gun's axis
   CUP: [0.52, 0.36], CUPR: 0.40,     // commander's cupola: centre (x, z) and inner radius
+  CUPTOP: 0.895,  // top of the cupola's ring (the seal the lid closes on), RF + 0.355. The OUTSIDE model's own cupola (measured from m1v3_turret.json): roof 0.59, ring top 0.78 out to 0.48 m, closed lid 0.78 to 0.91 inside 0.42 m, TUSK shield panels round it from 1.05 to 1.39 (open at front and back)
+  CUPLIFT: 0.12,  // open-protected: the lid slides this far up its post (its top then stays under the shield panels, 1.05)
   HAT: [-0.77, 0.62], HATR: 0.33,     // loader's hatch: placed from the outside model, whose M240 lies at x -0.90..-0.64, z -0.63..+0.43 in this frame (measured from m1v3_turret.json), so that the gun's grips are at the hatch's front rim and he stands behind them
   BZ: 1.0,        // the bustle bulkhead (blast doors) is at this z
   DZ: -2.75,      // the driver sits here
@@ -247,7 +249,13 @@ export function buildInterior(labels) {
       k.box('p', 0.07, 0.03, PZ + 0.1, C.steel, 0, 0.028, -(PZ + 0.1) / 2 + 0.03); k.cyl('p', 0.04, 0.04, 0.07, C.gunm, 0, 0.0, 0, 0, 0, 0, 10);                         /* the arm over the lid and its collar on the post */
       k.cyl('p', 0.008, 0.008, 0.12, C.steel, 0, -0.045, -PZ - 0.12, 0, 0, Math.PI / 2, 8); k.box('p', 0.02, 0.03, 0.02, C.steel, -0.05, -0.03, -PZ - 0.12); k.box('p', 0.02, 0.03, 0.02, C.steel, 0.05, -0.03, -PZ - 0.12);   /* inside handle */
       k.box('p', 0.05, 0.03, 0.09, C.steel, 0, -0.03, -PZ + R - 0.08); k.label('LATCH', 0.012, 0, -0.046, -PZ + R - 0.08, Math.PI / 2, 0, 0, 'plate', { size: 22 }); }, pos: [CX, yt + 0.132, CZ + PZ] };
-    moving.cupHole = { g: 'tur', out: true, hole: true, build: k => { k.cyl('p', R - 0.01, R - 0.01, 0.004, C.glass, 0, 0, 0, 0, 0, 0, 24); }, pos: [CX, yt + 0.122, CZ] };   /* seen only from outside: the dark of the open hatchway over the outside model's own closed lid */
+    // The open hatchway as seen from outside or from a man up in it (the interior itself is then not drawn, and the outside model's own
+    // closed lid is cut away inside 0.43 m of the hatch's centre): the cupola's upper ring in olive from the outside model's ring top up
+    // to the seal, and the dark well of the hatchway down to the roof.
+    moving.cupHole = { g: 'tur', out: true, hole: true, build: k => { const top = D.CUPTOP - RF, lo = 0.6 - RF;
+      k.cyl('p', R + 0.02, R + 0.02, top - 0.2, C.olive, 0, (top + 0.2) / 2, 0, 0, 0, 0, 32, true); k.ring('p', R + 0.02, 0.012, C.oliveD, 0, top, 0, Math.PI / 2, 0, 0, 32);
+      k.geo('p', new THREE.CylinderGeometry(R + 0.008, R + 0.008, top - lo, 32, 1, true), C.glass, 0, (top + lo) / 2, 0, 0, 0, 0, -1, 1, 1);   /* turned inside out: its inner face is the one drawn */
+      k.geo('p', new THREE.CircleGeometry(R + 0.008, 32), C.glass, 0, lo, 0, -Math.PI / 2, 0, 0); }, pos: [CX, RF, CZ] };   /* (thin skins only: nothing solid that the overlap check would meet inside) */
     // between the ports: head pads under each block, the hand crank that turns the cupola, an interphone box
     for (let i = 0; i < 8; i++) { const b = (i * 45 + 22.5) * Math.PI / 180; T.box('fit', 0.12, 0.05, 0.02, C.rubber, CX + Math.sin(b) * (R - 0.0), y0 + 0.055, CZ - Math.cos(b) * (R - 0.0), 0, -b, 0); }
     { const b = -62 * Math.PI / 180; T.push(CX + Math.sin(b) * (R - 0.03), y0 + 0.05, CZ - Math.cos(b) * (R - 0.03), 0, -b, 0); T.cyl('fit', 0.02, 0.02, 0.05, C.gunm, 0, 0, 0.02, Math.PI / 2, 0, 0, 8); T.box('fit', 0.012, 0.09, 0.012, C.steel, 0, -0.03, 0.05); T.cyl('fit', 0.011, 0.011, 0.05, C.rubber, 0, -0.075, 0.075, Math.PI / 2, 0, 0, 8); ctl(T, 'tur', 'spot', 0, -0.03, 'Cupola traverse crank: turns the commander\'s weapon station by hand (the commander works it)', { locked: true, r: 0.06 }); T.pop(); }
@@ -409,7 +417,12 @@ export function buildInterior(labels) {
 // not drawn (the housings of the vision blocks would otherwise fill the glass); the interior itself is never cut.
 // yaw 0 looks along the gun (or along the hull for the driver); positive yaw is to the right.
 export const SEATS = {
-  in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 360, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38, near: 0.58, nearUp: 0.95 },   /* with his head up in the cupola the outside model's own cupola fittings (nearer than 0.95 m) are left out, or they would fill the ports */
+  in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 360, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38, near: 0.58, nearUp: 0.95,   /* with his head up in the cupola the outside model's own cupola fittings (nearer than 0.95 m) are left out, or they would fill the ports */
+    // with the hatch open-protected his eye is in the gap between the cupola's ring (0.907 with its seal) and the raised lid (its underside
+    // 0.886 + 0.12 = 1.006), 0.37 m above the outside roof (0.59), and he leans 0.16 m toward the side he looks at; open, he stands up
+    // in it, the eye 1.47 (0.88 m above the roof, over the tops of the shield panels round the cupola, 1.39, so that he sees over them and is seen
+    // from outside: at 1.25 his head was hidden behind their dark windows) and he looks down 35 degrees at most
+    slot: (DIM.CUPTOP + 0.012 + DIM.CUPTOP - 0.009 + DIM.CUPLIFT) / 2, lean: 0.16, out: 1.47, outPitch: -35, headOutY: DIM.CUPTOP - 0.04 },
   in_gnr: { g: 'tur', name: 'Gunner', eye: [0.63, 0.2, -0.5], yaw0: 0, pitch0: -3, yawLim: 115, pitch: [-55, 35], fov: 70 },
   in_ldr: { g: 'tur', name: 'Loader', eye: [-0.66, 0.34, 0.3], yaw0: 52, pitch0: -14, yawLim: 175, pitch: [-60, 50], fov: 80 },
   in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.12, DIM.DZ + 0.22], yaw0: 0, pitch0: -19, yawLim: 85, pitch: [-62, 26], fov: 74, near: 2.3 },   /* back in the reclined seat: the T-bar and its grips in the foreground, displays either side, the vision blocks above */
