@@ -38,7 +38,7 @@ DIRECTOR = r"""(() => {
   run('main gun misses, team pulls out', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: false }], ['GNR.ontheway:2', 'GNR.miss:1'], (b, k) => { if (k === 1) b.units[0].state = 'moving'; });
   run('commander\'s .50 knocks a team out', [{ type: 'team_lost', uid: 1, by: 'm2' }], ['CDR.cease:1']);
   run('loader hit', [{ type: 'loader_hit' }], ['LDR.scream:3', 'LDR.wound:3', 'CDR.loader_down:2']);
-  run('gunner wounded, driver down, a man freezes', [{ type: 'crew', who: 'gnr', what: 'wounded' }, { type: 'crew', who: 'drv', what: 'down' }, { type: 'crew', who: 'ldr', what: 'freeze' }], ['GNR.wound:3', 'CDR.drv_down:2', 'LDR.freeze:2']);
+  run('gunner wounded, driver down, a man freezes', [{ type: 'crew', who: 'gnr', what: 'wounded' }, { type: 'crew', who: 'drv', what: 'down' }, { type: 'crew', who: 'ldr', what: 'freeze' }], ['GNR.scream:3', 'GNR.wound:3', 'CDR.drv_down:2', 'LDR.freeze:2']);
   run('crew bails out', [{ type: 'crew', who: null, what: 'bail_out' }], ['FLUSH', 'CDR.bail:3']);
   run('team located', [{ type: 'located', uid: 1, how: 'thermal' }], ['GNR.contact:1']);
   run('move order, ahead', [{ type: 'tank_move', to: [0, 300] }], ['CDR.drv_fwd:1|CDR.moveout:1', 'DRV.ack_fwd:1']);
