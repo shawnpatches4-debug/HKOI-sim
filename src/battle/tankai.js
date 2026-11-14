@@ -83,9 +83,9 @@
       const T = this.tank, W = this.world, A = this._crew(); if (this.t < A.scanAt) return; A.scanAt = this.t + 1;
       const see = SEEING[this.cond] == null ? 1 : SEEING[this.cond];
       for (const u of this.units) { if (!u.alive || u.gone || u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
-        const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.15 : veg >= 2 ? 0.4 : 1, moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
+        const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.3 : veg >= 2 ? 0.5 : 1, close = R < 400 ? 6 : R < 800 ? 3 : R < 1500 ? 1.5 : 1,   /* men a few hundred metres away fill the thermal sight: far easier to pick out than at two kilometres */ moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
         const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30;
-        const p = 0.03 * Math.exp(-R / 1500) * cover * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1);   /* chance per second (assumed) */
+        const p = Math.min(0.6, 0.03 * Math.exp(-R / 1500) * cover * close * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1));   /* chance per second (assumed) */
         if (this.rng.random() < p) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t });
           this.say(this.t, 'tank', inSector ? 'GNR' : 'CDR', `${inSector ? 'Gunner' : 'Commander'} picks up a heat signature: ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m${veg >= 4 ? ' in the trees' : veg >= 2 ? ' in scrub' : ' in the open'}.`, `thermal scan, about ${(p * 100).toFixed(1)}% a second for this team here`); } }
       // a located team that is still in view stays tracked as it moves
@@ -125,7 +125,7 @@
       const T = this.tank, W = this.world; if (!T.alive || this._pending) return; const A = this._crew(), S = this.skillOf();
       const hk = this._hkoiTurret();
       if (hk != null) { const d = angDiff(hk, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360; if (this._rf) { this._rf = null; } A.w.main = 'turret given to HKOI'; A.w.hkoi = 'engaging an incoming threat'; return; }
-      A.w.hkoi = this._volleyActive() ? 'tracking' : 'radar silent, waiting for a warning';
+      A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar silent, waiting for a warning';
       const tg = this._targets(), pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
       if (!pick) { this._rf = null; A.w.main = T.main > 0 ? 'no target in view' : 'no multi-purpose rounds left'; return; }
       const { k, u, R } = pick, want = brgOf(T.e, T.n, k.e, k.n), d = angDiff(want, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360;
