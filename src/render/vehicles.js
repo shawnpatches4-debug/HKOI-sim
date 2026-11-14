@@ -90,6 +90,7 @@ export class VehicleView {
     const paint = (m, gear) => {
       if (done.has(m)) return done.get(m);
       const c = m.clone(); c.name = m.name; vehicleFinish(c); const prev = c.onBeforeCompile; c.onBeforeCompile = (sh, r) => { prev(sh, r); sh.uniforms.uFGround = this.groundU; };   /* dirt builds up from THIS vehicle's ground, not the M1's */
+      if (gear && this.S.wheeled) c.color.multiplyScalar(0.16);                              /* tyres: dark enough that the theatre's paint leaves them alone */
       c.userData.c0 = c.color.clone(); (gear ? this.gearMats : this.mats).push(c); done.set(m, c); return c;
     };
     const gear = this.gear = root.getObjectByName('gear'); this.body = root.getObjectByName('body'); this.turret = root.getObjectByName('turret'); this.gun = root.getObjectByName('gun');
