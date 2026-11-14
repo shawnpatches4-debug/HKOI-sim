@@ -79,7 +79,7 @@ export class CommanderView {
     this.none = mk('div', 'panel', 'No enemy commander in this battle'); this.none.id = 'cdr-none'; this.none.hidden = true;
     host.append(this.list, this.none); this._show();
   }
-  setOn(v) { this.on = !!v; store.set('hkoi.cdrview', this.on); this.lastT = null; this._show(); }
+  setOn(v) { this.on = !!v; store.set('hkoi.cdrview', this.on); this.lastT = null; this.seenAt = 0; this._show(); }
   _show() { if (!this.host) return; this.host.classList.toggle('cdr', this.on); this.btn.classList.toggle('on', this.on); if (!this.on) { this.list.hidden = true; this.none.hidden = true; } }
 
   // the commander's record for this moment, or null
@@ -108,6 +108,9 @@ export class CommanderView {
     const dt = jump ? 1e3 : Math.max(0, st.dt || 0), kp = 1 - Math.exp(-EASE_POS * dt), ki = 1 - Math.exp(-EASE_IN * dt), ko = 1 - Math.exp(-EASE_OUT * dt);
     if (jump) { this.anim.clear(); this.pos.clear(); this.bel = null; }
     const F = this._forces(battle, C), spectator = !!st.showAll, M = this.map, P = (e, n) => M.toScreen(e, n);
+    // When the view comes up (the button, or the map opened with the view already on) the map closes in on his forces and his
+    // picture of the tank, clear of the list on the left. "Whole map" still shows everything.
+    if (!this.seenAt) { this.seenAt = 1; if (st.fit !== false) this._fit(F, C, spectator ? st.tank : null, dpr); }
 
     // Positions ease toward where the battle has them (it moves them in steps). Every eased value first moves toward the target it
     // had LAST frame for this frame's time, and only then takes the new target: so a change is followed from the frame it was seen in,
@@ -140,11 +143,18 @@ export class CommanderView {
     if (sel) this._order(x, this.anim.get(sel), C, byKey, t, P, dpr, 1, true, spectator);
     this._belief(x, C, st, t, P, dpr, spectator);   /* after the arrows, so his mark for the tank is never buried under them */
     for (const f of F) { if (f.riding && byKey.has(f.riding)) continue; const [a, b] = P(f.pe, f.pn), held = plan.some(o => !o.done && o.kind === 'hold_fire' && (o.to === 'all' ? f.key[0] === 'u' : refKey(o.to) === f.key)), riders = F.filter(q => q.riding === f.key).map(q => q.name);
-      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
+      this._symbol(x, a, b, f.sym, dpr, { dead: !f.alive || f.cdr && C.alive === false, cdr: f.cdr, hold: held }); this._label(a, b + 15 * dpr, f.name + (f.doing && (M.k / dpr > 0.11 || !f.alive) ? ' · ' + String(f.doing).split(':')[0] : '') + (riders.length ? ' · carrying ' + riders.join(', ') : ''), f.alive ? '#ffd9d3' : '#b8b8b8', 0); }
     if (!C.with && C.e != null) { const [a, b] = P(C.e, C.n); this._symbol(x, a, b, 'cdr', dpr, { dead: C.alive === false, cdr: true }); this._label(a, b + 15 * dpr, 'Commander' + (C.alive === false ? ' · killed' : C.radio === false ? ' · radio out' : ''), '#ffd9d3', 0); }
     if (lost) { const cv = this.map.cv; this._banner(x, cv.width / 2, 78 * dpr, C.alive === false ? 'Commander lost: teams act on their own' : 'Commander has lost his radio: teams act on their own', dpr); }
     this._labels(x, dpr); this._legend(x, dpr, spectator); x.restore();
     this._list(C, plan, byKey, t, spectator, battle);
+  }
+
+  _fit(F, C, T, dpr) {
+    const M = this.map, cv = M.cv, pts = F.filter(f => f.alive).map(f => [f.e, f.n]); if (C.picture) pts.push([C.picture.e, C.picture.n]); if (C.predict && C.predict.to) pts.push(C.predict.to); if (T) pts.push([T.e, T.n]); if (pts.length < 2) return;
+    let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity; for (const p of pts) { e0 = Math.min(e0, p[0]); e1 = Math.max(e1, p[0]); n0 = Math.min(n0, p[1]); n1 = Math.max(n1, p[1]); }
+    const left = Math.min(340, cv.width / dpr * 0.3), wpx = cv.width / dpr - left - 60, hpx = cv.height / dpr - 230, sc = Math.max(0.02, Math.min(1.2, wpx / Math.max(400, e1 - e0), hpx / Math.max(400, n1 - n0)));
+    M.scale = sc; M.k = sc * dpr; M.cx = (e0 + e1) / 2 - (left / 2) / sc; M.cn = (n0 + n1) / 2 - 20 / sc;
   }
 
   // ------------------------------------------------------------------ pieces of the picture
@@ -281,7 +291,7 @@ export class CommanderView {
     const rows = [['sym', 'missile', 'Missile team'], ['sym', 'rocket', 'Rocket team'], ['sym', 'drone', 'Drone crew'], ['sym', 'bmp', 'BMP'], ['sym', 'tank', 'Tank'], ['sym', 'light', 'Light vehicle'], ['sym', 'cdrflag', 'Commander is here'], ['sym', 'hold', 'Ordered to hold fire'],
       ['arr', 'move', 'Move on foot'], ['arr', 'ride', 'Ride in the UAZ'], ['arr', 'strike', 'Strike'], ['arr', 'fix', 'Fix (pin it)'], ['arr', 'break', 'Break contact'], ['arr', 'watch', 'Watch a sector'], ['arr', 'bel', 'Tank, where he thinks it is'], ['arr', 'pred', 'Where he expects it to go']];
     if (spectator) rows.push(['arr', 'true', 'True tank and his error']);
-    const cv = this.map.cv, cols = 2, per = Math.ceil(rows.length / cols), cw = 222 * dpr, rh = 19 * dpr, W = cols * cw + 14 * dpr, H = per * rh + 14 * dpr, x0 = cv.width - W - 12 * dpr, y0 = cv.height - H - 12 * dpr;
+    const cv = this.map.cv, cols = 2, per = Math.ceil(rows.length / cols), cw = 222 * dpr, rh = 19 * dpr, W = cols * cw + 14 * dpr, H = per * rh + 14 * dpr, x0 = cv.width - W - 12 * dpr, y0 = cv.height - H - 66 * dpr;   /* clear of the control bar along the bottom of the battle screen */
     x.fillStyle = 'rgba(8,10,12,.93)'; x.fillRect(x0, y0, W, H); x.font = `${11 * dpr}px ui-monospace, Menlo, monospace`; x.textBaseline = 'middle';
     rows.forEach((r, i) => { const cx = x0 + 10 * dpr + Math.floor(i / per) * cw + 16 * dpr, cy = y0 + 7 * dpr + (i % per + 0.5) * rh, k = r[1], A = [cx - 15 * dpr, cy], B = [cx + 15 * dpr, cy];
       x.save();

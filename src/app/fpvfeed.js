@@ -27,10 +27,11 @@ const CSS = `
   @keyframes fpvroll { from { top: -20%; } to { top: 102%; } }
   #fpv.black .lines { background: #000; } #fpv.wait .lines, #fpv.wait .rollbar { display: none; }
   #fpv .t { position: absolute; white-space: pre; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 0 0 4px #000; }
-  #fpv .tl { left: 5.5%; top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: 21%; } #fpv .br { right: 5.5%; bottom: 21%; text-align: right; }
+  #fpv .tl { left: max(5.5%, 280px); top: 15%; } #fpv .tr { right: 5.5%; top: 15%; text-align: right; } #fpv .bl { left: 5.5%; bottom: 21%; } #fpv .br { right: 5.5%; bottom: 21%; text-align: right; }
   #fpv .tc { left: 50%; top: 15%; transform: translateX(-50%); text-align: center; font-size: 12px; opacity: .9; }
   #fpv .bc { left: 50%; bottom: 21%; transform: translateX(-50%); text-align: center; }
-  #fpv .warn { left: 50%; top: 62%; transform: translateX(-50%); text-align: center; font-size: 17px; color: #ffd24a; }
+  #fpv .warn { left: 50%; top: 62%; transform: translateX(-50%); text-align: center; font-size: 17px; color: #ffd24a; background: rgba(0, 0, 0, .55); padding: 2px 10px; } #fpv .warn:empty { display: none; }
+  body.fpv-on #marks { display: none; }   /* the spectator's name tags do not belong in a camera picture */
   #fpv .warn.alarm { color: #ff5a4a; animation: fpvblink .5s steps(2) infinite; } @keyframes fpvblink { 50% { opacity: .25; } }
   #fpv .cap { position: absolute; left: 50%; bottom: 16.5%; transform: translateX(-50%); font: 500 11px var(--mono, monospace); letter-spacing: .06em; color: #d6dbd0; opacity: .85; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 2px #000; }
   #fpv svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -52,7 +53,7 @@ export class FpvFeed {
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     const el = this.el = mk('div'); el.id = 'fpv'; el.hidden = true;
     this.freeze = mk('canvas'); this.freeze.id = 'fpv-freeze'; this.freeze.width = 640; this.freeze.height = 360;
-    this.snow = mk('canvas'); this.snow.id = 'fpv-snow'; this.snow.width = 192; this.snow.height = 108;
+    this.snow = mk('canvas'); this.snow.id = 'fpv-snow'; this.snow.width = 320; this.snow.height = 180;
     this.rollbar = mk('div', 'rollbar');
     const NS = 'http://www.w3.org/2000/svg', svg = this.svg = document.createElementNS(NS, 'svg');
     svg.innerHTML = '<g id="fpv-cross" stroke="#fff" stroke-width="2" fill="none"><path d="M-16,0 H-5 M5,0 H16 M0,-16 V-5 M0,5 V16"/></g><rect id="fpv-gate" x="-18" y="-14" width="36" height="28" fill="none" stroke="#ffd24a" stroke-width="1.5" stroke-dasharray="6 4"/>';
@@ -93,7 +94,9 @@ export class FpvFeed {
   update(o, on) {
     if (!on) { if (this.on) this._off(); return; }
     this._dom(); const cams = o.cams, S = cams.s, cam = S.camera, W = o.world, T = o.tank;
-    if (!this.on) { this.on = true; this.el.hidden = false; this.sig = {}; this.last = null; this._watch = setInterval(() => { if (performance.now() - this.seen > 400) this._off(); }, 250); }
+    if (!this.on) { this.on = true; this.el.hidden = false; this.sig = {}; this.last = null; document.body.classList.add('fpv-on');
+      /* nobody tells this module when the battle screen is left: it looks for itself, and also gives up if it has not been called for a while */
+      this._watch = setInterval(() => { const st = window.__beta && window.__beta.state ? window.__beta.state() : 'play'; if (st !== 'play' || performance.now() - this.seen > 3000) this._off(); }, 250); }
     this.seen = performance.now();
     const u = this.unit = this.pick(o), tp = S.at(T.e, T.n, 2.2, this._tp || (this._tp = cam.position.clone())); if (!this._v) this._v = cam.position.clone();
     if (!u) { this._show({ phase: 'none' }, 0, false, 'В ЭТОМ БОЮ НЕТ ДРОНОВ · no drone crew in this battle', false, o); cam.position.set(tp.x - 40, tp.y + 18, tp.z + 40); cam.up.set(0, 1, 0); cam.lookAt(tp); this._fov(cam, 60); return; }
@@ -105,6 +108,7 @@ export class FpvFeed {
       // closer it gets (the pilot flies the path and watches the target), banked a little with the airframe, and shaking with the motors.
       const p = m.p, d = m.dir, tx = tp.x - p.x, ty = tp.y - p.y, tz = tp.z - p.z, tn = Math.hypot(tx, ty, tz) || 1, w = clamp(1.3 - tn / 1500, 0.6, 0.97);
       let lx = d.x * (1 - w) + tx / tn * w, ly = d.y * (1 - w) + ty / tn * w, lz = d.z * (1 - w) + tz / tn * w;
+      this._hide(this._mesh(o, st));
       const alt = Math.max(0, p.y - W.h(p.x, -p.z)), spd = this._speed(o, st, tt), jolt = this._jolt(o, st), tt0 = st.t;
       const amp = (0.0035 + 0.0025 * Math.min(1.5, spd / 30)) * (1 + 7 * jolt);
       lx += shake(tt0, 1) * amp; ly += shake(tt0, 2) * amp; lz += shake(tt0, 3) * amp;
@@ -135,13 +139,14 @@ export class FpvFeed {
       /* nothing new to show for an instant: the camera and the display stay as they were */
       q = this.last ? this.last.q : 100; noise = st.fiber ? 0 : Math.pow(1 - q / 100, 1.4);
     } else if (st.phase === 'wait') {
+      this._hide(null);
       // not launched yet: the picture from the drone sitting beside its pilot, motors off
       const de = T.e - u.e, dn = T.n - u.n, R = Math.hypot(de, dn) || 1; cam.position.copy(S.at(u.e + de / R * 1.5, u.n + dn / R * 1.5, 0.35, this._v)); cam.up.set(0, 1, 0); cam.lookAt(tp.x, cam.position.y + 6, tp.z); this._fov(cam, 76);
       this._text('tl', st.fiber ? 'ОПТОВОЛОКНО · FIBRE LINK' : 'RSSI 99  LQ 100'); this._text('tr', '0:00\nDISARMED'); this._text('bl', '25.1V  0 mAh'); this._text('br', `ЦЕЛЬ ${Math.round(R / 10) * 10} m`); this._text('bc', '');
       warn = !u.alive || u.gone ? 'РАСЧЁТ УНИЧТОЖЕН · crew destroyed' : u.ammo > 0 ? 'ОЖИДАНИЕ · waiting to launch' : 'ДРОНОВ НЕТ · no drones left'; this.svg.lastChild.setAttribute('transform', 'translate(-999 -999)'); this.svg.firstChild.setAttribute('transform', 'translate(-999 -999)');
     } else {
       // the flight is over. A drone that reached the vehicle: the picture freezes on its last frame. Anything else: the picture is gone.
-      dead = true; q = 0; alarm = true; const hit = st.end && st.end.how === 'hit'; frozen = hit && this.frozenKey === st.sortie;
+      this._hide(null); dead = true; q = 0; alarm = true; const hit = st.end && st.end.how === 'hit'; frozen = hit && this.frozenKey === st.sortie;
       noise = st.fiber ? 0 : frozen ? 0.5 : 1; warn = st.fiber ? 'СВЯЗЬ ПОТЕРЯНА · LINK LOST' : 'НЕТ СИГНАЛА · NO SIGNAL';
       if (!st.fiber) this._text('tl', 'RSSI 00  LQ 0'); this.svg.lastChild.setAttribute('transform', 'translate(-999 -999)');
       this._text('bc', st.pilotLost ? 'ОПЕРАТОР ПОТЕРЯН · pilot lost' : hit ? (st.end.killing ? 'ПОПАДАНИЕ · impact, target destroyed' : 'ПОПАДАНИЕ · impact') : st.end && st.end.how === 'ground' ? 'ПАДЕНИЕ · flew into the ground' : 'ДРОН УНИЧТОЖЕН · drone destroyed');
@@ -149,6 +154,9 @@ export class FpvFeed {
     this._show(st, noise, dead, warn, alarm, o, frozen);
   }
 
+  // the drone's own model would sit in front of its own camera: it is not drawn while ridden (and is put back on leaving)
+  _hide(mesh) { if (this.hid === mesh) return; if (this.hid) this.hid.visible = true; this.hid = mesh || null; if (mesh) mesh.visible = false; }
+  _mesh(o, st) { const V = o.volleys, th = st.m.th; if (!V) return null; if (typeof th.idx === 'string') { const d = V.transit && V.transit.get(st.u.id); return d ? d.mesh : null; } const B = o.battle.volleys, v = B && B[B.length - 1], d = v && V.live && V.live.get(v.i + ':' + th.idx); return d ? d.mesh : null; }
   _fov(cam, f) { if (Math.abs(cam.fov - f) > 0.01) { cam.fov = f; cam.updateProjectionMatrix(); } }
   // metres per second along its path: the engine's own distance-to-go for the attack run, the drone's cruise speed on the way in
   _speed(o, st, tt) { const th = st.m.th, HKe = window.HK, v = o.battle.volleys && o.battle.volleys[o.battle.volleys.length - 1]; if (typeof th.idx === 'number' && HKe && HKe.distAt && v) { const tv = st.t - v.t0, a = HKe.distAt(th, tv), b = HKe.distAt(th, tv + 0.2); if (isFinite(a) && isFinite(b) && a > b) return (a - b) / 0.2; } return th.v || tt.speed || 30; }
@@ -180,7 +188,7 @@ export class FpvFeed {
       for (let i = 0, k = y * w * 4; i < w; i++, k += 4) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; const v = s & 255, a = a0 * (102 + ((s >>> 8) & 127) * 1.2); d[k] = d[k + 1] = d[k + 2] = v; d[k + 3] = a; } this.rs = s; }
     x.putImageData(im, 0, 0);
   }
-  _off() { this.on = false; clearInterval(this._watch); if (!this.el) return; this.el.hidden = true; const cv = document.getElementById('view'); if (cv) { cv.style.filter = ''; cv.style.transform = ''; } this.sig = {}; this.last = null; }
+  _off() { this.on = false; clearInterval(this._watch); this._hide(null); if (!this.el) return; document.body.classList.remove('fpv-on'); this.el.hidden = true; const cv = document.getElementById('view'); if (cv) { cv.style.filter = ''; cv.style.transform = ''; } this.sig = {}; this.last = null; }
 }
 // is the vehicle's drone jammer switched on in this battle's settings? (engine: cfg.ew.drone_jammer; off by default)
 function B_ew(battle) { const c = battle && battle.cfg0; return !!(c && c.ew && c.ew.drone_jammer); }

@@ -23,7 +23,8 @@ const cfg = HK.defaultConfig(), B = new Battle.Battle({ biome: 'farmland', mapSe
 B.run(60); const realCdr = typeof B.commander;
 const cv = CV.createCanvas(W, H), host = mkEl('div'); cv.getBoundingClientRect = () => ({ width: W, height: H, left: 0, top: 0 }); cv.addEventListener = () => {}; cv.parentElement = host;
 const M = new MapView(cv); M.setWorld(B.world); M.fit(); M.scale *= 2.6; M.cx = B.tank.e + 150; M.cn = B.tank.n + 250;     /* zoomed on the fight, as a player would */
-const mapState = (spectator, t, dt) => ({ tank: B.tank, showAll: spectator, units: B.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: [], battle: B, t: t == null ? B.t : t, dt: dt == null ? 0.016 : dt });
+const mapState = (spectator, t, dt) => ({ tank: B.tank, showAll: spectator, units: B.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: [], battle: B, t: t == null ? B.t : t, dt: dt == null ? 0.016 : dt, fit: FIT });
+let FIT = false;   /* the pictures below use the test's own zoom; the automatic one is checked at the end */
 const save = name => fs.writeFileSync(path.join(OUT, name + '.png'), cv.toBuffer('image/png'));
 const labels = () => M.cdr.state().labels, has = w => labels().some(l => l.includes(w));
 const rows = () => M.cdr.rows.children.filter(r => r.tag === 'button').map(r => r.textContent);
@@ -77,6 +78,9 @@ if (worst > 0.02) bad.push('the easing is not the same at every frame rate'); if
 window.__fakeT = 100; M.cdr.lastT = null; M.draw(mapState(true, 100)); const n100 = M.cdr.state().orders.length; window.__fakeT = 12; M.draw(mapState(true, 12)); const back = M.cdr.state().orders; window.__fakeT = null;
 console.log('jump back from 100 s to 12 s: arrows', n100, '->', back.map(o => o[0]).join(','), '; list rows', rows().length);
 if (n100 !== 9 || back.map(o => o[0]).sort().join() !== '1,2' || back.some(o => o[1] !== 1 || o[2] !== 1) || rows().length !== 3) bad.push('a jump back in time left orders from the later moment');
+// 11b. switching the view on closes the map in on his forces: everything of his is inside the picture, clear of the list
+M.fit(); FIT = true; M.cdr.setOn(false); M.cdr.setOn(true); M.draw(mapState(true)); M.draw(mapState(true)); save('cdr_autofit'); FIT = false;
+{ const out = B.units.filter(u => u.alive && !u.gone).map(u => M.toScreen(u.e, u.n)).filter(p => p[0] < 300 || p[0] > W - 10 || p[1] < 60 || p[1] > H - 60); console.log('automatic zoom: scale', M.scale.toFixed(3), 'px per metre; teams outside the clear part of the picture:', out.length); if (out.length) bad.push('the automatic zoom leaves teams outside the picture or under the list'); }
 // 12. switched off again: the ordinary map, nothing of the commander's on the page
 M.cdr.setOn(false); M.draw(mapState(true)); save('map_normal_after'); if (!M.cdr.list.hidden || !M.cdr.none.hidden || mem['hkoi.cdrview'] !== 'false') bad.push('switching the view off leaves its panels up');
 console.log('battle.commander on this branch before the fake: ' + realCdr + '. Pictures in ' + OUT);

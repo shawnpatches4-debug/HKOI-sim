@@ -6,7 +6,7 @@ const INK = { open: [226, 224, 204], field: [[232, 226, 190], [222, 228, 196], [
 
 export class MapView {
   constructor(canvas) { this.cv = canvas; this.x = canvas.getContext('2d'); this.scale = 0; this.cx = 0; this.cn = 0; this.shed = null; this.shedKey = ''; this.onPick = null; this.pickMode = false; this._wire(); this.cdr = new CommanderView(this);   /* the enemy commander's own picture (cdrview.js): its button, its list and its drawing */ }
-  setWorld(world) { if (this.world === world) return; this.world = world; this.base = this._bake(world); this.shed = null; this.shedKey = ''; this.fit(); }
+  setWorld(world) { this.cdr.seenAt = 0;   /* the map is being opened: the commander view may close in on his forces again */ if (this.world === world) return; this.world = world; this.base = this._bake(world); this.shed = null; this.shedKey = ''; this.fit(); }
   fit() { const r = this.cv.getBoundingClientRect(); this.scale = Math.min(r.width, r.height) / this.world.size * 0.98; this.cx = 0; this.cn = 0; }
   // one pixel per ~4 m: land cover, hill shading from the north-west, a contour every 10 m with every fifth one heavier
   _bake(w) {
