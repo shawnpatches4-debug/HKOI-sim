@@ -66,7 +66,7 @@ export class Cameras {
     }
     this.lastUnit = null;
     if (this.mode === 'orbit' || this.mode === 'cut') {   // keep the orbit centred on the vehicle as it moves (the cutaway is the same view, closer in, with the interior shown)
-      const tgt = tp.clone(); tgt.y += 2; if (this.mode === 'cut' && this.snap) { const hr = T.h * DEG; cam.position.set(tgt.x - Math.cos(hr) * 6.5 + Math.sin(hr) * 2.5, tgt.y + 4.2, tgt.z - Math.sin(hr) * 6.5 - Math.cos(hr) * 2.5); } if (this.lastTank) { const d = tgt.clone().sub(this.lastTank); cam.position.add(d); } S.controls.target.copy(tgt); this.lastTank = tgt;
+      const tgt = tp.clone(); tgt.y += 2; if (this.mode === 'cut' && this.snap) { const hr = T.h * DEG; cam.position.set(tgt.x - Math.cos(hr) * 5.4 + Math.sin(hr) * 2.2, tgt.y + 2.8, tgt.z - Math.sin(hr) * 5.4 - Math.cos(hr) * 2.2); } if (this.lastTank) { const d = tgt.clone().sub(this.lastTank); cam.position.add(d); } S.controls.target.copy(tgt); this.lastTank = tgt;
       const g = W.h(cam.position.x, -cam.position.z) + 1.2; if (cam.position.y < g) cam.position.y = g;
       S.controls.update(); this.snap = false; if (cam.fov !== 50) { cam.fov = 50; cam.updateProjectionMatrix(); } return;
     }

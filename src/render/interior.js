@@ -15,7 +15,7 @@ const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), eas
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
 const DOME = [null, [2.3, 2.1, 1.75], [2.0, 0.16, 0.1], [0.25, 1.5, 1.25]];   // dome lamp settings: off, white, red, blue-green
 const DOME_NAME = ['off', 'white', 'red', 'blue-green'];
-const BRT = [0.3, 0.6, 1.0, 1.45];
+const BRT = [0.3, 0.6, 1.0, 1.45], CREW_NAMES = ['Gunner', 'Commander', 'Loader', 'Driver'], DOME_IDS = ['domeR', 'domeL', 'domeD'];
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _ray = new THREE.Raycaster();
 
 export class Interior {
@@ -118,11 +118,14 @@ export class Interior {
   _enter(mode) {
     const tk = this.tank, tur = tk.turret || tk.group, body = tk.body || tk.group; if (this.tur.parent !== tur) tur.add(this.tur); if (this.hul.parent !== body) body.add(this.hul);
     if (tk.turret) this.hul.position.copy(tk.turret.position); else { this.hul.position.set(0, 1.617, -0.025); this.tur.position.copy(this.hul.position); }
-    const cut = mode === 'cut'; SHARED.uInside.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
+    const cut = mode === 'cut'; if (cut) this._near(); SHARED.uInside.value = cut ? 0 : 1; SHARED.uClipOn.value = cut ? 1 : 0; if (cut) this._cutOn(); else this._cutOff();
     this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; this.head.z = this.head.vz = this.head.x = this.head.vx = 0; this.head.up = 0; this.mode = mode; this.active = true;
+    this._marks(cut);   /* the floating map markers of the outside views would hang in front of the walls */
     if (this.ui && !cut) this.ui.show(`${SEATS[mode].name}'s seat · drag to look around, wheel to lean in, click a switch. The crew runs the vehicle; your clicks only change harmless things.`, 6500);
   }
-  _leave() { if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
+  _near() { const cam = this.s.camera; if (this.near0 != null && cam.near !== this.near0) { cam.near = this.near0; cam.updateProjectionMatrix(); } }   /* give the camera its usual near distance back */
+  _marks(show) { const m = typeof document !== 'undefined' && document.getElementById('marks'); if (m) m.style.visibility = show ? '' : 'hidden'; }
+  _leave() { this._marks(true); this._near(); if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
   // the cutaway: the outside model is sliced by a plane that always faces the viewer, and shown from both sides so the far half reads as a shell
   _cutOn() { if (this.ext) return; const seen = new Set(), list = []; const root = this.tank.model || this.tank.group; root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && !seen.has(m)) { seen.add(m); list.push({ m, side: m.side, cp: m.clippingPlanes }); m.side = THREE.DoubleSide; m.clippingPlanes = [this.plane]; m.needsUpdate = true; } }); this.ext = list; }
   _cutOff() { if (!this.ext) return; for (const x of this.ext) { x.m.side = x.side; x.m.clippingPlanes = x.cp || null; x.m.needsUpdate = true; } this.ext = null; }
@@ -178,10 +181,10 @@ export class Interior {
       set('hkRadar', hk === 'RADAR SILENT' || hk === 'OFF' ? 0 : 1); set('hkTrack', hk === 'TRACKING' || hk === 'LAYING' || hk === 'FIRING' ? 1 : 0); set('hkFire', hk === 'FIRING' ? 1 : 0); set('hkArmed', T.alive ? 1 : 0);
       set('ldrSafe', T.loaded ? 0 : 1); set('ldrArmed', T.loaded ? 1 : 0); set('turPwr', T.alive ? 1 : 0); set('smkL', 0.8); set('smkR', 0.8); set('apsL', st.apsL == null || st.apsL > 0 ? 1 : 0); set('apsR', st.apsR == null || st.apsR > 0 ? 1 : 0);
       set('net0', 0.8); set('net1', 0.6 + 0.4 * (Math.sin(this.clock * 9) > 0.3 ? 1 : 0)); set('net2', blink * 0.7); set('radio0', 0.7); set('radio1', 0.7);
-      for (const who of ['Gunner', 'Commander', 'Loader', 'Driver']) set('icom' + who, 0.5);
+      for (const who of CREW_NAMES) set('icom' + who, 0.5);
       set('drvPwr', T.alive ? 1 : 0); set('drvEng', T.alive ? 1 : 0); set('drvPark', Math.abs(v) < 0.1 ? 1 : 0);
       for (const c of this.controls) if (c.lamp != null) I[c.lamp] = c.state ? 1 : 0;
-      const dm = this.domeMode; for (const d of ['domeR', 'domeL', 'domeD']) { set(d + 'w', dm === 1 ? 1 : 0); set(d + 'r', dm === 2 ? 1 : 0); set(d + 'b', dm === 3 ? 1 : 0); }
+      const dm = this.domeMode; for (const d of DOME_IDS) { set(d + 'w', dm === 1 ? 1 : 0); set(d + 'r', dm === 2 ? 1 : 0); set(d + 'b', dm === 3 ? 1 : 0); }
     }
     // spring back the controls the crew owns, release pushed buttons
     for (const c of this.controls) { if (c.anim > 0) { c.anim = Math.max(0, c.anim - dt * 2.2); this._poseControl(c); } if (c.press > 0) { c.press -= dt; this._poseControl(c); } }
@@ -189,14 +192,14 @@ export class Interior {
     // ---- lighting: dome lamps, display glow, daylight through openings
     this.tur.updateWorldMatrix(true, false); this.hul.updateWorldMatrix(true, false);
     const LP = SHARED.uLampPos.value, LC = SHARED.uLampCol.value, LR = SHARED.uLampR.value, dome = DOME[this.domeMode], dayK = (night ? 0.05 : 0.55 + 0.25 * Math.min(1.5, cond.hemiI || 1));
-    _v.set(1, 1, 1); if (cond.sky) { const c = new THREE.Color(cond.sky); _v.set(0.6 + 0.4 * c.r, 0.6 + 0.4 * c.g, 0.6 + 0.4 * c.b); }
+    if (this._skyOf !== s.cond) { this._skyOf = s.cond; const c = new THREE.Color(cond.sky || '#ffffff'); this._sky = new THREE.Vector3(0.6 + 0.4 * c.r, 0.6 + 0.4 * c.g, 0.6 + 0.4 * c.b); } _v.copy(this._sky);
     for (let i = 0; i < NLAMP; i++) { const l = this.lamps[i]; LP[i].copy(l.p).applyMatrix4((l.g === 'tur' ? this.tur : this.hul).matrixWorld); LR[i] = l.r; }
     for (let i = 0; i < 3; i++) { if (dome) LC[i].set(dome[0], dome[1], dome[2]); else LC[i].set(0, 0, 0); }
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
     LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * 1.3); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
     const a = dome ? 0.045 : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
-    const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3);
+    const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
 
     // ---- cutaway: the cutting plane faces the viewer
@@ -216,6 +219,7 @@ export class Interior {
     _v.set(S.eye[0] + H.x - Math.sin(yaw * DEG) * -lean, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z - Math.cos(yaw * DEG) * lean);
     g.updateWorldMatrix(true, false); cam.position.copy(_v).applyMatrix4(g.matrixWorld);
     g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4, 'YXZ'))); cam.up.set(0, 1, 0);
+    const near = S.near || 0.5; if (cam.near !== near) { if (this.near0 == null) this.near0 = cam.near; cam.near = near; cam.updateProjectionMatrix(); }
     const fov = S.fov / L.zoom; if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = cams.snap ? fov : cam.fov + (fov - cam.fov) * Math.min(1, dt * 10); cam.updateProjectionMatrix(); }
     return true;
   }
@@ -247,6 +251,7 @@ export class Interior {
 
   // ---------------------------------------------------------------- what the displays show (redrawn only when something on them changes)
   _draw(dt, s, hk, info) {
+    this.drawT = (this.drawT || 0) - dt; if (this.drawT > 0) return; this.drawT = 0.1;   /* ten times a second is plenty for numbers and lists */
     const B = s.battle, T = B.tank, st = T.st || {}, rf = B._rf, wait = rf ? Math.max(0, rf.at - B.t) : 0, pad = (n, w) => String(Math.round(n)).padStart(w, '0'), F = '"DIN Alternate", "Arial Narrow", Arial, sans-serif';
     const begin = (k, key) => { const c = this.cv[k]; if (c.key === key) return null; c.key = key; const x = c.x; if (c.opaque) { x.fillStyle = '#020806'; x.fillRect(0, 0, c.c.width, c.c.height); } else x.clearRect(0, 0, c.c.width, c.c.height); c.t.needsUpdate = true; return x; };
     const live = k => this.scr[k].uniforms.uHasLive.value > 0.5, loading = !T.loaded && T.main > 0;

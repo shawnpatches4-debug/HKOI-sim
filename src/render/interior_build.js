@@ -56,7 +56,7 @@ export function buildInterior(labels) {
     screens.push({ g, key, w, h, pos: k.at(u, v, 0.0045), quat: k.quat() });
   };
   // a console: a box whose face is the working plane z = 0 of the frame that fn draws in
-  const console_ = (k, x, y, z, rx, ry, w, h, d, col, fn) => { k.push(x, y, z, rx, ry, 0); k.box('fit', w, h, d, col, 0, 0, -d / 2 - 0.0005); k.box('fit', w - 0.012, h - 0.012, 0.002, C.blackP, 0, 0, 0); fn(); k.pop(); };
+  const console_ = (k, x, y, z, rx, ry, w, h, d, col, fn) => { k.push(x, y, z, rx, ry, 0); k.box('fit', w, h, d, col, 0, 0, -d / 2 - 0.0005); k.box('fit', w - 0.012, h - 0.012, 0.002, C.blackP, 0, 0, 0); for (const sx of [-1, 1]) for (const sy of [-1, 1]) k.cyl('fit', 0.005, 0.005, 0.004, C.steel, sx * (w / 2 - 0.012), sy * (h / 2 - 0.012), 0.002, Math.PI / 2, 0, 0, 6); fn(); k.pop(); };
   const wall = (k, b, a0, a1, y0, y1, col) => { const L = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]); k.plane(b, L, y1 - y0, col, (a0[0] + a1[0]) / 2, (y0 + y1) / 2, (a0[1] + a1[1]) / 2, 0, -Math.atan2(a1[1] - a0[1], a1[0] - a0[0]), 0); };
   // an intercom box: two knobs and a talk lamp
   const intercom = (k, g, x, y, z, ry, who) => console_(k, x, y, z, 0, ry, 0.15, 0.10, 0.05, C.olive, () => {
@@ -123,7 +123,7 @@ export function buildInterior(labels) {
   T.box('fit', 0.42, 0.44, 0.4, C.cream, gx, 0.2, -1.1); T.box('fit', 0.36, 0.36, 0.07, C.creamD, gx, 0.24, -0.875);
   T.push(gx, 0.19, -0.838); screen(T, 'tur', 'gps', 0.2, 0.125, 0, 0);
   for (const s of [-1, 1]) T.box('fit', 0.008, 0.15, 0.07, C.rubber, s * 0.112, 0, 0.035); T.box('fit', 0.232, 0.008, 0.07, C.rubber, 0, 0.079, 0.035); T.box('fit', 0.232, 0.008, 0.045, C.rubber, 0, -0.079, 0.022);
-  T.geo('fit', new THREE.TorusGeometry(0.075, 0.022, 6, 14, Math.PI), C.rubber, 0, 0.085, 0.06);
+  T.geo('fit', new THREE.TorusGeometry(0.06, 0.016, 6, 14, Math.PI), C.rubber, 0, 0.088, 0.062);
   T.label('GUNNER\'S PRIMARY SIGHT', 0.02, 0, 0.2, -0.0005, 0, 0, 0, 'plate'); T.lamp(ind('gnrWarn'), 0.07, 0.022, 0xff2a1a, -0.105, 0.125, -0.0005); T.label('MISSILE', 0.012, -0.105, 0.148, -0.0005, 0, 0, 0, 'danger', { size: 22 });
   T.lamp(ind('gunReady'), 0.045, 0.02, 0x30ff60, 0.125, 0.125, -0.0005); T.label('READY', 0.012, 0.125, 0.148, -0.0005, 0, 0, 0, 'panel', { size: 22 });
   T.pop();
@@ -145,6 +145,8 @@ export function buildInterior(labels) {
   T.box('fit', 0.16, 0.5, 0.16, C.creamD, gx, -0.6, -0.98); T.box('fit', 0.2, 0.1, 0.2, C.olive, gx, -0.32, -0.95); T.label('GUNNER\'S CONTROL HANDLES', 0.014, gx, -0.3, -0.848, 0, 0, 0, 'plate', { size: 22 });
   moving.yoke = { g: 'tur', build: k => { k.box('p', 0.3, 0.045, 0.08, C.black, 0, 0, 0); k.cyl('p', 0.035, 0.035, 0.12, C.steel, 0, -0.05, -0.06, 0.5, 0, 0, 10);
     for (const s of [-1, 1]) { k.cyl('p', 0.026, 0.03, 0.15, C.rubber, s * 0.155, 0.055, 0.0, 0, 0, s * -0.3, 10); k.box('p', 0.02, 0.022, 0.03, C.red, s * 0.18, 0.135, -0.012); k.box('p', 0.012, 0.05, 0.012, C.steel, s * 0.14, 0.06, -0.03); } }, pos: [gx, -0.25, -0.74] };
+  // hand cranks for when the power is off: elevation on the left of the pedestal, traverse on the right
+  for (const [sx, name] of [[-1, 'MANUAL\nELEVATION'], [1, 'MANUAL\nTRAVERSE']]) { const x = gx + sx * 0.2, y = -0.46, z = -0.9; T.box('fit', 0.09, 0.1, 0.12, C.creamD, x - sx * 0.05, y, z - 0.03); T.ring('fit', 0.07, 0.009, C.black, x, y, z + 0.04, 0, 0, 0, 16); T.box('fit', 0.13, 0.012, 0.008, C.steel, x, y, z + 0.04); T.cyl('fit', 0.011, 0.011, 0.06, C.rubber, x + 0.06, y, z + 0.07, Math.PI / 2, 0, 0, 8); T.label(name, 0.03, x - sx * 0.05, y + 0.075, z + 0.031, 0, 0, 0, 'plate', { size: 24 }); }
   // auxiliary sight, a plain telescope beside the gun
   T.cyl('fit', 0.036, 0.036, 0.5, C.black, gx - 0.25, GY + 0.1, -1.08, Math.PI / 2, 0, 0, 10); T.ring('fit', 0.036, 0.012, C.rubber, gx - 0.25, GY + 0.1, -0.83, 0, 0, 0, 12); T.label('AUX SIGHT', 0.013, gx - 0.25, GY + 0.16, -0.9, 0, 0, 0, 'plate', { size: 22 });
   // ballistic computer panel on the right wall, turned toward the gunner
@@ -253,6 +255,9 @@ export function buildInterior(labels) {
   T.tube('fit', [[1.17, RF - 0.07, -0.5], [1.14, 0.3, -0.62], [1.1, 0.19, -0.74]], 0.008, C.black); T.tube('fit', [[1.17, RF - 0.06, 0.1], [1.15, 0.36, 0.1], [1.12, 0.28, 0.1]], 0.008, C.black); T.tube('fit', [[0.62, 0.3, -0.33], [0.7, 0.42, -0.5], [0.76, RFF + 0.02, -0.9]], 0.008, C.black);
   T.tube('fit', [[-1.1, FL + 0.05, -0.6], [-1.15, -0.4, -0.72], [-1.12, 0.1, -0.86], [-0.9, RFF - 0.04, -1.2]], 0.035, C.rubber, 7);
   for (const [x, z] of [[-0.25, -0.45], [0.2, 0.9], [-1.0, 0.75]]) T.geo('fit', new THREE.TorusGeometry(0.055, 0.011, 6, 10, Math.PI), C.yellow, x, RF - 0.012, z, Math.PI, 0, 0);
+  // ventilation blower on the roof by the loader, and the crank that elevates the commander's machine gun
+  T.box('fit', 0.3, 0.1, 0.22, C.creamD, -0.2, RF - 0.05, 0.75); T.cyl('fit', 0.07, 0.07, 0.03, C.black, -0.2, RF - 0.105, 0.75, 0, 0, 0, 14); for (let i = 0; i < 5; i++) T.box('fit', 0.11, 0.004, 0.008, C.steel, -0.2, RF - 0.122, 0.71 + i * 0.02); T.label('BLOWER', 0.016, -0.2, RF - 0.05, 0.638, 0, Math.PI, 0, 'plate', { size: 22 });
+  T.box('fit', 0.07, 0.09, 0.09, C.creamD, CX - 0.2, RF - 0.045, CZ - 0.5); T.ring('fit', 0.05, 0.007, C.black, CX - 0.2, RF - 0.1, CZ - 0.5, Math.PI / 2, 0, 0, 14); T.cyl('fit', 0.009, 0.009, 0.05, C.rubber, CX - 0.16, RF - 0.125, CZ - 0.5, 0, 0, 0, 6); T.label('CAL .50 ELEVATION', 0.013, CX - 0.2, RF - 0.045, CZ - 0.454, 0, 0, 0, 'plate', { size: 22 });
   dome(T, 'tur', 0.1, RF, 0.62, 'domeR'); dome(T, 'tur', -0.75, RF, -0.42, 'domeL');
 
   // ---- the bustle bulkhead: frame, the ready-rack door (slides aside for a reload), the second door, the racks behind
@@ -329,10 +334,12 @@ export function buildInterior(labels) {
   return { T, H, controls, screens, moving, part };
 }
 
-// where each crewman's eyes are (frame as above) and how far his head turns. yaw 0 looks along the gun (or along the hull for the driver); positive yaw is to the right.
+// where each crewman's eyes are (frame as above) and how far his head turns. near: parts of the OUTSIDE model closer than this to the eye are
+// not drawn (the housings of the vision blocks would otherwise fill the glass); the interior itself is never cut.
+// yaw 0 looks along the gun (or along the hull for the driver); positive yaw is to the right.
 export const SEATS = {
-  in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 175, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38 },
+  in_cdr: { g: 'tur', name: 'Commander', eye: [DIM.CUP[0], 0.38, DIM.CUP[1] + 0.02], yaw0: -8, pitch0: -16, yawLim: 175, pitch: [-62, 28], fov: 76, up: DIM.RF + 0.175 - 0.38, near: 0.58 },
   in_gnr: { g: 'tur', name: 'Gunner', eye: [0.66, 0.2, -0.5], yaw0: 0, pitch0: -3, yawLim: 115, pitch: [-55, 35], fov: 70 },
   in_ldr: { g: 'tur', name: 'Loader', eye: [-0.66, 0.34, 0.3], yaw0: 52, pitch0: -14, yawLim: 175, pitch: [-60, 50], fov: 80 },
-  in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.07, DIM.DZ + 0.03], yaw0: 0, pitch0: -1, yawLim: 80, pitch: [-58, 20], fov: 72 },
+  in_drv: { g: 'hul', name: 'Driver', eye: [0, DIM.DRF - 0.07, DIM.DZ + 0.03], yaw0: 0, pitch0: -1, yawLim: 80, pitch: [-58, 20], fov: 72, near: 0.8 },
 };

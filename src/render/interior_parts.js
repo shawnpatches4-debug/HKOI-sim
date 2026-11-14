@@ -6,7 +6,7 @@
 // lights and take a short list of lamps instead.
 //
 // Seen from a seat, the interior must always be drawn in front of the vehicle's outside model (the hull roof under the turret would
-// otherwise cover the basket floor). The materials do that by packing their depth into the nearest half of the depth range, with
+// otherwise cover the basket floor). The materials do that by packing their depth into the very front of the depth range, with
 // their own very short near distance, so consoles a hand's width from the eye are not cut away either.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -36,7 +36,9 @@ const DEPTH_VS = /* glsl */`
   uniform float uInside;
   void cabDepth(in vec4 mv) {
     gl_Position = projectionMatrix * mv;
-    if (uInside > 0.5) { float zv = -mv.z; const float NI = 0.02; const float FI = 40.0; gl_Position.z = (NI * zv - NI * FI) / (FI - NI); }
+    // from a seat: own near distance NI and far distance FI, squeezed into the nearest fiftieth of the depth range, so that nothing of
+    // the outside model can come in front of the interior (it shows only where the interior has an opening)
+    if (uInside > 0.5) { float zv = -mv.z; const float NI = 0.03; const float FI = 40.0; const float E = 0.02; gl_Position.z = -zv + 2.0 * E * (zv - NI) * FI / (FI - NI); }
   }`;
 const CLIP_FS = /* glsl */`
   uniform vec4 uClip; uniform float uClipOn;
@@ -85,6 +87,7 @@ const FS = /* glsl */`
       else { alb *= 0.75 + 0.35 * w3.r; specK = 0.0; }
     #endif
     vec3 dif = uAmb; vec3 spc = vec3(0.0);
+    float low = mix(0.62, 1.0, smoothstep(-1.1, 0.3, vO.y));   /* less light reaches the floor and the corners under the consoles */
     for (int i = 0; i < ${NLAMP}; i++) {
       vec3 L = uLampPos[i] - vW; float d = length(L); L /= max(d, 1e-3);
       float r = d / uLampR[i]; float att = 1.0 / (1.0 + 6.0 * r * r) * clamp(1.6 - r * 0.8, 0.0, 1.0);
@@ -92,7 +95,7 @@ const FS = /* glsl */`
       dif += uLampCol[i] * att * wrap;
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
-    vec3 col = alb * dif + spc * specK + alb * glow;
+    vec3 col = alb * dif * low + spc * specK * low + alb * glow;
     gl_FragColor = vec4(col * uExpo, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
