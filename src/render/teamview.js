@@ -336,7 +336,7 @@ export class TeamView {
     for (let j = 0; j < NJ; j++) { if (LEGS[j] && kw > 0 && kw < 1) O[j].slerpQuaternions(C[j], TQ[j], kw); else O[j].copy(C[j]); }
     if (tl && tl.over) { a.hold = tl.keys[tl.keys.length - 1].q; a.tl = null; a.rest = 0; }
     // signs of life in the back: breathing, and a start when the weapon fires
-    const calmT = a.tl || striding ? 0 : 1; chase(a.calm, calmT, calmT, stiff(0.25), dt || 1e-4, 1);
+    const calmT = a.tl || (striding && g.v > 0.3) ? 0 : 1; chase(a.calm, calmT, calmT, stiff(0.25), dt || 1e-4, 1);
     if (lod === 0) {
       const guiding = this._info.firing && a.i === 0 && !this.weapon ? 0.45 : 1;
       const breath = ((0.012 * Math.sin(a.clock * 1.7) * guiding * a.calm.x) - (a.i === 0 ? (this.weapon ? 0.07 : 0.03) : 0.02) * this.kick.x) * this._lw;

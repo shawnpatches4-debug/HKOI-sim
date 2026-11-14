@@ -251,8 +251,8 @@ export const Y_MOVING = rate(HALF_MOVING), Y_POSING = rate(HALF_POSING);
 // right at 0.5), his smoothed speed over the ground, how much of a run it is (0 walk .. 1 run), and where the ball of each
 // foot is on the ground (figure's frame; on = the foot is down and must not slide; gy = height of the ground under it).
 // ---------------------------------------------------------------------------------------------------------------------
-export function newGait() { const foot = () => ({ x: 0, z: 0, on: true, sx: 0, sz: 0, gy: 0, gY: 0, fresh: true, far: 0 }); return { ph: 0.5, run: 0, vx: 0, vz: 0, v: 0, L: 0.5, beta: 0.56, slope: 0, ref: { x: 0, v: 0 }, refOk: false, hy: { x: 0, v: 0 }, hyOk: false, hy0: 0, clipL: 0, turn: 0, feet: [foot(), foot()] }; }
-export function resetGait(g, rig) { g.ph = 0.5; g.vx = g.vz = g.v = 0; g.run = 0; g.L = 0.5; g.beta = 0.56; g.turn = 0; g.refOk = false; g.hyOk = false; g.feet.forEach((f, k) => { f.x = (k ? -1 : 1) * rig.footW; f.z = rig.ballZ; f.on = true; f.sx = f.x; f.sz = f.z; f.gy = 0; f.fresh = true; }); }
+export function newGait() { const foot = () => ({ x: 0, z: 0, on: true, sx: 0, sz: 0, gy: 0, gY: 0, fresh: true, far: 0 }); return { ph: 0.5, run: 0, vx: 0, vz: 0, v: 0, L: 0.5, beta: 0.56, slope: 0, ref: { x: 0, v: 0 }, refOk: false, hy: { x: 0, v: 0 }, hyOk: false, hy0: 0, clipL: 0, acc: 0, clock: 0, turn: 0, feet: [foot(), foot()] }; }
+export function resetGait(g, rig) { g.ph = 0.5; g.vx = g.vz = g.v = 0; g.run = 0; g.L = 0.5; g.beta = 0.56; g.turn = 0; g.acc = 0; g.refOk = false; g.hyOk = false; g.feet.forEach((f, k) => { f.x = (k ? -1 : 1) * rig.footW; f.z = rig.ballZ; f.on = true; f.sx = f.x; f.sz = f.z; f.gy = 0; f.fresh = true; }); }
 // Stride length and the share of the stride each foot spends on the ground, from the speed. Chosen so the legs can actually reach:
 // an easy walk is about 1.3 m per stride (two steps); from about 1.7 m/s a loaded man breaks into a short-stepping trot, feet barely
 // leaving the ground; a real run is 2.4 to 3.4 m per stride with both feet off the ground between steps.
@@ -266,7 +266,8 @@ function gaitShape(g) {
 // both in his own frame.
 export function stepGait(g, rig, mx, mz, dyaw, dt) {
   if (dt > 1e-6) {
-    const k = 1 - Math.exp(-dt * 9); g.vx += (mx / dt - g.vx) * k; g.vz += (mz / dt - g.vz) * k; g.v = Math.hypot(g.vx, g.vz);
+    const k = 1 - Math.exp(-dt * 9), v0 = g.v; g.vx += (mx / dt - g.vx) * k; g.vz += (mz / dt - g.vz) * k; g.v = Math.hypot(g.vx, g.vz);
+    g.acc += ((g.v - v0) / dt - g.acc) * (1 - Math.exp(-dt * 7)); g.clock += dt;       /* how hard he is speeding up or slowing down */
     g.run += (ease((g.v - 1.7) / 0.7) - g.run) * (1 - Math.exp(-dt * 4));
     g.turn += (dyaw / dt - g.turn) * (1 - Math.exp(-dt * 5));
   }
@@ -312,12 +313,14 @@ export function stridePose(rig, g, carry, dt) {
   const c1 = Math.cos(TAU * (ph - b / 2));          /* +1 with the weight over the left foot, -1 over the right */
   const c0late = Math.cos(TAU * (ph - 0.07));       /* the same swing a little later: forearms and hands trail the upper arms */
   // pelvis and chest: lean into it (and into a hill), hip forward with its leg, chest and shoulders the other way, weight over the standing foot
-  const lean = 0.04 + (0.05 + 0.15 * r) * amp + 0.35 * slope * amp;
-  SX.tip = (0.03 + 0.08 * r) * amp + 0.2 * slope * amp; SX.yaw = -(0.09 + 0.03 * r) * amp * c0; SX.roll = (0.04 - 0.015 * r) * amp * c1;
+  // (he also leans into speeding up and back against slowing down, and shifts his weight from foot to foot when standing about)
+  const push = Math.max(-0.1, Math.min(0.12, 0.028 * g.acc)), idle = 1 - sat(v / 0.35), sway = idle * Math.sin(g.clock * 0.55 + 0.6 * Math.sin(g.clock * 0.21));
+  const lean = 0.04 + (0.05 + 0.15 * r) * amp + 0.35 * slope * amp + 0.6 * push;
+  SX.tip = (0.03 + 0.08 * r) * amp + 0.2 * slope * amp + 0.4 * push; SX.yaw = -(0.09 + 0.03 * r) * amp * c0; SX.roll = (0.04 - 0.015 * r) * amp * c1 + 0.012 * sway;
   SX.twist = (0.10 + 0.07 * r) * amp * c0 * (1 - 0.6 * carry);
   SX.look = -0.9 * (SX.yaw + SX.twist) + Math.max(-0.5, Math.min(0.5, -0.22 * g.turn));     /* the head stays on where he is going, and leads into a turn */
   SX.nod = -0.55 * (SX.tip + lean);
-  SO.x = (0.022 - 0.012 * r) * amp * c1; SO.z = 0;
+  SO.x = (0.022 - 0.012 * r) * amp * c1 + 0.016 * sway; SO.z = 0;
   _kh.multiplyQuaternions(rig.rootQ, rig.rel[0]).premultiply(_k1.setFromAxisAngle(AXX, SX.tip)).premultiply(_k1.setFromAxisAngle(AXZ, SX.roll)).premultiply(_k1.setFromAxisAngle(AXY, SX.yaw));
   // feet: heel down first, flat, heel up, toe off, then the swing with the knee lifted (a run kicks the heel up behind)
   const reach = rig.leg * 0.985, offA = (0.55 + 0.30 * r) * amp, strikeA = (0.28 - 0.22 * r) * amp;
