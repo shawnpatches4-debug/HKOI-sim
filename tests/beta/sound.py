@@ -13,7 +13,7 @@ import asyncio, os, sys, json, base64, struct
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp'; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'speed=2&gfx=min&force=ambush&cam=gnr'
-NEED = ['crew2_index.json', 'crew2_cdr.mp3', 'crew2_gnr.mp3', 'crew2_ldr.mp3', 'crew2_drv.mp3', 'crew2_any.mp3', 'crew2_hq.mp3', 'voice_index.json', 'voice_ru.mp3', 'screams.mp3', 'sfx_index.json']
+NEED = ['crew3_index.json', 'crew3_cdr.mp3', 'crew3_gnr.mp3', 'crew3_ldr.mp3', 'crew3_drv.mp3', 'crew3_any.mp3', 'crew3_hq.mp3', 'voice_index.json', 'voice_ru.mp3', 'screams.mp3', 'sfx_index.json']
 BANNED = ['voice_cdr.mp3', 'voice_gnr.mp3', 'voice_ldr.mp3', 'voice_drv.mp3', 'voice_panic.mp3']
 
 # 4. a made-up battle: [event or state change, expected requests as "WHO.event:priority"]
@@ -118,12 +118,12 @@ async def main():
         for x in bad: print('   WRONG %-34s got: %-50s expected: %s' % (x[0], x[2], x[3])); fails.append('event case: ' + x[0])
         # 5. every call from every seat, normal speed and 4x
         r = json.loads(await ev("""JSON.stringify((() => { const s = __beta.sound, out = [], base = { cond: 'rain', biome: 'forest', speed: 6, heading: 10, turret: 40, alive: true, camDist: 20, drones: [{ id: 'x', d: 300 }], talking: false };
-          for (const rate of [1, 4]) for (const view of ['orbit', 'chase', 'cdr', 'gnr', 'citv', 'hkoi', 'drv', 'ldr', 'top', 'enemy', 'troops', 'fly', 'missile']) { try { s.update(0.05, Object.assign({}, base, { view, rate }));
-            s.gun30(15); s.gun120(15); s.mg(15, true); s.mg(15, false); s.aps(10); s.explosion(40, 1.5); s.explosion(900, 0.8); s.airburst(60, 0.5); s.launch(800, true); s.launch(300, false); s.whoosh(0.5, 0.4); s.smoke(10); s.crackThump(600); s.blip('rf');
+          for (const rate of [1, 4]) for (const view of ['orbit', 'chase', 'cdr', 'gnr', 'citv', 'hkoi', 'drv', 'ldr', 'in_cdr', 'in_gnr', 'in_ldr', 'in_drv', 'top', 'enemy', 'troops', 'fly', 'missile']) { try { s.update(0.05, Object.assign({}, base, { view, rate }));
+            s.gun30(15); s.gun120(15); s.mg(15, true); s.mg(15, false); s.aps(10); s.explosion(40, 1.5); s.explosion(900, 0.8); s.airburst(60, 0.5); s.launch(800, true); s.launch(300, false); s.whoosh(0.5, 0.4); s.smoke(10); s.crackThump(600); s.blip('rf'); s.penetration(1.6); s.nearMiss(0.22);
             s.say('CDR', ['Fire!'], 1); s.say('CDR', ['Target! Cease fire!'], 1); s.cue('GNR', 'ready', 0); s.react('CDR', 'hit', 0.1); s.react('GNR', 'panic', 0.1); s.scream('scream', 0.1); s.enemy('fire', 0.1); out.push([view, rate, s.seat]); } catch (e) { out.push([view, rate, 'ERROR ' + (e.stack || e)]); } }
           s.hit(false); s.icom.flush('test'); s.update(0.05, Object.assign({}, base, { view: 'gnr', rate: 1, drones: [] })); return out; })())"""))
         seats = {x[0]: x[2] for x in r}; bad = [x for x in r if str(x[2]).startswith('ERROR')]
-        print('5. every sound call from 13 views at 1x and 4x: %d errors. Seats: %s' % (len(bad), json.dumps(seats)))
+        print('5. every sound call from 17 views at 1x and 4x: %d errors. Seats: %s' % (len(bad), json.dumps(seats)))
         for x in bad: fails.append('sound call threw in view %s: %s' % (x[0], x[2][:300]))
         # 6. the real frame loop through an engagement, from the gunner's seat
         await ev("void (__beta.cams.set('gnr'), __beta.setPlaying(true))"); t0 = await ev('__beta.battle.t'); info = {}

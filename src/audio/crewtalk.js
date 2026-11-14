@@ -71,10 +71,17 @@ export class CrewTalk {
     this.battle = battle; this.evN = 0; this.pending = []; this.volleyI = new Map(); this.lastT = -1;
     this.lastOrder = null; this.lastOrderEv = null; this.lastReport = -1e9; this.reportOpen = -1e9; this.started = false; this.dead = false;
     this.loaded = null; this.rfKey = null; this.ldrUp = null; this.coaxSaid = null; this.moving = null;
-    this.miss = new Map(); this.lastHit = -1e9; this.lastContact = -1e9; this.lastEnemyCall = -1e9; this.later = []; this.smoked = new Set();
+    this.dmgSeen = new Set(); this.miss = new Map(); this.lastHit = -1e9; this.lastContact = -1e9; this.lastEnemyCall = -1e9; this.later = []; this.smoked = new Set();
     this.trace = [];   // what was asked for: [sim time, who, event, heard or 'silent'] (tests, and the list of silent events)
   }
+  // can this man speak at all? Not when he is down (dead or out of action), and not while he is frozen with fear.
+  _mute(who) {
+    const b = this.battle; if (!b || !b.crewState || who === 'HQ' || who === 'ANY') return null;
+    const s = b.crewState(); if (!s.on) return null; const m = s.who[who.toLowerCase()]; if (!m) return null;
+    return m.status === 'down' ? 'down' : /^frozen/.test(m.busy || '') ? 'frozen' : null;
+  }
   _ask(t, who, ev, opt) { opt = opt || {};
+    { const why = this._mute(who); if (why) { this.trace.push([+t.toFixed(2), who, ev + ' (' + why + ': he says nothing)', 'silent']); return false; } }
     /* each man's own stress (src/battle/crew.js) picks his take: a shaken loader sounds shaken while a steady commander does not. The battle-wide level still applies up to 'tense'; lines that are urgent by nature (hit, wounded) keep their own level. */
     { const b = this.battle; if (who !== 'HQ' && opt.level != null && b && b.crewVoiceLevel && b.crewState && b.crewState().on) opt = Object.assign({}, opt, { level: Math.max(opt.level >= 2 && (ev === 'hit' || ev === 'wound' || ev === 'loader_down' || ev === 'contact') ? 2 : Math.min(1, opt.level), b.crewVoiceLevel(who) || 0) }); }
     const ok = this.net.request(who, ev, opt); this.trace.push([+t.toFixed(2), who, ev, ok ? 'said' : 'silent']); if (this.trace.length > 600) this.trace.splice(0, 200); return ok; }
@@ -114,6 +121,7 @@ export class CrewTalk {
       const R = v.rec.radio || []; let k = this.volleyI.get(v) || 0;
       while (k < R.length && R[k].t <= tv) { const r = R[k++]; if (tv - r.t <= 1.5 && !jumped) this._engine(b, v, r, t, now); }
       this.volleyI.set(v, k);
+      if (!this.dmgSeen.has(v)) { this.dmgSeen.add(v); this._damage(b, v); }
       for (const th of v.rec.threats || []) {   /* a warning receiver has this one, and it is still in the air */
         const end = th.viz && th.viz.end ? th.viz.end.t : th.impact;
         if (th.cue != null && tv >= th.cue && tv <= end) { if (/^lwr/.test(th.cue_src || '')) laser = true; else radar = true; }
@@ -142,6 +150,25 @@ export class CrewTalk {
     const o = { level: lvl, pri: 0, ttl: 22, group };
     this._ask(t, 'GNR', 'ready', o); this._ask(t, 'LDR', 'ready', o); this._ask(t, 'DRV', 'ready', o);
     this._ask(t, 'CDR', moving ? 'oscar_mike' : 'redcon', o);
+  }
+
+  // Damage reports. The damage model (src/dmg.js, the same report the interior draws from) says what each hit broke. After a
+  // hit that holes the armour without killing the vehicle, the man whose equipment it is reports it, when the pack has the
+  // words: the driver for tracks, engine, transmission and fuel, the gunner for the gun, the traverse drive, the fire control
+  // and the electronics. At most two reports a hit, the gravest first.
+  _damage(b, v) {
+    const D = typeof DMG !== 'undefined' ? DMG : null; if (!D || !v.cfg || !v.rec) return; let rep = [];
+    try { rep = D.report(v.rec, v.cfg); } catch (e) { return; }
+    const LINE = [['track_l', 'DRV', 'track'], ['track_r', 'DRV', 'track'], ['trans', 'DRV', 'trans'], ['gun', 'GNR', 'gun_out'], ['tdrive', 'GNR', 'trav_out'], ['fuel_l', 'DRV', 'fuel'], ['fuel_r', 'DRV', 'fuel'],
+      ['engine', 'DRV', 'power'], ['gps', 'GNR', 'fcs_out'], ['radio', 'GNR', 'elec_out'], ['radar', 'GNR', 'elec_out'], ['lwr', 'GNR', 'elec_out'], ['citv', 'GNR', 'elec_out']];
+    for (const h of rep) {
+      if (!h.penetrated || h.killing) continue; const hurt = {}; for (const c of h.comps || []) hurt[c.id] = c.state; let n = 0; const done = {};
+      for (const [id, who, ev] of LINE) {
+        if (!hurt[id] || n >= 2 || done[who + ev]) continue; if (ev === 'trans' && hurt[id] !== 'destroyed') continue;   /* "transmission is gone" only when it is */
+        done[who + ev] = 1; const k = n++;
+        this.later.push({ t: v.t0 + h.t + 2.2 + k * 2.4, run: () => this._ask(b.t, who, ev, { level: 2, pri: 2, ttl: 6 }) });
+      }
+    }
   }
 
   _engine(b, v, r, t, now) {
@@ -206,6 +233,14 @@ export class CrewTalk {
         break;
       case 'over':
         if (!stale && e.result === 'won') this._ask(t, 'HQ', opts.mission === 'advance' ? 'end_secure' : 'end_won', { level: 0, pri: 1, ttl: 10, delay: 1.5 }) || this._ask(t, 'HQ', 'end_won', { level: 0, pri: 1, ttl: 10, delay: 1.5 });
+        break;
+      case 'crew':   /* the crew model (src/battle/crew.js): a man wounded, a man down, the crew bailing out */
+        if (e.what === 'bail_out') { this.dead = true; this.net.flush('crew bails out'); break; }
+        if (stale) break;
+        if (e.what === 'wounded') this._ask(t, 'ANY', 'wound', { level: 2, pri: 3, ttl: 2 });   /* he is hit but stays at his post: his own cry */
+        else if (e.what === 'down' && e.who === 'ldr') this._ask(t, 'CDR', 'loader_down', { level: 2, pri: 2, ttl: 5, delay: 0.8 });
+        else if (e.what === 'down' && e.who === 'cdr') this._ask(t, 'GNR', 'cdr_down', { level: 2, pri: 3, ttl: 5, delay: 1.0 });   /* crew.js: with the commander down the gunner gives the orders */
+        else if (e.what === 'down') this._silent(t, 'CDR', 'crewman down (' + e.who + '): the pack has no line');
         break;
       default: break;   /* launch, hkoi_fire, trophy, move, wave: heard as sounds, not as speech */
     }

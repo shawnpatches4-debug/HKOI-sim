@@ -14,7 +14,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 export const SLOTS = [
   'gun30_out', 'gun30_in', 'gun120_out', 'gun120_in', 'mg50_out', 'mg50_in', 'mg762_out', 'mg762_in',
   'aps_out', 'aps_in', 'launch_small', 'launch_big', 'flyby', 'crack', 'explosion_small', 'explosion_medium', 'explosion_large',
-  'airburst', 'hit_in', 'smoke_discharge',
+  'airburst', 'hit_in', 'pen_in', 'nearmiss_in', 'smoke_discharge',
 ];
 
 export const Effects = {
@@ -148,6 +148,25 @@ export const Effects = {
       this._rattle(v.t + 0.05, 2);
     }
     M.deafen(killing ? 9 : 5);
+  },
+  // A round has come THROUGH the armour (heard inside, on top of hit()): the sharp crack of the plate failing, spall hissing
+  // across the compartment, then air and fluid lines venting. strength: the interior's hit strength (1.6 holed, 2 killing).
+  penetration(strength = 1.6) {
+    if (!this._live()) return; const M = this.mix, v = M.voice('explosions', { direct: true, cabin: 0.8 }), k = Math.min(1.3, strength / 1.6);
+    if (M.sample('pen_in', v)) return;
+    M.noise(v.in, v.t, { dur: 0.012, attack: 0.0003, type: 'highpass', f0: 2800, gain: 1.6 * k });                           /* the crack */
+    M.ring(v.in, v.t + 0.002, { freqs: [1730, 2950, 4400, 6100], dur: 0.35, gain: 0.25 * k });                              /* the plate rings high where it tore */
+    for (let i = 0; i < 14; i++) M.noise(v.in, v.t + 0.01 + rnd(0, 0.35), { dur: rnd(0.008, 0.03), type: 'bandpass', f0: rnd(2500, 8000), q: 4, gain: rnd(0.08, 0.3) * k });   /* spall striking metal */
+    M.noise(v.in, v.t + 0.15, { dur: 2.6, attack: 0.2, hold: 0.8, type: 'bandpass', f0: 5200, f1: 2600, q: 0.8, gain: 0.07 * k });   /* a line venting */
+    this._rattle(v.t + 0.1, 2.5);
+  },
+  // Something burst close by without striking (a near miss, heard inside): a dull thud through the hull, grit on the armour
+  nearMiss(strength = 0.22) {
+    if (!this._live()) return; const M = this.mix, v = M.voice('explosions', { direct: true, cabin: 0.5 }), k = Math.min(1, strength / 0.22);
+    if (M.sample('nearmiss_in', v)) return;
+    M.tone(v.in, v.t, { f0: 70, f1: 28, dur: 0.35, gain: 0.5 * k }); M.noise(v.in, v.t, { dur: 0.12, f0: 500, f1: 140, gain: 0.4 * k });
+    for (let i = 0; i < 8; i++) M.noise(v.in, v.t + rnd(0.08, 0.7), { dur: rnd(0.01, 0.03), type: 'bandpass', f0: rnd(2200, 6000), q: 5, gain: rnd(0.02, 0.07) * k });
+    this._rattle(v.t + 0.05, 0.6);
   },
   // loose kit, spall and fragments rattling on and inside the hull
   _rattle(when, k = 1) {
