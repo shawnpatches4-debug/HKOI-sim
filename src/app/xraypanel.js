@@ -42,7 +42,7 @@ export class XRayPanel {
     prev.title = 'Earlier hit'; next.title = 'Later hit'; prev.onclick = () => this.show(this.i - 1); next.onclick = () => this.show(this.i + 1); close.onclick = () => this.close(); this.prev = prev; this.next = next;
     head.append(el('b', null, 'X-RAY OF THE HIT'), this.count, prev, next, close);
     const body = el('div', 'xr-body'), left = el('div'), right = el('div'); this.cv = document.createElement('canvas'); this.read = el('div');
-    const key = el('div', 'xr-key'); for (const [k, name] of [['ok', 'untouched'], ['damaged', 'damaged'], ['destroyed', 'destroyed'], ['crew_ok', 'crew unhurt'], ['wounded', 'wounded'], ['killed', 'killed']]) { const s = el('span'), d = el('i', 'xr-dot'); d.style.background = XRAY_COLOURS[k]; s.append(d, name); key.append(s); }
+    const key = el('div', 'xr-key'); for (const [k, name] of [['ok', 'untouched'], ['damaged', 'damaged'], ['destroyed', 'destroyed'], ['crew_ok', 'crew unhurt'], ['wounded', 'wounded (blood)'], ['killed', 'killed (slumped)']]) { const s = el('span'), d = el('i', 'xr-dot'); d.style.background = XRAY_COLOURS[k]; s.append(d, name); key.append(s); }
     left.append(this.cv, key); const foot = el('label', 'xr-foot'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = this.auto; cb.onchange = () => { this.auto = cb.checked; app.store.set('xrayAuto', this.auto); }; foot.append(cb, 'Show this after every hit');
     right.append(this.read, el('div', 'xr-note', 'Armour and warhead figures are open-source estimates in millimetres of steel, not data. Places of the crew and components are approximate. Drag the picture to turn it.'), foot);
     body.append(left, right); box.append(head, body); document.body.append(box);
@@ -80,7 +80,7 @@ export class XRayPanel {
     const dm = el('div'); const hurt = h.comps.filter(c => c.state !== 'spared' && !c.crew);
     if (!hurt.length) dm.textContent = 'nothing'; for (const c of hurt) { const d = el('div'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[c.state] || XRAY_COLOURS.damaged; d.append(dot, `${c.name}: ${c.state}`); dm.append(d); }
     row('Damaged', dm);
-    const cr = el('div', 'xr-crew'); for (const [k, name] of CREW) { const st = h.crew[k] || 'ok', s = el('span'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[st === 'ok' ? 'crew_ok' : st]; s.append(dot, `${name} ${st === 'ok' ? 'unhurt' : st}`); cr.append(s); }
+    const cr = el('div', 'xr-crew'); for (const [k, name] of CREW) { const st = h.crew[k] || 'ok', s = el('span'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[st === 'ok' ? 'crew_ok' : st]; if (st === 'ok') s.append(dot, `${name} unhurt`); else { const w = el('b', null, st === 'killed' ? 'KILLED' : 'WOUNDED'); w.style.color = XRAY_COLOURS[st]; s.append(dot, `${name} `, w); } cr.append(s); }
     row('Crew', cr); R.append(tb);
     R.append(el('div', 'xr-res ' + (h.killing ? 'bad' : h.penetrated ? 'warn' : ''), h.effect));
   }

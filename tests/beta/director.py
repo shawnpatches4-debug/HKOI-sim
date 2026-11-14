@@ -137,6 +137,30 @@ async def main():
             if e: bad.append('frame error in the strip: ' + e)
             print(json.dumps(await pg.evaluate('__beta.scene.stats()'))); await pg.close()
 
+        if 'scenes' in PARTS:
+            # single moments, each in a named display: (name, force, biome, seed, battle time, display)
+            SC = [('trophy', 'standoff', 'farmland', 3, 11.5, 'simple'), ('hit_inside', 'ambush', 'farmland', 6, 10.3, 'simple'), ('hit_xray', 'ambush', 'farmland', 6, 12.2, 'engineer'),
+                  ('drone_down', 'drones', 'farmland', 1, 42.8, 'engineer'), ('lost', 'standoff', 'farmland', 1, 15.6, 'simple'), ('launch_fog', 'standoff', 'desert', 3, 6.5, 'engineer')]
+            only = os.environ.get('SCENES'); pg = await page(1280, 720, os.environ.get('GFX', 'medium'))
+            for name, force, biome, seed, t, hud in SC:
+                if only and name not in only.split(','): continue
+                if await pg.evaluate('document.body.classList.contains("hud-eng")') != (hud == 'engineer'): await pg.keyboard.press('h'); await pg.wait_for_timeout(300)
+                info = json.loads(await pg.evaluate(f"""(() => {{ const B = __beta, D = B.director; if (!D.on) D.toggle(); B.set.force = '{force}'; B.set.biome = '{biome}'; B.set.seed = {seed}; B.set.custom = null; B.start(); B.setPlaying(false);
+                  let n = 0; while (B.battle.t < {t} - 1e-6 && n++ < 2000) {{ B.playFor(0.1); D.update(0.1); }}
+                  return JSON.stringify({{ t: B.battle.t, mode: B.cams.mode, shot: D.shot ? (D.shot.cam || D.shot.rig) : null, fall: D.fall || null, cap: D.capText, eng: document.body.classList.contains('hud-eng'), state: B.state() }}); }})()"""))
+                await pg.wait_for_timeout(int(os.environ.get('SETTLE', '3200')))
+                lay = json.loads(await pg.evaluate("""(() => { const r = id => { const o = document.getElementById(id); if (!o || o.hidden || getComputedStyle(o).display === 'none') return null; const b = o.getBoundingClientRect(); return b.width && b.height ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null; };
+                  return JSON.stringify({ cap: r('dir-cap'), bar: r('bar'), subs: r('subs'), caption: r('caption'), tag: r('dir-tag'), xr: r('xr'), seat: document.body.classList.contains('in-seat'), state: __beta.state() }); })()"""))
+                over = lambda a, c: bool(a and c and a[0] < c[2] and c[0] < a[2] and a[1] < c[3] and c[1] < a[3])
+                print(f"scene {name}: t {info['t']:.1f} {info['shot']} (camera {info['mode']}{', instead: ' + info['fall'] if info['fall'] else ''}) display {'engineer' if info['eng'] else 'simple'} seat {lay['seat']} state {lay['state']} '{info['cap'] or ''}' layout {lay}")
+                if over(lay['cap'], lay['bar']): bad.append(f'caption over the control bar in scene {name}')
+                if lay['cap'] and (lay['subs'] or lay['caption']): bad.append(f'crew subtitles or the page caption shown with the director caption in scene {name}')
+                if over(lay['xr'], lay['bar']) or over(lay['xr'], lay['cap']) or over(lay['xr'], lay['tag']): bad.append(f'X-ray panel over the bar, the caption or the tag in scene {name}')
+                await pg.screenshot(path=os.path.join(OUT, f'scene_{name}.png'), timeout=120000)
+            e = await pg.evaluate('document.getElementById("errbar").hidden ? "" : document.getElementById("errbar").textContent.slice(0, 300)')
+            if e: bad.append('frame error in the scenes: ' + e)
+            await pg.close()
+
         if 'xray' in PARTS:
             pg = await page(1280, 720, 'min')
             # find one battle of each kind (the page's own battles; a few seconds each, unseen)
