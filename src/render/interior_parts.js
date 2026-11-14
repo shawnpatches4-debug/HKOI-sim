@@ -104,7 +104,7 @@ const FS = /* glsl */`
       #ifdef HASMAP
         alb *= texture2D(uCMap, vUv).rgb * 1.5;
       #endif
-      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.75, bt.a * uBloodAmt); }   /* blood soaking the uniform */
+      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.42, bt.a * uBloodAmt); }   /* blood soaking the uniform */
     #endif
     float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS

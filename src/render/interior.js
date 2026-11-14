@@ -205,7 +205,7 @@ export class Interior {
     this.st.arm = ease(this.st.arm, T.loaded ? 1 : 0, 6, dt); P.armLever.quaternion.copy(P.armLever.userData.q0).multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), 0.5 - this.st.arm));
     // the loader going up to his machine gun and coming down: one number U on the battle clock (0 at his station, 1 standing behind the gun).
     // The battle gives him 4 s to get up before he may fire and 2 s to get down before he may load: the act is fitted inside those.
-    { const lu = ldrUp && T.alive; if (lu !== L.lu) { L.lu = lu; L.luT = B.t; L.luU = this.st.ldrU; } if (B.t < L.luT) { L.luT = B.t; L.luU = lu ? 0 : this.st.ldrU; }
+    { const hurt = (this.fxS && this.fxS.blood.ldr === 'killed') || !!(cs0 && cs0.on && cs0.who.ldr.status !== 'ok' && cs0.who.ldr.status !== 'wounded'), lu = ldrUp && T.alive && !hurt;   /* a loader who is down is not standing in his hatch: he drops back inside */ if (lu !== L.lu) { L.lu = lu; L.luT = B.t; L.luU = this.st.ldrU; } if (B.t < L.luT) { L.luT = B.t; L.luU = lu ? 0 : this.st.ldrU; }
       this.st.ldrU = lu ? clamp(L.luU + (B.t - L.luT) / 3.8, 0, 1) : clamp(L.luU - (B.t - L.luT) / 1.9, 0, 1); }
     const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.13) / 0.25), cs0 && cs0.abandoned ? 1 : 0); P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
     this._mg(B, T, sdt || 0);

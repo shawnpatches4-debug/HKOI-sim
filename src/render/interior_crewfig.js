@@ -125,7 +125,7 @@ export class CrewFigures {
     // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
     const cut = M.bodyOnly ? 0.34 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
     // blood: the uniform darkens and stains, more for the dead than for the wounded
-    const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.7, 0.26, 0.22] : lvl === 1 ? [0.9, 0.6, 0.55] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
+    const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.6, 0.3, 0.27] : lvl === 1 ? [0.88, 0.66, 0.62] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
   }
   hide() { for (const k in this.men) this.men[k].g.visible = false; }
   triCount() { return Math.round(this.tris); }
