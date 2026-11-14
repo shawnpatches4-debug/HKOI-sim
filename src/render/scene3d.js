@@ -95,6 +95,7 @@ export class Scene3D {
     const Q = this.Q; if (!Q) return;
     if (this.terrain && this.terrain.setDetail) this.terrain.setDetail(Q.ground == null ? 2 : Q.ground);
     if (this.skyDome) this.skyDome.setOctaves(Q.skyOct || 5);
+    if (this.grade) { this.grade.uniforms.sharp.value = Q.bloom ? 0.32 : 0; this.grade.uniforms.fringe.value = Q.bloom ? 0.006 : 0; }
     if (this.cover) this.cover.setLevel(Q.cover || 0);
   }
   // Thermal picture for the sights. mode 0 off, 1 white hot, -1 black hot. Warm things (crews, vehicles, missiles) are made to glow by how
@@ -109,7 +110,7 @@ export class Scene3D {
   // which graphics chip the browser is actually using (a 'SwiftShader', 'llvmpipe' or 'Basic Render' answer means none: it is drawing on the processor)
   gpu() { if (this._gpu) return this._gpu; const gl = this.renderer.getContext(), e = gl.getExtension('WEBGL_debug_renderer_info'); this._gpu = String(e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); return this._gpu; }
   get software() { return /swiftshader|llvmpipe|basic render|software/i.test(this.gpu()); }
-  applySize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setPixelRatio(this.pr); this.renderer.setSize(w, h, false); this.composer.setPixelRatio(this.pr); this.composer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
+  applySize() { const w = this.canvas.clientWidth || 1280, h = this.canvas.clientHeight || 720; this.renderer.setPixelRatio(this.pr); this.renderer.setSize(w, h, false); this.composer.setPixelRatio(this.pr); this.composer.setSize(w, h); if (this.grade) this.grade.uniforms.px.value.set(1 / Math.max(1, w * this.pr), 1 / Math.max(1, h * this.pr)); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   // build (or rebuild) the ground and scenery for a world, freeing what was there before
   setWorld(world) {
     const sc = this.scene, t0 = performance.now(); this.world = world;

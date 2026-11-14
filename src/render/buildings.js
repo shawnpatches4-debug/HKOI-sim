@@ -172,6 +172,43 @@ export function buildBuildings(world) {
   const wallM = styled(new THREE.MeshStandardMaterial({ roughness: 0.9 }), WALL, true), roofM = styled(new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true, side: THREE.DoubleSide }), ROOF, false);
   fill(wallG, wallM, boxes); if (roofs.length) fill(roofG, roofM, roofs);
   wallG.dispose(); roofG.dispose();
-  group.userData.dispose = () => group.traverse(m => { if (m.isInstancedMesh) { m.geometry.dispose(); m.material.dispose(); m.dispose(); } });
+  addPoles(world, group);
+  group.userData.dispose = () => group.traverse(m => { if (m.geometry) m.geometry.dispose(); if (m.material) m.material.dispose(); if (m.isInstancedMesh) m.dispose(); });
   return group;
+}
+
+// A line of wooden power poles beside each road, with two sagging wires. For looks and for a sense of scale only.
+function addPoles(world, group) {
+  if (world.biomeKey === 'desert') return;
+  const SPAN = 62, SIDE = 6.5, TOP = 8.2, spots = [], wires = [];
+  for (const road of world.roads) {
+    let carry = SPAN / 2, prev = null;
+    for (let s = 0; s < road.pts.length - 1; s++) {
+      const [e0, n0] = road.pts[s], [e1, n1] = road.pts[s + 1], L = Math.hypot(e1 - e0, n1 - n0), ux = (e1 - e0) / L, uz = (n1 - n0) / L;
+      for (let d = carry; d < L; d += SPAN) {
+        const e = e0 + ux * d - uz * SIDE, n = n0 + uz * d + ux * SIDE;
+        if (!world.inside(e, n) || world.buildingAt(e, n, 2)) { prev = null; continue; }
+        const p = { e, n, y: world.h(e, n), a: Math.atan2(-ux, uz) };   /* turned so the cross-arm lies across the road */
+        if (prev && Math.hypot(prev.e - e, prev.n - n) < SPAN * 1.6) wires.push([prev, p]);
+        spots.push(p); prev = p;
+      }
+      carry = (carry + Math.ceil((L - carry) / SPAN) * SPAN) - L;
+    }
+    prev = null;
+  }
+  if (!spots.length) return;
+  // one pole: a tapering post and a short cross-arm near the top
+  const post = new THREE.CylinderGeometry(0.09, 0.14, TOP + 0.6, 6).toNonIndexed(), arm = new THREE.BoxGeometry(1.7, 0.1, 0.1).toNonIndexed(); post.translate(0, (TOP + 0.6) / 2 - 0.3, 0); arm.translate(0, TOP, 0);
+  const g = new THREE.BufferGeometry(), pos = new Float32Array((post.attributes.position.count + arm.attributes.position.count) * 3), nor = new Float32Array(pos.length);
+  pos.set(post.attributes.position.array, 0); pos.set(arm.attributes.position.array, post.attributes.position.count * 3); nor.set(post.attributes.normal.array, 0); nor.set(arm.attributes.normal.array, post.attributes.normal.count * 3);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); post.dispose(); arm.dispose();
+  const mat = atmosphere(weatherise(new THREE.MeshStandardMaterial({ color: '#4d4033', roughness: 0.95 }), 0.3));
+  const im = new THREE.InstancedMesh(g, mat, spots.length), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(1, 1, 1), P = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  spots.forEach((p, q) => { P.set(p.e, p.y, -p.n); Q.setFromAxisAngle(up, p.a + (hash(q, 5, 77) - 0.5) * 0.08); M.compose(P, Q, S); im.setMatrixAt(q, M); });
+  im.castShadow = true; im.receiveShadow = false; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); group.add(im);
+  // the wires hang in a shallow curve from arm end to arm end
+  const lp = [], end = (p, side, out) => { const c = Math.cos(p.a), s = Math.sin(p.a); return out.set(p.e + c * side * 0.78, p.y + TOP + 0.08, -p.n - s * side * 0.78); }, A = new THREE.Vector3(), B = new THREE.Vector3();
+  for (const [p, q] of wires) for (const side of [-1, 1]) { end(p, side, A); end(q, side, B); let px = A.x, py = A.y, pz = A.z;
+    for (let k = 1; k <= 6; k++) { const t = k / 6, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t - 4 * t * (1 - t) * 0.9, z = A.z + (B.z - A.z) * t; lp.push(px, py, pz, x, y, z); px = x; py = y; pz = z; } }
+  if (lp.length) { const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#1b1b1d', transparent: true, opacity: 0.7 })); lines.name = 'wires'; group.add(lines); }
 }

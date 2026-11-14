@@ -43,6 +43,7 @@ export function bakeGroundMaps(world, size = 2048) {
   const col = new Uint8Array(size * size * 4), c1 = new Uint8Array(size * size * 4), c2 = new Uint8Array(size * size * 4);
   const C = { open: rgb(G.open), meadow: rgb(G.meadow), plough: rgb(G.plough), low: G.low.map(rgb), high: G.high.map(rgb), scrub: rgb(G.scrub), forest: rgb(G.forest), built: rgb(G.built) };
   const rel = relativeHeight(world), g = world.fieldGrid, desert = world.biomeKey === 'desert';
+  const places = world.places || [];
   const at = (i, j) => (j < 0 ? 0 : j > n - 1 ? n - 1 : j) * n + (i < 0 ? 0 : i > n - 1 ? n - 1 : i);
   for (let py = 0; py < size; py++) {
     const nn = half - (py + 0.5) * mpp, gj = (nn + half) / cell, j0 = Math.floor(gj), fj = gj - j0;
@@ -56,6 +57,8 @@ export function bakeGroundMaps(world, size = 2048) {
         v = V[k11]; if (v === 4) wood += w11; else if (v === 5) line += w11; else if (v === 3) scrub += w11; else if (v === 6) built += w11; }
       const tpi = rel[k00] * w00 + rel[k10] * w10 + rel[k01] * w01 + rel[k11] * w11;
       const rag = (vn(e * 0.09, nn * 0.09, 21) - 0.5) * 0.6 + (vn(e * 0.4, nn * 0.4, 22) - 0.5) * 0.3;   // ragged edges for woods, scrub and yards
+      /* trodden earth and gravel around every building, wider than the single map cell the building itself occupies */
+      for (let q = 0; q < places.length; q++) { const pl = places[q], dx = e - pl.e, dz = nn - pl.n, lim = pl.r + 40; if (dx * dx + dz * dz < lim * lim) { if (world.buildingAt(e, nn, 6.5 + rag * 5)) built = 1; break; } }
       const wFor = sstep(0.38, 0.6, wood + rag), wLine = sstep(0.3, 0.7, line + rag) * (1 - wFor), wScrub = Math.min(1, sstep(0.35, 0.65, scrub + rag) + wLine * 0.8) * (1 - wFor), wBuilt = sstep(0.3, 0.62, built + rag * 0.5);
       // the field this pixel lies in, and how far it is from the field's edge
       let c = C.open, wSoil = 0, wLow = 0, wTall = 0, dir = 0, tint = 1, warm = 0;
