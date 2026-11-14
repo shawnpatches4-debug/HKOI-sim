@@ -122,7 +122,7 @@ const PARS = /* glsl */`
   uniform highp sampler2DArray hkNrm;
   #endif
   uniform vec3 hkMean[5]; uniform vec4 hkGrid; uniform vec3 hkRoad; uniform vec3 hkRock; uniform vec3 hkSoil; uniform float hkAsphalt;
-  uniform float uSnow; uniform float uWet;
+  uniform float uSnow; uniform float uWet; uniform vec3 hkClear[16];
   vec2 hkTilt; float hkRough;
   float hk_h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float hk_n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hk_h(i), hk_h(i + vec2(1, 0)), f.x), mix(hk_h(i + vec2(0, 1)), hk_h(i + vec2(1, 1)), f.x), f.y); }
@@ -189,13 +189,13 @@ const BODY = /* glsl */`
       dcol = vec3(0.82 + 0.36 * (n1 * 0.6 + n3 * 0.4));
     #endif
     vec3 base = mc.rgb * dcol * band;
-    base = mix(base, hkSoil * soilTex * (0.8 + 0.4 * n2), clamp(gap * 0.8 + tram * 0.5, 0.0, 1.0));
+    base = mix(base, hkSoil * soilTex * (0.8 + 0.4 * n2), clamp(gap * 0.8 * (wTall + 0.35 * wLow) / max(crop, 0.001) + tram * 0.5, 0.0, 1.0));
     base *= 1.0 - aF * 0.22 * (0.5 - 0.5 * sin(phF));
     base = mix(base, hkRock * mix(soilTex, stoneTex, 0.5) * (0.75 + 0.5 * n2), steep);
     vec3 roadCol = hkRoad * stoneTex * (0.86 + 0.28 * n2) * (1.0 - rut * 0.22);
     roadCol = mix(roadCol, mc.rgb * dcol * 0.9, crown * 0.7);
     base = mix(base, roadCol, road);
-    hkTilt += rdir * (cos(phF) * aF * 0.55 + (cos(phL) * aL + cos(phT) * aT) * 0.4) * (1.0 - road);
+    hkTilt += rdir * (cos(phF) * aF * 0.4 + (cos(phL) * aL + cos(phT) * aT) * 0.4) * (1.0 - road);
     hkRough = 0.96 - 0.06 * road * hkAsphalt;
 
     // wet ground: darker, and standing water in furrow bottoms, wheel ruts and hollows
@@ -212,6 +212,10 @@ const BODY = /* glsl */`
       cover = clamp(cover, 0.0, 1.0) * smoothstep(0.55, 0.8, gN.y);
       base = mix(base, vec3(0.83, 0.86, 0.91) * (0.93 + 0.07 * n3), cover); hkTilt *= 1.0 - 0.75 * cover; hkRough = mix(hkRough, 0.82, cover);
     }
+    #if HK_DETAIL > 0
+      /* soft dark ground under and beside every vehicle and team, so they sit on the earth even without sun */
+      { float occ = 1.0; for (int i = 0; i < 16; i++) { vec3 q = hkClear[i]; if (q.z > 0.0) occ *= 1.0 - 0.42 * (1.0 - smoothstep(q.z * 0.35, q.z * 1.05, distance(vWp.xz, q.xy))); } base *= occ; }
+    #endif
     diffuseColor.rgb = base;
   }
 `;
@@ -228,7 +232,7 @@ export function buildTerrain(world, opt = {}) {
   const U = {
     hkCol: { value: tex.col }, hkC1: { value: tex.c1 }, hkC2: { value: tex.c2 }, hkDet: { value: det.det }, hkNrm: { value: det.nrm }, hkMean: { value: det.means },
     hkGrid: { value: new THREE.Vector4(fg.cs, fg.sn, world.half, world.size) }, hkRoad: { value: lin(G.road) }, hkRock: { value: lin(G.rock) }, hkSoil: { value: lin(G.soil) }, hkAsphalt: { value: G.asphalt },
-    uSnow: ENV.snow, uWet: ENV.wet,
+    uSnow: ENV.snow, uWet: ENV.wet, hkClear: opt.clear || { value: Array.from({ length: 16 }, () => new THREE.Vector3(0, 0, -1)) },
   };
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.96, metalness: 0 });
   mat.defines = { HK_DETAIL: opt.detail == null ? 2 : opt.detail };

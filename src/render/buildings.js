@@ -58,7 +58,7 @@ const WALL = /* glsl */`
       float frame = box1(bu, ww + 0.07, aa) * box1(fv - (w0 + w1) * 0.5, (w1 - w0) * 0.5 + 0.07, aa) * has * (1.0 - isDoor);
       float bars = min(box1(bu, 0.025, aa) + box1(fv - (w0 + (w1 - w0) * 0.62), 0.025, aa), 1.0);
       float sill = box1(bu, ww + 0.12, aa) * box1(fv - (w0 - 0.09), 0.05, aa) * has * (1.0 - isDoor);
-      vec3 frameCol = mix(vec3(0.72, 0.71, 0.66), vec3(0.2, 0.12, 0.07), step(0.6, hb(vec2(seed * 7.0, 5.0))));
+      float fk = hb(vec2(seed * 7.0, 5.0)); vec3 frameCol = fk < 0.4 ? vec3(0.72, 0.71, 0.66) : fk < 0.6 ? vec3(0.2, 0.12, 0.07) : fk < 0.82 ? vec3(0.10, 0.22, 0.36) : vec3(0.12, 0.28, 0.16);   /* white, brown, or the painted blue and green of village houses */
       vec3 glassCol = mix(vec3(0.025, 0.03, 0.035), vec3(0.16, 0.15, 0.12), step(0.72, hb(vec2(bi + seed * 3.0, fl + faceId))) * 0.8);   /* a pale curtain behind some panes */
       wall *= 1.0 - 0.3 * has * (1.0 - isDoor) * box1(bu, ww + 0.1, aa) * smoothstep(0.9, 0.0, w0 - fv) * step(fv, w0) * streak;   /* dirt run-off under the sill */
       wall = mix(wall, frameCol, frame * (1.0 - far * 0.6)); wall = mix(wall, vec3(0.6, 0.59, 0.55), sill * (1.0 - far));
@@ -70,6 +70,8 @@ const WALL = /* glsl */`
       float plinth = step(v, 0.5); wall = mix(wall, wall * vec3(0.52, 0.52, 0.54), plinth * (panel ? 0.8 : 0.6));
       wall *= 1.0 - 0.28 * smoothstep(1.6, 0.0, v) * (0.5 + 0.5 * grain);
       wall *= 1.0 - 0.22 * smoothstep(0.55, 0.9, streak) * smoothstep(vScale.y - 2.5, vScale.y, v);
+      wall *= 1.0 - 0.38 * smoothstep(vScale.y - 0.55, vScale.y - 0.05, v) * (panel ? 0.3 : 1.0);   /* shade under the eaves */
+      if (!panel) { float trim = box1(bu, ww + 0.2, aa) * box1(fv - (w0 + w1) * 0.5, (w1 - w0) * 0.5 + 0.2, aa) * has * (1.0 - isDoor) * (1.0 - frame); wall = mix(wall, mix(wall, frameCol, 0.55) * 1.1, trim * step(0.6, fk) * (1.0 - far)); }   /* a painted surround on the coloured ones */
     } else if (top && kind < 2.5) { wall = vec3(0.16, 0.16, 0.165) * (0.75 + 0.5 * grain);
     } else if (kind < 3.5) { wall = brick * (1.0 - 0.5 * smoothstep(vScale.y - 0.5, vScale.y, v));   /* chimney, sooty at the top */
     } else if (kind < 4.5) {   /* picket fence: upright boards with gaps and pointed tops, on two rails */
@@ -114,8 +116,8 @@ const ROOF = /* glsl */`
 
 function styled(mat, body, glass) {
   mat.onBeforeCompile = sh => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aStyle; varying vec3 vBox; varying vec3 vBoxN; varying vec3 vScale; varying vec4 vStyle;').replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBox; varying vec3 vBoxN; varying vec3 vScale; varying vec4 vStyle;\n' + NOISE).replace('#include <color_fragment>', body);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aStyle; varying vec3 vBox; varying vec3 vBoxN; flat varying vec3 vScale; flat varying vec4 vStyle;').replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBox; varying vec3 vBoxN; flat varying vec3 vScale; flat varying vec4 vStyle;\n' + NOISE).replace('#include <color_fragment>', body);
     if (glass) sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.06, hkGlass);');
   };
   const m = atmosphere(weatherise(mat, glass ? 0.25 : 1.2)); m.customProgramCacheKey = () => 'hkbuilding' + (glass ? 'w' : 'r'); return m;

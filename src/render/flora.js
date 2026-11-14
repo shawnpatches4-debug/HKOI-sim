@@ -211,7 +211,7 @@ const KINDS = {
     if (lod === 2) return impostor(CELLS.iBroad, 0.74, { top: [0.72, 0.3, CELLS.leaf] });
     S.tube(V(0, -0.02, 0), V(0.01, 0.42, 0), 0.036, 0.024, lod ? 5 : 7, CELLS.bark, BARK, 0, 1);
     if (!lod) for (let k = 0; k < 5; k++) { const a = k / 5 * 6.2832 + R(), r = 0.16 + R() * 0.08, y0 = 0.3 + R() * 0.12; S.tube(V(0, y0, 0), V(Math.cos(a) * r, y0 + 0.2 + R() * 0.12, Math.sin(a) * r), 0.016, 0.006, 4, CELLS.bark, BARK, 0, 0.5); }
-    crownCards(S, R, { centre, radii, n: lod ? 10 : 38, size: lod ? 0.26 : 0.15, cellK: CELLS.leaf, col: LEAFC, fill: true });
+    crownCards(S, R, { centre, radii, n: lod ? 16 : 38, size: lod ? 0.21 : 0.15, cellK: CELLS.leaf, col: LEAFC, fill: true });
     return S.build();
   },
   // a tall narrow poplar
@@ -325,7 +325,8 @@ export function treeMaterials() {
       /* in snow the leaf trees stand nearly bare: only the thickest clumps and the twigs remain, and what remains turns brown */
       .replace('#include <alphatest_fragment>', `
         if (uSnow > 0.0 && vLeaf.y > 0.5) { diffuseColor.a *= smoothstep(0.55 + 0.25 * uSnow, 0.98, diffuseColor.a); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.6, 0.3, 0.1))) * vec3(1.5, 1.0, 0.6), 0.85 * uSnow); }
-        { vec2 tx = vMapUv * 2048.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.35 * lod)); }   /* keep crowns full as they shrink with distance */
+        { vec2 tx = vMapUv * 2048.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.22 * lod));   /* keep crowns full as they shrink with distance */
+          vec2 fq = floor(tx); float fine = fract(sin(dot(fq, vec2(12.9898, 78.233))) * 43758.5453); diffuseColor.a *= mix(0.62 + 0.76 * fine, 1.0, clamp(lod * 0.8, 0.0, 1.0)); diffuseColor.rgb *= mix(0.86 + 0.28 * fine, 1.0, clamp(lod * 0.8, 0.0, 1.0)); }   /* close up, break the soft picture into leaf-sized flecks */
         #include <alphatest_fragment>
         { float snow = uSnow * smoothstep(0.25, 0.8, vUpN + (fract(sin(dot(floor(vWp.xz * 3.0), vec2(12.9, 78.2))) * 43758.5) - 0.5) * 0.5) * (vLeaf.y > 0.5 ? 0.35 : 0.8) * step(0.001, vLeaf.x + vLeaf.y);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.89, 0.94), snow); }`)

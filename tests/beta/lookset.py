@@ -8,6 +8,10 @@ NEARB = "void (()=>{const b=window.__beta,T=b.battle.tank,B=b.world.buildings;le
 NEARV = "void (()=>{const b=window.__beta,w=b.world,T=b.battle.tank;let best=null,bd=1e9;for(let j=0;j<w.n;j++)for(let i=0;i<w.n;i++){if(w.V[j*w.n+i]!==%d)continue;const e=i*w.cell-w.half,n=j*w.cell-w.half,d=Math.hypot(e-T.e,n-T.n);if(d<bd){bd=d;best=[e,n];}}if(best){const a=Math.atan2(T.e-best[0],T.n-best[1]);b.view(best[0]+Math.sin(a)*%s,best[1]+Math.cos(a)*%s,0,%s,best[0],best[1]);}})()"
 V = {
     'sunward': "void (()=>{const s=window.__beta.scene.sunDir,b=Math.atan2(s.x,-s.z)*180/Math.PI;window.__beta.near(55,5,b+180+14)})()",
+    'drv': "window.__beta.cams.set('in_drv')",
+    'drv_nocover': "void (window.__beta.scene.cover.setLevel(0), window.__beta.cams.set('in_drv'))",
+    'drv_plain': "void (window.__beta.scene.terrain.setDetail(0), window.__beta.cams.set('in_drv'))",
+    'kneel': "window.__beta.near(9, 1.1, 200)",
     'treeline': NEARV % (5, 30, 30, 2.2),
     'woodedge': NEARV % (4, 40, 40, 2.2),
     'scrub': NEARV % (3, 10, 10, 1.7),
