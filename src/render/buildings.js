@@ -47,7 +47,7 @@ const WALL = /* glsl */`
         wall *= 0.86 + 0.22 * grain;
         if (panel) { float tone = hb(vec2(bi + faceId * 5.0, fl) + seed * 3.0); wall *= 0.9 + 0.16 * tone;   /* each concrete panel a little different, with a dark joint around it */
           float seam = max(1.0 - box1(bu, bw * 0.5 - 0.03, aa), 1.0 - box1(fv - fh * 0.5, fh * 0.5 - 0.03, aa)); wall *= 1.0 - 0.45 * seam * (1.0 - far); }
-        else { float bare = smoothstep(0.66, 0.74, nb(vec2(u, v) * 0.45 + seed * 77.0) + (0.25 - min(v, 1.2) * 0.2)); wall = mix(wall, brick, bare * 0.9); }   /* plaster fallen away, mostly low down */
+        else { float bare = smoothstep(0.74, 0.82, nb(vec2(u, v) * 0.45 + seed * 77.0) + (0.25 - min(v, 1.2) * 0.2)); wall = mix(wall, brick, bare * 0.9); }   /* plaster fallen away, mostly low down */
       }
       // windows and the door
       float gable = (!panel && an.x > 0.5) ? 1.0 : 0.0;
@@ -101,7 +101,7 @@ const ROOF = /* glsl */`
         float each = hb(vec2(ti, ci) + seed * 9.0); col *= mix(1.0, shadeC * gapT * (0.82 + 0.36 * each), 1.0 - far);
       } else if (kind < 1.5) {   /* corrugated sheets */
         float rib = 0.5 + 0.5 * cos(run / 0.18 * 6.2832), sheet = step(0.97, fract(down / 1.75)); col *= mix(1.0, (0.82 + 0.3 * rib) * (1.0 - 0.3 * sheet), 1.0 - far);
-        col = mix(col, vec3(0.34, 0.17, 0.09), smoothstep(0.55, 0.85, nb(vec2(run * 0.9, down * 0.4) + seed * 33.0)) * 0.6);   /* rust */
+        col = mix(col, vec3(0.34, 0.17, 0.09), smoothstep(0.62, 0.9, nb(vec2(run * 0.9, down * 0.4) + seed * 33.0)) * 0.35);   /* rust */
       } else {   /* tarred felt or slate */
         float course = down / 0.3, tx = run / 0.5 + 0.5 * mod(floor(course), 2.0); col *= mix(1.0, (0.85 + 0.25 * hb(vec2(floor(tx), floor(course)) + seed)) * (1.0 - 0.3 * step(0.93, fract(course))), 1.0 - far);
       }
@@ -210,5 +210,5 @@ function addPoles(world, group) {
   const lp = [], end = (p, side, out) => { const c = Math.cos(p.a), s = Math.sin(p.a); return out.set(p.e + c * side * 0.78, p.y + TOP + 0.08, -p.n - s * side * 0.78); }, A = new THREE.Vector3(), B = new THREE.Vector3();
   for (const [p, q] of wires) for (const side of [-1, 1]) { end(p, side, A); end(q, side, B); let px = A.x, py = A.y, pz = A.z;
     for (let k = 1; k <= 6; k++) { const t = k / 6, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t - 4 * t * (1 - t) * 0.9, z = A.z + (B.z - A.z) * t; lp.push(px, py, pz, x, y, z); px = x; py = y; pz = z; } }
-  if (lp.length) { const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#1b1b1d', transparent: true, opacity: 0.7 })); lines.name = 'wires'; group.add(lines); }
+  if (lp.length) { const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#232326', transparent: true, opacity: 0.45 })); lines.name = 'wires'; group.add(lines); }
 }

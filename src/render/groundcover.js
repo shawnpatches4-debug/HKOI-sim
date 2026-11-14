@@ -31,7 +31,7 @@ function coverSheet() {
     const x1 = x0 + lean * len * 0.45, y1 = S - len * 0.6, x2 = x0 + lean * len, y2 = S - len;
     c.fillStyle = grey(lum); c.beginPath(); c.moveTo(x0 - w / 2, S); c.quadraticCurveTo(x1 - w / 3, y1, x2, y2); c.quadraticCurveTo(x1 + w / 3, y1, x0 + w / 2, S); c.fill();
   };
-  cell(0, R => { for (let i = 0; i < 90; i++) { const f = i / 90; blade(S * (0.2 + R() * 0.6), (R() - 0.5) * 1.1, S * (0.35 + R() * 0.6), S * (0.022 + R() * 0.02), 30 + f * 34 + R() * 12); } });
+  cell(0, R => { for (let i = 0; i < 150; i++) { const f = i / 150; blade(S * (0.12 + R() * 0.76), (R() - 0.5) * 1.2, S * (0.3 + R() * 0.65), S * (0.011 + R() * 0.012), 30 + f * 34 + R() * 12); } });
   cell(1, R => {
     for (let i = 0; i < 46; i++) { const f = i / 46, x0 = S * (0.1 + R() * 0.8), lean = (R() - 0.5) * 0.24, len = S * (0.74 + R() * 0.2), lum = 34 + f * 30 + R() * 10, x2 = x0 + lean * len, y2 = S - len;
       c.strokeStyle = grey(lum); c.lineWidth = S * 0.008; c.beginPath(); c.moveTo(x0, S); c.lineTo(x2, y2 + S * 0.08); c.stroke();
@@ -89,7 +89,7 @@ const VERT_BODY = /* glsl */`
     float thick = mix(mix(open * hkDry, 0.38, wood), 1.0, crop);
     float tram = abs(mod(rc + 4.0, 21.0) - 10.5);
     float there = step(aSeed.z, thick) * smoothstep(2.9, 3.6, rd) * (1.0 - crop * step(abs(tram - 0.9), 0.3));
-    float h = mix(mix(0.2 + 0.3 * aSeed.w + 0.25 * c2.g, 0.4 + 0.3 * aSeed.w, wood), mix(0.55 + 0.35 * aSeed.w, 1.75 + 0.35 * aSeed.w, tall), crop);
+    float h = mix(mix(0.14 + 0.24 * aSeed.w + 0.25 * c2.g, 0.35 + 0.3 * aSeed.w, wood), mix(0.55 + 0.35 * aSeed.w, 1.75 + 0.35 * aSeed.w, tall), crop);
     float w = mix(mix(0.75, 0.9, wood), mix(0.6, 1.0, tall), crop);
     float kind = mix(mix(0.0, 3.0, wood), mix(1.0, 2.0, tall), crop);
     // fade out at the rim of the patch, and where something stands on it
@@ -105,7 +105,7 @@ const VERT_BODY = /* glsl */`
     float tip = position.y * position.y * h * (0.10 + 0.07 * sway) * hkWind.y;
     lp.xz += vec2(hkWind.x, hkWind.z) * tip;
     transformed = vec3(wxz.x + lp.x, gy + lp.y, wxz.y + lp.z);
-    vTint = mc.rgb * (0.8 + 0.5 * aSeed.z) * mix(0.55, 1.25, position.y);
+    vTint = mc.rgb * (0.8 + 0.5 * aSeed.z) * mix(0.6, 1.12, position.y);
     vUp = position.y; vWp = transformed;
     vMapUv = (uv * 0.96 + 0.02 + vec2(mod(kind, 2.0), floor(kind / 2.0))) * 0.5; vMapUv.y = (floor(kind / 2.0) + 1.0 - (uv.y * 0.96 + 0.02)) * 0.5;
   }
@@ -135,7 +135,7 @@ export class GroundCover {
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')   /* lit like the ground it grows from, so it blends into it */
         .replace('#include <begin_vertex>', VERT_BODY);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vTint; varying vec3 vWp; varying float vUp; uniform float uSnow;')
-        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 4.2; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
+        .replace('#include <color_fragment>', `diffuseColor.rgb *= vTint * 2.7; diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.92), uSnow * smoothstep(0.35, 0.9, vUp) * 0.7);
           { vec2 tx = vMapUv * 1024.0; float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx))))); diffuseColor.a = min(1.0, diffuseColor.a * (1.0 + 0.4 * lod)); }`)
         .replace('#include <normal_fragment_begin>', 'vec3 normal = normalize(vNormal); vec3 nonPerturbedNormal = normal;');
     };
@@ -152,7 +152,7 @@ export class GroundCover {
     const ht = new THREE.DataTexture(world.H, world.n, world.n, THREE.RedFormat, THREE.FloatType); ht.minFilter = ht.magFilter = THREE.NearestFilter; ht.generateMipmaps = false; ht.needsUpdate = true;
     u.hkHeight.value = ht; u.hkCol.value = terrain.tex.col; u.hkC1.value = terrain.tex.c1; u.hkC2.value = terrain.tex.c2;
     const fg = world.fieldGrid || { cs: 1, sn: 0 }; u.hkGrid.value.set(fg.cs, fg.sn, world.half, world.size); u.hkCellN.value.set(world.cell, world.n);
-    u.hkDry.value = world.biomeKey === 'desert' ? 0.12 : 1; this.world = world;
+    u.hkDry.value = world.biomeKey === 'desert' ? 0.05 : 1; this.world = world;
   }
   setLevel(level) {
     const L = LEVELS[level] || LEVELS[0]; this.level = level; this.mesh.geometry.instanceCount = L[0]; this.uniforms.hkPatch.value.set(L[1] * 2, L[1], 1); this.mesh.visible = L[0] > 0;
@@ -163,7 +163,7 @@ export class GroundCover {
     const u = this.uniforms, R = u.hkPatch.value.y, f = camera.getWorldDirection(this._fwd), p = camera.position;
     u.hkCentre.value.set(p.x + f.x * R * 0.72, p.z + f.z * R * 0.72);
     // from high up the cover cannot be told from the ground's own texture: shrink it away rather than draw it for nothing
-    const alt = this.world ? p.y - this.world.h(p.x, -p.z) : 0, k = 1 - Math.min(1, Math.max(0, (alt - 70) / 50));
+    const alt = this.world ? p.y - this.world.h(p.x, -p.z) : 0, k = 1 - Math.min(1, Math.max(0, (alt - 28) / 40));
     u.hkPatch.value.z = k; this.mesh.visible = this.level > 0 && k > 0;
     const C = u.hkClear.value; let n = 0;
     if (units) for (const o of units.children) { if (n >= MAX_CLEAR) break; if (!o.visible) continue; C[n++].set(o.position.x, o.position.z, (o.userData.heat || 0) >= 0.8 ? 2.6 : 5.5); }
