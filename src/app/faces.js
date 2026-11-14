@@ -113,7 +113,7 @@ export class Faces {
   async load() {
     if (this.asked || !this.base) return; this.asked = true;
     try {
-      const R = this.gl = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+      const R = this.gl = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });   /* the same graphics card as the battle: 'low-power' could put this on a second, built-in chip and stall every frame */
       R.setPixelRatio(1); R.setSize(W * 4, H, false); R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.05; R.setScissorTest(true);
       this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x111815);
       const src = {}; for (const n of new Set(Object.values(MODEL))) src[n] = await loadModel(this.base + 'crew/' + n + '.json');
@@ -227,13 +227,21 @@ export class Faces {
     if (!this.ok) return;
     const t = s.now, jumped = this.tLast == null || t < this.tLast - 0.01 || t > this.tLast + 3; this.acc += dt;
     const quiet = ROLES.every(r => s.crew.who[r].state === 'steady' && s.crew.who[r].status === 'ok') && !s.speaking;
-    if (!jumped && !this.hold && (!s.playing || this.acc < (quiet ? 0.2 : 0.083))) return;
+    const vis = ROLES.filter(r => (this.out[r] && this.out[r].isConnected && this.out[r].offsetParent) || (this.small[r] && this.small[r].isConnected && this.small[r].offsetParent));
+    if (!vis.length && !this.hold) return;   /* panel folded or hidden: nothing to draw */
+    /* Cost control (measured: copying the portraits out of their own drawing surface cost about 90 ms a frame in this release, the
+       whole battlefield about 17): ONE face is redrawn per refresh, in turn, at most 6 refreshes a second in a fight and 2 when all
+       are steady; if a refresh still costs more than 6 ms on this machine the pace halves again (down to one face a second). */
+    const cheap = this.draws > 8 && this.ms < 1.5;   /* a machine where a refresh costs almost nothing gets all four faces, smoothly */
+    const gap = cheap ? (quiet ? 0.2 : 0.083) : (quiet ? 0.5 : 0.16) * (this.ms > 6 ? Math.min(6, this.ms / 6) : 1);
+    if (!jumped && !this.hold && (!s.playing || this.acc < gap)) return;
     const step = jumped ? 0 : Math.max(0, Math.min(1, t - this.tLast)); this.acc = 0; this.tLast = t;
     const ev = this.ev = this.recent(s.battle, t), t0 = performance.now();
     for (const r of ROLES) { const M = this.men[r], m = s.crew.who[r];
       let T = this.target(M, m, t, ev, s.speaking && s.speaking.toLowerCase() === r); if (this.hold && this.hold[r]) T = Object.assign(T, this.hold[r]);
       if (jumped) M.sp.snap(T); else M.sp.step(T, step); this.pose(M); }
-    this.draw(s);
+    this.turn = ((this.turn || 0) + 1) % ROLES.length;
+    this.draw(s, jumped || this.hold || cheap ? null : vis.length ? [vis[this.turn % vis.length]] : []);
     this.ms += (performance.now() - t0 - this.ms) * 0.2; this.draws++;
   }
   // seconds since the last hit on the vehicle and since the last blast close to it (Trophy firing, a warhead bursting on the ground near by)
@@ -243,14 +251,14 @@ export class Faces {
       if (e.how === 'hit') out.hit = Math.min(out.hit, t - e.t); else if (t - e.t > 3) continue; else if (e.how === 'aps_kill' || e.how === 'ground' || e.how === 'miss') out.near = Math.min(out.near, t - e.t); }
     return out;
   }
-  draw(s) {
-    const R = this.gl, cv = R.domElement;
+  draw(s, only) {   /* only: the roles to redraw this time (null: all four) */
+    const R = this.gl, cv = R.domElement, doing = r => !only || only.includes(r);
     const alarm = sat(1 - (this.ev ? this.ev.hit : 99) / 14);   /* the red emergency lamp: on at a hit, fading over 14 s */
     ROLES.forEach((r, i) => { const m = s.crew.who[r], st = m.status === 'down' ? 0 : sat(((m.stress || 0) - 0.3) / 0.6);   /* the light on a face turns cooler and harder as his stress rises */
       this.lamp.color.setRGB(1, 0.89 + 0.06 * st, 0.74 + 0.26 * st); this.lamp.intensity = 3.4 + 1.6 * st; this.hemi.intensity = 1.25 - 0.6 * st - 0.35 * alarm; this.red.intensity = 2.6 * alarm;
-      R.setViewport(i * W, 0, W, H); R.setScissor(i * W, 0, W, H); R.render(this.scene, this.men[r].cam); });
+      if (doing(r)) { R.setViewport(i * W, 0, W, H); R.setScissor(i * W, 0, W, H); R.render(this.scene, this.men[r].cam); } });
     ROLES.forEach((r, i) => {
-      const m = s.crew.who[r], M = this.men[r], big = this.out[r], sm = this.small[r];
+      if (!doing(r)) return; const m = s.crew.who[r], M = this.men[r], big = this.out[r], sm = this.small[r];
       if (big && big.isConnected) { const x = big._x || (big._x = big.getContext('2d')); x.drawImage(cv, i * W + W * CROP.x, H * CROP.y, W * CROP.w, H * CROP.h, 0, 0, big.width, big.height); this.marks(x, big, M, m, s); }   /* the panel shows the face itself, close: the part of the picture that carries the expression */
       if (sm && sm.isConnected) { const x = sm._x || (sm._x = sm.getContext('2d')); x.drawImage(cv, i * W + W * 0.2, H * 0.1, W * 0.6, H * 0.62, 0, 0, sm.width, sm.height); if (m.status === 'down') { x.fillStyle = 'rgba(4,6,5,.55)'; x.fillRect(0, 0, sm.width, sm.height); } }
     });
