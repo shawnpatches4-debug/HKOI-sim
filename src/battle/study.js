@@ -133,9 +133,16 @@
     return { S, n, i: 0, sc, M }; }
   function stressStep(HK, run, count) { const end = Math.min(run.n, run.i + count);
     for (; run.i < end; run.i++) { const fixed = stressStream(HK, run.sc, run.i);
-      for (const st of SETUPS) { const A = run.S[st.key], c = Object.assign({}, A.cfg, { enemy: Object.assign({}, A.cfg.enemy, { fixed }) }), rec = { events: [], bursts: [], aps: [], ctx: {} };
-        HK.runMission(c, new HK.RNG(HK.seedFor(1, run.i)), A.lookup, rec);
-        const th = rec.threats.slice().sort((a, b) => a.impact - b.impact); let k = th.findIndex(t => t.viz && t.viz.end && t.viz.end.type === 'hit' && t.viz.end.killing); const upTo = k < 0 ? th.length : k + 1, seen = {};
+      for (const st of SETUPS) { const A = run.S[st.key]; let c, rec, th, k;
+        /* The engine plans every first burst of the whole stream before any follow-up burst, so in a 60-threat stream late threats could
+           take rounds from early follow-ups ("out of rounds" at threat 8 with 90 left). So: fight first with a bottomless magazine; if the
+           real magazine (150 + 150) was not emptied before the vehicle was lost, that result stands; only if it was, fight again with the real one. */
+        for (const deep of [true, false]) { c = Object.assign({}, A.cfg, { enemy: Object.assign({}, A.cfg.enemy, { fixed }) }); if (deep && st.hkoi) c.gun = Object.assign({}, A.cfg.gun, { obscurant_rounds: 1e6, he_rounds: 1e6 });
+          rec = { events: [], bursts: [], aps: [], ctx: {} }; HK.runMission(c, new HK.RNG(HK.seedFor(1, run.i)), A.lookup, rec);
+          th = rec.threats.slice().sort((a, b) => a.impact - b.impact); k = th.findIndex(t => t.viz && t.viz.end && t.viz.end.type === 'hit' && t.viz.end.killing);
+          if (!deep || !st.hkoi) break; const tEnd = k < 0 ? 1e9 : th[k].impact; let o = 0, h = 0; for (const q of rec.bursts || []) if (q.tf <= tEnd) { const nr = Array.isArray(q.rounds) ? q.rounds.length : (+q.rounds || 0); if (q.kind === 'he') h += nr; else o += nr; }
+          if (o <= A.cfg.gun.obscurant_rounds && h <= A.cfg.gun.he_rounds) break; A.dry = (A.dry || 0) + 1; }
+        const upTo = k < 0 ? th.length : k + 1, seen = {};
         { const tEnd = k < 0 ? 1e9 : th[k].impact, U = A.used || (A.used = { aps: 0, obs: 0, he: 0, hits: 0 }); for (const q of rec.aps || []) if (q.t <= tEnd) U.aps++; for (const b of rec.bursts || []) if (b.tf <= tEnd) { const nr = Array.isArray(b.rounds) ? b.rounds.length : (+b.rounds || 0); if (b.kind === 'he') U.he += nr; else U.obs += nr; } for (let j = 0; j < upTo; j++) if (th[j].state === 'hit') U.hits++; }   /* stores spent up to the moment the vehicle is lost */
         A.n++; A.at[run.i] = k < 0 ? 0 : k + 1;   /* 0 = survived the whole stream, else the number of the threat that killed it */
         for (let j = 0; j < upTo; j++) { const t = th[j], d = t.state === 'hit' ? 'hit' : (t.defeated_by || t.state || 'other'), b = /^hkoi/.test(d) || d === 'self_destruct' ? 'hkoi' : d === 'aps' ? 'aps' : d === 'gunner_jitter' || d === 'unguided_miss' ? 'gunner' : d === 'hit' ? 'hit' : 'other'; A.by[b] = (A.by[b] || 0) + 1; A.threats++;
@@ -145,7 +152,7 @@
   function stressSummary(run, key) { const A = run.S[key], n = A.n, M = run.M, at = Array.from(A.at.subarray(0, n)), lost = at.filter(x => x > 0).length, sorted = at.map(x => x === 0 ? M + 1 : x).sort((a, b) => a - b), q = f => n ? sorted[Math.min(n - 1, Math.floor(f * n))] : 0;
     const curve = []; for (const k of [1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60].filter(x => x <= M)) curve.push({ k, alive: n ? sorted.filter(x => x > k).length / n : 0 });
     const half = (curve.find(c => c.alive < 0.5) || {}).k || null, ninety = (curve.find(c => c.alive < 0.9) || {}).k || null, top = o => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([why, c]) => ({ why: LEAK[why] || why.replace(/_/g, ' '), n: c }));
-    return { n, M, lost, survivedAll: n ? (n - lost) / n : 0, median: q(0.5), q1: q(0.25), q3: q(0.75), mean: n ? sorted.reduce((a, b) => a + Math.min(b, M), 0) / n : 0, curve, half, ninety, used: A.used ? { aps: A.used.aps / n, obs: A.used.obs / n, he: A.used.he / n, hits: A.used.hits / n } : null, killer: top(A.killer), whyH: top(A.whyH), whyA: top(A.whyA), by: A.by, threats: A.threats,
+    return { n, M, lost, survivedAll: n ? (n - lost) / n : 0, median: q(0.5), q1: q(0.25), q3: q(0.75), mean: n ? sorted.reduce((a, b) => a + Math.min(b, M), 0) / n : 0, curve, half, ninety, ranDry: n ? (A.dry || 0) / n : 0, used: A.used ? { aps: A.used.aps / n, obs: A.used.obs / n, he: A.used.he / n, hits: A.used.hits / n } : null, killer: top(A.killer), whyH: top(A.whyH), whyA: top(A.whyA), by: A.by, threats: A.threats,
       first: Object.keys(A.first).map(g => ({ what: g, share: n ? A.first[g].n / n : 0, atThreat: A.first[g].sum / A.first[g].n })).sort((a, b) => a.atThreat - b.atThreat) }; }
 
   const api = { SETUPS, BUCKETS, run, one, summarise, range95, cfgFor, bucketOf, raidConfig, raidStart, raidStep, raidSummary, paired, BY, mapStart, mapInfo, stressStart, stressStep, stressSummary, stressStream, STRESS_MIX, STRESS_RANGE };
