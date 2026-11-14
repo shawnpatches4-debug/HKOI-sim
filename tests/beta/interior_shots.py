@@ -30,7 +30,8 @@ async def main():
     out, tag, params = sys.argv[1], sys.argv[2], sys.argv[3]; which = sys.argv[4] if len(sys.argv) > 4 else 'all'; os.makedirs(out, exist_ok=True)
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
-        pg = await b.new_page(viewport={'width': int(os.environ.get('W', '1280')), 'height': int(os.environ.get('H', '720'))}); errs = []
+        FULL = {'width': int(os.environ.get('W', '1280')), 'height': int(os.environ.get('H', '720'))}; small = os.environ.get('LOADSMALL') == '1'; state = {'big': not small}
+        pg = await b.new_page(viewport={'width': 320, 'height': 180} if small else FULL); errs = []   # LOADSMALL=1: load and stage at a small size (frames are drawn in software here), go to full size for the first picture
         pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e)[:400])); pg.on('console', lambda m: m.type == 'error' and 'Failed to load resource' not in m.text and errs.append(m.text[:400]))
         await pg.goto(os.environ['BASE'] + '#play=1&' + params, timeout=120000)
         for i in range(200):
@@ -38,7 +39,9 @@ async def main():
             await pg.wait_for_timeout(1500)
         await pg.evaluate(HELP); await pg.evaluate('void (hud(0), __beta.setPlaying(false))'); settle = int(os.environ.get('SETTLE', '4500'))
         async def shot(name, js, wait=None):
-            if ONLY and not any(k in name for k in ONLY): return   # ONLY=a,b: a short run of just the pictures whose names contain one of these
+            if ONLY and not any(k in name for k in ONLY):
+                return   # ONLY=a,b: a short run of just the pictures whose names contain one of these
+            if not state['big']: state['big'] = True; await pg.set_viewport_size(FULL); await pg.wait_for_timeout(1500)
             n0 = await pg.evaluate('__beta.scene.frameN'); await pg.evaluate('void (' + js + ')')
             for i in range(120):   # the page draws slowly here: wait for four whole frames (camera, small outside views, displays), not for a time
                 await pg.wait_for_timeout(500)
@@ -161,7 +164,7 @@ async def main():
             for i, dtt in enumerate(UP):
                 await shot(f'ldr_{tagk}_first_person_{i:02d}_{dtt}s', f"(__beta.runTo(T0 + {dtt}), lk('in_ldr', 0, 0, 1))")
                 if i in (3, 6, 9, 11): await shot(f'ldr_{tagk}_from_cdr_{i:02d}_{dtt}s', "lk('in_cdr', -84, -20, 1)"); await shot(f'ldr_{tagk}_from_gnr_{i:02d}_{dtt}s', "lk('in_gnr', -120, 22, 1)"); await shot(f'ldr_{tagk}_outside_{i:02d}_{dtt}s', "outv(5.0, 3.4, 215)")
-                print('U', dtt, await pg.evaluate('JSON.stringify({U: +__beta.interior.st.ldrU.toFixed(2), lid: +__beta.interior.st.hatch.toFixed(2), mode: __beta.interior.mode, headOut: __beta.interior.headOut, loaded: __beta.battle.tank.loaded})'))
+                if not ONLY or any(k in f'first_person_{i:02d}_' for k in ONLY): print('U', dtt, await pg.evaluate('JSON.stringify({U: +__beta.interior.st.ldrU.toFixed(2), lid: +__beta.interior.st.hatch.toFixed(2), mode: __beta.interior.mode, headOut: __beta.interior.headOut, loaded: __beta.battle.tank.loaded})'))
             staged_fire = await pg.evaluate("(() => { const b = __beta.battle; if (!(b._mg && b._mg.m240 && b.t < b._mg.t + 3)) { fire(); return true; } return false; })()"); print('burst staged:', staged_fire)
             await shot(f'ldr_{tagk}_firing_first_person', "(__beta.runTo(__beta.battle.t + 0.5), lk('in_ldr', 0, 0, 1))"); await shot(f'ldr_{tagk}_firing_from_cdr', "lk('in_cdr', -84, -20, 1)"); await shot(f'ldr_{tagk}_firing_outside', "outv(5.0, 3.4, 215)"); await shot(f'ldr_{tagk}_firing_outside_front', "outv(6.0, 2.6, 330)")
             print('firing', await pg.evaluate('JSON.stringify({firing: __beta.interior.mgFiring, mgYaw: +__beta.interior.st.mgYaw.toFixed(1), pivot: !!__beta.interior.mgPivot})'))
