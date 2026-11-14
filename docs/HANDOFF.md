@@ -1,3 +1,6 @@
+# STATE AT 18:05 UTC 14 Nov 2026: 0.90 PUBLISHED
+0.90 is on Shawn's "HKOI Battlefield Beta" page (artifact version 32), built from be974de. Nobody has confirmed it on his machine yet.
+Open, waiting for Shawn: where the HKOI station goes (right beside the CROWS / rear bustle / keep and block the loader's hatch); the questions in the 13:35 entry below. Known faults are listed in the last WORKLOG entry.
 # STATE AT 13:35 UTC 14 Nov 2026 (read this first)
 Shawn is asleep. His orders in force: ONE full release, NO publish before it; progress pictures welcome; free rein; honest numbers.
 Branch claude/loving-newton-czylil (pushed) holds EVERYTHING except the sound third pass (branch worktree-agent-afd3cb6297e3a4e79, asked for status 13:32; before merging: `git ls-tree -r --name-only <branch> | grep -c '^\.cache$'` must print 0).
