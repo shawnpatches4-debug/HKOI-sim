@@ -21,7 +21,7 @@ export const DIM = {
   RFF: 0.43,      // the same at the front wall (the roof slopes down toward the gun)
   GY: 0.20,       // height of the gun's axis
   CUP: [0.52, 0.36], CUPR: 0.40,     // commander's cupola: centre (x, z) and inner radius
-  HAT: [-0.62, 0.4], HATR: 0.33,     // loader's hatch (over his seat, behind the grips of the M240 on the outside model)
+  HAT: [-0.77, 0.62], HATR: 0.33,     // loader's hatch: placed from the outside model, whose M240 lies at x -0.90..-0.64, z -0.63..+0.43 in this frame (measured from m1v3_turret.json), so that the gun's grips are at the hatch's front rim and he stands behind them
   BZ: 1.0,        // the bustle bulkhead (blast doors) is at this z
   DZ: -2.75,      // the driver sits here
   DRF: -0.45,     // underside of the hull roof over the driver (the outside model's glacis is 0.37 to 0.43 m below the turning point there)
