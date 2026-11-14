@@ -131,14 +131,13 @@ export class TeamView {
     const atPlace = (l, name) => l.to === l.places[name] && l.e >= 1, heldBy = (l, i) => l.to.fig === i || (l.e < 1 && l.from.fig === i), a0 = F[0].userData.a, a1 = F[1].userData.a;
     const lifting = () => { const l = L.base, fr = l.places.front, bk = l.places.back; return (l.e < 1 || l.to === fr) && !((l.to === bk && l.e > 0.04) || (l.from === bk && l.e < 0.9)); };   /* in his hands while it is in front of him, not while it swings onto his back */
     if (L.base) {
-      const hb = this.base.userData.home.s;                                       /* on the controls at the back of the sight unit (small corrections while aiming) */
+      /* on the controls at the back of the sight unit (small corrections while aiming) */
       hand(0, 'Right', 'load', V(-0.03, 0.14, -0.36), L.base, () => atPlace(L.base, 'ground') && a0.key === 'gunner' && !a0.tl, 1);
       hand(0, 'Left', 'load', V(0.13, 0.1, -0.36), L.base, () => atPlace(L.base, 'ground') && a0.key === 'gunner' && !a0.tl, 1);
       hand(0, 'Right', 'chest', strap(rig0, 'Right', 0.05), null, () => L.base.to.fig === 0 && L.base.e > 0.5 && a0.post === 'up');
       hand(0, 'Left', 'chest', strap(rig0, 'Left', -0.05), null, () => L.base.to.fig === 0 && L.base.e > 0.5 && a0.post === 'up');
       hand(0, 'Right', 'load', V(-0.05, 0.12, -0.22), L.base, () => lifting() && a0.post !== 'flat');      /* both hands on the launcher while it is lifted or set down */
       hand(0, 'Left', 'load', V(-0.05, 0.12, 0.22), L.base, () => lifting() && a0.post !== 'flat');
-      void hb;
     }
     if (L.tube) for (const l of [L.tube, L.spare]) {
       hand(1, 'Right', 'load', V(-0.02, -0.06, -0.28), l, () => heldBy(l, 1) && a1.post !== 'flat');
@@ -147,12 +146,13 @@ export class TeamView {
     if (L.weapon) {
       hand(0, 'Right', 'load', V(R.grip[0], R.grip[1], R.grip[2]), L.weapon, () => heldBy(L.weapon, 0) && a0.post !== 'flat');
       hand(0, 'Left', 'load', V(R.grip2[0], R.grip2[1], R.grip2[2]), L.weapon, () => heldBy(L.weapon, 0) && a0.post === 'low');
-      if (L.round) hand(1, 'Right', 'load', V(0, 0, 0.12), L.round, () => this.round.visible && L.round.to !== L.round.places.bag && !(atPlace(L.round, 'muzzle') && this._handOff));
+      if (L.round) hand(1, 'Right', 'load', V(0, 0, 0.12), L.round, () => this.round.visible && L.round.to !== L.round.places.bag);
     }
     for (const l of this.loads) { l.holders = []; F.forEach((f, i) => { if (f.userData.a.hands.some(h => h.load === l) || Object.values(l.places).some(pl => pl.fig === i)) l.holders.push(i); }); }
     this.act = 'weapon'; this.want = 'weapon'; this.setUp = true; this.hold = false; this.goWhenPacked = false; this.clock = 0; this.todo = []; this.lag = V(); this.back = V(); this.trail = [];
     this.P = { x: psi, v: 0 }; this._psi = psi; this._want0 = null; this._wait = 0; this._gx = null; this._gz = 0; this._gy = 0; this._err = null;
-    this._lw = 1; this.kick = { x: 0, v: 0 }; this.away01 = { x: 0, v: 0 }; this._awayUntil = -1; this._firing = false; this._reload = null; this._info = Object.assign({}, TeamView.INFO); this.done = false; this._deadT = 0; this._handOff = false;
+    this._lw = 1; this.kick = { x: 0, v: 0 }; this.away01 = { x: 0, v: 0 }; this._awayUntil = -1; this._firing = false; this._reload = null; this._info = Object.assign({}, TeamView.INFO); this.done = false; this._deadT = 0;
+    if (this.tube) this.tube.visible = true; if (this.spent) this.spent.visible = false; if (this.round) this.round.visible = false;
     this.anim = true; this._snap(); this._poseAll(0, 0);
   }
   // how one thing sits relative to another (both given in the team's frame)
@@ -285,14 +285,13 @@ export class TeamView {
 
   // ---- posing (once per frame at most) ----
   _poseAll(dt, lod) {
-    const F = this.figures, I = this._info;
+    const F = this.figures;
     // a start when the weapon fires, and the second man turning his head away from the blast
     chase(this.kick, 0, 0, stiff(0.07), dt || 1e-4, 1);
     const turnAway = this.clock < this._awayUntil ? 1 : 0; chase(this.away01, turnAway, turnAway, stiff(turnAway ? 0.05 : 0.22), dt || 1e-4, 1);
     for (let i = 0; i < F.length; i++) this._pose(F[i], F[i].userData.a, dt, lod);
     for (const l of this.loads) this._carry(l, dt);
     for (let i = F.length - 1; i >= 0; i--) this._finish(F[i], F[i].userData.a, dt, lod, i !== F.length - 1);
-    void I;
   }
   // one figure: the pose aimed for, every joint chasing it, and where his body ends up (so the loads can be placed)
   _pose(f, a, dt, lod) {
@@ -506,7 +505,7 @@ export class TeamView {
   // how far a man is from a place in the team's frame
   _off(a, pl) { const h = this._here(a); return Math.hypot(h.x - pl.x, h.z - pl.z); }
   _cancel() {
-    this.todo.length = 0; this._reload = null; this._handOff = false; if (this.round) this.round.visible = false;
+    this.todo.length = 0; this._reload = null; if (this.round) this.round.visible = false;
     if (this.tube && !this.tube.visible) this.tube.visible = true;
     if (this.L.spare && this.L.spare.at !== 'lie') { this._send(this.L.spare, 'lie', 0.4, 0.05); }
   }
@@ -616,10 +615,9 @@ export class TeamView {
   _reloadRpg(reloading, I) {
     const L = this.L, F = this.figures, a1 = F[1].userData.a, r = this._reload;
     if (!r && reloading && I.reload > 3.2) {
-      const R = this._reload = { step: 1 }; this._handOff = false;
+      this._reload = { step: 1 };
       this._send(L.weapon, 'port', 0.6, 0.02);
       this._to(1, 'crouch', 'low', TeamView.HANDOVER);
-      void R;
     } else if (r && r.step === 1 && (I.reload < 4.9 || !reloading) && !I.loaded) {
       // timed so the rocket goes into the muzzle just as the battle counts the launcher loaded
       r.step = 2;
@@ -627,7 +625,7 @@ export class TeamView {
       this._at(1.3, () => { this._send(L.round, 'muzzle', 0.9, 0.06); r.step = 3; });
     } else if (r && (I.loaded || !reloading && r.step > 2 && L.round.e >= 1)) {
       // the battle says a round is in: the rocket in the muzzle takes over from the one in his hand, and everyone goes back to how they were
-      this.round.visible = false; this._handOff = true; this._reload = null;
+      this.round.visible = false; this._reload = null;
       this._at(0.2, () => { this._send(L.weapon, 'shoulder', 0.6, 0.02); this._to(1, a1.still.key, a1.still.post, a1.still); });
     }
   }
