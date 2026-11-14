@@ -13,6 +13,8 @@ const CSS = `
   #dir-cap { position: fixed; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: min(980px, calc(100vw - 48px)); padding: 9px 20px 10px; z-index: 3;
     background: linear-gradient(90deg, rgba(4, 8, 7, 0), rgba(4, 8, 7, .78) 12%, rgba(4, 8, 7, .78) 88%, rgba(4, 8, 7, 0)); border-top: 1px solid rgba(57, 217, 138, .35);
     font-size: clamp(16px, 1.75vw, 23px); font-weight: 600; letter-spacing: .01em; text-align: center; text-shadow: 0 1px 3px #000; pointer-events: none; transition: opacity .25s; }
+  #dir-cap.docked { position: static; transform: none; left: auto; bottom: auto; }   /* in the page's dock: stacked above the replay bar and the control bar, never over them */
+  @media (max-width: 1700px) { body.hud-eng #dir-cap.docked { max-width: max(300px, calc(100vw - 850px)); } }
   #dir-tag { position: fixed; right: 16px; top: 64px; z-index: 3; display: flex; gap: 6px; pointer-events: none; font: 700 12px/1 var(--mono, monospace); letter-spacing: .08em; }
   #dir-tag span { padding: 5px 8px; border-radius: 5px; background: rgba(4, 8, 7, .8); border: 1px solid var(--line, #2a5); color: var(--accent, #39d98a); }
   #dir-tag span.slow { color: #05130c; background: var(--warn, #ffb347); border-color: var(--warn, #ffb347); }
@@ -29,6 +31,7 @@ export class Director {
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     this.cap = app.el('div'); this.cap.id = 'dir-cap'; this.cap.style.opacity = 0; this.tag = app.el('div'); this.tag.id = 'dir-tag'; this.tag.hidden = true;
     this.tagOn = app.el('span', null, 'DIRECTOR'); this.tagSlow = app.el('span', 'slow', '×' + SLOW); this.tagSlow.hidden = true; this.tagRp = app.el('span', 'slow', 'REPLAY \u00d7' + AGAIN); this.tagRp.hidden = true; this.rp = null; this.replayed = new Set(); this.mine = false; this.rpSaved = 1; this.tag.append(this.tagOn, this.tagSlow, this.tagRp); document.body.append(this.cap, this.tag);
+    { const dock = document.getElementById('dock'); if (dock) { this.cap.classList.add('docked'); this.cap.style.display = 'none'; dock.insertBefore(this.cap, document.getElementById('replay') || document.getElementById('bar') || null); } }
     this.btn = app.el('button', 'btn', 'Director'); this.btn.title = 'The simulator films its own battle: automatic camera, captions, slow motion at the decisive moment (F)'; this.btn.onclick = () => this.toggle(); this._paint();
     window.addEventListener('keydown', e => { if (e.code === KEY && app.state === 'play' && !(e.target && e.target.tagName === 'INPUT') && !e.ctrlKey && !e.metaKey) this.toggle(); });
     // a click or the wheel on the picture: the viewer wants the camera
@@ -56,9 +59,9 @@ export class Director {
   update(dt) {
     const A = this.app, b = A.battle, live = this.on && A.state === 'play' && !!b && !!A.volleys;
     if (window.__beta && window.__beta.director !== this) window.__beta.director = this;
-    const mc = document.getElementById('caption'); if (mc) { const v = live ? 'hidden' : ''; if (mc.style.visibility !== v) mc.style.visibility = v; }   /* the page's own caption line gives way to the director's */
+    for (const id of ['caption', 'subs']) { const o = document.getElementById(id); if (o) { const v = live ? 'none' : ''; if (o.style.display !== v) o.style.display = v; } }   /* the page's own caption line and the crew subtitles give way to the director's captions */
     if (this.tag.hidden === live) this.tag.hidden = !live;
-    if (!live) { if (this.capText !== null) { this.capText = null; this.cap.style.opacity = 0; } if (this.ctrl || this.slow) this._release(false); return; }
+    if (!live) { if (this.capText !== null) { this.capText = null; this.cap.style.opacity = 0; if (this.cap.classList.contains('docked')) this.cap.style.display = 'none'; } if (this.ctrl || this.slow) this._release(false); return; }
     if (b !== this.b) {   /* a new battle, or the same one started over for a rewind */
       this.b = b; this.shot = null;
       if (!this.mine) { this.replayed.clear(); if (this.rp) this._again(null); }   /* the viewer jumped in time: replays may be shown again */
@@ -71,7 +74,8 @@ export class Director {
     // the caption line
     const c = this.plan.captionAt(t), text = c ? c.text : '';
     if (text !== this.capText) { this.capText = text; if (text) this.cap.textContent = text; this.cap.style.opacity = text ? 1 : 0;
-      const bar = document.getElementById('bar'), top = bar && !bar.hidden ? bar.getBoundingClientRect().top : 0; if (top > 0) this.cap.style.bottom = Math.round(innerHeight - top + 12) + 'px'; }   /* sit just above the control bar, however tall it is */
+      if (this.cap.classList.contains('docked')) this.cap.style.display = text ? '' : 'none'; else {
+      const bar = document.getElementById('bar'), top = bar && !bar.hidden ? bar.getBoundingClientRect().top : 0; if (top > 0) this.cap.style.bottom = Math.round(innerHeight - top + 12) + 'px'; } }   /* no dock on this page: sit just above the control bar, however tall it is */
     // Instant replay of the engagement's decisive moment from another angle. Only while the battle is being watched again (the page's
     // Replay), where jumping in time is the page's own, tested machinery: the director asks it to go back, films, and asks it to return.
     if (this.rp) { if (!this.ctrl || !A.review) this._again(null); else if (t >= this.rp.to) { const r = this.rp; this._again(null); A.seek(r.at + 0.05); return; } }   /* forward again: the same battle carries on */
@@ -101,7 +105,10 @@ export class Director {
     const A = this.app, cams = A.cams;
     if (!this.ctrl) { this.userMode = cams.mode === 'free' || !cams.mode ? 'orbit' : cams.mode; this.ctrl = true; }
     this.shot = s; this.hasLast = false; this.fall = null;
-    if (s.cam === 'troops') { const u = this._unit(s.uid); if (u && u.alive && !u.gone) { cams.choose(u); cams.set('troops'); this.modeSet = 'troops'; } else { this.fall = 'site'; this._free(); } }
+    const u0 = s.uid != null ? this._unit(s.uid) : null, secret = !A.spectator && u0 && u0.alive && !u0.gone && !u0.known;   /* fog of war: a team the vehicle has not located is not shown */
+    if (s.cam === 'troops') { if (secret) { this.fall = s.brg != null ? 'gun' : 'tank'; this._free(); } else if (u0 && u0.alive && !u0.gone) { cams.choose(u0); cams.set('troops'); this.modeSet = 'troops'; } else { this.fall = 'site'; this._free(); } }
+    else if (s.inside) { if (cams.interior && cams.interior.owns(s.cam) && A.tank.loaded) { cams.set(s.cam); this.modeSet = s.cam; } else { this.fall = 'low'; this._free(); } }   /* no interior to show: stay outside */
+    else if ((s.rig === 'site' || s.rig === 'downrange') && secret) { this.fall = s.brg != null ? 'gun' : 'tank'; this._free(); }
     else if (s.cam) { cams.set(s.cam); this.modeSet = s.cam; }
     else this._free();
     // which side of the line to stand on, and for the calm shots which way round: the first choice with a clear view
@@ -117,7 +124,7 @@ export class Director {
   _missile(s) { const v = this.b.volleys[s.v]; if (!v) return null; for (const m of this.app.volleys.info) if (m.th && m.th.idx === s.idx && v.rec.threats.indexOf(m.th) >= 0) return m; return null; }
   _drive(s, t) {
     const A = this.app, S = A.scene, T = A.shown, age = t - s.t0; let rig = this.fall || s.rig;
-    if (s.cam === 'troops' && !this.fall) { const u = this._unit(s.uid); if (!u || !u.alive || u.gone) { this.fall = rig = 'site'; this._free(); A.refresh(); } }   /* the team is gone: look at where it was */
+    if (s.cam === 'troops' && !this.fall && this.modeSet === 'troops') { const u = this._unit(s.uid); if (!u || !u.alive || u.gone) { this.fall = rig = 'site'; this._free(); A.refresh(); } }   /* the team is gone: look at where it was */
     if (!rig) return;
     const P = this.pos, L = this.look;
     if (rig === 'tank' || rig === 'wide' || rig === 'hold') {

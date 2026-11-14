@@ -6,8 +6,11 @@
 import { XRayView, XRAY_COLOURS } from '../render/xray.js';
 
 const CSS = `
-  #xr { position: fixed; z-index: 6; right: 12px; top: 96px; width: 392px; max-width: calc(100vw - 24px); padding: 10px 12px 10px; font-size: 13px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
-  #xr.big { background: #0a0f0e; right: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+  #xr { position: fixed; z-index: 6; left: 12px; top: 96px; width: 330px; max-width: calc(100vw - 24px); padding: 10px 12px 10px; font-size: 13px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); }
+  body.hud-eng #xr:not(.big) { left: 50%; transform: translateX(-50%); }   /* the engineer display has columns at both sides: the small panel goes between them */
+  #xr:not(.big) table, #xr:not(.big) .xr-note, #xr:not(.big) .xr-key, #xr:not(.big) .xr-nav { display: none; }   /* small, during a battle: the picture, what was struck and the result; Details opens the rest */
+  #xr.big .xr-more { display: none; }
+  #xr.big { background: #0a0f0e; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
   #xr .xr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } #xr .xr-head b { font: 700 12px/1 var(--mono); letter-spacing: .1em; color: var(--accent); }
   #xr .xr-head span { color: var(--dim); font: 12px var(--mono); flex: 1; } #xr .xr-head .btn { padding: 3px 9px; }
   #xr .xr-body { display: block; } #xr.big .xr-body { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, 1fr); gap: 14px; align-items: start; }
@@ -39,10 +42,11 @@ export class XRayPanel {
     const el = app.el; document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     const box = this.box = el('div', 'panel'); box.id = 'xr'; box.hidden = true;
     const head = el('div', 'xr-head'); this.count = el('span'); const prev = el('button', 'btn', '‹'), next = el('button', 'btn', '›'), close = el('button', 'btn', 'Close');
+    prev.classList.add('xr-nav'); next.classList.add('xr-nav'); const more = el('button', 'btn xr-more', 'Details'); more.title = 'Armour, warhead, damage and crew for this hit'; more.onclick = () => this.open(this.app.battle, this.i, true);
     prev.title = 'Earlier hit'; next.title = 'Later hit'; prev.onclick = () => this.show(this.i - 1); next.onclick = () => this.show(this.i + 1); close.onclick = () => this.close(); this.prev = prev; this.next = next;
-    head.append(el('b', null, 'X-RAY OF THE HIT'), this.count, prev, next, close);
+    head.append(el('b', null, 'X-RAY OF THE HIT'), this.count, more, prev, next, close);
     const body = el('div', 'xr-body'), left = el('div'), right = el('div'); this.cv = document.createElement('canvas'); this.read = el('div');
-    const key = el('div', 'xr-key'); for (const [k, name] of [['ok', 'untouched'], ['damaged', 'damaged'], ['destroyed', 'destroyed'], ['crew_ok', 'crew unhurt'], ['wounded', 'wounded'], ['killed', 'killed']]) { const s = el('span'), d = el('i', 'xr-dot'); d.style.background = XRAY_COLOURS[k]; s.append(d, name); key.append(s); }
+    const key = el('div', 'xr-key'); for (const [k, name] of [['ok', 'untouched'], ['damaged', 'damaged'], ['destroyed', 'destroyed'], ['crew_ok', 'crew unhurt'], ['wounded', 'wounded (blood)'], ['killed', 'killed (slumped)']]) { const s = el('span'), d = el('i', 'xr-dot'); d.style.background = XRAY_COLOURS[k]; s.append(d, name); key.append(s); }
     left.append(this.cv, key); const foot = el('label', 'xr-foot'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = this.auto; cb.onchange = () => { this.auto = cb.checked; app.store.set('xrayAuto', this.auto); }; foot.append(cb, 'Show this after every hit');
     right.append(this.read, el('div', 'xr-note', 'Armour and warhead figures are open-source estimates in millimetres of steel, not data. Places of the crew and components are approximate. Drag the picture to turn it.'), foot);
     body.append(left, right); box.append(head, body); document.body.append(box);
@@ -70,7 +74,8 @@ export class XRayPanel {
     const n = this.list.length; if (!n) return; this.i = i = Math.max(0, Math.min(n - 1, i)); const x = this.list[i], h = x.h, el = this.app.el;
     this.view.setHit(h, (typeof DMG !== 'undefined' ? DMG : window.DMG)); this.spin = 0;
     this.count.textContent = `Hit ${i + 1} of ${n}`; this.prev.disabled = i === 0; this.next.disabled = i === n - 1; this.prev.style.opacity = i === 0 ? 0.35 : 1; this.next.style.opacity = i === n - 1 ? 0.35 : 1;
-    const R = this.read; R.textContent = ''; R.append(el('div', 'xr-title', `${WEAPON[h.key] || h.name} at ${clock(x.t)}`));
+    const R = this.read; R.textContent = ''; R.append(el('div', 'xr-title', `${WEAPON[h.key] || h.name} at ${clock(x.t)}: ${h.zoneName.replace(/ \(.*/, '').toLowerCase()}`));
+    { const hurt = CREW.filter(([k]) => h.crew[k] && h.crew[k] !== 'ok'); if (hurt.length) { const d = el('div', 'xr-hurt'); hurt.forEach(([k, name], j) => { const w = el('b', null, `${j ? ', ' : ''}${name} ${h.crew[k] === 'killed' ? 'KILLED' : 'WOUNDED'}`); w.style.color = XRAY_COLOURS[h.crew[k]]; d.append(w); }); R.append(d); } }
     const tb = el('table'), row = (a, b) => { const tr = el('tr'), td = el('td'); if (typeof b === 'string') td.textContent = b; else td.append(b); tr.append(el('td', null, a), td); tb.append(tr); };
     row('Plate struck', h.zoneName + (h.top ? ' (attack from above)' : ''));
     row('Armour there', `about ${h.armor} mm against this kind of warhead`);
@@ -80,7 +85,7 @@ export class XRayPanel {
     const dm = el('div'); const hurt = h.comps.filter(c => c.state !== 'spared' && !c.crew);
     if (!hurt.length) dm.textContent = 'nothing'; for (const c of hurt) { const d = el('div'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[c.state] || XRAY_COLOURS.damaged; d.append(dot, `${c.name}: ${c.state}`); dm.append(d); }
     row('Damaged', dm);
-    const cr = el('div', 'xr-crew'); for (const [k, name] of CREW) { const st = h.crew[k] || 'ok', s = el('span'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[st === 'ok' ? 'crew_ok' : st]; s.append(dot, `${name} ${st === 'ok' ? 'unhurt' : st}`); cr.append(s); }
+    const cr = el('div', 'xr-crew'); for (const [k, name] of CREW) { const st = h.crew[k] || 'ok', s = el('span'), dot = el('i', 'xr-dot'); dot.style.background = XRAY_COLOURS[st === 'ok' ? 'crew_ok' : st]; if (st === 'ok') s.append(dot, `${name} unhurt`); else { const w = el('b', null, st === 'killed' ? 'KILLED' : 'WOUNDED'); w.style.color = XRAY_COLOURS[st]; s.append(dot, `${name} `, w); } cr.append(s); }
     row('Crew', cr); R.append(tb);
     R.append(el('div', 'xr-res ' + (h.killing ? 'bad' : h.penetrated ? 'warn' : ''), h.effect));
   }

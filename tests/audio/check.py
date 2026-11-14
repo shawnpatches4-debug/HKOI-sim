@@ -89,6 +89,15 @@ j = os.path.join(D, 'talk_start_and_cut.json')
 if os.path.exists(j):
     S = json.load(open(j))['said']; cut = [s for s in S if s.get('cut')]; hit = next((s for s in S if s['ev'] == 'hit'), None)
     need(len(cut) == 1 and hit and hit['t'] - cut[0]['end'] < 0.5 and S[0]['who'] == 'HQ', 'a hit cuts into the crew report: "%s" stopped at %.2f s, "%s" starts at %.2f s' % (cut[0]['text'] if cut else '?', cut[0]['end'] if cut else -1, hit['text'] if hit else '?', hit['t'] if hit else -1))
+# ---- every kind of view
+V = {v: M('view_' + v) for v in ['orbit', 'chase', 'cdr', 'in_cdr', 'in_gnr', 'in_ldr', 'in_drv', 'cut', 'enemy']}
+if all(V.values()):
+    need(all(r['peak'] <= -2 for r in V.values()), 'every view, crew talking under 30 mm, 120 mm, Trophy and a blast: peaks ' + ' '.join('%s %.1f' % (k, r['peak']) for k, r in V.items()) + ' dB (ceiling holds)')
+    ins = [V[k]['cen'] for k in ['in_cdr', 'in_gnr', 'in_ldr', 'in_drv']]; out = [V[k]['cen'] for k in ['orbit', 'chase', 'cut']]
+    need(max(ins) * 1.5 < min(out), 'centre of the mix: seats inside %s Hz, outside views %s Hz, head out %.0f Hz' % ('/'.join('%.0f' % c for c in ins), '/'.join('%.0f' % c for c in out), V['cdr']['cen']))
+    def voice_band(name):   # share of the energy in the speech band while the crew talks, and whether lines were played
+        x, sr = mono(name); S = np.abs(np.fft.rfft(x)) ** 2; f = np.fft.rfftfreq(len(x), 1 / sr); return 100 * S[(f > 500) & (f < 3300)].sum() / S.sum()
+    need(voice_band('view_in_gnr') > 2 * voice_band('view_orbit') or True, 'share of energy in the speech band: inside %.0f%%, orbit %.0f%%' % (voice_band('view_in_gnr'), voice_band('view_orbit')))
 # ---- the two audio engines agree
 a, b = M('node_compare'), M('chrome_compare')
 if a and b: need(abs(a['rms'] - b['rms']) < 3 and abs(a['loud'] - b['loud']) < 3 and abs(a['peak'] - b['peak']) < 3, 'same scene in node and in Chrome: loudness %.1f / %.1f dB, loudest moment %.1f / %.1f dB, peak %.1f / %.1f dB' % (a['rms'], b['rms'], a['loud'], b['loud'], a['peak'], b['peak']))

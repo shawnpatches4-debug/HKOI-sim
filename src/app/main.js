@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Scene3D, CONDITIONS, QUALITY } from '../render/scene3d.js';
 import { TankView, TeamView, PropView } from '../render/units.js';
+import { Vehicles } from '../render/vehicles.js';
 import { VolleyView } from '../render/volleyview.js';
 import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { Interior } from '../render/interior.js';
@@ -28,6 +29,7 @@ const FORCES = {
   standoff: { name: 'Stand-off raid', note: 'The old simulator\'s kind of raid: three launchers from 2 km or more, firing over about 6 seconds', force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }], raid: { minR: 2000, window: 6 } },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
+if (typeof HKEnemyVeh !== 'undefined') Object.assign(FORCES, HKEnemyVeh.FORCES);   /* enemy vehicles: mechanised ambush, armoured counter-attack, sprawling defence */
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five waves']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
@@ -50,6 +52,7 @@ const ASSETS = q.get('assets') === '0' ? null : 'assets/';
 const tank = new TankView(ASSETS); tank.group.userData.heat = 0.5; scene.units.add(tank.group);
 const interior = new Interior(scene, tank, cams);   // turret and hull interior with the crew seats: in the scene only while an inside or cutaway view is on
 const props = [];
+const vehicles = new Vehicles(scene, ASSETS);   /* enemy vehicles (UAZ, BMP-2, tanks): drawn from battle.vehicles(), nothing if the battle has none */
 let battle = null, teams = [], volleys = null, state = 'title', playing = false, speed = +(q.get('speed') || 1), logShown = 0, capT = -9, capW = 0, ended = false, showLog = store.get('log', true), showPerf = store.get('perf', q.get('perf') === '1');
 
 // ---------------------------------------------------------------- the display and the title screen's own state
@@ -68,7 +71,7 @@ const simRate = () => state === 'play' ? (playing ? speed : 0) : demoLive() ? 1 
 const seeAll = () => set.spectator || state === 'title';                               // behind the title every team is shown
 // the tank's own crew: its level and whether stress acts on it. Ladder raids always use a trained crew with stress on, so scores compare.
 function crewOf() { return set.custom && set.custom.rung ? { quality: 'trained', stress: true } : { quality: SKILLS.some(x => x[0] === set.crew) ? set.crew : 'trained', stress: set.stress !== false }; }
-function battleOpts(seed) { const pos = tankPos(), F = forceOf(), c = crewOf(); return { world, seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, waves: set.waves, raid: F.raid, force: F.force, crewQuality: c.quality, crewStress: c.stress, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined }; }
+function battleOpts(seed) { const pos = tankPos(), F = forceOf(), c = crewOf(); return { world, seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, waves: set.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: c.quality, crewStress: c.stress, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined }; }
 
 
 function newBattle(seed = set.seed) {
@@ -167,6 +170,7 @@ function place() {
     const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
     tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); if (!tv.ground) tv.ground = teamGround; const far = pos.distanceTo(scene.camera.position) * scene.camera.fov / 40;   /* how far away the team looks (a zoomed sight brings it close) */ tv.update(frameDt * simRate(), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', far < 330, teamInfo(u, far));
     if (tv.fell) { if (tv.fell.blast) scene.fx.fire(pos.x, pos.y + 0.2, pos.z, 6, 0.45); else scene.fx.dust(pos.x, pos.y + 0.2, pos.z, 0.7); tv.fell = null; } });   /* a team has just been knocked out: a small fire for a few seconds where a shell burst (the burst, smoke and scorch mark come with the shell itself), a puff of dust under machine-gun fire */
+  vehicles.update(battle, { t: tNow, all: seeAll(), teams });
 }
 // what the drawing of a team needs to know about its weapon: is a round in the launcher (not between firing and the end of reloading), is a spare ready
 // reload: seconds until it can fire again; pack: seconds of packing up left before it moves off; setup: seconds of setting up left; dead: knocked out; dist: how far away it looks
@@ -410,7 +414,7 @@ const hkV = new THREE.Vector3();
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
-const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
+const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, get spectator() { return !!set.spectator; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
 const director = new Director(film), xray = new XRayPanel(film);
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
@@ -437,7 +441,7 @@ function frameBody(now) {
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
-  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
+  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } }
   else if (state !== 'play' && (pagesOpen || state === 'title' && !demoLive())) { stillT -= raw; if (stillT <= 0) { stillT = 0.5; scene.render(dt); drawMarks(); } }   /* a still picture behind a menu is redrawn twice a second, not every frame */
   else { scene.render(dt); drawMarks(); }

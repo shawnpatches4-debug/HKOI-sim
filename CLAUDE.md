@@ -8,13 +8,14 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 1. Read `docs/HANDOFF.md` (current state and next tasks), then the last ~20 entries of `docs/WORKLOG.md`, then skim `docs/OVERHAUL_SPEC.md` (everything he asked for), `docs/AI_SPEC.md` (his AI decisions) and `docs/LESSONS_FROM_V40.md` (what the old simulator teaches about this one).
 2. `bash tools/setup.sh` once per fresh workspace. If `assets/` is empty, ask Shawn for `hkoi-assets.zip` and unzip it into `./assets` first.
 3. `bash tools/dev.sh check` must pass before you call anything done.
+4. **Before quoting or changing any survival or cut-rate figure, read `docs/HKOI_NUMBERS.md`** and measure with `node tests/study/hkoi_only.js 1000`. HKOI-only survival a few points above no protection, and a beam-cut rate of 1 to 10%, is what the model gives today with the 40 g round. It is not a bug to tune away. The system specification with every formula the resolver uses is `docs/HKOI_SPEC.md`: MODEL values are what the code does, INTENT values are what Shawn wants and are not implemented until he says so.
 
 ## Rules he has set (do not relax these)
 - **Double-check everything.** Commit at every checkpoint, run the tests after every change, keep modules clean. He does not want to come back to a laggy, unfixable mess.
 - **Honest numbers.** If a realistic change is worse for HKOI, make it realistic and tell him. Never tune to hit a target. State your assumptions.
 - **Updates about every 10 minutes while working, with pictures** (screenshots you took and looked at).
 - **Keep all existing mechanics**; the legacy resolver in `src/engine.js` is the source of truth for missile/HKOI/Trophy outcomes. Do not edit it casually; `node invariants.js`-style checks lived in the old build.
-- **Third-party assets stay out of git** while the repository is public (`assets/` is ignored). Never `git add -f` an asset. Sources of the supplied models are still unconfirmed: see `docs/ASSETS.md`.
+- **Third-party assets stay out of git** while the repository is public (`assets/` is ignored). Never `git add -f` an asset. One exception he ordered himself on 14 Nov 2026: the T-72 and T-90 source packs in `models_src/` (see its README). Sources of the supplied models are still unconfirmed: see `docs/ASSETS.md`.
 - **Log every version to the Notion "R&D Log"** if a Notion connection is available (data source id `01785400-2dc2-43cd-a2ab-0a8b29a01c16`; properties Entry, Type, Module, Version, date:Date:start, Patent-relevant, Notes). If not available, say so and list what needs logging.
 - His email address is private: never send it to an outside service.
 - Crew figures are parked ("skip implementing crew for now"). Do not use the crewman model without showing him a picture first.
@@ -35,6 +36,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 - `src/app/` main.js (shell, frame loop, HUD, map, sound wiring), index.tpl.html (markup + CSS), mapview.js, enemyviews.js (enemy sight reticles, team menu)
 - `src/render/` scene3d.js (renderer, weather, quality levels), cameras.js, units.js (TankView incl. HKOI station, TeamView, PropView, model loading, poses), volleyview.js (missiles, tracers, Trophy, impacts), fx.js, env.js (weather, vehicle finish), terrain.js, scenery.js
 - `src/battle/tankai.js` the tank crew: independent weapons, target order, thermal scanning, counter-fire, loader, missions and movement (decisions in `docs/AI_SPEC.md`)
+- `src/battle/enemyveh.js`, `enemycdr.js` enemy vehicles (UAZ, BMP-2, T-72B3, T-90M, zone armour, aim-point gunnery) and the enemy commander; both install onto the battle, loaded before battle.js; `src/battle/crew.js` crew stress; `src/battle/study.js` Monte Carlo (raids, per map, stress test); `src/battle/ladder.js`
 - `src/battle/battle.js` time-stepped battle layer (enemy teams, tank behaviour, return fire, machine guns); each enemy volley is resolved by `HK.runMission` in `src/engine.js`
 - `src/world/world.js` generated 8x8 km terrain, sight lines, routes; `src/audio/sound.js` synthesised effects + recorded voices
 - `tools/` build_beta.py, dev.sh, setup.sh, serve_csp.sh, glb2json.py, lineup_split.py + vehicle_pack.py (cut a vehicle out of a multi-variant OBJ and pack hull/turret); `tools/audio/` (unpack a sound bank, transcribe, catalogue, build voice strips: see docs/ASSETS.md "Sound packs")

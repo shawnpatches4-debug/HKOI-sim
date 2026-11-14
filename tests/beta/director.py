@@ -137,16 +137,46 @@ async def main():
             if e: bad.append('frame error in the strip: ' + e)
             print(json.dumps(await pg.evaluate('__beta.scene.stats()'))); await pg.close()
 
+        if 'scenes' in PARTS:
+            # single moments, each in a named display: (name, force, biome, seed, battle time, display)
+            SC = [('trophy', 'standoff', 'farmland', 3, 11.5, 'simple'), ('hit_inside', 'ambush', 'farmland', 6, 10.3, 'simple'), ('hit_xray', 'ambush', 'farmland', 6, 11.2, 'engineer'),
+                  ('drone_down', 'drones', 'farmland', 1, 42.8, 'engineer'), ('lost', 'standoff', 'farmland', 1, 15.6, 'simple'), ('launch_fog', 'standoff', 'desert', 3, 6.5, 'engineer')]
+            only = os.environ.get('SCENES'); pg = await page(1280, 720, os.environ.get('GFX', 'medium'))
+            for name, force, biome, seed, t, hud in SC:
+                if only and name not in only.split(','): continue
+                if await pg.evaluate('document.body.classList.contains("hud-eng")') != (hud == 'engineer'): await pg.keyboard.press('h'); await pg.wait_for_timeout(300)
+                # in two steps, with real frames in between as in play (the X-ray panel watches for a hit frame by frame)
+                step = lambda: pg.evaluate(f"""(() => {{ const B = __beta, D = B.director; if (!D.on) D.toggle(); B.set.force = '{force}'; B.set.biome = '{biome}'; B.set.seed = {seed}; B.set.custom = null; if (!window.__pre) {{ B.start(); B.setPlaying(false); }}
+                  let n = 0; while (B.battle.t < {t} - (window.__pre ? 0 : 2.5) - 1e-6 && n++ < 2000) {{ B.playFor(0.1); D.update(0.1); }}
+                  return JSON.stringify({{ t: B.battle.t, mode: B.cams.mode, shot: D.shot ? (D.shot.cam || D.shot.rig) : null, fall: D.fall || null, cap: D.capText, eng: document.body.classList.contains('hud-eng'), state: B.state() }}); }})()""")
+                await pg.evaluate('void (window.__pre = 0)'); await step(); await pg.wait_for_timeout(2500); await pg.evaluate('void (window.__pre = 1)'); info = json.loads(await step())
+                await pg.wait_for_timeout(int(os.environ.get('SETTLE', '3200')))
+                lay = json.loads(await pg.evaluate("""(() => { const r = id => { const o = document.getElementById(id); if (!o || o.hidden || getComputedStyle(o).display === 'none') return null; const b = o.getBoundingClientRect(); return b.width && b.height ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null; };
+                  const xr = r('xr'), hitp = []; if (xr) for (const o of document.querySelectorAll('.panel, #dir-cap, #dir-tag, #warn')) { if (o.id === 'xr' || o.hidden || getComputedStyle(o).display === 'none') continue; const b = o.getBoundingClientRect(); if (b.width && b.height && b.left < xr[2] && xr[0] < b.right && b.top < xr[3] && xr[1] < b.bottom) hitp.push(o.id || o.className); }
+                  return JSON.stringify({ cap: r('dir-cap'), bar: r('bar'), subs: r('subs'), caption: r('caption'), tag: r('dir-tag'), xr, xrOver: hitp, seat: document.body.classList.contains('in-seat'), state: __beta.state() }); })()"""))
+                over = lambda a, c: bool(a and c and a[0] < c[2] and c[0] < a[2] and a[1] < c[3] and c[1] < a[3])
+                print(f"scene {name}: t {info['t']:.1f} {info['shot']} (camera {info['mode']}{', instead: ' + info['fall'] if info['fall'] else ''}) display {'engineer' if info['eng'] else 'simple'} seat {lay['seat']} state {lay['state']} '{info['cap'] or ''}' layout {lay}")
+                if over(lay['cap'], lay['bar']): bad.append(f'caption over the control bar in scene {name}')
+                if lay['cap'] and (lay['subs'] or lay['caption']): bad.append(f'crew subtitles or the page caption shown with the director caption in scene {name}')
+                if lay['xrOver']: bad.append('X-ray panel over ' + str(lay['xrOver']) + ' in scene ' + name)
+                if name.startswith('hit') and not lay['xr']: bad.append('the X-ray did not open by itself after the hit in scene ' + name)
+                await pg.evaluate('void (__beta.xray && (__beta.xray.touched = true))')   # keep the small X-ray panel open: a headless screenshot can take longer than the 14 s it stays up
+                await pg.screenshot(path=os.path.join(OUT, f'scene_{name}.png'), timeout=120000)
+            e = await pg.evaluate('document.getElementById("errbar").hidden ? "" : document.getElementById("errbar").textContent.slice(0, 300)')
+            if e: bad.append('frame error in the scenes: ' + e)
+            await pg.close()
+
         if 'xray' in PARTS:
             pg = await page(1280, 720, 'min')
             # find one battle of each kind (the page's own battles; a few seconds each, unseen)
-            found = json.loads(await pg.evaluate('''(() => { const B = __beta, want = { none: null, through: null, kill: null }, hits = b => { const o = []; for (const v of b.volleys) for (const h of DMG.report(v.rec, v.cfg)) o.push(h); return o; };
+            found = {'none': {'force': 'ambush', 'biome': 'farmland', 'seed': 7, 'i': 0}, 'through': {'force': 'ambush', 'biome': 'farmland', 'seed': 6, 'i': 0}, 'kill': {'force': 'standoff', 'biome': 'farmland', 'seed': 1, 'i': 0}}
+            if os.environ.get("XRAY_FIND"): found = json.loads(await pg.evaluate('''(() => { const B = __beta, want = { none: null, through: null, kill: null }, hits = b => { const o = []; for (const v of b.volleys) for (const h of DMG.report(v.rec, v.cfg)) o.push(h); return o; };
               for (const [force, biome] of [['ambush', 'farmland'], ['standoff', 'farmland'], ['ambush', 'desert'], ['heavy', 'farmland']]) for (let seed = 1; seed <= 9; seed++) { if (want.none && want.through && want.kill) break;
                 B.set.force = force; B.set.biome = biome; B.set.seed = seed; B.set.custom = null; B.start(); B.setPlaying(false); B.runTo(45); const H = hits(B.battle);
                 H.forEach((h, i) => { const k = !h.penetrated ? 'none' : h.killing ? 'kill' : 'through'; if (!want[k] && (k !== 'through' || h.comps.length || !want._t)) { if (k === 'through' && !h.comps.length) { want._t = { force, biome, seed, i }; return; } want[k] = { force, biome, seed, i, zone: h.zoneName, key: h.key, comps: h.comps.map(c => c.id + ':' + c.state).join(',') }; } }); }
               if (!want.through && want._t) want.through = want._t; delete want._t; return JSON.stringify(want); })()'''))
             print('battles used for the X-ray pictures:', found)
-            for k in ['none', 'through', 'kill']:
+            for k in os.environ.get('XK', 'none,through,kill').split(','):
                 w = found.get(k)
                 if not w: bad.append('no battle found with a hit of kind ' + k); continue
                 ok = await pg.evaluate(f'''(() => {{ const B = __beta; B.set.force = '{w['force']}'; B.set.biome = '{w['biome']}'; B.set.seed = {w['seed']}; B.start(); B.setPlaying(false); B.runTo(45); return B.xray.open(B.battle, {w['i']}, true); }})()''')

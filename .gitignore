@@ -13,3 +13,7 @@ build/beta_pub/
 .cache
 build/beta_http/
 __pycache__/
+
+# source model packs Shawn asked to keep in the repository (14 Nov 2026)
+!models_src/**/*.zip
+!models_src/**/*.png
