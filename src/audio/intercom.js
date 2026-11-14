@@ -26,6 +26,11 @@ export class Intercom {
     this.said = []; this.dropped = [];        // what was spoken and what was dropped (for tests and for the report)
     this.listening = false; this.vol = 1;
     this.out = c.createGain(); this.out.gain.value = 0; this.out.connect(mix.bus.voices.direct);
+    // What gets out of the vehicle: a listener standing close hears the men's own voices (not the intercom) low and dull
+    // through the armour. A shout carries about 40 m, a calm word about 16 m; beyond that, nothing. The radio net is in
+    // their headsets only and does not leak at all.
+    this.leakIn = c.createGain(); this.leakGain = c.createGain(); this.leakGain.gain.value = 0;
+    { const a = c.createBiquadFilter(), b = c.createBiquadFilter(); a.type = 'lowpass'; a.frequency.value = 520; b.type = 'lowpass'; b.frequency.value = 800; this.leakIn.connect(a); a.connect(b); b.connect(this.leakGain); this.leakGain.connect(mix.bus.voices.air); }
     this.crew = this._chain({ lo: 300, hi: 3300, peakF: 1900, peakDb: 5, drive: 1.5, level: 0.65 });
     this.radio = this._chain({ lo: 480, hi: 2600, peakF: 1300, peakDb: 6, drive: 2.4, level: 0.6 });
     // the hiss of an open line: only while somebody is keyed
@@ -48,7 +53,7 @@ export class Intercom {
   async load(base, get) {
     if (this.index || !base) return;
     let idx = null;
-    for (const name of ['crew3_index.json', 'crew2_index.json']) {   /* the second is the first cut of the same human pack */
+    for (const name of ['crew4_index.json', 'crew3_index.json']) {   /* crew4: four re-voiced men and the made lines; crew3: the pack as it is */   /* the second is the first cut of the same human pack */
       try { const a = await get(base + name); if (a) { const j = JSON.parse(new TextDecoder().decode(a)); if (j && j.e && j.strips) { idx = j; break; } } } catch (e) { /* try the next */ }
     }
     if (!idx) return; this.index = idx;
@@ -61,6 +66,11 @@ export class Intercom {
   has(who, ev) { return !!this.takes(who, ev); }
   // from the crew's seats the net is heard; from anywhere else it is not
   listen(on) { if (on === this.listening) return; this.listening = on; this.out.gain.setTargetAtTime(on ? this.vol : 0, this.ctx.currentTime, 0.04); }
+  // from an outside view `dist` metres from the vehicle (on = an outside view near enough to matter)
+  leak(dist, on) {
+    const lv = this.cur ? this.cur.level || 0 : 0, range = 16 + 12 * lv, k = on ? Math.max(0, 1 - dist / range) : 0, v = Math.pow(k, 1.5) * (0.3 + 0.2 * lv);
+    if (Math.abs(v - (this._leak || 0)) < 0.002) return; this._leak = v; this.leakGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+  }
   // the intercom volume knob inside the vehicle: 1 = the normal setting
   level(v) { v = Math.max(0, Math.min(1.4, v)); if (Math.abs(v - this.vol) < 0.01) return; this.vol = v; if (this.listening) this.out.gain.setTargetAtTime(v, this.ctx.currentTime, 0.04); }
 
@@ -113,18 +123,19 @@ export class Intercom {
   }
   _start(q, now) {
     const c = this.ctx, x = this._pick(q.who, q.ev, q.level), net = q.who === 'HQ' ? this.radio : this.crew, isRadio = q.who === 'HQ';
-    const rate = VOICE_RATE[q.who] || 1, t0 = now + 0.02, tClip = t0 + 0.07, len = x[2] / rate, tEnd = tClip + len;
+    const rate = this.index.revoiced ? 1 : VOICE_RATE[q.who] || 1,   /* re-voiced strips already differ per man */
+      t0 = now + 0.02, tClip = t0 + 0.07, len = x[2] / rate, tEnd = tClip + len;
     const line = c.createGain(); line.gain.value = 1; line.connect(net.in);
     const s = c.createBufferSource(), g = c.createGain(); s.buffer = this.bufs[x[0]]; s.playbackRate.value = rate; g.gain.value = rnd(0.9, 1.1);
-    s.connect(g); g.connect(line); s.start(tClip, x[1], x[2]);
+    s.connect(g); g.connect(line); if (!isRadio) g.connect(this.leakIn); s.start(tClip, x[1], x[2]);
     this._click(line, t0, isRadio ? 0.5 : 0.35, isRadio);                         /* key down */
     if (isRadio) this.mix.noise(line, tEnd + 0.03, { dur: 0.09, attack: 0.004, hold: 0.05, type: 'bandpass', f0: 1700, q: 0.4, gain: 0.5 });   /* squelch tail */
     else this._click(line, tEnd + 0.05, 0.25, false);                             /* key up */
     const h = this.hiss.g.gain, hv = isRadio ? 0.03 : 0.012, tOff = tEnd + (isRadio ? 0.12 : 0.06);   /* the open line hisses; explicit ramps only (one audio engine mishandles chained targets here) */
     h.cancelScheduledValues(t0); h.setValueAtTime(0, t0); h.linearRampToValueAtTime(hv, t0 + 0.02); h.setValueAtTime(hv, tOff); h.linearRampToValueAtTime(0, tOff + 0.04);
     const end = tEnd + (isRadio ? 0.2 : 0.1);
-    this.cur = { who: q.who, ev: q.ev, pri: q.pri, group: q.group, line, src: s, end, gapAfter: q.gap != null ? q.gap : rnd(0.22, 0.5) };
-    this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], pri: q.pri, level: q.level, waited: +(now - q.asked).toFixed(2) });
+    this.cur = { who: q.who, ev: q.ev, pri: q.pri, level: q.level, group: q.group, line, src: s, end, gapAfter: q.gap != null ? q.gap : rnd(0.22, 0.5) };
+    this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], made: x[6] || '', pri: q.pri, level: q.level, waited: +(now - q.asked).toFixed(2) });
     if (this.said.length > 400) this.said.splice(0, 100);
   }
   // somebody more important keys his microphone: the speaker is cut off in mid-word

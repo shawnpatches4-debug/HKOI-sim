@@ -13,7 +13,7 @@ import asyncio, os, sys, json, base64, struct
 from playwright.async_api import async_playwright
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp'; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'speed=2&gfx=min&force=ambush&cam=gnr'
-NEED = ['crew3_index.json', 'crew3_cdr.mp3', 'crew3_gnr.mp3', 'crew3_ldr.mp3', 'crew3_drv.mp3', 'crew3_any.mp3', 'crew3_hq.mp3', 'voice_index.json', 'voice_ru.mp3', 'screams.mp3', 'sfx_index.json']
+NEED = ['crew4_index.json', 'crew4_cdr.mp3', 'crew4_gnr.mp3', 'crew4_ldr.mp3', 'crew4_drv.mp3', 'crew4_hq.mp3', 'voice_index.json', 'voice_ru.mp3', 'screams.mp3', 'sfx_index.json']
 BANNED = ['voice_cdr.mp3', 'voice_gnr.mp3', 'voice_ldr.mp3', 'voice_drv.mp3', 'voice_panic.mp3']
 
 # 4. a made-up battle: [event or state change, expected requests as "WHO.event:priority"]
@@ -34,10 +34,12 @@ DIRECTOR = r"""(() => {
     out.push([name, ok, got.join(' '), expect.join(' ')]);
   };
   run('main gun fires and hits', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: true }, { type: 'team_lost', t: 100.9, uid: 1, by: 'main' }], ['GNR.ontheway:2', 'GNR.target:1', 'CDR.cease:1']);
-  run('main gun misses, team stays', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: false }], ['GNR.ontheway:2', 'CDR.reengage_doubt:1']);
-  run('main gun misses, team pulls out', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: false }], ['GNR.ontheway:2'], (b, k) => { if (k === 1) b.units[0].state = 'moving'; });
+  run('main gun misses, team stays', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: false }], ['GNR.ontheway:2', 'GNR.miss:1', 'CDR.reengage_doubt:1']);
+  run('main gun misses, team pulls out', [{ type: 'gun', uid: 1, R: 900, tof: 0.8, hit: false }], ['GNR.ontheway:2', 'GNR.miss:1'], (b, k) => { if (k === 1) b.units[0].state = 'moving'; });
   run('commander\'s .50 knocks a team out', [{ type: 'team_lost', uid: 1, by: 'm2' }], ['CDR.cease:1']);
-  run('loader hit', [{ type: 'loader_hit' }], ['ANY.wound:3', 'CDR.loader_down:2']);
+  run('loader hit', [{ type: 'loader_hit' }], ['LDR.wound:3', 'CDR.loader_down:2']);
+  run('gunner wounded, driver down, a man freezes', [{ type: 'crew', who: 'gnr', what: 'wounded' }, { type: 'crew', who: 'drv', what: 'down' }, { type: 'crew', who: 'ldr', what: 'freeze' }], ['GNR.wound:3', 'CDR.drv_down:2', 'LDR.freeze:2']);
+  run('crew bails out', [{ type: 'crew', who: null, what: 'bail_out' }], ['FLUSH', 'CDR.bail:3']);
   run('team located', [{ type: 'located', uid: 1, how: 'thermal' }], ['GNR.contact:1']);
   run('move order, ahead', [{ type: 'tank_move', to: [0, 300] }], ['CDR.drv_fwd:1|CDR.moveout:1', 'DRV.ack_fwd:1']);
   run('move order, behind', [{ type: 'tank_move', to: [0, -300] }], ['CDR.moveout:1', 'DRV.onmove:1']);
@@ -49,7 +51,7 @@ DIRECTOR = r"""(() => {
   run('lull', [{ type: 'lull', wave: 0 }], ['GNR.ready:0', 'LDR.ready:0', 'DRV.ready:0', 'CDR.redcon:0']);
   run('gun loaded', [], ['LDR.up:1'], (b, k) => { b.tank.loaded = k === 1; });
   run('gunner lays at 1230 m', [], ['GNR.range_1200:1'], (b, k) => { if (k === 1) b._rf = { k: b.tank.known[0], R: 1230, at: 200 }; });
-  run('loader up on his gun', [], ['LDR.mg_ready:1'], (b, k) => { if (k === 1) b.tank.ai.ldr.up = true; });
+  run('loader up on his gun', [], ['LDR.going_up:1', 'LDR.mg_ready:1'], (b, k) => { if (k === 1) b.tank.ai.ldr.up = true; });
   run('coax on a new target', [], ['GNR.mg:1'], (b, k) => { if (k === 1) b.tank.ai.coax.said = 1; });
   run('tank halts', [], ['CDR.drv_stop:0'], (b, k) => { b.tank.mode = k === 0 ? 'moving' : 'halted'; });
   return JSON.stringify(out);

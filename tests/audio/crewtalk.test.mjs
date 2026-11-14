@@ -12,6 +12,10 @@ const require = createRequire(import.meta.url), here = path.dirname(fileURLToPat
 const { CrewTalk, engineLine } = await import(path.join(root, 'src/audio/crewtalk.js'));
 const { HK, Battle } = require(path.join(root, 'tests/battle/load.js'));
 const REL = JSON.parse(fs.readFileSync(path.join(root, 'tools/audio/crew_release.json'), 'utf8')).e;
+// plus the lines that are made (tools/audio/made_lines.json: synthesised) or cut out of the pack (tools/audio/splice.py), and each man's own wound cry
+{ const made = JSON.parse(fs.readFileSync(path.join(root, 'tools/audio/made_lines.json'), 'utf8')).lines;
+  for (const who in made) for (const ev in made[who]) for (let n = 1; n <= (ev.includes('{N}') ? 12 : 1); n++) (REL[who] || (REL[who] = {}))[ev.replace('{N}', n)] = [[0, 1, 'made']];
+  REL.CDR.smoke = REL.GNR.identified = REL.GNR.miss = [[0, 1, 'splice']]; for (const who of ['CDR', 'GNR', 'LDR', 'DRV']) REL[who].wound = REL.ANY.wound; }
 let fail = 0; const bad = (...a) => { fail++; if (fail < 25) console.log('FAIL', ...a); };
 
 // ---- 1. the engine's sentences
@@ -22,14 +26,17 @@ const LINES = [
   ['CDR', 'We’re hit. Crew report.', 'hit'], ['CDR', 'WE’RE HIT! IS EVERYONE OKAY?!', 'hit'], ['CDR', 'Target. Cease fire.', 'cease'], ['CDR', 'Miss. Re-engage.', 'reengage_doubt'], ['CDR', 'Gunner, sabot, tank.', 'load_sabot'],
   ['GNR', 'On the way.', 'ontheway'], ['GNR', 'ON THE WAY! ON THE WAY!', 'ontheway'], ['GNR', 'Target! It’s down!', 'target'], ['GNR', 'Gunner’s good.', 'ready'], ['GNR', 'I’m okay— gunner up!', 'ready'], ['GNR', 'Gun’s jammed. Clearing.', 'misfire'], ['GNR', 'Gun’s clear!', 'gun_back'],
   ['LDR', 'Up.', 'up'], ['LDR', 'Loader’s good.', 'ready'], ['DRV', 'Driver’s good.', 'ready'], ['DRV', 'Driver up! Still running!', 'ready'],
-  // the pack has nothing that says these: the crewman must stay silent (no machine speech, no line that says something else)
-  ['CDR', 'Missile, 3 o\'clock.', null], ['CDR', 'Drone! 11 o\'clock!', null], ['CDR', 'No cover in reach. Hold here.', null], ['CDR', 'All stations, report.', null], ['CDR', 'Good work. Stay sharp.', null], ['CDR', 'It went wide.', null],
-  ['CDR', 'FIRE! FIRE! GET OUT! GET OUT!', null], ['CDR', 'Fire!', null], ['CDR', 'It’s blind. Hold your position.', null],
-  ['GNR', 'Identified.', null], ['GNR', 'Driver, steady.', null], ['GNR', 'No cut. Still guiding.', null], ['GNR', 'IT DIDN’T WORK! IT’S STILL COMING!', null], ['GNR', 'Beam’s cut. It’s blind.', null], ['GNR', 'HE at fifty rounds.', null],
-  ['LDR', 'Trophy, kill.', null], ['LDR', 'Left side’s empty!', null], ['LDR', 'I CAN’T— THE HATCH—', null],
+  // lines the pack does not have: made (synthesised or spliced), each still tied to the engine's own line
+  ['CDR', 'Missile, 3 o\'clock.', 'missile_3'], ['CDR', 'Drone! 11 o\'clock!', 'drone_11'], ['CDR', 'MISSILE! 12 O\'CLOCK!', 'missile_12'], ['CDR', 'No cover in reach. Hold here.', 'hold'], ['CDR', 'NOWHERE TO GO!', 'hold'],
+  ['CDR', 'All stations, report.', 'report'], ['CDR', 'Good work. Stay sharp.', 'good'], ['CDR', 'It went wide.', 'wide'], ['CDR', 'SMOKE! SMOKE! SMOKE!', 'smoke'],
+  ['GNR', 'Identified.', 'identified'], ['GNR', 'Driver, steady.', 'steady'], ['GNR', 'No cut. Still guiding.', 'nocut'], ['GNR', 'IT DIDN’T WORK! IT’S STILL COMING!', 'nocut'], ['GNR', 'Beam’s cut. It’s blind.', 'cut'],
+  ['GNR', 'It’s back on the beam.', 'back'], ['GNR', 'HE at fifty rounds.', 'he50'], ['GNR', 'HE’s out!', 'heout'], ['GNR', 'Obscurant at fifty rounds.', 'obs50'],
+  ['LDR', 'Trophy, kill.', 'trophy_kill'], ['LDR', 'TROPHY! TROPHY GOT IT!', 'trophy_kill'], ['LDR', 'Trophy missed!', 'trophy_miss'], ['LDR', 'Left side’s empty!', 'left_empty'], ['LDR', 'RIGHT SIDE’S OUT!', 'right_empty'],
+  // still nothing true to say: silence
+  ['CDR', 'FIRE! FIRE! GET OUT! GET OUT!', null], ['CDR', 'Fire!', null], ['CDR', 'It’s blind. Hold your position.', null], ['LDR', 'I CAN’T— THE HATCH—', null],
 ];
 for (const [who, s, want] of LINES) { const m = engineLine(who, s, 'fwd'); if ((m && m.ev || null) !== want) bad('engine line', who, JSON.stringify(s), '->', m && m.ev, 'expected', want); }
-if (!(engineLine('CDR', 'SMOKE! SMOKE! SMOKE!', null) || {}).cue) bad('smoke must be a sound, not speech');
+if (!(engineLine('CDR', 'SMOKE! SMOKE! SMOKE!', null) || {}).cue) bad('smoke must fire the dischargers as well as the word');
 for (const [order, want] of [['fwd', 'ack_fwd'], ['left', 'ack_left'], ['right', 'ack_right'], ['back', 'onmove'], [null, 'onmove']]) if (engineLine('DRV', 'On it!', order).ev !== want) bad('driver answer after order', order);
 
 // ---- 2. whole battles
@@ -61,7 +68,10 @@ for (const biome of ['farmland', 'desert', 'town', 'forest']) for (const seed of
       if (k === 'CDR.reengage_doubt' && !(E.some(e => e.type === 'gun' && !e.hit && b.t - (e.t + e.tof) < 1.5 && b.t >= e.t + e.tof) || radio(/^Miss/))) bad(biome, seed, '"Doubtful" with no miss', b.t.toFixed(1));
       if (/^HQ\.end/.test(k) && !(b.over && b.over.result === 'won')) bad(biome, seed, 'the net announces a win that did not happen');
       if (k === 'GNR.contact' && !near('located')) bad(biome, seed, '"Enemy!" with nothing located');
-      if (k === 'LDR.mg_ready' && !(T.ai && T.ai.ldr && T.ai.ldr.up)) bad(biome, seed, '"MG ready" but the loader is not up');
+      if (k === 'LDR.going_up' && !(T.ai && T.ai.ldr && T.ai.ldr.up)) bad(biome, seed, '"Going up" but the loader is not up');
+      if (k === 'LDR.coming_down' && T.ai.ldr.up) bad(biome, seed, '"Coming down" but the loader is still up');
+      if (k === 'GNR.miss' && !E.some(e => e.type === 'gun' && !e.hit && b.t - (e.t + e.tof) < 1.5 && b.t >= e.t + e.tof)) bad(biome, seed, '"Miss" with no miss');
+      if (/^CDR\.(missile|drone)_/.test(k) && !radio(/o.clock/i)) bad(biome, seed, 'a clock call with no warning from the engine');
       if (!(REL[a.who] && REL[a.who][a.ev])) bad('asked for a line that is not in the release list', k);
     }
     n0 = asked.length;
@@ -78,13 +88,13 @@ for (const quality of ['green', 'trained', 'expert']) {
     const asked = [], net = { ready: true, has: (who, ev) => !!(REL[who] && REL[who][ev]), request(who, ev, o) { if (!this.has(who, ev)) return false; asked.push({ t: b.t, who, ev, level: o.level, v: b.volleys.length }); return true; }, flush() {} };
     const talk = new CrewTalk(net, { warn() {}, blip() {}, smoke() {} }); let n0 = 0;
     while (b.t < 600 && !(b.over && b.t > (b._overT || (b._overT = b.t)) + 5)) {
-      b.step(); talk.update(b, b.t, { mission: 'hold' }); const S = b.crewState();
+      const S0 = b.crewState(); b.step(); talk.update(b, b.t, { mission: 'hold' }); const S = b.crewState();   /* S0: the states before this step (a man's state can change in the very step he speaks) */
       for (const a of asked.slice(n0)) {
         if (a.who === 'HQ' || a.who === 'ANY') continue; const m = S.who[a.who.toLowerCase()], lv = a.level == null ? 1 : a.level;
         byLevel[lv]++; const st = byState[m.state] || (byState[m.state] = [0, 0, 0]); st[lv]++;
-        if (m.status === 'down' || /^frozen/.test(m.busy || '')) { mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
+        if (m.status === 'down' || (/^frozen/.test(m.busy || '') && a.ev !== 'freeze')) {   /* his one line as he locks up is allowed */ mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
         if (m.state === 'panicked' && lv !== 2) bad(quality, 'a panicked man was not given his shouted take', a.who, a.ev, lv);
-        if (m.state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
+        if (m.state === 'steady' && S0.who[a.who.toLowerCase()].state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down', 'gnr_down', 'drv_down', 'bail', 'freeze'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
       }
       n0 = asked.length;
     }

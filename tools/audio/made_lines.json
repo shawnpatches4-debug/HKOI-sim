@@ -1,0 +1,46 @@
+{
+  "note": "Crew lines the human voice pack does not have. The owner authorised making them (14 Nov 2026). Each is made by tools/audio/build_voices.py: spliced from the pack where a word can be cut out whole (tools/audio/splice.py), otherwise synthesised with the open Kokoro v1.0 model, then given the same per-man voice treatment, loudness and tone colour as the pack's lines. Every made line is marked in the built index (made: splice or synth). To replace one with a real recording, put <WHO>.<event>.<level>.wav (level 0 calm, 1 tense, 2 shouted) into the folder given to build_voices.py as its drop-in folder and rebuild. Three wordings per line: calm, tense, shouted. {N} is the clock hour, one to twelve.",
+  "voices": { "CDR": [13, 14], "GNR": [16, 13], "LDR": [13, 18], "DRV": [14, 11] },
+  "pace": [1.0, 1.08, 1.16],
+  "clock": ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"],
+  "lines": {
+    "CDR": {
+      "missile_{N}": ["Missile, {N} o'clock.", "Missile! {N} o'clock!", "Missile! {N} o'clock!"],
+      "drone_{N}": ["Drone, {N} o'clock.", "Drone! {N} o'clock!", "Drone! {N} o'clock!"],
+      "tank_{N}": [null, "Tank! {N} o'clock!", "Tank! {N} o'clock!"],
+      "pc_{N}": [null, "P C! {N} o'clock!", "P C! {N} o'clock!"],
+      "hold": ["No cover in reach. Hold here.", "Nothing to hide behind! Hold!", "Nowhere to go! Hold!"],
+      "report": ["All stations, report.", "Everyone okay? Report!", "Report! Everyone report!"],
+      "good": ["Good work. Stay sharp.", "That was close. Stay on it.", "That was close! Stay on it!"],
+      "wide": ["It went wide.", "It missed! It went past!", "It missed! It missed!"],
+      "bail": ["Bail out. Bail out.", "Bail out! Bail out!", "Bail out! Bail out! Get out!"],
+      "gnr_down": ["Gunner's down.", "Gunner's down!", "Gunner's down! He's down!"],
+      "drv_down": ["Driver's down.", "Driver's down!", "Driver's down! He's down!"],
+      "destroyed": ["Target destroyed.", "Target destroyed!", "Target destroyed!"],
+      "burning": ["He's burning.", "He's burning!", "He's burning!"],
+      "freeze": [null, null, "I can't! I can't!"]
+    },
+    "GNR": {
+      "steady": ["Driver, steady.", "Steady! Steady!", "Steady! Steady!"],
+      "cut": ["Beam's cut. It's blind.", "Cut! It's blind!", "It's cut! It's cut!"],
+      "nocut": ["No cut. Still guiding.", "No cut! It's still guiding!", "It didn't work! It's still coming!"],
+      "back": ["It's back on the beam.", "It's back on the beam!", "It's back! It's guiding again!"],
+      "obs50": ["Obscurant at fifty rounds.", "Obscurant's at fifty!", "Fifty rounds of smoke left!"],
+      "he50": ["H E at fifty rounds.", "H E is at fifty!", "H E is at fifty!"],
+      "heout": ["H E is out.", "H E is out!", "H E is out!"],
+      "freeze": [null, null, "I can't! I can't see it!"]
+    },
+    "LDR": {
+      "trophy_kill": ["Trophy, kill.", "Trophy got it!", "Trophy! Trophy got it!"],
+      "trophy_miss": ["Trophy fired, no kill.", "Trophy missed!", "It missed! Brace! Brace!"],
+      "left_empty": ["Trophy left side empty.", "Left side's empty!", "Left side's out!"],
+      "right_empty": ["Trophy right side empty.", "Right side's empty!", "Right side's out!"],
+      "going_up": ["Going up.", "Going up!", "Going up!"],
+      "coming_down": ["Coming down.", "Coming down!", "Coming down!"],
+      "freeze": [null, null, "I can't! I can't!"]
+    },
+    "DRV": {
+      "freeze": [null, null, "I can't! It won't! Hold on!"]
+    }
+  }
+}
