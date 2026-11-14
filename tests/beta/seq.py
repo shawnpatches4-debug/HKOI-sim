@@ -1,40 +1,32 @@
 # python3 seq.py <outbase> <kind> : film strip of one enemy team through a movement, to judge animation (single stills cannot show it).
 # Run with the CSP server up and BASE set, like sheet.py. The team is taken away from the battle and driven by hand in steps of 1/120 s.
-#   STEPS  = JSON list of stages, each {"mode": "still|down|walk|run", "spd": m/s, "t": seconds between pictures, "shots": pictures, "turn": degrees added to the heading}
+# (The same movements can be measured and drawn as stick figures in seconds, without a browser: tests/motion/harness.mjs and stick.py.)
+#   STEPS  = JSON list of stages, each {"mode": "still|down|walk|run", "spd": m/s, "t": seconds between pictures, "shots": pictures, "turn": degrees added to the heading,
+#            "info": {...} what the battle tells the team from this stage on (loaded, spare, firing, reload, reloadT, pack, setup, dead)}
+#   PRE    = JSON list of stages run before the pictures start, each {"mode", "spd", "t", "info"}; SLOPE = up|down|across: first move the team to sloping ground
+#   FIG    = 0 or 1: keep the camera on that man instead of on the team's point
 #   ANG    = camera bearing relative to the team's heading (90 = side-on), DIST, CAMH = camera distance and height, FOLLOW = 1 keeps the camera on the team, BACK = metres behind the team's point the camera looks at
 #   EVAL   = no pictures: print the result of this expression (it can use __D)
-#   NUM=1  = no pictures: print measurements instead (foot slide, frame-rate independence, cost per team per frame)
+#   NUM=1  = no pictures: print the measurements of tests/beta/motion_metrics.js (jolts, foot slide, feet on the ground, frame-rate independence, cost per team per frame)
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 from PIL import Image
 DRIVE = r"""window.__drv = (kind) => { const B = __beta, u = B.battle.units.find(x => x.spec.key === kind), i = B.battle.units.indexOf(u), tv = B.teams()[i], T = B.battle.tank;
   const place = tv.place.bind(tv), update = tv.update.bind(tv); tv.place = () => {}; tv.update = () => {};   /* the page's own frame loop no longer touches this team */
-  const toTank = Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI, info = { loaded: true, spare: true, firing: false };
-  const D = { tv, u, ground: (x, z) => B.scene.world.h(x, -z), e: u.e, n: u.n, hdg: toTank + 90, toTank, info, t: 0,
-    reset() { D.e = u.e; D.n = u.n; D.hdg = toTank + 90; place(B.scene.at(D.e, D.n, 0), toTank); tv._gx = null; update(0.001, 'still', true, info); tv.settle(); },
-    step(dt, mode, spd) { const mv = mode === 'walk' || mode === 'run', h = D.hdg * Math.PI / 180; if (mv) { D.e += Math.sin(h) * spd * dt; D.n += Math.cos(h) * spd * dt; }
-      place(B.scene.at(D.e, D.n, 0), mv ? D.hdg : toTank); update(dt, mode, true, info); D.t += dt; },
+  const toTank = Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI, fresh = { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 5 }, info = Object.assign({}, fresh);
+  const D = { tv, u, ground: (x, z) => B.scene.world.h(x, -z), e0: u.e, n0: u.n, e: u.e, n: u.n, hdg: toTank + 90, toTank, info, t: 0,
+    reset() { D.e = D.e0; D.n = D.n0; D.hdg = toTank + 90; D.t = 0; Object.assign(info, fresh); tv.ground = D.ground; tv.group.visible = true; if (tv._start) tv._start(); place(B.scene.at(D.e, D.n, 0), toTank); tv._gx = null; update(0.001, 'still', true, info); tv.settle(); },
+    step(dt, mode, spd, near) { const mv = mode === 'walk' || mode === 'run', h = D.hdg * Math.PI / 180; if (mv) { D.e += Math.sin(h) * spd * dt; D.n += Math.cos(h) * spd * dt; }
+      if (info.reload > 0) info.reload = Math.max(0, info.reload - dt); if (info.pack > 0) info.pack = Math.max(0, info.pack - dt); if (info.setup > 0) info.setup = Math.max(0, info.setup - dt);
+      if (!info.loaded && !info.firing && info.reloadT && info.reload <= 2) info.loaded = true;
+      place(B.scene.at(D.e, D.n, 0), mv ? D.hdg : toTank); update(dt, mode, near !== false, info); D.t += dt; },
     run(sec, mode, spd, fps) { const n = Math.round(sec * (fps || 120)); for (let k = 0; k < n; k++) D.step(1 / (fps || 120), mode, spd); },
-    cam(ang, dist, h, follow, back) { const g0 = tv.group.position, hh = D.hdg * Math.PI / 180, g = g0.clone(); g.x -= Math.sin(hh) * back; g.z += Math.cos(hh) * back; const a = (D.hdg + ang) * Math.PI / 180, c = B.scene.camera; B.cams.mode = 'free'; c.up.set(0, 1, 0); c.fov = 40; c.updateProjectionMatrix();
+    // move the team to the steepest ground within `r` metres (to judge feet on slopes): returns the slope found, in degrees, along and across the heading
+    slope(r, want) { let best = null; const W = B.scene.world, h = (toTank + 90) * Math.PI / 180; for (let a = 0; a < 360; a += 15) for (let d = 20; d <= r; d += 20) { const e = u.e + Math.sin(a * Math.PI / 180) * d, n = u.n + Math.cos(a * Math.PI / 180) * d, s = Math.atan2(W.h(e + Math.sin(h) * 8, n + Math.cos(h) * 8) - W.h(e, n), 8) * 180 / Math.PI, c = Math.atan2(W.h(e + Math.cos(h) * 3, n - Math.sin(h) * 3) - W.h(e, n), 3) * 180 / Math.PI, sc = want === 'across' ? Math.abs(c) - Math.abs(s) : want === 'down' ? -s : s; if (!best || sc > best.sc) best = { e, n, s, c, sc }; }
+      D.e0 = best.e; D.n0 = best.n; D.reset(); return { along_deg: +best.s.toFixed(1), across_deg: +best.c.toFixed(1) }; },
+    cam(ang, dist, h, follow, back, fig) { const g = tv.group.position.clone(), hh = D.hdg * Math.PI / 180; if (fig >= 0) { const y = g.y; tv.group.updateMatrixWorld(true); tv.figures[fig].getWorldPosition(g); g.y = y; } g.x -= Math.sin(hh) * back; g.z += Math.cos(hh) * back; const a = (D.hdg + ang) * Math.PI / 180, c = B.scene.camera; B.cams.mode = 'free'; c.up.set(0, 1, 0); c.fov = 40; c.updateProjectionMatrix();
       const p = follow ? g : (D.c0 || (D.c0 = g.clone())); c.position.set(p.x + Math.sin(a) * dist, p.y + h, p.z - Math.cos(a) * dist); c.lookAt(p.x, p.y + 0.9, p.z); } };
   return (window.__D = D, 1); }"""
-NUM = r"""(() => { const D = __D, tv = D.tv, out = {}, THREE_V = D.tv.group.position.constructor;
-  const ball = (f, k) => { const b = f.userData.a.rig.bones[k ? 21 : 17]; f.updateWorldMatrix(true, true); return new THREE_V().setFromMatrixPosition(b.matrixWorld); };
-  // 1. foot slide: while a foot is down, how far does the ball of the foot really move over the ground (true skeleton positions)
-  const slide = (mode, spd, fps) => { D.reset(); D.run(3, mode, spd, fps); let worst = 0, sum = 0, n = 0; const st = {};
-    for (let s = 0; s < fps * 4; s++) { const before = tv.figures.map(f => f.userData.a.g.feet.map(x => x.on)); D.step(1 / fps, mode, spd);
-      tv.figures.forEach((f, i) => f.userData.a.g.feet.forEach((ft, k) => { const key = i + '_' + k; if (ft.on && before[i][k]) { const p = ball(f, k); if (!st[key]) st[key] = { p0: p, d: 0 }; else st[key].d = Math.max(st[key].d, Math.hypot(p.x - st[key].p0.x, p.z - st[key].p0.z)); } else if (st[key]) { worst = Math.max(worst, st[key].d); sum += st[key].d; n++; st[key] = null; } })); }
-    const g = tv.figures[0].userData.a.g; return { worst_cm: +(worst * 100).toFixed(2), mean_cm: +(sum / Math.max(1, n) * 100).toFixed(2), stances: n, stride_m: +g.L.toFixed(2), strides_per_s: +(g.v / g.L).toFixed(2), on_ground_share: +g.beta.toFixed(2), run: +g.run.toFixed(2) }; };
-  out.slide = { walk_2_2_60fps: slide('walk', 2.2, 60), walk_2_2_240fps: slide('walk', 2.2, 240), walk_2_0_30fps: slide('walk', 2.0, 30), run_3_5_60fps: slide('run', 3.5, 60), rpg_walk_3_2_144fps: slide('walk', 3.2, 144), run_5_1_60fps: slide('run', 5.1, 60), run_5_1_240fps: slide('run', 5.1, 240) };
-  // 2. frame-rate independence: the same 6.5 s story (still, walk, run, still, down) at four frame rates
-  const story = fps => { D.reset(); D.run(0.5, 'still', 0, fps); D.run(2.5, 'walk', 2.2, fps); const a = tv.figures[0].userData.a, b = tv.figures[1].userData.a; const mid = { ph0: +a.g.ph.toFixed(3), ph1: +b.g.ph.toFixed(3), hipY: +a.oy.toFixed(4), lag: +tv.lag.length().toFixed(3), z1: +b.z.toFixed(3) };
-    D.run(1.5, 'run', 3.5, fps); const r = { ph0: +a.g.ph.toFixed(3), run: +a.g.run.toFixed(3), lag: +tv.lag.length().toFixed(3) }; D.run(0.4, 'still', 0, fps); const s = { x0: +a.x.toFixed(3), z0: +a.z.toFixed(3), x1: +b.x.toFixed(3), psi: +tv._psi.toFixed(3), thighW: +a.cur[14].w.toFixed(3) }; D.run(1.6, 'still', 0, fps); D.run(0.45, 'down', 0, fps);
-    return { after_walk: mid, after_run: r, into_still: s, into_down: { spineW: +a.cur[1].w.toFixed(4), y: +a.oy.toFixed(4), ph: tv._ph } }; };
-  out.fps = { f30: story(30), f60: story(60), f144: story(144), f240: story(240) };
-  // 3. cost per team per frame (near), over 200 calls
-  const cost = (mode, spd) => { D.reset(); D.run(1.5, mode, spd, 60); const t0 = performance.now(); for (let k = 0; k < 200; k++) D.step(1 / 240, mode, spd); return +((performance.now() - t0) / 200).toFixed(4); };
-  out.cost_ms = { walk: cost('walk', 2.2), run: cost('run', 3.5), still: cost('still', 0) }; D.reset(); D.run(0.3, 'walk', 2.2, 60); { const t0 = performance.now(); for (let k = 0; k < 200; k++) D.step(1 / 240, 'walk', 2.2); out.cost_ms.blending = +((performance.now() - t0) / 200).toFixed(4); }
-  out.err = tv._err ? String(tv._err.stack || tv._err).slice(0, 500) : null; D.reset(); return out; })()"""
 async def main():
     out, kind = sys.argv[1], sys.argv[2]
     steps = json.loads(os.environ.get('STEPS', '[{"mode":"walk","spd":2.2,"t":0.0875,"shots":8}]')); ang = os.environ.get('ANG', '90'); dist = os.environ.get('DIST', '4.2'); camh = os.environ.get('CAMH', '1.2'); follow = os.environ.get('FOLLOW', '1'); back = os.environ.get('BACK', '0.75')
@@ -55,14 +47,18 @@ async def main():
         if os.environ.get('EVAL'):   # print the result of one expression (it can use __D, the driver) and stop
             print(json.dumps(await pg.evaluate(os.environ['EVAL']))); print('errors', errs[:5]); await b.close(); return
         if os.environ.get('NUM'):
-            print(json.dumps(await pg.evaluate(NUM), indent=1)); print('errors', errs[:5]); await b.close(); return
-        pre = json.loads(os.environ.get('PRE', '[]'))
-        for s in pre: await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)})")
+            print(json.dumps(await pg.evaluate('__motion.all(__D, {})'), indent=1)); print('errors', errs[:5]); await b.close(); return
+        if os.environ.get('SLOPE'): print('slope', await pg.evaluate(f"__D.slope(200, '{os.environ['SLOPE']}')"))
+        pre = json.loads(os.environ.get('PRE', '[]')); fig = os.environ.get('FIG', '-1')
+        for s in pre:
+            if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
+            await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)})")
         ims = []
         for s in steps:
             if s.get('turn'): await pg.evaluate(f"void (__D.hdg += {s['turn']})")
+            if s.get('info'): await pg.evaluate(f"void Object.assign(__D.info, {json.dumps(s['info'])})")
             for k in range(s.get('shots', 1)):
-                await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)}); __D.cam({ang}, {dist}, {camh}, {follow}, {back})"); await pg.wait_for_timeout(int(os.environ.get('WAIT', '1800')))
+                await pg.evaluate(f"__D.run({s['t']}, '{s['mode']}', {s.get('spd', 0)}); __D.cam({ang}, {dist}, {camh}, {follow}, {back}, {fig})"); await pg.wait_for_timeout(int(os.environ.get('WAIT', '1800')))
                 f = f'{out}_{len(ims):02d}.png'; await pg.screenshot(path=f, timeout=120000); ims.append(Image.open(f).copy()); os.remove(f)
         w, h = ims[0].size; rows = (len(ims) + cols - 1) // cols; S = Image.new('RGB', (w * cols, h * rows))
         for i, im in enumerate(ims): S.paste(im, ((i % cols) * w, (i // cols) * h))

@@ -33,7 +33,7 @@ const peek = (t, every, len) => { const x = (t % every) / len; return x < 1 ? Ma
 export class TeamView {
   static use(helpers) { H = helpers; }
   constructor(kind, assetBase) {
-    this.kind = kind; this.ground = null; this.dying = false;
+    this.kind = kind; this.ground = null; this.done = false;   /* done: knocked out, fallen, and lain there long enough to be taken away */
     const g = this.group = new THREE.Group(), cloth = new THREE.MeshStandardMaterial({ color: '#5a5b45', roughness: 0.95 }), dark = new THREE.MeshStandardMaterial({ color: '#2a2c26', roughness: 0.8 });
     // plain stand-in shapes until the models arrive
     const man = (x, z, crouch) => { const m = new THREE.Group(), body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, crouch ? 0.45 : 0.75, 3, 8), cloth), head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), dark); body.position.y = crouch ? 0.55 : 0.8; head.position.y = crouch ? 1.05 : 1.48; body.castShadow = head.castShadow = true; m.add(body, head); m.position.set(x, 0, z); g.add(m); return m; };
@@ -111,7 +111,7 @@ export class TeamView {
     this.loads = []; const L = {}; this.L = L;
     const load = (name, obj, places, at, more) => { const l = Object.assign({ name, obj, places, from: places[at], to: places[at], at, e: 1, dur: 1, lift: 0, queue: [], P: V(), Q: Q(), S: V(1, 1, 1), mounted: false, fold: { x: 0, v: 0 }, foldT: 0 }, more); this.loads.push(l); L[name] = l; return l; };
     const rig0 = F[0].userData.rig, rig1 = F[1].userData.rig, yq = a => Q().setFromAxisAngle(AXY, a), xq = a => Q().setFromAxisAngle(AXX, a);
-    if (this.base) load('base', this.base, { ground: Object.assign({ gnd: true }, this.base.userData.home), back: Object.assign({ fig: 0 }, this.baseRide) }, 'ground', { legs: this.legs });
+    if (this.base) load('base', this.base, { ground: Object.assign({ gnd: true }, this.base.userData.home), back: Object.assign({ fig: 0 }, this.baseRide), front: onChest(rig0, 0, V(0, -0.3, 0.36), yq(Math.PI / 2)) }, 'ground', { legs: this.legs });
     if (this.tube) {
       const hm = this.tube.userData.home, carry = onChest(rig1, 1, V(0.02, -0.2, 0.3), yq(1.25).multiply(xq(-0.12)));
       load('tube', this.tube, { seat: L.base ? { load: L.base, ...this._rel(hm, this.base.userData.home) } : Object.assign({ gnd: true }, hm), shoulder: Object.assign({ fig: 1 }, this.tubeRide), carry,
@@ -129,15 +129,15 @@ export class TeamView {
     const PR = TeamView.POLE_R, PL = TeamView.POLE_L, strap = (rig, side, dx) => rig.at[J[side + 'Arm']].p.clone().add(V(dx, -0.14, 0.13)).sub(rig.at[S2].p).applyQuaternion(rig.at[S2].q.clone().invert());
     const hand = (i, side, kind, v, load, on, fidget) => F[i].userData.a.hands.push({ side, pole: side === 'Right' ? PR : PL, kind, v, load, on, fidget: fidget || 0, s: { x: 0, v: 0 } });
     const atPlace = (l, name) => l.to === l.places[name] && l.e >= 1, heldBy = (l, i) => l.to.fig === i || (l.e < 1 && l.from.fig === i), a0 = F[0].userData.a, a1 = F[1].userData.a;
-    const lifting = () => { const l = L.base; return l.e < 1 && (l.to.fig === 0 ? l.e < 0.45 : l.from.fig === 0 ? l.e > 0.55 : true); };   /* in his hands while it is in front of him, not while it swings onto his back */
+    const lifting = () => { const l = L.base, fr = l.places.front, bk = l.places.back; return (l.e < 1 || l.to === fr) && !((l.to === bk && l.e > 0.04) || (l.from === bk && l.e < 0.9)); };   /* in his hands while it is in front of him, not while it swings onto his back */
     if (L.base) {
       const hb = this.base.userData.home.s;                                       /* on the controls at the back of the sight unit (small corrections while aiming) */
       hand(0, 'Right', 'load', V(-0.03, 0.14, -0.36), L.base, () => atPlace(L.base, 'ground') && a0.key === 'gunner' && !a0.tl, 1);
       hand(0, 'Left', 'load', V(0.13, 0.1, -0.36), L.base, () => atPlace(L.base, 'ground') && a0.key === 'gunner' && !a0.tl, 1);
       hand(0, 'Right', 'chest', strap(rig0, 'Right', 0.05), null, () => L.base.to.fig === 0 && L.base.e > 0.5 && a0.post === 'up');
       hand(0, 'Left', 'chest', strap(rig0, 'Left', -0.05), null, () => L.base.to.fig === 0 && L.base.e > 0.5 && a0.post === 'up');
-      hand(0, 'Right', 'load', V(-0.1, 0.1, -0.2), L.base, () => lifting() && a0.post !== 'flat');      /* both hands on the launcher while it is lifted or set down */
-      hand(0, 'Left', 'load', V(0.1, 0.1, 0.2), L.base, () => lifting() && a0.post !== 'flat');
+      hand(0, 'Right', 'load', V(-0.05, 0.12, -0.22), L.base, () => lifting() && a0.post !== 'flat');      /* both hands on the launcher while it is lifted or set down */
+      hand(0, 'Left', 'load', V(-0.05, 0.12, 0.22), L.base, () => lifting() && a0.post !== 'flat');
       void hb;
     }
     if (L.tube) for (const l of [L.tube, L.spare]) {
@@ -151,7 +151,7 @@ export class TeamView {
     }
     this.act = 'weapon'; this.want = 'weapon'; this.setUp = true; this.hold = false; this.goWhenPacked = false; this.clock = 0; this.todo = []; this.lag = V(); this.back = V(); this.trail = [];
     this.P = { x: psi, v: 0 }; this._psi = psi; this._want0 = null; this._wait = 0; this._gx = null; this._gz = 0; this._gy = 0; this._err = null;
-    this.kick = { x: 0, v: 0 }; this.away01 = { x: 0, v: 0 }; this._awayUntil = -1; this._firing = false; this._reload = null; this._info = Object.assign({}, TeamView.INFO); this.dying = false; this._deadT = 0; this._handOff = false;
+    this.kick = { x: 0, v: 0 }; this.away01 = { x: 0, v: 0 }; this._awayUntil = -1; this._firing = false; this._reload = null; this._info = Object.assign({}, TeamView.INFO); this.done = false; this._deadT = 0; this._handOff = false;
     this.anim = true; this._snap(); this._poseAll(0, 0);
   }
   // how one thing sits relative to another (both given in the team's frame)
@@ -159,8 +159,7 @@ export class TeamView {
 
   // ---- every frame ----
   update(dt, mode, near, info) {
-    if (!this.figures) return;
-    if (!this.anim || this._err) return;
+    if (!this.figures || !this.anim || this._err) { if (info && info.dead) this.done = true; return; }
     try { this._update(dt > 0 ? dt : 0, mode, near, info || TeamView.INFO); }
     catch (e) { this._err = e; console.error('enemy team animation stopped: ' + (e && e.stack || e)); }   /* a fault here must never stop the picture */
   }
@@ -217,6 +216,12 @@ export class TeamView {
   // turns to face the way he is going, and his stride is moved on by the ground he really covered
   _walk(a, h, ox, oz, psi) {
     a.clock += h;
+    const tl = a.tl;                                           /* his list of in-between poses moves on */
+    if (tl && !tl.over) {
+      tl.t += h;
+      while (tl.k < tl.keys.length && tl.t >= tl.keys[tl.k].d) { tl.t -= tl.keys[tl.k].d; tl.k++; if (tl.k < tl.keys.length && !tl.keys[tl.k].q) this._toStride(a); }
+      if (tl.k >= tl.keys.length) tl.over = true;
+    }
     const striding = a.gen === 'stride', s = striding && a.slot ? a.slot : a.place, cs = Math.cos(psi), sn = Math.sin(psi);
     let tx = ox + s.x * cs + s.z * sn, tz = oz - s.x * sn + s.z * cs, ty = psi + s.yaw; const x0 = a.X.x, z0 = a.Z.x, w0 = a.Yw.x, gx0 = a.GX.x, gz0 = a.GZ.x, gy0 = a.GY.x;
     if (striding && s.behind && this.trail.length) { this._behind(s.behind, s.side); tx = _v4.x; tz = _v4.z; ty = _v4.y; }   /* the men behind follow in the leader's footsteps */
@@ -286,12 +291,7 @@ export class TeamView {
     if (a.settled && lod > 0) return;
     // the timeline of in-between poses moves on
     let seg = null, u = 0;
-    if (tl) {
-      tl.t += dt;
-      while (tl.k < tl.keys.length && tl.t >= tl.keys[tl.k].d) { tl.t -= tl.keys[tl.k].d; tl.k++; if (tl.k < tl.keys.length && !tl.keys[tl.k].q) this._toStride(a); }
-      if (tl.k >= tl.keys.length) { const last = tl.keys[tl.keys.length - 1]; a.hold = last.q; a.tl = null; a.rest = 0; }
-      else { seg = tl.keys[tl.k]; u = tl.t / seg.d; }
-    }
+    if (tl && !tl.over) { seg = tl.keys[tl.k]; u = tl.t / seg.d; }
     const striding = a.gen === 'stride';
     // how much the legs are the walking legs (exactly on their footprints) rather than a held pose
     const kwT = striding ? (seg ? ease(u) : 1) : 0; chase(a.kw, kwT, kwT, stiff(striding ? 0.05 : 0.07), dt || 1e-4, 1);
@@ -313,16 +313,20 @@ export class TeamView {
       a.sox = SO.x; a.soy = SO.y;
     }
     // the pose aimed for at this instant
-    let Gp;
-    if (seg) { const A = tl.k ? tl.keys[tl.k - 1].q : a.from, B = seg.q || TQ; Gp = GQ; for (let j = 0; j < NJ; j++) Gp[j].slerpQuaternions(A[j], B[j], u); }
-    else Gp = striding ? TQ : a.hold;
-    // every joint chases it; when walking, the hips and legs are exactly the stride
-    const Y = striding && !seg ? Y_MOVING : Y_POSING, gp = a.gp, w = a.w;
-    if (dt > 0) for (let j = 0; j < NJ; j++) {
-      if (LEGS[j] && kw >= 1) { C[j].copy(TQ[j]); w[j].set(0, 0, 0); O[j].copy(C[j]); }
-      else { chaseJoint(C[j], w[j], gp[j], Gp[j], Y[j], dt); if (LEGS[j] && kw > 0) O[j].slerpQuaternions(C[j], TQ[j], kw); else O[j].copy(C[j]); }
-      gp[j].copy(Gp[j]);
-    } else for (let j = 0; j < NJ; j++) { C[j].copy(Gp[j]); O[j].copy(Gp[j]); gp[j].copy(Gp[j]); w[j].set(0, 0, 0); }
+    // Every joint chases it; when walking, the hips and legs are exactly the stride. While a timeline is playing, a long frame is
+    // taken in pieces, so a slow computer rounds the corners between in-between poses the same way a fast one does.
+    const Y = striding && !seg ? Y_MOVING : Y_POSING, gp = a.gp, w = a.w, m = tl && dt > 0.0095 ? Math.min(6, Math.ceil(dt / 0.009)) : 1;
+    let Gp = null;
+    for (let s = 1; s <= m; s++) {
+      Gp = tl ? this._goalAt(a, dt * (m - s) / m) : striding ? TQ : a.hold;
+      if (dt > 0) for (let j = 0; j < NJ; j++) {
+        if (LEGS[j] && kw >= 1) { if (s === m) { C[j].copy(TQ[j]); w[j].set(0, 0, 0); } }
+        else chaseJoint(C[j], w[j], gp[j], Gp[j], Y[j], dt / m);
+        gp[j].copy(Gp[j]);
+      } else for (let j = 0; j < NJ; j++) { C[j].copy(Gp[j]); gp[j].copy(Gp[j]); w[j].set(0, 0, 0); }
+    }
+    for (let j = 0; j < NJ; j++) { if (LEGS[j] && kw > 0 && kw < 1) O[j].slerpQuaternions(C[j], TQ[j], kw); else O[j].copy(C[j]); }
+    if (tl && tl.over) { a.hold = tl.keys[tl.keys.length - 1].q; a.tl = null; a.rest = 0; }
     // signs of life in the back: breathing, and a start when the weapon fires
     const calmT = a.tl || striding ? 0 : 1; chase(a.calm, calmT, calmT, stiff(0.25), dt || 1e-4, 1);
     if (lod === 0) {
@@ -365,7 +369,7 @@ export class TeamView {
     if (again) fk(rig, O, UPPER);
     let busy = 0;
     for (const hd of a.hands) {
-      const on = hd.on() ? 1 : 0; chase(hd.s, on, on, stiff(0.085), dt || 1e-4, 1); if (dt <= 0) hd.s.x = on;
+      const on = hd.on() ? 1 : 0; chase(hd.s, on, on, stiff(on ? 0.14 : 0.07), dt || 1e-4, 1); if (dt <= 0) hd.s.x = on;
       const w = sat(hd.s.x); if (w < 0.003) continue; busy = Math.max(busy, w);
       if (hd.kind === 'chest') _v1.copy(hd.v).applyQuaternion(Wq[S2]).add(Wp[S2]);
       else {
@@ -390,6 +394,16 @@ export class TeamView {
     // has he come to rest? (then a far-off figure need not be redone until something changes)
     if (!a.tl && a.gen === 'static' && Math.hypot(a.X.x - a.tx, a.Z.x - a.tz) < 0.004 && Math.abs(a.X.v) + Math.abs(a.Z.v) < 0.01) { a.rest += dt; if (a.rest > 1.5) a.settled = true; } else { a.rest = 0; a.settled = false; }
   }
+  // the pose a timeline aims for, `back` seconds before now (fills and returns GQ, or the stride or the final pose)
+  _goalAt(a, back) {
+    const tl = a.tl, K = tl.keys, n = K.length; let k = tl.k, t = tl.t - back;
+    if (tl.over) { if (t >= 0) return K[n - 1].q || TQ; k = n - 1; t += K[k].d; }
+    while (t < 0 && k > 0) { k--; t += K[k].d; }
+    if (t < 0) t = 0;
+    const A = k ? K[k - 1].q : a.from, B = K[k].q || TQ, u = t / K[k].d;
+    for (let j = 0; j < NJ; j++) GQ[j].slerpQuaternions(A[j], B[j], u);
+    return GQ;
+  }
   // a load: at one of its places, or on its way from one to the next
   _frame(pl, P, Qo, S) {
     if (pl.fig != null) { const a = this.figures[pl.fig].userData.a; P.copy(pl.p).applyQuaternion(a.cq).add(a.cp); Qo.multiplyQuaternions(a.cq, pl.q); S.copy(pl.s); }
@@ -397,11 +411,12 @@ export class TeamView {
     else { P.copy(pl.p); if (pl.gnd) P.y += pl.dy || 0; Qo.copy(pl.q); S.copy(pl.s); }
   }
   _carry(l, dt) {
-    if (l.e < 1) { l.e += dt / l.dur; if (l.e >= 1) { l.e = 1; const nx = l.queue.shift(); if (nx) { l.from = l.to; l.to = l.places[nx.to]; l.e = 0; l.dur = nx.dur; l.lift = nx.lift; } } }
+    if (l.e < 1) { l.e += dt / l.dur; if (l.e >= 1) { l.e = 1; const nx = l.queue.shift(); if (nx) { l.from = l.to; l.to = l.places[nx.to]; l.e = 0; l.dur = nx.dur; l.lift = nx.lift; l.side = nx.side || 0; } } }
     if (l.e >= 1) this._frame(l.to, l.P, l.Q, l.S);
     else {
-      const s = ease(l.e); this._frame(l.from, _P0, _Q0, _S0); this._frame(l.to, l.P, l.Q, l.S);
-      l.P.lerpVectors(_P0, l.P, s); l.P.y += l.lift * Math.sin(Math.PI * s); l.Q.slerpQuaternions(_Q0, l.Q, s); l.S.lerpVectors(_S0, l.S, s);
+      const s = ease(l.e); this._frame(l.from, _P0, _Q0, _S0); this._frame(l.to, _v2, _q3, _v3);
+      l.P.lerpVectors(_P0, _v2, s); l.P.y += l.lift * Math.sin(Math.PI * s);
+      if (l.side) { const pl = l.to.fig != null ? l.to : l.from; if (pl.fig != null) l.P.addScaledVector(_v4.set(-1, 0, 0).applyQuaternion(this.figures[pl.fig].userData.a.fq), l.side * Math.sin(Math.PI * s)); }   /* swung round his right side, not through him */ l.Q.slerpQuaternions(_Q0, _q3, s); l.S.lerpVectors(_S0, _v3, s);
     }
     const o = l.obj, onBone = l.e >= 1 && l.to.fig != null;
     if (onBone) { if (!l.mounted) { const b = this.figures[l.to.fig].userData.a.rig.bones[S2]; b.add(o); o.position.copy(l.to.p); o.quaternion.copy(l.to.q); o.scale.copy(l.to.s); l.mounted = true; } }
@@ -412,17 +427,17 @@ export class TeamView {
   // ---- what the team does ----
   _at(delay, fn) { const ev = { t: this.clock + delay, fn }; let i = this.todo.length; while (i > 0 && this.todo[i - 1].t > ev.t) i--; this.todo.splice(i, 0, ev); }
   // send a load to one of its places (and on to others after that)
-  _send(l, to, dur, lift = 0.1) {
+  _send(l, to, dur, lift = 0.1, side = 0) {
     if (!l) return;
     if (l.e < 1) { this._frame(l.from, _P0, _Q0, _S0); const s = ease(l.e), P = V(), Qo = Q(), S = V(); this._frame(l.to, P, Qo, S); l.from = { p: _P0.clone().lerp(P, s).setY(mix(_P0.y, P.y, s) + l.lift * Math.sin(Math.PI * s)), q: _Q0.clone().slerp(Qo, s), s: _S0.clone().lerp(S, s) }; }
     else l.from = l.to;
-    l.queue.length = 0; l.to = l.places[to]; l.at = to; if (l.from === l.to) { l.e = 1; return; } l.e = 0; l.dur = dur; l.lift = lift;
+    l.queue.length = 0; l.to = l.places[to]; l.at = to; if (l.from === l.to) { l.e = 1; return; } l.e = 0; l.dur = dur; l.lift = lift; l.side = side;
   }
-  _then(l, to, dur, lift = 0.05) { if (l) { if (l.e >= 1) this._send(l, to, dur, lift); else { l.queue.push({ to, dur, lift }); l.at = to; } } }
+  _then(l, to, dur, lift = 0.05, side = 0) { if (l) { if (l.e >= 1) this._send(l, to, dur, lift, side); else { l.queue.push({ to, dur, lift, side }); l.at = to; } } }
   // start one man on a list of in-between poses [[name or 'live' (= on his feet, walking or standing), seconds], ...] ending at a place
   _go(a, keys, place, key, post) {
     for (let j = 0; j < NJ; j++) a.from[j].copy(a.gp[j]);
-    a.tl = { keys: keys.map(k => ({ q: k[0] === 'live' ? null : a.K[k[0]], d: k[1] })), k: 0, t: 0 };
+    a.tl = { keys: keys.map(k => ({ q: k[0] === 'live' ? null : a.K[k[0]], d: k[1] })), k: 0, t: 0, over: false };
     if (place) a.place = place;
     a.key = key; a.post = post; a.settled = false; a.rest = 0;
     if (keys[0][0] === 'live') this._toStride(a); else a.gen = 'static';
@@ -454,7 +469,7 @@ export class TeamView {
   _request(want) {
     const was = this.act, F = this.figures; this.want = want;
     if (want === 'dead') { this._cancel(); this._fall(); return; }
-    if (was === 'dead') return;
+    if (was === 'dead') { this._start(); this.want = want; if (want !== 'weapon') this._request(want); return; }   /* (the battle was wound back: they are alive again) */
     if (want === 'move') {
       if (was === 'move') return;
       if (was === 'packed' || was === 'arrive') { this._stepOut(); return; }
@@ -489,7 +504,7 @@ export class TeamView {
       const k = Math.max(0.42, Math.min(1.25, dur / 4.4)), near = TeamView.BESIDE;
       this._to(0, 'kneel', 'low', a0.still, k);
       this._at(0.5 * k, () => { L.base.foldT = 1; });
-      this._at(1.5 * k, () => { this._send(L.base, 'back', 1.1 * k, 0.12); });
+      this._at(1.5 * k, () => { this._send(L.base, 'front', 0.6 * k, 0.05); this._then(L.base, 'back', 0.7 * k, 0.12, 0.42); });
       this._at(2.5 * k, () => { this._to(0, 'live', 'up', null, k); });
       if (L.tube) {
         this._to(1, 'knee', 'low', near, k);
@@ -506,7 +521,7 @@ export class TeamView {
     if (L.base) {
       const k = Math.max(0.5, Math.min(1.3, dur / 4.6)), near = TeamView.BESIDE;
       this._to(0, 'kneel', 'low', a0.still, k);
-      this._at(0.45 * k, () => { this._send(L.base, 'ground', 1.1 * k, 0.12); });
+      this._at(0.3 * k, () => { this._send(L.base, 'front', 0.7 * k, 0.12, 0.42); this._then(L.base, 'ground', 0.6 * k, 0.05); });
       this._at(1.4 * k, () => { L.base.foldT = 0; });
       this._at(2.2 * k, () => { this._to(0, 'gunner', 'low', a0.still, k); });
       if (L.tube) {
@@ -519,7 +534,7 @@ export class TeamView {
   }
   // Knocked out: each man buckles and falls where he is, and what he carried drops beside him.
   _fall() {
-    const F = this.figures; this.act = 'dead'; this.dying = true; this._deadT = 0; this.hold = false; this.setUp = false;
+    const F = this.figures; this.act = 'dead'; this._deadT = 0; this.hold = false; this.setUp = false;
     F.forEach((f, i) => {
       const a = f.userData.a, back = (i + (this._seed || 0)) % 2 === 1 && a.post !== 'flat', here = this._here(a, back ? -0.4 : 0.45); here.yaw += (i ? -0.5 : 0.35);
       const keys = a.post === 'flat' ? [['fallen', 0.5]] : back ? [['buckle', 0.22 + 0.1 * i], ['fallen_back', 0.5]] : [['buckle', 0.2 + 0.1 * i], ['hands_knees', 0.28], ['fallen', 0.34]];
@@ -537,7 +552,7 @@ export class TeamView {
   // the small scenes at the weapon that follow the battle's clock: firing, reloading
   _scenes(dt) {
     const I = this._info, L = this.L, F = this.figures;
-    if (this.act === 'dead') { this._deadT += dt; if (this._deadT > 45) this.dying = false; return; }
+    if (this.act === 'dead') { this._deadT += dt; if (this._deadT > 45) this.done = true; return; }
     if (I.firing !== this._firing) {
       this._firing = I.firing;
       if (I.firing) { this.kick.v += 54; this._awayUntil = this.clock + 1.1; for (const f of F) { f.userData.a.settled = false; f.userData.a.rest = 0; } }

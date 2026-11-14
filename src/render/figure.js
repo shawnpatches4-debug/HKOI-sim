@@ -258,7 +258,7 @@ function gaitShape(g) {
 // both in his own frame.
 export function stepGait(g, rig, mx, mz, dyaw, dt) {
   if (dt > 1e-6) {
-    const k = 1 - Math.exp(-dt * 6); g.vx += (mx / dt - g.vx) * k; g.vz += (mz / dt - g.vz) * k; g.v = Math.hypot(g.vx, g.vz);
+    const k = 1 - Math.exp(-dt * 9); g.vx += (mx / dt - g.vx) * k; g.vz += (mz / dt - g.vz) * k; g.v = Math.hypot(g.vx, g.vz);
     g.run += (ease((g.v - 1.7) / 0.7) - g.run) * (1 - Math.exp(-dt * 4));
     g.turn += (dyaw / dt - g.turn) * (1 - Math.exp(-dt * 5));
   }
@@ -328,13 +328,14 @@ export function stridePose(rig, g, carry, dt) {
     A.set(f.x, f.gy + rig.ballH + lift + rig.fz * Math.sin(tp) + rig.ay * Math.cos(tp), f.z - (rig.fz * Math.cos(tp) - rig.ay * Math.sin(tp)));
     const fd = SD[k ? J.RightFoot : J.LeftFoot]; fd[0] = 0; fd[1] = -rig.fz * Math.sin(th) - rig.ay * Math.cos(th); fd[2] = rig.fz * Math.cos(th) - rig.ay * Math.sin(th);
     const d = Math.min(0.62 * reach, Math.hypot(A.x - (SO.x + side * rig.hipW), A.z - rig.hipZ)), most = A.y + Math.sqrt(reach * reach - d * d);   /* (a foot far out of reach does not drag the hips to the ground: the heel lifts instead) */
-    _def[k] = pull * Math.max(0, top - most);             /* how far the hips must come down for this leg to reach its foot */
+    const need = top - most; _def[k] = pull * 0.5 * (need + Math.sqrt(need * need + 0.0009));             /* how far the hips must come down for this leg to reach its foot */
   }
   // The hips have weight: they cannot change direction in an instant the way the sums above can when a foot lands. They chase the
   // height worked out above; the legs below are then fitted to wherever the hips really are, so the feet stay exactly on their spots.
-  const want = top - Math.hypot(_def[0], _def[1]) - rig.hipY;
-  if (!g.hyOk || !(dt > 0)) { g.hy.x = want; g.hy.v = 0; g.hyOk = true; } else chase(g.hy, g.hy0, want, stiff(0.045), dt, 1);
-  g.hy0 = want; if (g.hy.x > want + 0.03) { g.hy.x = want + 0.03; if (g.hy.v > 0) g.hy.v *= 0.5; }   /* (but never so high that a standing leg cannot reach the ground: a raised heel takes up the last 3 cm) */
+  const most = 0.13 * rig.leg, want = top - most * Math.tanh(Math.hypot(_def[0], _def[1]) / most) - rig.hipY;   /* (the hips give by a hand's breadth at most) */
+  if (!g.hyOk || !(dt > 0)) { g.hy.x = want; g.hy.v = 0; g.hyOk = true; }
+  else { const rate = (want - g.hy0) / dt; chase(g.hy, g.hy0, want, stiff(0.05), dt, 1); if (g.hy.x > want + 0.035) { g.hy.x = want + 0.035; if (g.hy.v > rate) g.hy.v = rate; } }
+  g.hy0 = want;   /* (but never so high that a standing leg cannot reach the ground: a raised heel takes up the last 3 cm) */
   SO.y = g.hy.x;
   // legs: thigh and shin worked out so the ankle is exactly where the foot is, knee forward, never quite straight
   for (let k = 0; k < 2; k++) {

@@ -44,7 +44,7 @@
           });
           if (low < 1e8 && t > 2.5 && (g.feet[0].on || g.feet[1].on) && (!f.userData.a.kw || f.userData.a.kw.x >= 1)) { floatMax = Math.max(floatMax, low); floatMin = Math.min(floatMin, low); }
         });
-        if (sample) sample(t, s);
+        if (sample) sample(t, s, i === n - 1);
       }
     }
     const r2 = x => +x.toFixed(2);
@@ -57,7 +57,7 @@
   // the same story at several frame rates: where are the hips, head, hands and feet at the end of each stage? (largest difference from the 240 fps run, cm)
   function rates(D, story, list) {
     const names = Object.keys(WATCH), runs = {}, p = [0, 0, 0];
-    for (const fps of list) { const marks = []; let stage = null, lastT = 0; play(D, story, fps, (t, s) => { if (stage && stage !== s) marks.push(snap()); stage = s; }); marks.push(snap()); runs[fps] = marks; }
+    for (const fps of list) { const marks = []; play(D, story, fps, (t, s, end) => { if (end) marks.push(snap()); }); runs[fps] = marks; }
     function snap() { D.tv.group.updateMatrixWorld(true); return D.tv.figures.map(f => names.map(n => pos(f, WATCH[n], p).slice())); }
     const ref = runs[list[list.length - 1]], out = {};
     for (const fps of list) { let worst = 0; runs[fps].forEach((m, si) => m.forEach((f, fi) => f.forEach((q, j) => { const r = ref[si] && ref[si][fi][j]; if (r) worst = Math.max(worst, Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2])); }))); out['fps' + fps + '_cm'] = +(worst * 100).toFixed(1); }

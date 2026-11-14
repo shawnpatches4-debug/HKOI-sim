@@ -128,13 +128,18 @@ function place() {
   // enemy teams: drawn between simulation steps like the vehicle, facing the way they walk when moving and the vehicle when in position
   const fU = state === 'play' ? Math.max(0, Math.min(1, simBank / battle.dt)) : 1;
   while (teams.length < battle.units.length) { const t = new TeamView(battle.units[teams.length].type, ASSETS); t.group.userData.heat = 0.9; scene.units.add(t.group); teams.push(t); }   /* a new enemy group has arrived */
-  battle.units.forEach((u, i) => { const tv = teams[i]; const show = u.alive && !u.gone && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); tv.group.visible = show && !(cams.mode === 'enemy' && cams.unit === u);   /* looking through a team's own eyes, its figures would only block the picture */ if (!show) return;
+  battle.units.forEach((u, i) => { const tv = teams[i]; const show = (u.alive || !tv.done) && !u.gone && (set.spectator || u.known || u.state === 'guiding' || u.state === 'firing'); tv.group.visible = show && !(cams.mode === 'enemy' && cams.unit === u);   /* looking through a team's own eyes, its figures would only block the picture */ if (!show) return;
     const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
-    tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); tv.update(frameDt * (state === 'play' && playing ? speed : 0), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', pos.distanceToSquared(scene.camera.position) < 300 * 300, teamInfo(u)); });
+    tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); if (!tv.ground) tv.ground = teamGround; const far = pos.distanceTo(scene.camera.position) * scene.camera.fov / 40;   /* how far away the team looks (a zoomed sight brings it close) */ tv.update(frameDt * (state === 'play' && playing ? speed : 0), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', far < 330, teamInfo(u, far)); });
 }
 // what the drawing of a team needs to know about its weapon: is a round in the launcher (not between firing and the end of reloading), is a spare ready
-const _ti = { loaded: true, spare: true, firing: false };
-function teamInfo(u) { const busy = u.state === 'guiding' || u.state === 'firing'; _ti.loaded = u.ammo > 0 && !busy && battle.t >= (u.readyAt || 0) - 2 || busy && u.spec.key !== 'rpg'; _ti.spare = u.ammo > 1; _ti.firing = busy; return _ti; }
+// reload: seconds until it can fire again; pack: seconds of packing up left before it moves off; setup: seconds of setting up left; dead: knocked out; dist: how far away it looks
+const _ti = { loaded: true, spare: true, firing: false, reload: 0, pack: 0, setup: 0, dead: false, dist: 0 }, teamGround = (x, z) => scene.world.h(x, -z);
+function teamInfo(u, dist) {
+  const busy = u.state === 'guiding' || u.state === 'firing'; _ti.loaded = u.ammo > 0 && !busy && battle.t >= (u.readyAt || 0) - 2 || busy && u.spec.key !== 'rpg'; _ti.spare = u.ammo > 1; _ti.firing = busy;
+  _ti.reload = u.ammo > 0 && !busy ? Math.max(0, (u.readyAt || 0) - battle.t) : 0; _ti.pack = u.state === 'moving' && !((u.spd || 0) > 0.2) ? Math.max(0.05, (u.packUntil || 0) - battle.t) : 0;
+  _ti.setup = u.state === 'setup' ? Math.max(0, u.spec.setup * (u.setupK || 1) - (battle.t - u.since)) : 0; _ti.dead = !u.alive; _ti.dist = dist || 0; return _ti;
+}
 // markers: what the vehicle's sensors hold (threats cued and tracked, launch sites located); in spectator mode every team, faintly
 const marks = $('marks'), pool = [], v3 = new THREE.Vector3();
 function mark(i, cls, p, text) { let m = pool[i]; if (!m) { m = el('div', 'mk'); m.append(el('i'), el('span')); marks.append(m); pool.push(m); } v3.copy(p).project(scene.camera); const on = v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; m.hidden = !on; if (!on) return; m.className = 'mk ' + cls; m.style.transform = `translate(${((v3.x + 1) / 2 * innerWidth).toFixed(1)}px, ${((1 - v3.y) / 2 * innerHeight).toFixed(1)}px)`; if (m.lastChild.textContent !== text) m.lastChild.textContent = text; }
