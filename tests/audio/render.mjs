@@ -48,15 +48,18 @@ async function render(name, seconds, { setup, prepare, acts = [], state = null, 
   if (setup) setup(sound);
   if (process.env.RAW) { sound.mix.sum.disconnect(); sound.mix.sum.connect(ctx.destination); }   /* RAW=1: skip the limiter, to see how hard it would have to work */
   const list = acts.slice().sort((a, b) => a[0] - b[0]); let k = 0, refused = 0;   /* the offline context refuses a few pause points; that frame's update is simply skipped */
-  for (let t = STEP; t < seconds - 2 * STEP; t += STEP) {
-    ctx.suspend(t).then(() => {
-      try { while (k < list.length && list[k][0] <= t) list[k++][1](sound, t); if (state) { const st = state(t, sound); if (st) sound.update(STEP, st); } } catch (e) { console.log('ERROR in scene', name, 'at', t.toFixed(2), e.stack || e); process.exitCode = 1; }
-      ctx.resume();
-    }).catch(() => { refused++; });
-  }
+  // Pause the render every thirtieth of a second and do what the page's frame loop would do. All pauses are booked before
+  // the render starts. The offline engine can refuse a pause on a busy machine; such a frame's actions run at the next one,
+  // so a render with many refusals is not trustworthy: it is reported, and tests/audio/check.py reads the report.
+  const frame = t => {
+    try { while (k < list.length && list[k][0] <= t) list[k++][1](sound, t); if (state) { const st = state(t, sound); if (st) sound.update(STEP, st); } } catch (e) { console.log('ERROR in scene', name, 'at', t.toFixed(2), e.stack || e); process.exitCode = 1; }
+  };
+  for (let n = 1; n * STEP < seconds - 2 * STEP; n++) { const t = n * STEP; ctx.suspend(t).then(() => { frame(t); ctx.resume(); }).catch(() => { refused++; }); }
+  await new Promise(r => setTimeout(r, 30));
   const buf = await ctx.startRendering();
   if (process.env.RAW) { let pk = 0; for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); } console.log('raw peak before the limiter', name.padEnd(36), (20 * Math.log10(pk + 1e-9)).toFixed(1), 'dB'); return sound; }
   const over = writeWav(path.join(OUT, name + '.wav'), buf);
+  if (refused) { console.log('NOTE', name, ':', refused, 'pause points were refused by the offline engine (those frames ran late)'); if (refused > 3) { console.log('UNRELIABLE RENDER', name); process.exitCode = 2; } }
   if (over) console.log('CLIPPED', name, over, 'samples over full scale');
   return sound;
 }
