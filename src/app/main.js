@@ -191,7 +191,7 @@ function drawStatus() {
 function drawLog() {
   const due = battle.log.filter(l => l.t <= battle.t); if (due.length === logShown) return; due.sort((a, b) => a.t - b.t);
   const box = $('log'), fresh = due.slice(logShown); logShown = due.length;
-  for (const l of fresh) { if (!set.spectator && (l.kind === 'volley' || l.kind === 'enemy' && !/loses sight/.test(l.text))) continue; if (l.kind === 'engine' && (l.sub === 'track' || l.sub === 'handoff') && !set.spectator) continue; const d = el('div', 'k-' + l.kind); const mm = Math.floor(l.t / 60), ss = (l.t % 60).toFixed(0).padStart(2, '0'); d.append(`${mm}:${ss}  `); d.append(el('b', null, (l.kind === 'crew' && l.who ? l.who + ': ' : '') + l.text)); if (l.kind === 'crew' && l.why) d.append(el('small', null, l.why)); box.append(d); }
+  for (const l of fresh) { if (!set.spectator && (l.kind === 'volley' || l.kind === 'enemy' && !/loses sight/.test(l.text))) continue; if (l.kind === 'engine' && (l.sub === 'track' || l.sub === 'handoff') && !set.spectator) continue; const d = el('div', 'k-' + l.kind); const mm = Math.floor(l.t / 60), ss = (l.t % 60).toFixed(0).padStart(2, '0'); d.append(`${mm}:${ss}  `); d.append(el('b', null, l.text)); if (l.kind === 'crew' && l.why) d.append(el('small', null, l.why)); box.append(d); }
   while (box.childElementCount > 120) box.firstChild.remove(); box.scrollTop = box.scrollHeight;
   // the caption carries the most important new line, not merely the newest; the log keeps the lesser detail only in spectator view
   const W8 = l => l.kind === 'engine' ? ({ hit: 9, kill: 7, miss: 5, launch: 6, cue: 6, crew: 5, fire: 4, track: 2, handoff: 2 }[l.sub] || 3) : ({ volley: 8, result: 8, enemy: 5, tank: 6, crew: 6 }[l.kind] || 0);
@@ -274,7 +274,7 @@ function demoTick(dt, live) {
   advance(dt);
 }
 let previewTimer = 0; function preview() { clearTimeout(previewTimer); previewTimer = setTimeout(() => { if (state === 'title') titleBattle(); }, 60); }
-function start() { clearTimeout(previewTimer); sound.start(); sound.loadVoices(ASSETS); ensureWorld(); setupOpen = false; pagesOpen = false; state = 'play'; newBattle(); playing = true; barOpen = null; { let c = store.get('cam', 'orbit'); if (c === 'drv') c = 'in_drv'; cams.set(VIEW_OF[c] ? c : 'orbit'); } if (cams.mode === 'orbit') { const T = battle.tank; scene.camera.position.copy(scene.at(T.e - 26, T.n - 34, 13)); } buildBar(); show(); }
+function start() { clearTimeout(previewTimer); demo.manual = false; sound.start(); sound.loadVoices(ASSETS); ensureWorld(); setupOpen = false; pagesOpen = false; state = 'play'; newBattle(); playing = true; barOpen = null; { let c = store.get('cam', 'orbit'); if (c === 'drv') c = 'in_drv'; cams.set(VIEW_OF[c] ? c : 'orbit'); } if (cams.mode === 'orbit') { const T = battle.tank; scene.camera.position.copy(scene.at(T.e - 26, T.n - 34, 13)); } buildBar(); show(); }
 
 // ---- the control bar: one row. Views are grouped (outside, crew views, inside, enemy); a group opens a second row with its views.
 // The old overlay driver view is gone from the bar: the driver's seat inside replaces it. The head-out commander and loader views stay.
