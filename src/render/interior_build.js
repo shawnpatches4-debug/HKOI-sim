@@ -21,7 +21,7 @@ export const DIM = {
   RFF: 0.43,      // the same at the front wall (the roof slopes down toward the gun)
   GY: 0.20,       // height of the gun's axis
   CUP: [0.52, 0.36], CUPR: 0.40,     // commander's cupola: centre (x, z) and inner radius
-  HAT: [-0.60, 0.15], HATR: 0.33,    // loader's hatch
+  HAT: [-0.62, 0.4], HATR: 0.33,     // loader's hatch (over his seat, behind the grips of the M240 on the outside model)
   BZ: 1.0,        // the bustle bulkhead (blast doors) is at this z
   DZ: -2.75,      // the driver sits here
   DRF: -0.45,     // underside of the hull roof over the driver (the outside model's glacis is 0.37 to 0.43 m below the turning point there)
@@ -227,7 +227,7 @@ export function buildInterior(labels) {
   // open-protected (raised a hand's width, so he can look out under it all round) or open.
   T.tag = 'cupola';
   { const y0 = RF, yb = RF + 0.11, yt = RF + 0.24, R = D.CUPR, DIRS = ['front', 'right front', 'right', 'right rear', 'rear', 'left rear', 'left', 'left front'];
-    T.cyl('shell', R + 0.02, R + 0.02, yb - y0, C.cream, CX, (y0 + yb) / 2, CZ, 0, 0, 0, 32, true); T.cyl('shell', R + 0.02, R + 0.02, 0.07, C.cream, CX, yt + 0.035, CZ, 0, 0, 0, 32, true);
+    T.cyl('shell', R + 0.02, R + 0.02, yb - y0, C.cream, CX, (y0 + yb) / 2, CZ, 0, 0, 0, 32, true); T.cyl('shell', R + 0.02, R + 0.02, 0.115, C.cream, CX, yt + 0.0575, CZ, 0, 0, 0, 32, true); T.ring('fit', R + 0.02, 0.012, C.rubber, CX, yt + 0.115, CZ, Math.PI / 2, 0, 0, 32);   /* the seal lip the lid closes on */
     T.ring('fit', R + 0.02, 0.022, C.steel, CX, RF, CZ, Math.PI / 2, 0, 0, 32);
     for (let i = 0; i < 8; i++) { const a = (i * 45 + 22.5) * Math.PI / 180, px = CX + Math.sin(a) * R, pz = CZ - Math.cos(a) * R;
       T.box('shell', 0.115, yt - yb + 0.004, 0.05, C.creamD, px, (yb + yt) / 2, pz, 0, -a, 0);                                   /* housing between two ports: painted, with a black frame either side and four bolts */
@@ -236,13 +236,31 @@ export function buildInterior(labels) {
       T.box('fit', 0.2, 0.018, 0.04, C.rubber, bx, yt - 0.003, bz, 0, -b, 0); T.box('fit', 0.2, 0.014, 0.05, C.black, bx, yb + 0.004, bz, 0, -b, 0);
       T.push(bx, (yb + yt) / 2, bz, 0, -b, 0); ctl(T, 'tur', 'spot', 0, 0, `Observation port: looks out to the ${DIRS[i]} of the turret`, { r: 0.075 }); T.pop(); }
     T.push(CX, yt + 0.035, CZ + R - 0.004, 0, Math.PI, 0); T.box('fit', 0.09, 0.05, 0.03, C.steel, 0, 0, 0.015); T.label('HATCH', 0.014, 0, 0.012, 0.031, 0, 0, 0, 'plate', { size: 22 });
-    ctl(T, 'tur', 'spot', 0, -0.012, 'Commander\'s hatch handle: closed, open-protected (raised a hand\'s width), open', { key: 'cdrHatch', n: 3, r: 0.05 }); T.pop();
-    moving.cupHatch = { g: 'tur', build: k => { k.cyl('p', R + 0.03, R + 0.03, 0.03, C.cream, 0, 0, -(R + 0.02), 0, 0, 0, 28); k.cyl('p', 0.008, 0.008, 0.1, C.steel, 0, -0.03, -(R + 0.02) - 0.16, 0, 0, Math.PI / 2, 8); k.box('p', 0.05, 0.03, 0.12, C.steel, 0, -0.03, -0.14); }, pos: [CX, yt + 0.087, CZ + R + 0.02] }; }
+    ctl(T, 'tur', 'spot', 0, -0.012, 'Commander\'s hatch handle: closed, open-protected (lid raised a hand\'s width on its post), open (swung aside and locked)', { key: 'cdrHatch', n: 3, r: 0.05 }); T.pop();
+    // The commander's hatch: the lid hangs on an arm from a post at the back of the cupola. Open-protected = lid and arm slide 10 cm up
+    // the post and stay over the opening; open = they swing aside round the post and lock.
+    const PZ = R + 0.075;   /* the post stands just outside the ring, at the back */
+    moving.cupPost = { g: 'tur', out: true, build: k => { k.cyl('p', 0.024, 0.024, 0.3, C.steel, 0, 0.15, 0, 0, 0, 0, 10); k.box('p', 0.09, 0.05, 0.1, C.creamD, 0, 0.025, -0.04); k.cyl('p', 0.03, 0.03, 0.012, C.gunm, 0, 0.3, 0, 0, 0, 0, 10); }, pos: [CX, yt + 0.04, CZ + PZ] };
+    moving.cupHatch = { g: 'tur', out: true, build: k => { k.cyl('p', R + 0.035, R + 0.035, 0.03, C.cream, 0, 0, -PZ, 0, 0, 0, 28); k.cyl('p', R - 0.02, R - 0.02, 0.012, C.creamD, 0, -0.02, -PZ, 0, 0, 0, 24);
+      k.box('p', 0.07, 0.03, PZ + 0.1, C.steel, 0, 0.028, -(PZ + 0.1) / 2 + 0.03); k.cyl('p', 0.04, 0.04, 0.07, C.gunm, 0, 0.0, 0, 0, 0, 0, 10);                         /* the arm over the lid and its collar on the post */
+      k.cyl('p', 0.008, 0.008, 0.12, C.steel, 0, -0.045, -PZ - 0.12, 0, 0, Math.PI / 2, 8); k.box('p', 0.02, 0.03, 0.02, C.steel, -0.05, -0.03, -PZ - 0.12); k.box('p', 0.02, 0.03, 0.02, C.steel, 0.05, -0.03, -PZ - 0.12);   /* inside handle */
+      k.box('p', 0.05, 0.03, 0.09, C.steel, 0, -0.03, -PZ + R - 0.08); k.label('LATCH', 0.012, 0, -0.046, -PZ + R - 0.08, Math.PI / 2, 0, 0, 'plate', { size: 22 }); }, pos: [CX, yt + 0.132, CZ + PZ] };
+    moving.cupHole = { g: 'tur', out: true, hole: true, build: k => { k.cyl('p', R - 0.01, R - 0.01, 0.004, C.glass, 0, 0, 0, 0, 0, 0, 24); }, pos: [CX, yt + 0.122, CZ] };   /* seen only from outside: the dark of the open hatchway over the outside model's own closed lid */
+    // between the ports: head pads under each block, the hand crank that turns the cupola, an interphone box
+    for (let i = 0; i < 8; i++) { const b = (i * 45 + 22.5) * Math.PI / 180; T.box('fit', 0.12, 0.05, 0.02, C.rubber, CX + Math.sin(b) * (R - 0.0), y0 + 0.055, CZ - Math.cos(b) * (R - 0.0), 0, -b, 0); }
+    { const b = -62 * Math.PI / 180; T.push(CX + Math.sin(b) * (R - 0.03), y0 + 0.05, CZ - Math.cos(b) * (R - 0.03), 0, -b, 0); T.cyl('fit', 0.02, 0.02, 0.05, C.gunm, 0, 0, 0.02, Math.PI / 2, 0, 0, 8); T.box('fit', 0.012, 0.09, 0.012, C.steel, 0, -0.03, 0.05); T.cyl('fit', 0.011, 0.011, 0.05, C.rubber, 0, -0.075, 0.075, Math.PI / 2, 0, 0, 8); ctl(T, 'tur', 'spot', 0, -0.03, 'Cupola traverse crank: turns the commander\'s weapon station by hand (the commander works it)', { locked: true, r: 0.06 }); T.pop(); }
+    { const b = 118 * Math.PI / 180; T.push(CX + Math.sin(b) * (R - 0.012), y0 + 0.05, CZ - Math.cos(b) * (R - 0.012), 0, -b, 0); T.box('fit', 0.1, 0.07, 0.03, C.olive, 0, 0, 0.015); T.label('INTERPHONE', 0.011, 0, 0.018, 0.031, 0, 0, 0, 'panel', { size: 20 }); T.cyl('fit', 0.01, 0.01, 0.012, C.black, -0.02, -0.012, 0.036, Math.PI / 2, 0, 0, 8); T.pop(); } }
   moving.glass = { g: 'tur', R: D.CUPR + 0.012, y: RF + 0.175, h: 0.13, c: [CX, CZ] };
   // ---- loader's station (left of the gun)
   T.tag = 'loader';
   T.ring('fit', D.HATR, 0.028, C.steel, HX, RF, HZ, Math.PI / 2, 0, 0, 28); T.cyl('shell', D.HATR, D.HATR, 0.05, C.cream, HX, RF + 0.025, HZ, 0, 0, 0, 24, true);
-  moving.hatch = { g: 'tur', build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.cream, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', 0.014, 0.014, 0.18, C.yellow, 0, -0.04, -D.HATR + 0.05, 0, 0, Math.PI / 2, 8); k.box('p', 0.06, 0.03, 0.05, C.steel, 0.2, -0.03, -D.HATR - 0.05); }, pos: [HX, RF + 0.065, HZ + D.HATR] };
+  // The loader's hatch: hinged at the back, with a spring arm that helps him lift it and holds it open.
+  T.box('fit', 0.3, 0.04, 0.05, C.steel, HX, RF + 0.05, HZ + D.HATR + 0.035); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX, RF + 0.065, HZ + D.HATR + 0.01, 0, 0, Math.PI / 2, 8);   /* hinge block and pin on the roof */
+  moving.hatch = { g: 'tur', out: true, build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.cream, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', D.HATR - 0.03, D.HATR - 0.03, 0.012, C.creamD, 0, -0.02, -D.HATR, 0, 0, 0, 20);
+    for (const sx of [-1, 1]) k.box('p', 0.035, 0.035, 0.1, C.steel, sx * 0.1, 0.0, -0.04);                                                                                   /* hinge lugs */
+    k.box('p', 0.03, 0.02, 0.3, C.gunm, 0.22, -0.02, -0.17, 0.0, 0.0, 0); k.cyl('p', 0.018, 0.018, 0.16, C.steel, 0.22, -0.035, -0.06, Math.PI / 2, 0, 0, 8);          /* spring arm and its cylinder */
+    k.cyl('p', 0.012, 0.012, 0.18, C.yellow, 0, -0.05, -D.HATR - 0.08, 0, 0, Math.PI / 2, 8); for (const sx of [-1, 1]) k.box('p', 0.02, 0.04, 0.02, C.steel, sx * 0.08, -0.03, -D.HATR - 0.08); k.box('p', 0.06, 0.03, 0.05, C.steel, 0.2, -0.03, -D.HATR - 0.1); }, pos: [HX, RF + 0.065, HZ + D.HATR] };
+  moving.ldrHole = { g: 'tur', out: true, hole: true, build: k => { k.cyl('p', D.HATR - 0.01, D.HATR - 0.01, 0.004, C.glass, 0, 0, 0, 0, 0, 0, 24); }, pos: [HX, RF + 0.082, HZ] };
   T.push(HX + 0.2, RF - 0.002, HZ + 0.1, Math.PI / 2, 0, 0); ctl(T, 'tur', 'spot', 0, 0, 'Loader\'s hatch (he opens it himself when he goes up to his machine gun)', { locked: true, r: 0.09 }); T.pop();
   // his periscope, in the roof ahead of the hatch: its glass shows its own small view of the outside, forward and a little to the left
   T.box('fit', 0.26, 0.1, 0.13, C.black, HX, RF - 0.051, HZ - D.HATR - 0.15); T.box('fit', 0.2, 0.022, 0.008, C.creamD, HX, RF - 0.115, HZ - D.HATR - 0.12, 0.0);

@@ -65,7 +65,7 @@ export class CrewFigures {
       const cdr = role === 'cdr', tint = /_body$/.test(n) ? (cdr ? [0.74, 0.66, 0.48] : [0.6, 0.63, 0.48]) : /_helmet$/.test(n) ? (cdr ? [0.5, 0.46, 0.33] : [0.28, 0.29, 0.25]) : /_equipment$/.test(n) ? [0.56, 0.53, 0.42] : [1, 1, 1];
       if (this.cab) { const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; o.material = mat; mats.push(mat); }
       tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
-    const B = BASE[role]; g.add(fig); g.rotation.y = Math.PI - B.face * Math.PI / 180; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
+    const B = BASE[role]; g.userData.crew = true; g.add(fig); g.rotation.y = Math.PI - B.face * Math.PI / 180; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
     const Q = () => Array.from({ length: NJ }, () => new THREE.Quaternion()), D = Array.from({ length: NJ }, () => null);
     for (const n of ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot']) D[J[n]] = [0, -1, 0];
     const sp = () => ({ x: 0, v: 0, g: 0 });
@@ -93,8 +93,9 @@ export class CrewFigures {
     let tip = B.tip, roll = 0.018 * Math.sin(t * 0.31 + seed), twist = 0, gripL = 1, gripR = 1;
     tip += 0.012 * Math.sin(t * 1.45 + seed);                                                                           /* breathing */
     if (strained) tip += 0.05; if (shaken) { tip += 0.11; look += (hsh(Math.floor(t * 6), seed) - 0.5) * 0.1; nod += 0.08; }
-    if (role === 'ldr' && M.load >= 0.05 && M.load < 0.86) { look = M.load < 0.4 ? -1.0 : 0.25; nod = 0.25; twist = M.load < 0.4 ? -0.55 : 0.2; tip += 0.12; }      /* at the rack, then at the breech */
+    if (role === 'ldr' && M.load >= 0.05 && M.load < 0.86 && !(M.up > 0.01)) { look = M.load < 0.4 ? -1.0 : 0.25; nod = 0.25; twist = M.load < 0.4 ? -0.55 : 0.2; tip += 0.12; }      /* at the rack, then at the breech */
     if (role === 'cdr' && M.rise > 0.02) { nod = -0.05; look *= 0.6; }
+    if (role === 'ldr' && M.up > 0.01) { const u = M.up, k1 = Math.min(1, u / 0.1), k2 = Math.max(0, Math.min(1, (u - 0.45) / 0.25)); nod = -0.7 * k1 * (1 - k2) + 0.06 * k2; look = (M.aim || 0) * k2; twist = -0.25 * k1 * (1 - k2); tip = 0.06 + 0.1 * k1 * (1 - k2) + (M.firing ? 0.03 * Math.sin(t * 70) : 0); }   /* looks up at his hatch, works it, climbs; then level behind his gun, shaken by its recoil */
     const br = Math.max(M.brace || 0, 0), fl = M.flinch || 0; tip += 0.2 * br + 0.42 * fl; nod += 0.28 * br + 0.45 * fl; if (br > 0.5) look *= 0.3;   /* bracing for a hit about to land; thrown by one that has */
     if (panic) { tip += 0.3; nod = 0.55; look = (hsh(Math.floor(t * 1.3), seed) - 0.5) * 0.5; gripL = gripR = 0; for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left'; set(S + 'Arm', [0.32, 0.25, 0.9], sd[i]); set(S + 'ForeArm', [-0.45, 0.88, 0.05], sd[i]); } }   /* hands to his helmet */
     if (hurt) { tip += 0.2; roll += 0.17; nod += 0.3; look = 0.15; gripL = 0; set('LeftArm', [0.18, -0.9, 0.38], 1); set('LeftForeArm', [-0.85, 0.22, 0.48], 1); }                                   /* left hand clamped to the wound, working one-handed */

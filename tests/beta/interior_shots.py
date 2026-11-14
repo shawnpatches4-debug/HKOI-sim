@@ -103,6 +103,38 @@ async def main():
             await pg.evaluate("""void (window.stageAt = (T) => { const b = __beta.battle, V = __beta.THREE; b.interiorHits = [{ T, pen: true, kill: false, minor: false, s: 1.6, e: new V.Vector3(1.7, 0.35, -0.3), d: new V.Vector3(-1, -0.03, 0.1).normalize(), comps: { gps: 'damaged' }, crew: { gnr: 'wounded' }, idx: 7 }]; })""")
             T0 = await pg.evaluate('__beta.battle.t + 1.0'); await pg.evaluate(f'void stageAt({T0})')
             for i, dtt in enumerate([0.9, 0.15, 0.25, 0.5, 1.0, 2.5, 8]): await shot(f'strip_hit_{i}', f"(__beta.runTo(__beta.battle.t + {dtt}), lk('in_ldr', 30, 2, 1.2))")
+        if which in ('ldrup', 'hatches'):
+            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
+            for i in range(80):
+                st = await pg.evaluate('JSON.stringify(__beta.interior.stats)')
+                if '"crewReady":true' in st or '"crewFailed":true' in st: break
+                await pg.wait_for_timeout(1500)
+            print('crew', st)
+            await pg.evaluate("void (window.outv = (dist, h, off) => { const T = __beta.battle.tank; __beta.near(dist, h, ((T.h || 0) + off + 360) % 360); })")
+        if which == 'hatches':   # both hatches in every position, from inside and from outside
+            for st, nm in [(0, 'closed'), (1, 'open_protected'), (2, 'open')]:
+                await pg.evaluate(f"void (__beta.interior.cupUser = true, __beta.interior.setCupolaHatch({st}, true))")
+                await shot(f'hatch_cdr_{nm}_inside', "lk('in_cdr', 8, 42, 1)"); await shot(f'hatch_cdr_{nm}_inside_rear', "lk('in_cdr', 178, 30, 1)"); await shot(f'hatch_cdr_{nm}_from_loader', "lk('in_ldr', 40, 26, 1)")
+                await shot(f'hatch_cdr_{nm}_outside', "outv(5.5, 3.6, 150)"); await shot(f'hatch_cdr_{nm}_outside_close', "outv(3.4, 3.2, 20)")
+            await pg.evaluate("void __beta.interior.setCupolaHatch(0, true)")
+            await shot('hatch_ldr_closed_inside', "lk('in_ldr', -60, 55, 1)")
+        if which == 'ldrup':   # the loader opening his hatch, climbing up, firing his machine gun and coming down
+            real = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(b.tank.ai && b.tank.ai.ldr && b.tank.ai.ldr.up) && b.tank.alive && n++ < 3000) __beta.runTo(b.t + 0.1); return !!(b.tank.ai && b.tank.ai.ldr && b.tank.ai.ldr.up) && b.tank.alive ? +b.t.toFixed(1) : null; })()")
+            print('loader goes up at', real); tagk = 'real' if real is not None else 'staged'
+            if real is None: await pg.evaluate("void (window.forceUp = true, (() => { const L = __beta.battle.tank.ai.ldr; Object.defineProperty(L, 'up', { get: () => window.forceUp, set() {}, configurable: true }); })())")
+            await pg.evaluate("void (window.T0 = __beta.battle.t, window.fire = () => { const b = __beta.battle, T = b.tank, a = ((T.h || 0) + 30) * Math.PI / 180; b._mg = { t: b.t - 0.3, dur: 3, m240: true, e: T.e + Math.sin(a) * 400, n: T.n + Math.cos(a) * 400, R: 400 }; })")
+            UP = [0.05, 0.3, 0.55, 0.8, 1.05, 1.35, 1.6, 1.9, 2.2, 2.6, 3.1, 3.9]
+            for i, dtt in enumerate(UP):
+                await shot(f'ldr_{tagk}_first_person_{i:02d}_{dtt}s', f"(__beta.runTo(T0 + {dtt}), lk('in_ldr', 0, 0, 1))")
+                if i in (3, 6, 9, 11): await shot(f'ldr_{tagk}_from_cdr_{i:02d}_{dtt}s', "lk('in_cdr', -78, 6, 1)"); await shot(f'ldr_{tagk}_from_gnr_{i:02d}_{dtt}s', "lk('in_gnr', -120, 22, 1)"); await shot(f'ldr_{tagk}_outside_{i:02d}_{dtt}s', "outv(5.0, 3.4, 215)")
+                print('U', dtt, await pg.evaluate('JSON.stringify({U: +__beta.interior.st.ldrU.toFixed(2), lid: +__beta.interior.st.hatch.toFixed(2), mode: __beta.interior.mode, headOut: __beta.interior.headOut, loaded: __beta.battle.tank.loaded})'))
+            staged_fire = await pg.evaluate("(() => { const b = __beta.battle; if (!(b._mg && b._mg.m240 && b.t < b._mg.t + 3)) { fire(); return true; } return false; })()"); print('burst staged:', staged_fire)
+            await shot(f'ldr_{tagk}_firing_first_person', "(__beta.runTo(__beta.battle.t + 0.5), lk('in_ldr', 0, 0, 1))"); await shot(f'ldr_{tagk}_firing_from_cdr', "lk('in_cdr', -78, 6, 1)"); await shot(f'ldr_{tagk}_firing_outside', "outv(5.0, 3.4, 215)"); await shot(f'ldr_{tagk}_firing_outside_front', "outv(6.0, 2.6, 330)")
+            print('firing', await pg.evaluate('JSON.stringify({firing: __beta.interior.mgFiring, mgYaw: +__beta.interior.st.mgYaw.toFixed(1), pivot: !!__beta.interior.mgPivot})'))
+            if real is None: await pg.evaluate("void (window.forceUp = false, window.T1 = __beta.battle.t)")
+            else: print('comes down at', await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (b.tank.ai.ldr.up && b.tank.alive && n++ < 3000) __beta.runTo(b.t + 0.1); window.T1 = b.t; return +b.t.toFixed(1); })()"))
+            for i, dtt in enumerate([0.3, 0.7, 1.1, 1.5, 2.0]): await shot(f'ldr_{tagk}_down_first_person_{i}_{dtt}s', f"(__beta.runTo(T1 + {dtt}), lk('in_ldr', 0, 0, 1))")
+            await shot(f'ldr_{tagk}_down_from_cdr', "lk('in_cdr', -78, 6, 1)")
         if which == 'cuts':   # the cutaway from every side, at rest and again with the turret laid on a target
             CU = [('left', "cutv(-5.2, 2.4, 3.0)"), ('right', "cutv(5.2, 2.0, 3.0)"), ('above', "cutv(-0.6, -1.5, 8.5)"), ('front_left', "cutv(-3.6, 5.2, 2.0)"), ('rear_right_high', "cutv(3.2, -3.4, 5.6)")]
             for name, js in CU: await shot('cut_' + name, js)

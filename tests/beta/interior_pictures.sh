@@ -17,6 +17,8 @@ for j in "$@"; do echo "== $j"; case "$j" in
   looprt) SIM_S=12 timeout 900 python3 tests/beta/interior_loop.py "$OUT/looprt.png" "gfx=medium&speed=4&force=heavy" ;;
   hits)   W=1280 H=720 timeout 3000 python3 tests/beta/interior_shots.py "$OUT" day "gfx=high&speed=1&force=heavy" hits ;;
   hitsnight) W=1280 H=720 timeout 1500 python3 tests/beta/interior_shots.py "$OUT" night "gfx=high&speed=1&cond=night" hitsnight ;;
+  ldrup)  W=1280 H=720 timeout 3000 python3 tests/beta/interior_shots.py "$OUT" day "gfx=high&speed=1&force=heavy" ldrup ;;
+  hatches) W=1280 H=720 timeout 2400 python3 tests/beta/interior_shots.py "$OUT" day "gfx=high&speed=1" hatches ;;
   cuts)   W=1280 H=720 timeout 1800 python3 tests/beta/interior_shots.py "$OUT" day "gfx=high&speed=1&mission=advance" cuts ;;
 esac 2>&1 | grep -v "GPU stall\|404"; done
 pkill -f "http.server $PORT" 2>/dev/null; echo "pictures in $OUT"

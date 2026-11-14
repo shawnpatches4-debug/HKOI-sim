@@ -44,15 +44,16 @@ function boneTree(file) { const d = JSON.parse(fs.readFileSync(file, 'utf8')), N
 const haveCrew = ASSETS && ['gunner', 'loader', 'driver'].every(k => fs.existsSync(`${ASSETS}/crew/crew_${k}.json`));
 const { CrewFigures } = await import('./render/interior_crewfig.js');
 const crewOf = I => { const m = k => boneTree(`${ASSETS}/crew/crew_${k}.json`); const c = new CrewFigures(null, { tur: I.tur, hul: I.hul }, null, { gunner: m('gunner'), loader: m('loader'), driver: m('driver'), gunner2: m('gunner') }); c.measure = true; return c; };
-const SAMPLE = [9.5, 18.5, 26, 37.5, 47, 56.5], samples = {};
+const SAMPLE = [9.5, 18.5, 26, 37.5, 47, 56.5], samples = {}, LSAMPLE = [42.3, 42.9, 43.4, 43.9, 44.4, 45, 45.8, 47, 48.3, 48.9, 49.6, 50.5], lsamp = {};
 let fails = 0; const finals = [];
 for (const fps of [30, 60, 144, 240]) {
   const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; const crew = { jump: 0, hand: 0, bad: 0 }; let shakeMax = 0, smoke37 = null, smoke45 = null, crewBad = 0, crewInst = 0, bloodEnd = '', flick21 = null; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null, maxThr = 0, maxSteer = 0, maxCup = 0, gearD = 0;
   for (let i = 0, t = 0; t < 60; i++, t = i * dt) {
-    cams.mode = modes[Math.floor(t / 4) % 5]; script(R, t);
+    cams.mode = t > 41 && t < 51.5 ? 'in_ldr' : modes[Math.floor(t / 4) % 5]; script(R, t);   /* the loader's climb to his machine gun and back (t 42 to 48 and after) is watched from his own seat */
     try { I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: R.T.h }, volleys: R.volleys, cond: t > 50 ? 'night' : 'day', playing: true, speed: 1 }); if (I.owns(cams.mode)) I.drive(cams, dt); cams.snap = false; }
     catch (e) { fails++; if (fails < 4) console.log('EXCEPTION at t', t.toFixed(2), cams.mode, e.stack.split('\n').slice(0, 3).join(' | ')); }
     if (!I.built) continue;
+    for (const st of LSAMPLE) if (Math.abs(t - st) < dt / 2) (lsamp[st] = lsamp[st] || {})[fps] = [R.scene.camera.position.clone(), I.st.ldrU, I.st.hatch];
     if (haveCrew && (!I.crewFig || !I.crewFig.measure)) { I.crewFig = crewOf(I); if (fps === 30 && !globalThis._said) { globalThis._said = 1; console.log('crew skeletons ready:', I.crewFig.ready, 'failed:', I.crewFig.failed, 'men:', Object.keys(I.crewFig.men).join(',')); } }
     if (haveCrew && I.crewFig.ready && t > 0.5) { for (const k in I.crewFig.men) { const m = I.crewFig.men[k]; if (!m.g.visible) continue; crew.jump = Math.max(crew.jump, m.speedJump * (fps / 60)); if (k === 'gnr' || k === 'drv') crew.hand = Math.max(crew.hand, m.handErr[0], m.handErr[1]); for (const q of m.draw) if (!Number.isFinite(q.x + q.y + q.z + q.w)) crew.bad++; }
       for (const st of SAMPLE) if (Math.abs(t - st) < dt / 2) (samples[st] = samples[st] || {})[fps] = Object.values(I.crewFig.men).map(m => m.draw.map(q => q.clone())); }
@@ -74,6 +75,8 @@ for (const fps of [30, 60, 144, 240]) {
 }
 if (haveCrew) { let worst = 0; for (const st of SAMPLE) { const S = samples[st]; if (!S || !S[30] || !S[240]) continue; for (const f of [60, 144, 240]) if (S[f]) S[f].forEach((man, mi) => man.forEach((q, j) => { const a = q.angleTo(S[30][mi][j]); if (a > worst) worst = a; })); }
   console.log(`crew: largest difference of any joint between 30 and 60/144/240 frames a second at ${SAMPLE.length} sampled moments: ${(worst * 180 / Math.PI).toFixed(2)} degrees`); } else console.log('crew: model files not on this machine (set HK_ASSETS): crew motion NOT tested');
+{ let worst = 0, path = []; for (const st of LSAMPLE) { const S = lsamp[st]; if (!S || !S[30]) continue; path.push(`${st}s U=${S[30][1].toFixed(2)} lid=${S[30][2].toFixed(2)}`); for (const f of [60, 144, 240]) if (S[f]) worst = Math.max(worst, S[f][0].distanceTo(S[30][0])); }
+  console.log(`loader's climb, his own eyes: largest difference of the camera's place between 30 and 60/144/240 frames a second at ${LSAMPLE.length} moments: ${(worst * 1000).toFixed(1)} mm   (${path.join(', ')})`); }
 const I = rig().I; I._build();
 console.log('stats', JSON.stringify(I.stats), 'exceptions/failures', fails, 'indicator lights', Object.keys(IND).length, 'labels full', I.labels.full);
 if (process.env.LIST) for (const c of I.controls) console.log((c.locked ? 'crew ' : 'FREE ') + c.g + ' ' + c.type.padEnd(7) + c.name);
