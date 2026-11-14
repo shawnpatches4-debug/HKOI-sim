@@ -20,7 +20,7 @@ const CSS = `
 `;
 const ENDED = { hkoi: 'Blinded or shot down by HKOI', trophy: 'Stopped by Trophy', hit: 'HIT THE VEHICLE', gunner_jitter: 'Enemy gunner missed', terrain_mask: 'Lost behind cover', counter_fire: 'Gunner driven off by machine-gun fire', suppressed_aim: 'Aim shaken by machine-gun fire', unguided_miss: 'Missed on its own', crew_smoke: 'Lost in crew smoke' };
 const THREAT = { kornet: 'Kornet', saclos: 'Konkurs', rpg: 'RPG', sal: 'Laser-homing missile', fpv: 'FPV drone', fpv_fiber: 'Fibre FPV drone' };
-const RESULT = { lost: 'Vehicle destroyed', won: 'Enemy beaten off', objective: 'Objective reached', withdrawn: 'Broke contact', time: 'Time ran out' };
+const RESULT = { lost: 'Vehicle destroyed', won: 'Enemy beaten off', objective: 'Objective reached', withdrawn: 'Broke contact', abandoned: 'Crew abandoned the vehicle', time: 'Time ran out' };
 const clock = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0'), pc = x => Math.round(100 * x) + '%';
 
 // ctx: { el, store, deps: { HK, Battle, Study, Ladder }, scenario() -> { opts, text }, playRung(rung), back() }
@@ -37,7 +37,7 @@ export function initPages(ctx) {
     const sc = el('div', 'pg-score'); sc.append(el('b', null, String(d.score)), el('span', null, `out of 100 · ${Ladder.grade(d.score)} · ${RESULT[d.result] || d.result} after ${clock(d.t)}`)); box.append(sc);
     const p = el('div', 'pg-parts'); for (const [k, name, max] of [['vehicle', 'Vehicle', 50], ['crew', 'Crew', 20], ['mission', 'Mission', 20], ['stores', 'Rounds left', 10]]) { const s = el('span'); s.append(`${name} `, el('b', null, `${d.parts[k]}/${max}`)); p.append(s); } box.append(p);
     box.append(el('div', 'pg-saved', d.saved));
-    const tot = [['Missiles, rockets and drones at the vehicle', d.threats], ['Hits taken', d.hits], ['Stopped by HKOI', d.hkoiStopped], ['Stopped by Trophy', d.trophyStopped], ['Trophy shots left', `${d.trophyLeft} of 6`], ['Obscurant / HE rounds left', `${d.obsLeft} / ${d.heLeft}`], ['Crew hurt', d.crewDown], ['Enemy teams destroyed', `${d.destroyed} of ${d.teams}`], ['Enemy teams that pulled out', d.pulledOut]];
+    const tot = [['Missiles, rockets and drones at the vehicle', d.threats], ['Hits taken', d.hits], ['Stopped by HKOI', d.hkoiStopped], ['Stopped by Trophy', d.trophyStopped], ['Trophy shots left', `${d.trophyLeft} of 8`], ['Obscurant / HE rounds left', `${d.obsLeft} / ${d.heLeft}`], ['Crew hurt', d.crewDown], ['Enemy teams destroyed', `${d.destroyed} of ${d.teams}`], ['Enemy teams that pulled out', d.pulledOut]];
     if (d.waves > 1) tot.unshift(['Enemy groups faced', `${d.wave} of ${d.waves}`]);
     box.append(table(['', ''], tot));
     if (d.story.length) { box.append(el('div', 'pg-h', 'Threat by threat')); const sb = el('div', 'pg-scroll'); sb.append(table(['Launched', 'Weapon', 'From', 'Range', 'Ended', 'How'], d.story.map(x => [clock(x.t), THREAT[x.key] || x.key, x.from, x.R ? x.R + ' m' : '-', clock(x.tEnd), ENDED[x.ended] || String(x.ended).replace(/_/g, ' ')]), r => r[5] === ENDED.hit ? 'hit' : r[5] === ENDED.hkoi ? 'hk' : null)); box.append(sb); }
@@ -63,24 +63,29 @@ export function initPages(ctx) {
   // (does Trophy last through three waves?) but too few to settle small differences.
   const N = screen('numbers', true); let running = false, stop = false;
   function openNumbers() {
-    const c = N.c, sc = ctx.scenario(); c.textContent = ''; let kind = 'raids', preset = 'setup', n = 5000, nb = 25;
+    const c = N.c, sc = ctx.scenario(); c.textContent = ''; let kind = 'raids', preset = 'setup', n = 5000, nb = 25, nm = 2000;
     const sub = el('div', 'sub'), opts = el('div'), status = el('div', 'pg-note'), bar = el('div', 'pg-bar'), fill = el('div'), out = el('div'); bar.append(fill);
     const seg = (items, get, set) => { const box = el('div', 'seg'); const draw = () => { box.textContent = ''; for (const [v, name, tip] of items) { const b = el('button', 'btn' + (get() === v ? ' on' : ''), name); if (tip) b.title = tip; b.onclick = () => { if (running) return; set(v); drawOpts(); }; box.append(b); } }; draw(); return box; };
     const opt = (label, box) => { const o = el('div', 'opt'); o.append(el('label', null, label), box); return o; };
     const drawOpts = () => { opts.textContent = ''; const g = el('div', 'opts');
-      g.append(opt('Kind of run', seg([['raids', 'Raids by the thousand', 'One engagement each. Fast, so thousands can be run and small differences settled.'], ['battles', 'Whole battles (slow)', 'The full fight with both sides thinking. About a second each.']], () => kind, v => { kind = v; })));
+      g.append(opt('Kind of run', seg([['raids', 'Raids by the thousand', 'One engagement each. Fast, so thousands can be run and small differences settled.'], ['maps', 'Map by map', 'Each kind of ground gets its own result: the enemy\'s real opening volleys on that map, replayed by the thousand.'], ['battles', 'Whole battles (slow)', 'The full fight with both sides thinking. About a second each.']], () => kind, v => { kind = v; })));
       if (kind === 'raids') { g.append(opt('Enemy', seg([['setup', 'This setup\'s enemy', sc.text], ['old', 'The old simulator\'s raid', 'Three threats over six seconds, Kornet from 2 km, exactly as the old page ran it']], () => preset, v => { preset = v; })));
         g.append(opt('Raids per setup', seg([[1000, '1,000'], [2000, '2,000'], [5000, '5,000'], [10000, '10,000']], () => n, v => { n = v; }))); }
+      else if (kind === 'maps') g.append(opt('Raids per setup, each map', seg([[1000, '1,000'], [2000, '2,000'], [5000, '5,000']], () => nm, v => { nm = v; })));
       else g.append(opt('Battles per setup', seg([[10, '10'], [25, '25'], [50, '50'], [100, '100']], () => nb, v => { nb = v; })));
       opts.append(g);
-      sub.textContent = kind === 'raids' ? (preset === 'old' ? 'The old simulator\'s raid: three threats over six seconds, Kornet-class launches from 2 km or more.' : `Raids by this setup's enemy: ${sc.raidText}.`) + ' Every raid is fought four times: with HKOI and Trophy, Trophy only, HKOI only, and neither.' : `${sc.text}. Whole battles, each fought four times.`;
-      status.textContent = kind === 'raids' ? `About ${Math.round(n / 5000 * 40)} to ${Math.round(n / 5000 * 90)} seconds for ${n.toLocaleString()} raids per setup. The page stays usable while it runs.` : 'Each battle takes about a second. With so few, only large differences show: use raids to settle small ones.'; };
+      sub.textContent = kind === 'raids' ? (preset === 'old' ? 'The old simulator\'s raid: three threats over six seconds, Kornet-class launches from 2 km or more.' : `Raids by this setup's enemy: ${sc.raidText}.`) + ' Every raid is fought four times: with HKOI and Trophy, Trophy only, HKOI only, and neither.' : kind === 'maps' ? `${sc.mapText}. On each map the real battle is set up 24 times, the enemy's opening volley is captured from its real firing positions, and those openings are replayed under the four setups.` : `${sc.text}. Whole battles, each fought four times.`;
+      status.textContent = kind === 'maps' ? `About ${Math.round(nm / 1000 * 1.5)} to ${Math.round(nm / 1000 * 4)} minutes for all four maps.` : kind === 'raids' ? `About ${Math.round(n / 5000 * 40)} to ${Math.round(n / 5000 * 90)} seconds for ${n.toLocaleString()} raids per setup. The page stays usable while it runs.` : 'Each battle takes about a second. With so few, only large differences show: use raids to settle small ones.'; };
     drawOpts();
     const go = btn('Run', async () => {
       if (running) { stop = true; return; } running = true; stop = false; go.textContent = 'Stop'; out.textContent = ''; const t0 = performance.now(), prog = (d, tot, what) => { fill.style.width = (100 * d / tot).toFixed(1) + '%'; status.textContent = `${what} ${d.toLocaleString()} of ${tot.toLocaleString()} · ${Math.round((performance.now() - t0) / 1000)} s`; };
       try {
         if (kind === 'raids') { const run = Study.raidStart(deps.HK, sc.cfg, preset === 'old' ? { preset: 'old' } : Object.assign({ preset: 'setup' }, sc.raid), n); await new Promise(r => setTimeout(r, 0));
           while (!stop && !Study.raidStep(deps.HK, run, 40)) { prog(run.i, n, 'Raid'); await new Promise(r => setTimeout(r, 0)); } prog(run.i, n, 'Raid'); if (run.i > 0) raidResults(out, run, preset === 'old' ? 'the old simulator\'s raid' : sc.raidText); }
+        else if (kind === 'maps') { const done = []; for (let k = 0; k < sc.maps.length && !stop; k++) { const mp = sc.maps[k]; status.textContent = `${mp.name}: building the ground`; await new Promise(r => setTimeout(r, 30));
+            const run = Study.mapStart(deps, Object.assign({}, sc.mapOpts, { world: mp.make() }), nm, 24);
+            while (!stop && !Study.raidStep(deps.HK, run, 25)) { if (!run.map.ready) { fill.style.width = (100 * (k + 0.15 * run.map.seed / run.map.K) / sc.maps.length).toFixed(1) + '%'; status.textContent = `${mp.name}: setting up battle ${run.map.seed} of ${run.map.K} · ${Math.round((performance.now() - t0) / 1000)} s`; } else { fill.style.width = (100 * (k + 0.15 + 0.85 * run.i / Math.max(1, run.n)) / sc.maps.length).toFixed(1) + '%'; status.textContent = `${mp.name}: raid ${run.i.toLocaleString()} of ${run.n.toLocaleString()} · ${Math.round((performance.now() - t0) / 1000)} s`; } await new Promise(r => setTimeout(r, 0)); }
+            if (run.map.ready) done.push({ mp, run }); mapResults(out, done, sc); } }
         else { const rows = {}, lookups = {}; for (const st of Study.SETUPS) rows[st.key] = []; const total = nb * Study.SETUPS.length; let done = 0;
           for (let seed = 1; seed <= nb && !stop; seed++) for (const st of Study.SETUPS) { if (stop) break; rows[st.key].push(Study.one({ HK: deps.HK, Battle: deps.Battle }, sc.opts, st, seed, lookups)); done++; prog(done, total, 'Battle'); await new Promise(r => setTimeout(r, 0)); }
           const res = {}; for (const st of Study.SETUPS) res[st.key] = Study.summarise(rows[st.key], st); if (res.both.n) battleResults(out, res, sc); } }
@@ -103,8 +108,22 @@ export function initPages(ctx) {
     out.append(table(['Setup'].concat(Study.BY.map(b => b[1])), S.map(st => { const r = R[st.key]; return [st.name].concat(Study.BY.map(([k]) => r.threats ? (100 * (r.by[k] || 0) / r.threats).toFixed(1) : '0')); })));
     out.append(el('div', 'pg-h', 'Why threats got past each defence (with both fitted), most common first'));
     out.append(table(['Reason', 'Times', 'Per 100 threats'], R.both.leaks.filter(l => !/ off$/.test(l.why)).slice(0, 10).map(l => [l.why, l.n.toLocaleString(), (100 * l.n / Math.max(1, R.both.threats)).toFixed(1)])));
-    out.append(el('div', 'pg-note', 'A raid is one engagement resolved by the same engine that decides the battles you watch, with the vehicle halted in its position. The likely range is the 95% range for the true figure given this many raids. The inputs are assumptions, not test results: cloud payload of 40 g a round, Trophy at 90% when cued and 80% when not, enemy gunner steadiness, a 3 km radar pick-up and the rest of the engine\'s settings.'));
+    out.append(el('div', 'pg-note', 'A raid is one engagement resolved by the same engine that decides the battles you watch, with the vehicle halted in its position. The likely range is the 95% range for the true figure given this many raids. The inputs are assumptions, not test results: cloud payload of 75 g a round, Kornet launches from 2 km or more, Trophy at 90% when cued and 85% when not (30% against drones), enemy gunner steadiness, a 3 km radar pick-up and the rest of the engine\'s settings.'));
     copyBox(out, [`HKOI Battlefield, ${n.toLocaleString()} raids per setup: ${what}.`].concat(S.map(st => { const r = R[st.key]; return `${st.name}: vehicle survives ${pc1(r.survival)} (${pc1(r.range[0])} to ${pc1(r.range[1])}), ${r.hitsPerRaid.toFixed(3)} hits per raid.`; }), [line(p1, R.both, R.aps, 'With Trophy fitted'), line(p2, R.hkoi, R.none, 'Without Trophy')]).join('\n'));
+  }
+  function mapResults(out, done, sc) {
+    out.textContent = ''; if (!done.length) return; const rows = [], notes = [], where = [], txt = [`HKOI Battlefield, map by map: ${sc.mapText}.`];
+    for (const { mp, run } of done) { const I = Study.mapInfo(run); if (!run.n || !run.S.both.n) { rows.push([mp.name, '-', '-', '-', '-', '-', 'the enemy never got a shot']); where.push([mp.name, `0 of ${I.placements}`, '-', '-', '-']); continue; }
+      const R = {}; for (const st of Study.SETUPS) R[st.key] = Study.raidSummary(run.S[st.key]); const p = Study.paired(run.S.both, run.S.aps);
+      rows.push([mp.name, pc1(R.both.survival), pc1(R.aps.survival), pc1(R.hkoi.survival), pc1(R.none.survival), `${p.net >= 0 ? '+' : ''}${(100 * p.net).toFixed(1)} points`, `saved ${p.saved.toLocaleString()}, cost ${p.cost.toLocaleString()}: ${Math.abs(p.z) >= 3 ? 'far beyond chance' : Math.abs(p.z) >= 2 ? 'unlikely to be chance' : 'could be chance'}`]);
+      where.push([mp.name, `${I.openings} of ${I.placements}`, I.launchesPerOpening.toFixed(1), `${I.nearest} / ${I.median} / ${I.farthest} m`, Math.round(100 * I.hullDown) + '%']);
+      txt.push(`${mp.name}: HKOI + Trophy ${pc1(R.both.survival)}, Trophy only ${pc1(R.aps.survival)}, HKOI only ${pc1(R.hkoi.survival)}, neither ${pc1(R.none.survival)} (${R.both.n.toLocaleString()} raids per setup; launches ${I.nearest} to ${I.farthest} m, typical ${I.median} m).`); }
+    out.append(el('div', 'pg-h', 'Vehicle survives the opening volley, by map'));
+    out.append(table(['Map', 'HKOI + Trophy', 'Trophy only', 'HKOI only', 'Neither', 'HKOI adds to Trophy', 'Raid by raid'], rows));
+    out.append(el('div', 'pg-h', 'What the ground gave the enemy'));
+    out.append(table(['Map', 'Placements where the enemy got a shot', 'Launches in the opening volley', 'Launch range: nearest / typical / farthest', 'Tank hull-down'], where));
+    out.append(el('div', 'pg-note', 'Each map is one generated piece of ground of that kind (the map number in the setup). The opening volley only: what happens after it is in "whole battles". The tank moves as it planned with both defences fitted. Inputs are assumptions, not test data.'));
+    copyBox(out, txt.join('\n'));
   }
   function battleResults(out, res, sc) {
     out.textContent = ''; const S = Study.SETUPS, both = res.both, aps = res.aps;

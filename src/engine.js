@@ -38,17 +38,17 @@ function defaultConfig() {
     enemy: { gunner_jitter_mrad: 3, jitter_tremor_frac: 0.5, drone_jink_g: 1.2, drone_skill: 'trained', drone_evasion: true, raid_size: 3, mix: { kornet: 0.55, vikhr: 0.2, saclos: 0.1, sal: 0.05, fpv: 0.1 }, window_s: 6, same_beam_pair_prob: 0.15, same_beam_gap_s: 1.5, decoys: 0, close_range_bias: 0, range_cap_m: null, kornet_min_m: 2000 },
     fc: { ai: true, track_aim: false, own_lead: true, lead_mode: 'steering', lead_horizon_s: 1.2, lead_frac: 0.3, human_approval_s: 0, meet_mode: 'optimal', fixed_meet_m: 1000, ai_track_factor: 0.5, ai_weave_removal: 0.8, ai_init_s: 0.25, reengage: true, max_bursts: 4, sustain: true, sustain_max: 8, false_track_fire_p: 0.2, false_track_fire_p_ai: 0.03, motion_pred_m_per_mps: 0.4 },
     lwr: { bearing_sigma_deg: 8, latency_s: 0.1, pd_ref: 0.95, beam_rider_range_km_half: 4, false_alarm_per_min: 0.6, sal_designation_lead_s: 4, maws: false },
-    radar: { mode: 'emcon', acq_range_ref_m: 3000, rcs_ref_m2: 0.02, rcs_log_sigma: 0.5, track_mrad: 2, track_init_s: 0.5, max_tracks: 8, search_s: 1.0, motion_mrad_per_mps: 0.08, sigint_time_const_s: 30 },
+    radar: { mode: 'continuous', acq_range_ref_m: 15000, rcs_ref_m2: 0.02, rcs_log_sigma: 0.5, track_mrad: 2, track_init_s: 0.5, max_tracks: 64, search_s: 1.0, motion_mrad_per_mps: 0.08, sigint_time_const_s: 30 },
     eo: { enabled: true, angle_mrad: 0.3, max_range_m: 3000, max_extinction_per_km: 1.2 },
     gun: { obscurant_rounds: 150, he_rounds: 150, burst: 4, rof_rpm: 200, dispersion_mrad: 2, heat_mrad_per_round: 0.015, pointing_mrad: 0.5, stab_mrad_per_mps: 0.12, boresight_bias_mrad: 0.7, slew_az_dps: 90, turret_assist_dps: 40, slew_el_dps: 60, slew_acc_dps2: 400, stab_upset_mrad: 2, settle_s: 0.2, el_min_deg: -10, el_max_deg: 60, dead_zones_deg: [[155, 205]], jam_per_burst: 0.02, jam_clear_s: 4, fc_latency_s: 0.3 },
-    rnd: { muzzle_v: 805, muzzle_v_sigma: 5, drag_k_ref: 2.4e-4, arm_distance_m: 60, fuze_radius_m: 5, he_drone_radius_m: 12, fuze_reliability: 0.97, ground_false_trigger: 0.04, payload_g: 40, colocate: true, colocate_timing_sigma_s: 0.004, upwind_offset: true, he_pk_drone: 0.7, he_pk_missile: 0.2, wind_estimate_sigma_ms: 1.5, density_estimate_sigma: 0.02 },
+    rnd: { muzzle_v: 805, muzzle_v_sigma: 5, drag_k_ref: 2.4e-4, arm_distance_m: 60, fuze_radius_m: 5, he_drone_radius_m: 12, fuze_reliability: 0.97, ground_false_trigger: 0.04, payload_g: 75, colocate: true, colocate_timing_sigma_s: 0.004, upwind_offset: true, he_pk_drone: 0.7, he_pk_missile: 0.2, wind_estimate_sigma_ms: 1.5, density_estimate_sigma: 0.02 },
     obs: { alpha_m2_per_g: 0.85, sigma0_m: 2, eddy_K_m2s: 2, form_s: 0.3, tau_lock_margin: 4.6, own_sight_tau: 1, saclos_effect: 0.6 },
     drift: { relock: false, heading_mrad: 3, trim_acc: 1, lift_lo: 0, lift_hi: 1, beam_field_m: 4, recapture_min_m: 200, reacquire_s: 0.3 },
     crew: { enabled: true, experience: 'trained', trust: 0.7, need: 0.75, doctrine: 'unsure', smoke: 'last', decide_s: 4, drill: true, accel: 2.4, evade_speed: 12, reverse_speed: 8, smoke_form_s: 3, smoke_s: 25, smoke_eff: 0.75 },
     // combined arms: an enemy tank the crew must fight with the main gun while missiles and drones come in (off by default)
     duel: { on: false, R: 1800, brg: 15, t0: 2, first_shot_s: [3, 7], reload_s: 7.5, p_hit_ref: 0.75, own_lay_s: 2.2, own_reload_s: 6, own_p_hit_ref: 0.92, own_p_kill: 0.75, turret_dps: 40, max_shots: 8 },
     ew: { drone_jammer: false, jam_p: 0.6 },
-    aps: { enabled: true, radar_cue: true, radar_range_m: 1000, mag_per_side: 3, reset_s: 0.6, pk_cued: 0.9, pk_uncued: 0.8, pk_drone: 0.3, inhibit_with_dismounts: 0.5 },
+    aps: { enabled: true, radar_cue: true, radar_range_m: 1000, mag_per_side: 4, reset_s: 0.6, pk_cued: 0.9, pk_uncued: 0.85, pk_drone: 0.3, inhibit_with_dismounts: 0.5 },
   };
 }
 
