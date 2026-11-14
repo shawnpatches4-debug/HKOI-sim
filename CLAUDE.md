@@ -38,7 +38,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 - `src/battle/battle.js` time-stepped battle layer (enemy teams, tank behaviour, return fire, machine guns); each enemy volley is resolved by `HK.runMission` in `src/engine.js`
 - `src/world/world.js` generated 8x8 km terrain, sight lines, routes; `src/audio/sound.js` synthesised effects + recorded voices
 - `tools/` build_beta.py, dev.sh, setup.sh, serve_csp.sh, glb2json.py, lineup_split.py + vehicle_pack.py (cut a vehicle out of a multi-variant OBJ and pack hull/turret); `tools/audio/` (unpack a sound bank, transcribe, catalogue, build voice strips: see docs/ASSETS.md "Sound packs")
-- `tests/` battle + world tests (node), `tests/beta/` shot.py, click.py, drag.py, sheet.py (pose sheet of an enemy team: states x angles), enemyviews_loop.py (headless browser)
+- `tests/` battle + world tests (node), `tests/beta/` shot.py, click.py, drag.py, sheet.py (pose sheet of an enemy team: states x angles), seq.py (animation sequences), enemyviews_loop.py, voicepack.py, replay.py (headless browser)
 - `window.__beta` in the page exposes scene, battle, cams, tank, teams(), props, near(), view(), setPlaying(), runTo(), playFor(), advance(), prof()
 
 ## Showing Shawn a build
