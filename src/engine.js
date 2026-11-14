@@ -1190,7 +1190,7 @@ function runMission(cfg, rng, lookup, rec) {
   for (const th of threats) {
     if (th.state === 'hit') {
       hits++;
-      const k = trng(th).random() < (th.duel ? (Math.abs(((th.rel_brg + 180) % 360) - 180) > 50 ? 0.6 : THREATS.ke.kill) : THREATS[th.key].kill);
+      const k = trng(th).random() < (cfg.vehicle.armour ? armourPk(cfg, th, trng(th)) : th.duel ? (Math.abs(((th.rel_brg + 180) % 360) - 180) > 50 ? 0.6 : THREATS.ke.kill) : THREATS[th.key].kill);   /* vehicle.armour (off by default): the plate struck decides, see armourPk */
       if (k) killed = true;
       th.viz.end = { t: th.impact, type: 'hit', killing: k };
       if (k) { say(th.impact + 0.1, 'CDR', 'Fire, fire, fire! Evacuate!', 'FIRE! FIRE! EVACUATE!', 'FIRE! FIRE! GET OUT! GET OUT!'); say(th.impact + 0.7, 'LDR', 'Loader evacuating!', 'Hatch! Get the hatch!', 'I CAN\u2019T\u2014 THE HATCH\u2014'); }
@@ -1299,6 +1299,29 @@ function leakAPS(cfg, th) {
   if (!cfg.aps.enabled) return 'aps_off';
   for (const t of ['aps_inhibited', 'aps_empty', 'aps_reset', 'aps_miss']) if (th.tags.includes(t)) return t;
   return 'other';
+}
+
+// ---- optional: the armour decides whether a hit knocks the vehicle out (cfg.vehicle.armour = true; OFF by default, so every
+// result without it is unchanged). The engine's own rule is one flat chance per weapon, the same from every direction. This rule
+// picks the plate from the direction of the hit the way src/dmg.js does (turret three times in five, hull twice; drones and
+// top-attack missiles onto the roof or engine deck; a warned crew has the turret front toward the threat; hull-down hides the hull),
+// compares the warhead with the plate, and if it is through applies a chance that what is behind is vital, scaled by how much the
+// warhead does inside. Plate and warhead figures are the open-source ESTIMATES of src/dmg.js (mm of steel against shaped charges).
+// The "behind" chances and the per-weapon inside effect are ASSUMPTIONS made on 14 Nov 2026, not data and not tuned to any result.
+const ARM = { zones: { turret_front: [1300, 0.65], turret_side: [450, 0.70], turret_rear: [120, 0.60], turret_roof: [60, 0.60], hull_front: [750, 0.55], hull_side_f: [420, 0.60], hull_side_r: [180, 0.75], hull_rear: [90, 0.80], engine_deck: [45, 0.70] },
+  pen: { ke: 700, kornet: 1150, vikhr: 900, saclos: 650, sal: 750, fpv: 400, fpv_fiber: 400, rpg: 500, ir: 760 }, inside: { ke: 0.8, kornet: 1, vikhr: 1, saclos: 0.9, sal: 1, ir: 0.9, rpg: 0.6, fpv: 0.35, fpv_fiber: 0.35 }, glance: 0.03 };
+function armourZone(cfg, th, rng) {
+  const key = th.key, top = key === 'fpv' || key === 'fpv_fiber' || key === 'ir', relHull = th.rel_brg || 0, warned = th.cue != null && th.cue < th.impact - 1.5;
+  const relTur = warned ? (rng.random() - 0.5) * 30 : relHull + 60 + rng.random() * 120, ah = Math.abs(((relHull + 540) % 360) - 180), at = Math.abs(((relTur + 540) % 360) - 180);
+  const hullDown = (cfg.vehicle.half_h || 1.2) < 0.9, c = [];
+  if (top) { c.push(['turret_roof', key === 'ir' ? 5 : 3]); if (!hullDown) c.push(['engine_deck', 2]); }
+  else { c.push([at < 35 ? 'turret_front' : at > 140 ? 'turret_rear' : 'turret_side', 3]); if (!hullDown) c.push([ah < 35 ? 'hull_front' : ah > 145 ? 'hull_rear' : ah < 90 ? 'hull_side_f' : 'hull_side_r', 2]); }
+  let u = rng.random() * c.reduce((q, x) => q + x[1], 0); for (const [z, w] of c) if ((u -= w) <= 0) return z; return c[0][0];
+}
+function armourPk(cfg, th, rng) {
+  const z = armourZone(cfg, th, rng), Z = ARM.zones[z], pen = (ARM.pen[th.key] || 600) * (0.85 + 0.2 * rng.random());
+  th.armour = { zone: z, mm: Z[0], pen: Math.round(pen), through: pen > Z[0] };
+  return pen > Z[0] ? Z[1] * (ARM.inside[th.key] == null ? 0.8 : ARM.inside[th.key]) : ARM.glance;
 }
 
 // crew helpers shared with the display
