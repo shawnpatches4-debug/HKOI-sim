@@ -49,6 +49,11 @@ Who says what, and which events are silent because the pack has no line, is in `
 
 Shawn authorised making the missing lines on 14 Nov 2026. The wordings are in `tools/audio/made_lines.json`. To replace a made line with a real recording: put `<WHO>.<event>.<level>.wav` (level 0 calm, 1 tense, 2 shouted; for example `CDR.missile_3.1.wav`) into a folder, give that folder to build_voices.py as its last argument, and rebuild. `python3 -I tools/audio/voice_report.py assets <work> crew4 --list` prints how the four voices measure and the full list of made lines with how far each is from the man's real lines. The Kokoro model is `kokoro-multi-lang-v1_0.tar.bz2` from the "tts-models" release of k2-fsa/sherpa-onnx on GitHub.
 
+### Hit calls: the pack's fire calls and each man's scream (overlay, fourth pass, 14 Nov 2026)
+| File | What | Made by |
+|---|---|---|
+| assets/crewpanic_cdr.mp3, crewpanic_gnr.mp3, crewpanic_ldr.mp3, crewpanic_drv.mp3, crewpanic_index.json (about 450 kB, kept out of the repository) | An OVERLAY on crew4_index.json that the intercom adds when it is there (without it those lines stay silent). Pack clips the earlier passes left out, re-voiced for their man exactly as build_voices.py does: commander "Fire! Fire! Engine is burning!" and "The engine is on fire!" (fire_engine), "We have got smoke in the turret!" (smoke_turret), "The ammo is on fire!" and "There is a fire in the ammo compartment." (fire_ammo), "Fire extinguished!" three deliveries (fire_out); driver "TC, we have an engine fire. Pulling second shot." two deliveries (engine_fire). Plus the 12 human screams of screams.mp3 (0 A.D., CC-BY-SA 3.0; a different person from the pack actor), three to each man, each put through that man's re-voicing (scream, made: 'scream'). Nothing is synthesised. A splice "Fire! Fire!" from clip 434 was tried and NOT kept: the speech recogniser read every cut as "Fire fire hit" or "Fire fire engine". | `python3 -I tools/audio/build_panic.py <work dir> assets <Whisper model folder>` |
+
 ### Sound slots: dropping in recordings
 Every sound that is not a voice is synthesised in code until recordings arrive. `assets/sfx_index.json` (a copy of `tools/audio/sfx_index.template.json`) names a recording for any slot; a slot with an empty list stays synthesised. No code changes are needed.
 Entry: `{ "file": "sfx/name.mp3", "start": seconds, "len": seconds, "gain": 1 }` (start, len and gain optional; several entries for one slot are picked at random). Record weapons close (5 to 15 m) and dry: the simulator adds the delay, the loss of highs and the level for distance, the country's echo and the muffling inside the hull itself.
@@ -65,6 +70,7 @@ Entry: `{ "file": "sfx/name.mp3", "start": seconds, "len": seconds, "gain": 1 }`
 | hit_in | a round striking the vehicle, heard inside | |
 | pen_in, nearmiss_in | heard inside: a round coming through the armour (crack, spall, venting), on top of hit_in; a near miss | |
 | smoke_discharge | the smoke grenade dischargers | |
+| extinguisher_in | the automatic fire extinguishers firing after a hit starts a fire inside (heard inside; outside a dull thump) | valve bang and about 1.5 s of gas |
 | turbine_in_loop, turbine_out_loop, tracks_loop | engine inside / outside, tracks | must loop cleanly; pitch follows the throttle |
 | wind_loop, rain_loop, rain_roof_loop | weather outside; rain on the armour heard inside | must loop cleanly |
 

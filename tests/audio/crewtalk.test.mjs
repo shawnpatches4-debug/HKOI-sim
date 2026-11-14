@@ -9,13 +9,16 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url), here = path.dirname(fileURLToPath(import.meta.url)), root = path.join(here, '../..');
-const { CrewTalk, engineLine } = await import(path.join(root, 'src/audio/crewtalk.js'));
-const { HK, Battle } = require(path.join(root, 'tests/battle/load.js'));
+const { CrewTalk, engineLine, fireOf, HIT_CALLS, HIT_WINDOW } = await import(path.join(root, 'src/audio/crewtalk.js'));
+const { HK, DMG, Battle } = require(path.join(root, 'tests/battle/load.js'));
 const REL = JSON.parse(fs.readFileSync(path.join(root, 'tools/audio/crew_release.json'), 'utf8')).e;
 // plus the lines that are made (tools/audio/made_lines.json: synthesised) or cut out of the pack (tools/audio/splice.py), and each man's own wound cry
 { const made = JSON.parse(fs.readFileSync(path.join(root, 'tools/audio/made_lines.json'), 'utf8')).lines;
   for (const who in made) for (const ev in made[who]) for (let n = 1; n <= (ev.includes('{N}') ? 12 : 1); n++) (REL[who] || (REL[who] = {}))[ev.replace('{N}', n)] = [[0, 1, 'made']];
   REL.CDR.smoke = REL.GNR.identified = REL.GNR.miss = [[0, 1, 'splice']]; for (const who of ['CDR', 'GNR', 'LDR', 'DRV']) REL[who].wound = REL.ANY.wound; }
+// plus the hit calls of the overlay (tools/audio/build_panic.py: the pack's fire calls, each man's scream). The splice "Fire! Fire!"
+// was not kept (the speech recogniser did not read it on its own), so CDR.fire is not in the list.
+for (const [who, ev] of [['CDR', 'fire_engine'], ['CDR', 'smoke_turret'], ['CDR', 'fire_ammo'], ['CDR', 'fire_out'], ['DRV', 'engine_fire'], ['CDR', 'scream'], ['GNR', 'scream'], ['LDR', 'scream'], ['DRV', 'scream']]) (REL[who] || (REL[who] = {}))[ev] = [[0, 1, 'panic']];
 let fail = 0; const bad = (...a) => { fail++; if (fail < 25) console.log('FAIL', ...a); };
 
 // ---- 1. the engine's sentences
@@ -47,13 +50,21 @@ for (const biome of ['farmland', 'desert', 'town', 'forest']) for (const seed of
   const b = new Battle.Battle({ biome, mapSeed: 3, seed, skill: seed % 2 ? 'green' : 'expert', cfg, lookup, force, mission, waves: 2 });
   const asked = [], net = { ready: true, has: (who, ev) => !!(REL[who] && REL[who][ev]), request(who, ev, o) { if (!this.has(who, ev)) return false; asked.push({ t: b.t, who, ev, o: o || {} }); return true; }, flush() { asked.push({ t: b.t, flush: true }); } };
   const cues = [], talk = new CrewTalk(net, { warn() {}, blip: k => cues.push([b.t, k]), smoke: () => cues.push([b.t, 'smoke']) });
-  let lost = null, n0 = 0;
+  let lost = null, n0 = 0; const hitCount = new Map();
   while (b.t < 600 && !(b.over && b.t > (b._overT || (b._overT = b.t)) + 5)) {
     const was = { loaded: b.tank.loaded, mode: b.tank.mode }; b.step(); talk.update(b, b.t, { mission });
     const T = b.tank, E = b.events || [], near = (type, f, w = 0.35) => E.some(e => e.type === type && Math.abs(e.t - b.t) <= w && (!f || f(e)));
     const radio = re => b.volleys.slice(-3).some(v => v.rec && (v.rec.radio || []).some(r => Math.abs(v.t0 + r.t - b.t) <= 1.7 && re.test(r.text)));
+    const hitsNow = E.filter(e => e.type === 'end' && e.by === 'hit' && !e.killing && Math.abs(e.t - b.t) <= 0.5);
+    const fireNow = hitsNow.map(e => { const v = b.volleys.find(x => x.i === e.v); let h = null; try { h = DMG.report(v.rec, v.cfg).find(x => x.idx === e.idx); } catch (err) { h = null; } return fireOf(h); }).filter(Boolean);
     for (const a of asked.slice(n0)) {
       if (a.flush) { lost = lost == null ? b.t : lost; continue; }
+      const k0 = a.who + '.' + a.ev;
+      if (/^(CDR\.(fire_engine|fire_ammo|smoke_turret)|DRV\.engine_fire)$/.test(k0)) { const want = k0 === 'CDR.fire_ammo' ? 'ammo' : k0 === 'CDR.smoke_turret' ? 'hull' : 'engine'; if (!fireNow.includes(want)) bad(biome, seed, 'a fire call with no such fire', k0, JSON.stringify(fireNow), b.t.toFixed(1)); }
+      if (/\.scream$/.test(k0) && !(near('crew', e => (e.what === 'wounded' || e.what === 'down') && String(e.who).toUpperCase() === a.who, 0.5) || (a.who === 'LDR' && near('loader_hit', null, 0.5)))) bad(biome, seed, 'a scream from a man who was not hurt', k0, b.t.toFixed(1));
+      if (k0 === 'CDR.fire_out' && !near('crew', e => e.what === 'fire_out', 0.5)) bad(biome, seed, '"Fire extinguished" with no fire put out', b.t.toFixed(1));
+      if (k0 === 'CDR.report' && !(E.some(e => e.type === 'end' && e.by === 'hit' && b.t - e.t >= 0 && b.t - e.t < 3.5) || radio(/report|everyone okay/i))) bad(biome, seed, '"Everyone okay? Report!" with no hit', b.t.toFixed(1));
+      if (a.who !== 'HQ' && a.ev !== 'scream' && !a.o.needs) { const h = E.filter(e => e.type === 'end' && e.by === 'hit' && !e.killing && b.t - e.t >= 0 && b.t - e.t < HIT_WINDOW).pop(); if (h) { const ks = hitCount.get(h) || new Set(); ks.add(k0); hitCount.set(h, ks); const n = ks.size; /* the same line asked twice is one call (the intercom plays it once) */ if (n > HIT_CALLS) bad(biome, seed, `more than ${HIT_CALLS} calls in the first ${HIT_WINDOW} s after a hit`, k0, b.t.toFixed(1)); } }
       const k = a.who + '.' + a.ev; counts[k] = (counts[k] || 0) + 1; lines++;
       if (lost != null) bad(biome, seed, 'a line after the vehicle was lost', k, 't', b.t.toFixed(1));
       if (k === 'LDR.up' && !(T.loaded || radio(/^up/i))) bad(biome, seed, '"Up!" but the gun is not loaded', b.t.toFixed(1));
@@ -92,7 +103,7 @@ for (const quality of ['green', 'trained', 'expert']) {
       for (const a of asked.slice(n0)) {
         if (a.who === 'HQ' || a.who === 'ANY') continue; const m = S.who[a.who.toLowerCase()], lv = a.level == null ? 1 : a.level;
         byLevel[lv]++; const st = byState[m.state] || (byState[m.state] = [0, 0, 0]); st[lv]++;
-        if (m.status === 'down' || (/^frozen/.test(m.busy || '') && a.ev !== 'freeze')) {   /* his one line as he locks up is allowed */ mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
+        if ((m.status === 'down' && !(a.ev === 'scream' && m.busy === 'out of action')) || (/^frozen/.test(m.busy || '') && a.ev !== 'freeze')) {   /* his one line as he locks up is allowed, and the scream of a man badly wounded as he goes down */ mutedAsk++; bad(quality, 'a man who is', m.status === 'down' ? 'down' : 'frozen', 'speaks:', a.who, a.ev, 't', b.t.toFixed(1)); }
         if (m.state === 'panicked' && lv !== 2) bad(quality, 'a panicked man was not given his shouted take', a.who, a.ev, lv);
         if (m.state === 'steady' && S0.who[a.who.toLowerCase()].state === 'steady' && lv === 2 && !['hit', 'wound', 'loader_down', 'contact', 'cdr_down', 'gnr_down', 'drv_down', 'bail', 'freeze'].includes(a.ev)) bad(quality, 'a steady man shouts', a.who, a.ev);
       }
