@@ -74,6 +74,7 @@
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
         this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
+        this.xOpt = { commander: opt.commander || false, ai: opt.enemyAI === 'classic' ? 'classic' : 'v2' };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle), off by default; enemyAI 'classic' switches off the teams' newer judgement (kept for the tests that compare with stored battles) */
         this.raid = opt.raid || null;   /* { minR, window }: the old simulator's kind of raid: launchers no closer than minR metres, shots spread over window seconds */
         // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
         if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }
@@ -144,6 +145,7 @@
             });
           }
         }
+        if (this._vehPlace) this._vehPlace(force, side);   /* enemyveh.js: trucks for the teams that have one, enemy armour, and the commander; does nothing for a force without them */
         if (side == null) this.belief = { e: T0.e, n: T0.n, t: 0 };   /* the ambush was laid for this vehicle: the enemy starts out knowing roughly where it is */
       }
       // positions for crews that do not need to see the target themselves: out of sight of the vehicle, in concealment
@@ -166,6 +168,7 @@
         this._crewStep(dt);   /* crew.js: the crew's stress moves on one step */
         this._moveTank(dt);
         for (const u of this.units) this._unit(u, dt);
+        if (this._vehStep) this._vehStep(dt);   /* enemyveh.js, enemycdr.js: enemy vehicles and the enemy commander move on one step */
         this._commander();
         this._morale();
         if (this._locQ && this._locQ.length) this._locQ = this._locQ.filter(q => { if (this.t < q.t) return true; const u = q.u, T = this.tank; if (u.alive && !u.gone && !u.known) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); this.ev(this.t, 'located', { uid: u.id }); this.say(this.t, 'tank', 'CDR', `${u.spec.name} #${u.id + 1} located at ${Math.round(Math.hypot(u.e - T.e, u.n - T.n) / 10) * 10} m.`, q.how); } return false; });
@@ -223,6 +226,7 @@
       // ---------------------------------------------------------------- enemy teams
       _unit(u, dt) {
         if (!u.alive || u.gone) return;
+        if (u.ride && this._rideUnit(u, dt)) return;   /* enemyveh.js: a team that is using its truck (walking to it, loading, riding, dismounting) */
         const W = this.world, T = this.tank, S = SKILL[this.skill], sp = u.spec;
         if (u.state === 'moving') {   // displacing to the next prepared position
           if (this.t < (u.packUntil || 0)) { u.spd = 0; return; }   /* still packing up: the team has not left yet */
@@ -275,6 +279,7 @@
       // and against the distance to walk. The route prefers vegetation and ground the vehicle cannot see.
       _displace(u, why, text, cand) {
         if (!u.alive || u.gone) return false;
+        if ((u.veh || u.rideVeh || u.cdrStay) && this._vehDisplaceHook) { const x = this._vehDisplaceHook(u, why, text, cand); if (x != null) return x; }   /* enemyveh.js: a vehicle shifts position its own way; a team with a truck may ride; enemycdr.js: a team the commander has told to stay for a second salvo does not scoot after its first shot */
         const W = this.world, T = this.tank, sp = u.spec, Bv = this.belief || T; if (u.ammo <= 0) { u.state = 'spent'; return false; }
         if (u.state === 'moving') return true;   /* already packing up or on the way: one decision at a time */
         // other firing points near the team: ground within 450 m of it that looks onto where the vehicle is believed to be, from inside the weapon's reach
@@ -308,7 +313,7 @@
         if (this.over || this.t < (this._moraleAt || 0)) return; this._moraleAt = this.t + 1; const S = SKILL[this.skill];
         for (const u of this.units) if (u.alive && !u.gone && (u.state === 'spent' || u.ammo <= 0) && u.state !== 'guiding' && u.state !== 'firing') { if (u.spentAt == null) u.spentAt = this.t; if (this.t - u.spentAt > (PACK[u.spec.key] || 8)) { u.gone = true; u.known = false; const k = this.tank.known.find(q => q.id === u.id); if (k) k.done = true; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1} is out of ammunition and pulls back.`, 'nothing left to fire'); } }
         // this wave: its teams still able to fight, out of those it brought
-        const mine = this.units.filter(u => (u.wave || 0) === this.wave), able = mine.filter(u => u.alive && !u.gone && u.ammo > 0), n = mine.length, last = this.wave >= this.nWaves - 1;
+        const mine = this.units.filter(u => (u.wave || 0) === this.wave).concat(this._vehMorale ? this._vehMorale() : []) /* enemyveh.js: armed vehicles count as part of the group */, able = mine.filter(u => u.alive && !u.gone && u.ammo > 0), n = mine.length, last = this.wave >= this.nWaves - 1;
         if (this.waveAt != null) {   /* a lull: the next wave is on its way */
           if (this.t >= this.waveAt && !this._volleyActive() && !this._pending && this.tank.alive) { this.waveAt = null; this._nextWave(); } return; }
         if (this._volleyActive() || this._pending) return;
@@ -336,6 +341,7 @@
         if (this.opened) for (const u of this.units) if (u.alive && !u.gone && u.spec.indirect && u.state === 'hidden' && u.hasShot) this._launchDrone(u);
         if (this._volleyActive() || this._pending) return;
         const arrivals = this.transit.filter(d => d.arrive <= this.t), ready = this.units.filter(u => u.alive && !u.gone && !u.spec.indirect && u.state === 'hidden' && u.hasShot);
+        if (this._vehReady) this._vehReady(ready);   /* enemyveh.js: vehicles with a shot join in; enemycdr.js: launchers under a hold-fire order wait */
         if (!ready.length && !arrivals.length) { this._waitSince = null; return; }
         if (this._waitSince == null) this._waitSince = this.t;
         const waited = this.t - this._waitSince, exposed = this._exposure();
@@ -382,6 +388,7 @@
       // What a team is doing and why, in a few plain words (for the team menu and the log)
       intentOf(u) {
         if (!u.alive) return 'destroyed'; if (u.gone) return 'pulled out of the fight'; const S = SKILL[this.skill];
+        if (this._xIntent) { const x = this._xIntent(u); if (x) return x; }   /* enemyveh.js, enemycdr.js: riding, or under the commander's order */
         if (u.state === 'spent' || u.ammo <= 0) return 'out of ammunition';
         if (u.state === 'moving') return (this.t < (u.packUntil || 0) ? 'packing up: ' : (u.gait === 'run' ? 'running: ' : 'moving: ')) + (u.moveWhy || 'new position');
         if (u.state === 'setup') return 'setting up the weapon';
@@ -399,6 +406,7 @@
 
       _fireVolley(teams, exposed, waited, how) {
         how = how || { atWill: false, why: '' };
+        if (this._vehVolley) teams = this._vehVolley(teams);   /* enemyveh.js: an enemy tank's round that misses is settled there; a hit goes on to the engine */
         const W = this.world, T = this.tank, S = SKILL[this.skill], r = this.rng, at = { e: T.e, n: T.n, h: T.h, v: T.v }, launches = [];
         for (const u of teams) {
           if (r.random() < S.misfire) { u.readyAt = this.t + 8 + r.random() * 6; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1}: misfire, clearing the launcher.`, 'friction'); continue; }
@@ -569,6 +577,9 @@
         return { t: +this.t.toFixed(1), alive: T.alive, volleys: this.volleys.length, fired, hits, by, obs: T.st.obs, he: T.st.he, apsL: T.st.apsL, apsR: T.st.apsR, crew: T.st.crew, wave: this.wave + 1, waves: this.nWaves, teamsLeft: this.units.filter(u => u.alive && !u.gone && u.ammo > 0).length + (this.wave < this.nWaves - 1 ? 1 : 0), main: T.main, killedByTank: this.killedByTank || 0, killedByMg: this.killedByMg || 0, coax: T.coax, m2: T.m2 };
       }
     }
+    /* enemy vehicles, transport and the enemy commander live in enemyveh.js and enemycdr.js; without those files, or with a force that has none, nothing changes */
+    const EV = deps.EnemyVeh || (typeof HKEnemyVeh !== 'undefined' ? HKEnemyVeh : null); if (EV) EV.install(Battle, { HK, TEAMS, SKILL, PACK });
+    const EC = deps.EnemyCdr || (typeof HKEnemyCdr !== 'undefined' ? HKEnemyCdr : null); if (EV && EC) EC.install(Battle, { HK, TEAMS, SKILL });
     const TA = deps.TankAI || (typeof HKTankAI !== 'undefined' ? HKTankAI : null); if (TA) TA.install(Battle, SKILL);   /* the tank crew's drills live in tankai.js */
     /* the crew's stress and panic live in crew.js; without that file every hook answers "no change" */
     const CW = deps.Crew || (typeof HKCrew !== 'undefined' ? HKCrew : null); if (CW) CW.install(Battle, { HK, DMG: deps.DMG }); else Object.assign(Battle.prototype, { _crewStep() {}, _crewAdd() { return 0; }, _crewMul() { return 1; }, _crewOut() { return false; }, _crewFlinch() { return false; } });

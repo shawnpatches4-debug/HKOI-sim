@@ -61,11 +61,12 @@ export class CrewFigures {
     if (!fig) return null; const mats = [], g = new THREE.Group(); let tris = 0; fig.position.set(0, 0, 0); fig.rotation.set(0, 0, 0); fig.updateMatrixWorld(true);
     const rig = makeRig(fig, crewBoneName); if (!rig) { console.warn('crew figure: the skeleton is not the one expected'); return null; }
     fig.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; const n = (o.material && o.material.name) || ''; if (/knife|pistol/.test(n)) { o.visible = false; return; }
+      if (o.isSkinnedMesh && o.skeleton && !o.geometry.attributes.aArm) { const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, bn = o.skeleton.bones.map(b => (/UpperArm|Forearm|Hand|Finger/i.test(b.name) ? 1 : 0)), a = new Float32Array(si.count); for (let i = 0; i < si.count; i++) { let w = 0; for (let k = 0; k < 4; k++) w += bn[si.getComponent(i, k)] * sw.getComponent(i, k); a[i] = w; } o.geometry.setAttribute('aArm', new THREE.BufferAttribute(a, 1)); }   /* how much of each point belongs to an arm: from his own eyes a man sees only his arms */
       // tank crew, not infantry: plain coveralls instead of camouflage and a dark crew helmet; the commander in khaki with a lighter helmet
       const cdr = role === 'cdr', tint = /_body$/.test(n) ? (cdr ? [0.74, 0.66, 0.48] : [0.6, 0.63, 0.48]) : /_helmet$/.test(n) ? (cdr ? [0.5, 0.46, 0.33] : [0.28, 0.29, 0.25]) : /_equipment$/.test(n) ? [0.56, 0.53, 0.42] : [1, 1, 1];
-      if (this.cab) { const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; o.material = mat; mats.push(mat); }
+      if (this.cab) { const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; if (/_head$/.test(n)) mat.uniforms.uSleeve.value.set(...(cdr ? [0.74 * 0.62, 0.66 * 0.62, 0.48 * 0.62] : [0.6 * 0.62, 0.63 * 0.62, 0.48 * 0.62])); o.material = mat; mats.push(mat); }
       tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
-    const B = BASE[role]; g.add(fig); g.rotation.y = Math.PI - B.face * Math.PI / 180; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
+    const B = BASE[role]; g.userData.crew = true; g.add(fig); g.rotation.y = Math.PI - B.face * Math.PI / 180; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
     const Q = () => Array.from({ length: NJ }, () => new THREE.Quaternion()), D = Array.from({ length: NJ }, () => null);
     for (const n of ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot']) D[J[n]] = [0, -1, 0];
     const sp = () => ({ x: 0, v: 0, g: 0 });
@@ -93,8 +94,9 @@ export class CrewFigures {
     let tip = B.tip, roll = 0.018 * Math.sin(t * 0.31 + seed), twist = 0, gripL = 1, gripR = 1;
     tip += 0.012 * Math.sin(t * 1.45 + seed);                                                                           /* breathing */
     if (strained) tip += 0.05; if (shaken) { tip += 0.11; look += (hsh(Math.floor(t * 6), seed) - 0.5) * 0.1; nod += 0.08; }
-    if (role === 'ldr' && M.load >= 0.05 && M.load < 0.86) { look = M.load < 0.4 ? -1.0 : 0.25; nod = 0.25; twist = M.load < 0.4 ? -0.55 : 0.2; tip += 0.12; }      /* at the rack, then at the breech */
+    if (role === 'ldr' && M.load >= 0.05 && M.load < 0.86 && !(M.up > 0.01)) { look = M.load < 0.4 ? -1.0 : 0.25; nod = 0.25; twist = M.load < 0.4 ? -0.55 : 0.2; tip += 0.12; }      /* at the rack, then at the breech */
     if (role === 'cdr' && M.rise > 0.02) { nod = -0.05; look *= 0.6; }
+    if (role === 'ldr' && M.up > 0.01) { const u = M.up, k1 = Math.min(1, u / 0.1), k2 = Math.max(0, Math.min(1, (u - 0.45) / 0.25)); nod = -0.7 * k1 * (1 - k2) + 0.06 * k2; look = (M.aim || 0) * k2; twist = -0.25 * k1 * (1 - k2); tip = 0.06 + 0.1 * k1 * (1 - k2) + (M.firing ? 0.03 * Math.sin(t * 70) : 0); }   /* looks up at his hatch, works it, climbs; then level behind his gun, shaken by its recoil */
     const br = Math.max(M.brace || 0, 0), fl = M.flinch || 0; tip += 0.2 * br + 0.42 * fl; nod += 0.28 * br + 0.45 * fl; if (br > 0.5) look *= 0.3;   /* bracing for a hit about to land; thrown by one that has */
     if (panic) { tip += 0.3; nod = 0.55; look = (hsh(Math.floor(t * 1.3), seed) - 0.5) * 0.5; gripL = gripR = 0; for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left'; set(S + 'Arm', [0.32, 0.25, 0.9], sd[i]); set(S + 'ForeArm', [-0.45, 0.88, 0.05], sd[i]); } }   /* hands to his helmet */
     if (hurt) { tip += 0.2; roll += 0.17; nod += 0.3; look = 0.15; gripL = 0; set('LeftArm', [0.18, -0.9, 0.38], 1); set('LeftForeArm', [-0.85, 0.22, 0.48], 1); }                                   /* left hand clamped to the wound, working one-handed */
@@ -122,9 +124,9 @@ export class CrewFigures {
       if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Math.abs(Wp[J[S + 'Hand']].distanceTo(_v) - 0.075) : 0;   /* how far the palm is from the grip (the wrist is meant to be 7.5 cm short of it) */ r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
     for (let i = 0; i < NJ; i++) r.rig.bones[i].quaternion.copy(r.draw[i]);
     // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
-    const cut = M.bodyOnly ? 0.34 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
+    const cut = M.bodyOnly ? 0.14 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
     // blood: the uniform darkens and stains, more for the dead than for the wounded
-    const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.7, 0.26, 0.22] : lvl === 1 ? [0.9, 0.6, 0.55] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
+    const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.6, 0.3, 0.27] : lvl === 1 ? [0.88, 0.66, 0.62] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
   }
   hide() { for (const k in this.men) this.men[k].g.visible = false; }
   triCount() { return Math.round(this.tris); }

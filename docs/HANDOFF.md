@@ -1,3 +1,11 @@
+# STATE AT 13:35 UTC 14 Nov 2026 (read this first)
+Shawn is asleep. His orders in force: ONE full release, NO publish before it; progress pictures welcome; free rein; honest numbers.
+Branch claude/loving-newton-czylil (pushed) holds EVERYTHING except the sound third pass (branch worktree-agent-afd3cb6297e3a4e79, asked for status 13:32; before merging: `git ls-tree -r --name-only <branch> | grep -c '^\.cache$'` must print 0).
+The last WORKLOG entry (13:35) lists what was merged, the open interior faults (the lead owns the interior now) and the honest enemy figures.
+Release steps left: merge sound; fix what the page tests show (tests/beta/shell.py, pages.py, replay.py, director.py, sound.py, cdrview.py, fpvfeed.py, vehicles.py; one headless browser at a time through tools/run_test.sh, a page load takes about 4 minutes in software); look at pictures of the loader up on his gun from outside (scratchpad int/e6); rerun node tests/motion/harness.mjs check on a quiet machine; final bash tools/dev.sh check; Notion R&D Log entry; compare the live page's file list; bash tools/dev.sh pub; publish to the "HKOI Battlefield Beta" artifact. The original crew models in assets/crew ARE used in the seats and the face panel now: they must be published (the CLAUDE.md line "except assets/crew" is out of date; the new assets/veh files too).
+Unverified by anyone: sound (never heard), motion at real frame rates, performance on a real graphics card.
+Open questions for Shawn (all kept at current behaviour until he answers): UAZ hard-top; enemy tank paint; turret throw height; BMP-2M tubes; X-ray blood strength; fog-of-war launch shot; commander view allowed with fog of war on; veterans' timed arrival and whether experts do it; rocket teams in plain view; stand-off raid 6 s spread; three Abrams endings (he said no for now).
+
 # Hand-off: where the project stands (13 Nov 2026, about 15:15 CT)
 
 ## What exists on `main`

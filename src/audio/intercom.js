@@ -94,7 +94,7 @@ export class Intercom {
     const now = this.ctx.currentTime;
     if (this.cur && now >= this.cur.end) { this.freeAt = this.cur.end + (this.cur.gapAfter || 0.3); this.cur = null; }
     for (let i = this.queue.length - 1; i >= 0; i--) {
-      const q = this.queue[i]; if (now <= q.dead) continue;
+      const q = this.queue[i]; if (!q || now <= q.dead) continue;   /* dropping a group below can shorten the queue under this loop */
       this.queue.splice(i, 1); this.dropped.push({ who: q.who, ev: q.ev, why: 'stale' }); this._dropGroup(q.group, 'stale group');
     }
     let best = null;

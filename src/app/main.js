@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Scene3D, CONDITIONS, QUALITY } from '../render/scene3d.js';
 import { TankView, TeamView, PropView } from '../render/units.js';
+import { Vehicles } from '../render/vehicles.js';
 import { VolleyView } from '../render/volleyview.js';
 import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { Interior } from '../render/interior.js';
@@ -12,6 +13,7 @@ import { XRayPanel } from './xraypanel.js';
 import { MapView } from './mapview.js';
 import { Hud } from './hud.js';
 import { TitleShow } from './title.js';
+import { Faces } from './faces.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
@@ -28,12 +30,14 @@ const FORCES = {
   standoff: { name: 'Stand-off raid', note: 'The old simulator\'s kind of raid: three launchers from 2 km or more, firing over about 6 seconds', force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }], raid: { minR: 2000, window: 6 } },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
+if (typeof HKEnemyVeh !== 'undefined') Object.assign(FORCES, HKEnemyVeh.FORCES);   /* enemy vehicles: mechanised ambush, armoured counter-attack, sprawling defence */
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five waves']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
-const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true }, store.get('setup', {}));
+const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true, figures: true, armour: false }, store.get('setup', {}));
 if (q.get('waves')) set.waves = +q.get('waves') || 1;
-for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission', 'crew']) if (q.get(k)) set[k] = q.get(k);
+for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission']) if (q.get(k)) set[k] = q.get(k);
+if (q.get('owncrew')) set.crew = q.get('owncrew');   /* (the hash word crew=1 belongs to the interior's trial figures) */
 if (q.get('stress')) set.stress = q.get('stress') !== '0';
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
 
@@ -50,15 +54,17 @@ const ASSETS = q.get('assets') === '0' ? null : 'assets/';
 const tank = new TankView(ASSETS); tank.group.userData.heat = 0.5; scene.units.add(tank.group);
 const interior = new Interior(scene, tank, cams);   // turret and hull interior with the crew seats: in the scene only while an inside or cutaway view is on
 const props = [];
-let battle = null, teams = [], volleys = null, state = 'title', playing = false, speed = +(q.get('speed') || 1), logShown = 0, capT = -9, capW = 0, ended = false, showLog = store.get('log', true), showPerf = store.get('perf', q.get('perf') === '1');
+const vehicles = new Vehicles(scene, ASSETS);   /* enemy vehicles (UAZ, BMP-2, tanks): drawn from battle.vehicles(), nothing if the battle has none */
+let battle = null, teams = [], volleys = null, state = 'title', playing = false, speed = +(q.get('speed') || 1), logShown = 0, capT = -9, capW = 0, ended = false, logOpen = false, logFilter = 'all', showPerf = store.get('perf', q.get('perf') === '1');
 
 // ---------------------------------------------------------------- the display and the title screen's own state
 // Two displays, remembered: 'simple' (almost nothing on screen) and 'engineer' (everything). Key H or the bar's button switches.
-let hudMode = q.get('hud') === 'engineer' || q.get('hud') === 'simple' ? q.get('hud') : store.get('hud', 'simple');
-const hudBox = new Hud($, el);
+let hudMode = q.get('hud') === 'engineer' || q.get('hud') === 'simple' ? q.get('hud') : store.get('hud', 'engineer');   /* engineer is the default; a stored choice is respected */
+const faces = q.get('faces') === '0' || !ASSETS ? null : new Faces(ASSETS);   // crew portraits (the supplied crew models); faces=0 in the address switches them off
+const hudBox = new Hud($, el, store, faces);
 const SEATV = { in_cdr: 1, in_gnr: 1, in_ldr: 1, in_drv: 1, cut: 1 };   // views in which the display gets out of the way of the interior
 const SIGHTV = { gnr: 1, citv: 1, hkoi: 1, enemy: 1, troops: 1 };       // views through a sight, or with the enemy team menu on the left: no boxes at the left
-let setupOpen = false, pagesOpen = false, pagesFrom = 'title', lastOutside = 'orbit', barOpen = null, lastMode = '';
+let setupOpen = false, pagesOpen = false, pagesFrom = 'title', lastOutside = 'orbit', barOpen = false, lastMode = '';
 // The battle behind the title screen. It is a real battle with the current setup, on its own seeds, fought at normal speed and
 // started again a few seconds after it ends. On Minimum graphics, or when the browser draws without a graphics card, it is a
 // still picture instead (the hash parameter demo=1 forces it on, demo=0 off).
@@ -68,7 +74,7 @@ const simRate = () => state === 'play' ? (playing ? speed : 0) : demoLive() ? 1 
 const seeAll = () => set.spectator || state === 'title';                               // behind the title every team is shown
 // the tank's own crew: its level and whether stress acts on it. Ladder raids always use a trained crew with stress on, so scores compare.
 function crewOf() { return set.custom && set.custom.rung ? { quality: 'trained', stress: true } : { quality: SKILLS.some(x => x[0] === set.crew) ? set.crew : 'trained', stress: set.stress !== false }; }
-function battleOpts(seed) { const pos = tankPos(), F = forceOf(), c = crewOf(); return { world, seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, waves: set.waves, raid: F.raid, force: F.force, crewQuality: c.quality, crewStress: c.stress, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined }; }
+function battleOpts(seed) { const pos = tankPos(), F = forceOf(), c = crewOf(); return { world, seed, cfg: cfg0, lookup, skill: set.skill, cond: set.cond, mission: set.mission, waves: set.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: c.quality, crewStress: c.stress, armour: !!set.armour, tank: pos ? { e: pos.e, n: pos.n, hull: pos.h || 0 } : undefined }; }
 
 
 function newBattle(seed = set.seed) {
@@ -83,7 +89,7 @@ function newBattle(seed = set.seed) {
         const view = new PropView(kinds[k++], ASSETS), face = (a * 180 / Math.PI + 180 + (u.id * 37) % 50 - 25 + 360) % 360, hh = face * Math.PI / 180, d = 2, pitch = Math.atan2(world.h(e + Math.sin(hh) * d, n + Math.cos(hh) * d) - world.h(e - Math.sin(hh) * d, n - Math.cos(hh) * d), 2 * d);
         view.place(scene.at(e, n, 0), face, -pitch, 0); view.group.userData.heat = 0.3; scene.units.add(view.group); props.push({ view, u, e, n }); break; } } }
   scene.marks.clear(); scene.fx.n = 0;
-  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
+  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; ended = false; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('ticker').textContent = ''; $('caption').textContent = '';
   api.battle = battle; hudBox.reset(battle, sound); place();
 }
 // the player's chosen start position for this map (none = the default at the map centre)
@@ -94,13 +100,13 @@ let replay = null;   // { T: length in seconds, ev: [{ t, text, k }], specWas }
 function rewind() {
   battle = new BattleAPI.Battle(battleOpts(set.seed));
   if (volleys) volleys.dispose(); scene.marks.clear(); scene.fx.n = 0;
-  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('caption').textContent = '';
+  volleys = new VolleyView(scene, battle, scene.fx); volleys.assetBase = ASSETS; volleys.emit = onVolleyEvent; volleys.tankView = tank; logShown = 0; simBank = 0; tNow = 0; prevT.e = battle.tank.e; prevT.n = battle.tank.n; prevT.h = battle.tank.h; voiceV = null; voiceHits = 0; shotI = 0; mgI = 0; prevU.length = 0; landing.length = 0; $('log').textContent = ''; $('ticker').textContent = ''; $('caption').textContent = '';
   props.forEach((p, i) => { p.u = battle.units.find(u => u.id === p.u.id) || p.u; }); api.battle = battle; hudBox.reset(battle, sound);
 }
 function runQuiet(t, toEnd) { let n = 0; while (battle.t < t - 1e-6 && n++ < 20000) { if (toEnd && (!battle.tank.alive || battle.over || (n % 20 === 0 && battle.summary().teamsLeft === 0 && !battle._volleyActive()))) break; battle.step(); } if (battle._pending) battle.step(); }
 function seek(t) {
   if (!replay) return; t = Math.max(0, Math.min(replay.T, t)); if (t < battle.t - 0.05) rewind(); runQuiet(t);
-  shotI = (battle.shots || []).length; landing.length = 0; mgI = (battle.mgs || []).length; simBank = 0; tNow = battle.t; volleys.skipTo(battle.t); $('log').textContent = ''; logShown = 0; capT = -9; $('caption').textContent = ''; place();
+  shotI = (battle.shots || []).length; landing.length = 0; mgI = (battle.mgs || []).length; simBank = 0; tNow = battle.t; volleys.skipTo(battle.t); $('log').textContent = ''; $('ticker').textContent = ''; logShown = 0; capT = -9; $('caption').textContent = ''; place();
 }
 function replayEvents() { const ev = []; for (const l of battle.log) { const k = l.kind === 'volley' ? 'v' : /knocked out|position destroyed/.test(l.text) ? 'k' : /Vehicle destroyed|hits the vehicle|We.re hit|HIT/.test(l.text) && l.kind !== 'tank' ? 'h' : /springs the ambush|breaks contact|changes tactics|launches a drone/.test(l.text) ? 'v' : null; if (k && (!ev.length || l.t - ev[ev.length - 1].t > 0.4)) ev.push({ t: l.t, text: l.text, k }); } return ev; }
 function replayStart() {
@@ -111,9 +117,9 @@ function replayStart() {
   buildBar(); show();
 }
 function replayStop() { if (!replay) return; set.spectator = replay.specWas; replay = null; $('replay').hidden = true; }
-function replayCode() { const p = tankPos(); return btoa(JSON.stringify({ v: VERSION, b: set.biome, c: set.cond, f: set.force, s: set.skill, m: set.mission, w: set.waves, r: set.custom && set.custom.rung, q: crewOf().quality, cs: crewOf().stress ? 1 : 0, map: set.map, seed: set.seed, pos: p ? [Math.round(p.e), Math.round(p.n), Math.round(p.h || 0)] : null })); }
+function replayCode() { const p = tankPos(); return btoa(JSON.stringify({ v: VERSION, b: set.biome, c: set.cond, f: set.force, s: set.skill, m: set.mission, w: set.waves, r: set.custom && set.custom.rung, q: crewOf().quality, cs: crewOf().stress ? 1 : 0, a: set.armour ? 1 : 0, map: set.map, seed: set.seed, pos: p ? [Math.round(p.e), Math.round(p.n), Math.round(p.h || 0)] : null })); }
 function replayLoad(code) { let o; try { o = JSON.parse(atob(String(code).trim())); } catch (e) { return 'That is not a replay code.'; } if (!o || !BIOMES.some(b => b[0] === o.b) || !FORCES[o.f]) return 'That replay code does not fit this version.';
-  set.biome = o.b; set.cond = CONDITIONS[o.c] ? o.c : 'day'; set.force = o.f; set.skill = o.s; set.mission = o.m || 'hold'; set.waves = +o.w || 1; set.crew = SKILLS.some(x => x[0] === o.q) ? o.q : 'trained'; set.stress = o.cs !== 0; { const rg = o.r && window.HKLadder.RUNGS.find(x => x.key === o.r); set.custom = rg ? { force: rg.force, raid: rg.raid, name: rg.name, note: rg.brief, rung: rg.key } : null; } set.map = +o.map || 1; set.seed = +o.seed || 1; if (o.pos) { set.pos = set.pos || {}; set.pos[set.biome + ':' + set.map] = { e: o.pos[0], n: o.pos[1], h: o.pos[2] }; }
+  set.biome = o.b; set.cond = CONDITIONS[o.c] ? o.c : 'day'; set.force = o.f; set.skill = o.s; set.mission = o.m || 'hold'; set.waves = +o.w || 1; set.crew = SKILLS.some(x => x[0] === o.q) ? o.q : 'trained'; set.stress = o.cs !== 0; set.armour = o.a === 1; { const rg = o.r && window.HKLadder.RUNGS.find(x => x.key === o.r); set.custom = rg ? { force: rg.force, raid: rg.raid, name: rg.name, note: rg.brief, rung: rg.key } : null; } set.map = +o.map || 1; set.seed = +o.seed || 1; if (o.pos) { set.pos = set.pos || {}; set.pos[set.biome + ':' + set.map] = { e: o.pos[0], n: o.pos[1], h: o.pos[2] }; }
   battle = null; ended = false; ensureWorld(true); replayStart(); return o.v !== VERSION ? `Made with version ${o.v}; this is ${VERSION}, so the battle may not run the same way.` : ''; }
 let rpT = 0, rpSig = '';
 function drawReplay(dt) { const box = $('replay'), on = !!replay && state === 'play' && !mapOpen; if (box.hidden === on) box.hidden = !on; if (!on) return;
@@ -139,7 +145,7 @@ function openPage(which) { pagesFrom = state; pagesOpen = true; show(); if (whic
 function tankPos() { const p = set.pos && set.pos[set.biome + ':' + set.map]; return p && world.passable(p.e, p.n, true) ? p : null; }
 // ---------------------------------------------------------------- map screen
 const mapv = new MapView($('mapcv')); let mapOpen = false, mapFrom = 'title';
-function mapState() { const T = battle.tank; return { tank: T, showAll: set.spectator, units: battle.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: state === 'play' ? volleys.info.map(m => ({ e: m.p.x, n: -m.p.z })) : [] }; }
+function mapState() { const T = battle.tank; return { tank: T, showAll: set.spectator, units: battle.units.map(u => ({ e: u.e, n: u.n, name: `${u.spec.name} #${u.id + 1}`, state: u.state, known: u.known, alive: u.alive })), missiles: state === 'play' ? volleys.info.map(m => ({ e: m.p.x, n: -m.p.z })) : [], battle, t: Math.min(tNow, battle.t), dt: frameDt }; }
 function openMap() { if (state === 'title' && battle.t > 0) titleBattle();   /* the map shows the start position, not where the battle behind the title has got to */ mapOpen = true; mapFrom = state; $('map').hidden = false; mapv.setWorld(world); $('map-place').hidden = $('map-reset').hidden = state !== 'title'; mapv.pickMode = false; $('map').classList.remove('pick'); $('map-place').classList.remove('on'); mapv.fit(); refreshShed(); }
 function refreshShed() { const T = battle.tank; mapv.viewshedFor(T.e, T.n); $('map-info').textContent = `${world.biome.name} · map ${set.map} · ${(mapv.shed.share * 100).toFixed(0)}% of the ground within 4.5 km can see the vehicle here`; }
 function closeMap() { mapOpen = false; $('map').hidden = true; }
@@ -167,6 +173,7 @@ function place() {
     const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
     tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); if (!tv.ground) tv.ground = teamGround; const far = pos.distanceTo(scene.camera.position) * scene.camera.fov / 40;   /* how far away the team looks (a zoomed sight brings it close) */ tv.update(frameDt * simRate(), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', far < 330, teamInfo(u, far));
     if (tv.fell) { if (tv.fell.blast) scene.fx.fire(pos.x, pos.y + 0.2, pos.z, 6, 0.45); else scene.fx.dust(pos.x, pos.y + 0.2, pos.z, 0.7); tv.fell = null; } });   /* a team has just been knocked out: a small fire for a few seconds where a shell burst (the burst, smoke and scorch mark come with the shell itself), a puff of dust under machine-gun fire */
+  vehicles.update(battle, { t: tNow, all: seeAll(), teams });
 }
 // what the drawing of a team needs to know about its weapon: is a round in the launcher (not between firing and the end of reloading), is a spare ready
 // reload: seconds until it can fire again; pack: seconds of packing up left before it moves off; setup: seconds of setting up left; dead: knocked out; dist: how far away it looks
@@ -190,24 +197,38 @@ function drawMarks() {
   }
   for (; i < pool.length; i++) pool[i].hidden = true;
 }
-function chip(label, value, cls) { const c = el('div', 'chip panel' + (cls ? ' ' + cls : '')); c.append(label + ' '); c.append(el('b', null, value)); return c; }
+// the top strip of the engineer display: time, time rate, frame time. Everything else is in the panels.
+let stripSig = '';
 function drawStatus() {
-  const s = battle.summary(), T = battle.tank.st, st = $('status'); st.textContent = '';
-  const mm = Math.floor(battle.t / 60), ss = Math.floor(battle.t % 60);
-  st.append(chip('T+', `${mm}:${String(ss).padStart(2, '0')}`), chip('OBSCURANT', s.obs, s.obs < 40 ? 'warn' : ''), chip('HE', s.he, s.he < 40 ? 'warn' : ''), chip('TROPHY', `L${s.apsL} R${s.apsR}`, s.apsL + s.apsR === 0 ? 'bad' : s.apsL + s.apsR < 3 ? 'warn' : ''));
-  const crew = s.crew || {}, down = Object.values(crew).filter(x => x !== 'ok').length; st.append(chip('CREW', down ? `${4 - down}/4` : '4/4', down ? 'bad' : ''), chip('INCOMING', `${s.fired} fired · ${s.hits} hit`, s.hits ? 'bad' : ''));
-  if (s.waves > 1) st.append(chip('ENEMY GROUP', battle.waveAt != null ? `${s.wave} of ${s.waves} beaten · lull` : `${s.wave} of ${s.waves}`, battle.waveAt != null ? '' : 'warn'));
-  if (!s.alive) st.append(chip('VEHICLE', 'DESTROYED', 'bad'));
-  st.append(chip('FRAME', fps ? `${(1000 / fps).toFixed(1)} ms · ${fps} fps` : '-', fps && fps < 30 ? 'warn' : ''));
+  const st = $('status'), t = `T+ ${Math.floor(battle.t / 60)}:${String(Math.floor(battle.t % 60)).padStart(2, '0')}`, r = playing ? (speed === 0.25 ? '¼×' : speed + '×') : 'paused', f = fps ? `${(1000 / fps).toFixed(1)} ms · ${fps} fps` : `${Math.round(scene.rawMs || 0)} ms · under 1 fps`;
+  const sig = t + r + f; if (sig === stripSig && st.childElementCount) return; stripSig = sig;
+  if (!st.childElementCount) { const fr = el('span', 'chip'); fr.title = 'Frame time and frames a second. Click for the full figures'; fr.onclick = () => { showPerf = !showPerf; store.set('perf', showPerf); show(); }; st.append(el('span', 'chip'), el('span', 'chip'), fr); }
+  const c = st.children; if (c[0].textContent !== t) c[0].textContent = t; if (c[1].textContent !== r) { c[1].textContent = r; c[1].className = 'chip' + (playing ? '' : ' warn'); } if (c[2].textContent !== f) { c[2].textContent = f; c[2].className = 'chip' + (fps && fps < 30 ? ' warn' : ''); }
+}
+// The battle's lines use a few of the engine's own words; on screen they are put in plain ones (wording only, nothing else changes).
+const PLAIN = [[/\bSACLOS\b/g, 'Konkurs'], [/\bAPS\b/g, 'Trophy'], [/\(cued by HKOI track\)/g, '(warned by HKOI\'s radar track)'], [/\bSAL\b/g, 'Laser-guided missile'], [/\bHE\b/g, 'airburst'], [/ — /g, ': ']];
+const plain = t => { let x = String(t == null ? '' : t); for (const [a, b] of PLAIN) x = x.replace(a, b); return x; };
+const LOG_FILTERS = [['all', 'All'], ['threats', 'Threats'], ['crew', 'Crew'], ['enemy', 'Enemy']];
+function setLog(open, filter) {
+  if (filter) logFilter = filter; logOpen = !!open && state === 'play'; const ov = $('logov'), box = $('log'); ov.hidden = !logOpen; box.className = 'f-' + logFilter;
+  const f = $('lo-filters'); f.textContent = ''; for (const [k, name] of LOG_FILTERS) { const b = el('button', 'btn' + (logFilter === k ? ' on' : ''), name); b.onclick = () => setLog(true, k); f.append(b); }
+  if (logOpen) box.scrollTop = box.scrollHeight;
+}
+$('lo-close').onclick = () => setLog(false); $('ticker').onclick = () => setLog(!logOpen);
+// the ticker: the latest three lines, newest brightest, one line each (the full log opens on a click or key L)
+let tickT = 0;
+function tick(l, when) {
+  const box = $('ticker'), d = el('div', 'k-' + l.kind); d.append(el('i', null, when), el('b', null, plain(l.text))); if (l.why) d.append(el('small', null, plain(l.why))); d.title = plain(l.text) + (l.why ? ' (' + plain(l.why) + ')' : '');
+  box.append(d); while (box.childElementCount > 3) box.firstChild.remove(); box.classList.remove('old'); tickT = performance.now();
 }
 function drawLog() {
   const due = battle.log.filter(l => l.t <= battle.t); if (due.length === logShown) return; due.sort((a, b) => a.t - b.t);
   const box = $('log'), fresh = due.slice(logShown); logShown = due.length;
-  for (const l of fresh) { if (!set.spectator && (l.kind === 'volley' || l.kind === 'enemy' && !/loses sight/.test(l.text))) continue; if (l.kind === 'engine' && (l.sub === 'track' || l.sub === 'handoff') && !set.spectator) continue; const d = el('div', 'k-' + l.kind); const mm = Math.floor(l.t / 60), ss = (l.t % 60).toFixed(0).padStart(2, '0'); d.append(`${mm}:${ss}  `); d.append(el('b', null, l.text)); if (l.kind === 'crew' && l.why) d.append(el('small', null, l.why)); box.append(d); }
-  while (box.childElementCount > 120) box.firstChild.remove(); box.scrollTop = box.scrollHeight;
+  for (const l of fresh) { if (!set.spectator && (l.kind === 'volley' || l.kind === 'enemy' && !/loses sight/.test(l.text))) continue; if (l.kind === 'engine' && (l.sub === 'track' || l.sub === 'handoff') && !set.spectator) continue; const d = el('div', 'k-' + l.kind); const mm = Math.floor(l.t / 60), ss = (l.t % 60).toFixed(0).padStart(2, '0'); d.append(`${mm}:${ss}  `); d.append(el('b', null, plain(l.text))); if (l.why && (l.kind === 'crew' || l.kind === 'engine')) d.append(el('small', null, plain(l.why))); box.append(d); tick(l, `${mm}:${ss}`); }
+  while (box.childElementCount > 400) box.firstChild.remove(); if (logOpen) box.scrollTop = box.scrollHeight;
   // the caption carries the most important new line, not merely the newest; the log keeps the lesser detail only in spectator view
   const W8 = l => l.kind === 'engine' ? ({ hit: 9, kill: 7, miss: 5, launch: 6, cue: 6, crew: 5, fire: 4, track: 2, handoff: 2 }[l.sub] || 3) : ({ volley: 8, result: 8, enemy: 5, tank: 6, crew: 6 }[l.kind] || 0);
-  const top = fresh.filter(l => l.kind !== 'setup' && (set.spectator || l.kind !== 'volley' && l.kind !== 'enemy')).sort((a, b) => W8(a) - W8(b) || a.t - b.t).pop(); if (top && (W8(top) >= capW || performance.now() - capT > 1800)) { capW = W8(top); const c = $('caption'); c.textContent = top.text; if (top.why && hudMode === 'engineer') c.append(el('small', null, top.why)); c.style.opacity = 1; capT = performance.now(); }
+  const top = fresh.filter(l => l.kind !== 'setup' && (set.spectator || l.kind !== 'volley' && l.kind !== 'enemy')).sort((a, b) => W8(a) - W8(b) || a.t - b.t).pop(); if (top && (W8(top) >= capW || performance.now() - capT > 1800)) { capW = W8(top); const c = $('caption'); c.textContent = plain(top.text); c.style.opacity = 1; capT = performance.now(); }
 }
 function checkEnd() {
   if (ended) return; const s = battle.summary(), last = battle.volleys[battle.volleys.length - 1], quiet = !last || battle.t > last.tEnd + 6;
@@ -243,12 +264,12 @@ function show() {
   const p = state === 'play', eng = hudMode === 'engineer', seat = p && !!SEATV[cams.mode];
   if (!p) { $('tsight').hidden = true; $('dsight').hidden = true; $('replay').hidden = true; $('esight').hidden = true; $('units').hidden = true; $('caption').textContent = ''; $('subs').style.opacity = 0; }
   $('title').hidden = state !== 'title' || pagesOpen; $('setup').hidden = !(state === 'title' && setupOpen && !pagesOpen); $('result').hidden = state !== 'result' || pagesOpen;
-  document.body.classList.toggle('setup-open', state === 'title' && setupOpen); document.body.classList.toggle('in-seat', seat); document.body.classList.toggle('hud-eng', p && eng);
-  $('status').hidden = !(p && eng && !seat); $('bar').hidden = !p; $('log').hidden = !(p && eng && showLog && !seat);
+  document.body.classList.toggle('setup-open', state === 'title' && setupOpen); document.body.classList.toggle('in-seat', seat); document.body.classList.toggle('hud-eng', p && eng); document.body.classList.toggle('hud-none', q.get('hud') === 'none');
+  $('status').hidden = !(p && eng && !seat); $('bar').hidden = !p; $('ticker').hidden = !(p && eng && !seat); if (!p && logOpen) setLog(false);
   hud.hidden = !(showPerf && (p ? eng && !seat : q.get('perf') === '1'));
   lastMode = cams.mode; stillT = 0;
 }
-function setHud(mode) { hudMode = mode === 'engineer' ? 'engineer' : 'simple'; store.set('hud', hudMode); if (hudMode === 'simple') barOpen = null; hudBox.sig = {}; hudBox.tSlow = hudBox.tFast = 0; if (state === 'play') { buildBar(); drawStatus(); } show(); if ($('o-hud').childElementCount) seg('o-hud', HUDS, 'hud'); }
+function setHud(mode) { hudMode = mode === 'engineer' ? 'engineer' : 'simple'; store.set('hud', hudMode); barOpen = false; if (hudMode === 'simple') setLog(false); hudBox.sig = {}; hudBox.tSlow = hudBox.tFast = 0; if (state === 'play') { buildBar(); drawStatus(); } show(); if ($('o-hud').childElementCount) seg('o-hud', HUDS, 'hud'); }
 function seg(id, items, key, after) { const box = $(id); box.textContent = ''; const cur = key === 'hud' ? hudMode : set[key]; for (const [v, name, tip] of items) { const b = el('button', 'btn' + (cur === v ? ' on' : ''), name); if (tip) b.title = tip; b.onclick = () => { if (key === 'hud') { setHud(v); return; } set[key] = v; store.set('setup', set); seg(id, items, key, after); if (after) after(); }; box.append(b); } }
 const HUDS = [['simple', 'Simple', 'Almost nothing on screen: a status line, two gauges, a warning when something is inbound'], ['engineer', 'Engineer', 'Everything: crew states and reasons, weapons, every threat in the air, the event log, frame time']];
 const nameOf = (list, k) => (list.find(x => x[0] === k) || ['', String(k)])[1];
@@ -260,6 +281,8 @@ function note() {
   $('s-note').textContent = (set.custom ? `Ladder raid "${set.custom.name}": ${set.custom.note} Ladder raids always use a trained crew with stress on. Pick an enemy force to leave the ladder. ` : F.note + '. ') + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.');
   const live = $('t-live'), on = demoLive() || state === 'title' && (demo.forced === '1' || demo.forced !== '0' && scene.quality !== 'min' && !scene.software); live.className = on ? '' : 'still'; live.textContent = ''; live.append(el('i'), on ? 'LIVE: a battle with this setup is being fought behind the menu' : 'Still picture (Minimum graphics): the battle starts when you press Play');
 }
+// the setting that belongs to the interior: the crew figures in the seats (the address can still switch them off: crew=0)
+function inside() { interior.graphic = q.get('graphic') !== '0';   /* graphic effects are always on (the owner's decision); only the address can switch them off, for pictures */ interior.crewOn = set.figures !== false && q.get('crew') !== '0'; }
 function buildTitle() {
   $('ver').textContent = VERSION;
   const again = () => { note(); preview(); };
@@ -267,6 +290,8 @@ function buildTitle() {
   seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name, f.note]), 'force', () => { set.custom = null; store.set('setup', set); again(); });
   seg('o-skill', SKILLS, 'skill', again); seg('o-mission', MISSIONS, 'mission', again); seg('o-waves', LENGTHS, 'waves', again);
   seg('o-crew', SKILLS, 'crew', again); seg('o-stress', [[true, 'On', 'Fear, wounds and overload slow the crew and can break it'], [false, 'Off', 'The crew works like a machine: never slower, never breaks']], 'stress', again);
+  seg('o-figures', [[true, 'On', 'The crew sit in their seats inside the vehicle'], [false, 'Off', 'Empty seats']], 'figures', inside);
+  seg('o-armour', [[false, 'Flat chance by weapon', 'A hit knocks the vehicle out with a fixed chance for each kind of weapon'], [true, 'The armour decides', 'The plate that is struck decides whether a hit knocks the vehicle out']], 'armour', again);
   seg('o-hud', HUDS, 'hud'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note);
   seg('o-gfx', Object.entries(QUALITY).sort((a, b) => (b[1].auto ? 1 : 0) - (a[1].auto ? 1 : 0)).map(([k, v]) => [k, v.name]), 'gfx', () => { scene.setQuality(set.gfx); note(); stillT = 0; });
   $('o-map').value = set.map; $('o-map').onchange = () => { set.map = Math.max(1, Math.min(9999, Math.round(+$('o-map').value || 1))); store.set('setup', set); again(); };
@@ -286,7 +311,7 @@ function demoTick(dt, live) {
   advance(dt);
 }
 let previewTimer = 0; function preview() { clearTimeout(previewTimer); previewTimer = setTimeout(() => { if (state === 'title') titleBattle(); }, 60); }
-function start() { clearTimeout(previewTimer); demo.manual = false; sound.start(); sound.loadVoices(ASSETS); ensureWorld(); setupOpen = false; pagesOpen = false; state = 'play'; newBattle(); playing = true; barOpen = null; { let c = store.get('cam', 'orbit'); if (c === 'drv') c = 'in_drv'; cams.set(VIEW_OF[c] ? c : 'orbit'); } if (cams.mode === 'orbit') { const T = battle.tank; scene.camera.position.copy(scene.at(T.e - 26, T.n - 34, 13)); } buildBar(); show(); }
+function start() { clearTimeout(previewTimer); demo.manual = false; sound.start(); sound.loadVoices(ASSETS); ensureWorld(); setupOpen = false; pagesOpen = false; state = 'play'; newBattle(); playing = true; barOpen = false; { let c = store.get('cam', 'orbit'); if (c === 'drv') c = 'in_drv'; cams.set(VIEW_OF[c] ? c : 'orbit'); } if (cams.mode === 'orbit') { const T = battle.tank; scene.camera.position.copy(scene.at(T.e - 26, T.n - 34, 13)); } buildBar(); show(); }
 
 // ---- the control bar: one row. Views are grouped (outside, crew views, inside, enemy); a group opens a second row with its views.
 // The old overlay driver view is gone from the bar: the driver's seat inside replaces it. The head-out commander and loader views stay.
@@ -295,41 +320,52 @@ const VIEW_GROUPS = [
   { key: 'out', name: 'Outside', views: [['orbit', 'Orbit'], ['chase', 'Chase'], ['top', 'Overhead'], ['fly', 'Free look']] },
   { key: 'crew', name: 'Crew views', views: [['cdr', 'Commander, head out'], ['ldr', 'Loader, head out'], ['gnr', 'Gunner sight'], ['citv', 'CITV'], ['hkoi', 'HKOI sight']] },
   { key: 'in', name: 'Inside', views: [['in_cdr', 'Commander seat'], ['in_gnr', 'Gunner seat'], ['in_ldr', 'Loader seat'], ['in_drv', 'Driver seat'], ['cut', 'Cutaway']] },
-  { key: 'enemy', name: 'Enemy', spectator: true, views: [['enemy', 'Enemy sight'], ['troops', 'Enemy close-up'], ['missile', 'Missile']] },
+  { key: 'enemy', name: 'Enemy', spectator: true, views: [['enemy', 'Enemy sight'], ['troops', 'Enemy close-up'], ['missile', 'Missile'], ['fpv', 'Drone camera']] },
 ];
 const VIEW_OF = {}; for (const g of VIEW_GROUPS) for (const [k, name] of g.views) VIEW_OF[k] = { g, name };
 const KEY_VIEWS = VIEW_GROUPS.filter(g => !g.spectator).flatMap(g => g.views.map(v => v[0])).slice(0, 9);   // keys 1 to 9
-function setView(key) { const v = VIEW_OF[key]; if (!v || v.g.spectator && !set.spectator) return; if (!SEATV[key] && !v.g.spectator) lastOutside = key; cams.set(key); store.set('cam', v.g.spectator ? 'orbit' : key); if (hudMode === 'simple') barOpen = null; buildBar(); show(); }
+function setView(key) { const v = VIEW_OF[key]; if (!v || v.g.spectator && !set.spectator) return; if (!SEATV[key] && !v.g.spectator) lastOutside = key; cams.set(key); store.set('cam', v.g.spectator ? 'orbit' : key); barOpen = false; buildBar(); show(); }
 function setSpectator(on) { set.spectator = on; if (!on && VIEW_OF[cams.mode] && VIEW_OF[cams.mode].g.spectator) cams.set('orbit'); store.set('setup', set); hudBox.sig = {}; buildBar(); show(); }
+// small line drawings for the bar's buttons (16 x 16, drawn in the button's own colour)
+const ICONS = {
+  pause: '<path d="M5 3v10M11 3v10"/>', play: '<path d="M5 3l8 5-8 5z"/>',
+  view: '<path d="M1.5 8s2.4-4.5 6.5-4.5S14.500 8 14.500 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/>',
+  map: '<path d="M1.500 3.500l4-1.500 5 1.500 4-1.500v10.500l-4 1.500-5-1.500-4 1.500zM5.500 2v10.500M10.500 3.500V14"/>',
+  sound: '<path d="M2 6h2.500l3.500-3v10l-3.500-3H2zM10.500 5.500a3.500 3.500 0 010 5M12.500 3.500a6 6 0 010 9"/>', mute: '<path d="M2 6h2.500l3.500-3v10l-3.500-3H2zM10.500 6l4 4M14.500 6l-4 4"/>',
+  display: '<path d="M1.500 3h13v8.500h-13zM5.500 14h5M4 6h4M4 8.500h6"/>', menu: '<path d="M2 8l6-5.500L14 8M4 7v6.500h8V7"/>', out: '<path d="M6 2.500H2.500v11H6M6 8h8M11 5l3 3-3 3"/>',
+};
+function icon(name) { const sp = el('span', 'ic'); sp.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`; return sp; }
+// The bar is six things: time (pause and rate), the view (one button that opens the view picker), map, sound, display, menu.
 function buildBar() {
   const bar = $('bar'); bar.textContent = ''; const eng = hudMode === 'engineer', seat = !!SEATV[cams.mode], slim = seat && !eng, cur = VIEW_OF[cams.mode];
-  const btn = (text, cls, tip, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); if (tip) b.title = tip; b.onclick = fn; return b; };
-  // second row: the views of the open group
-  const og = VIEW_GROUPS.find(g => g.key === barOpen);
-  if (og) { const pop = el('div', 'barrow pop'); pop.append(el('span', 'lbl', og.name));
-    if (og.spectator) pop.append(btn(set.spectator ? 'Spectator: on' : 'Spectator: off', 'spec' + (set.spectator ? ' on' : ''), 'Show every enemy team and allow the enemy views. Off: fog of war, you see only what the vehicle has found', () => setSpectator(!set.spectator)));
-    for (const [k, name] of og.views) { const b = btn(name, (og.spectator ? 'spec' : '') + (cams.mode === k ? ' on' : ''), HINT[k], () => setView(k)); const n = KEY_VIEWS.indexOf(k); if (n >= 0) b.title = `${HINT[k] || name} (key ${n + 1})`; if (og.spectator && !set.spectator) b.disabled = true; pop.append(b); }
-    bar.append(pop); }
+  const btn = (ic, text, cls, tip, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : '')); if (ic) b.append(icon(ic)); if (text) b.append(el('span', null, text)); if (tip) b.title = tip; b.onclick = fn; return b; };
+  // the view picker: every view, grouped, with its key
+  if (barOpen) { const pick = el('div', 'pick');
+    for (const vg of VIEW_GROUPS) { const row = el('div', 'barrow'); row.append(el('span', 'lbl', vg.name));
+      if (vg.spectator) row.append(btn(null, set.spectator ? 'Spectator: on' : 'Spectator: off', 'spec' + (set.spectator ? ' on' : ''), 'Show every enemy team and allow the enemy views. Off: fog of war, you see only what the vehicle has found', () => setSpectator(!set.spectator)));
+      for (const [k, name] of vg.views) { const n = KEY_VIEWS.indexOf(k), b = btn(null, name, (vg.spectator ? 'spec' : '') + (cams.mode === k ? ' on' : ''), (HINT[k] || name) + (n >= 0 ? ` (key ${n + 1})` : ''), () => setView(k)); if (n >= 0) b.append(el('kbd', null, String(n + 1))); if (vg.spectator && !set.spectator) b.disabled = true; row.append(b); }
+      pick.append(row); }
+    bar.append(pick); }
   const row = el('div', 'barrow'); bar.append(row); const grp = () => { const g = el('div', 'grp'); row.append(g); return g; };
-  let g = grp(); g.append(btn(playing ? 'Pause' : 'Play', '', 'Space bar', () => { playing = !playing; buildBar(); }));
-  if (!slim) for (const sp of [0.25, 1, 2, 4]) g.append(btn(sp === 0.25 ? '¼×' : sp + '×', speed === sp ? 'on' : '', 'Time rate', () => { speed = sp; buildBar(); }));
-  g = grp(); for (const vg of VIEW_GROUPS) { if (slim && vg.key !== 'in') continue; const mine = cur && cur.g === vg; g.append(btn(mine ? `${vg.name}: ${cur.name}` : vg.name, (vg.spectator ? 'spec' : '') + (mine ? ' on' : '') + (barOpen === vg.key ? ' open' : ''), 'Choose a view', () => { barOpen = barOpen === vg.key ? null : vg.key; buildBar(); })); }
-  if (seat) g.append(btn('Back outside', '', 'Leave the inside view (Esc)', () => setView(lastOutside)));
-  if (!slim || SENSOR[cams.mode] || cams.mode === 'gnr') g = grp();
-  if (SENSOR[cams.mode] || cams.mode === 'gnr') g.append(btn('Thermal: ' + (wantThermal() === 1 ? 'white hot' : wantThermal() === -1 ? 'black hot' : 'off'), 'on', 'Thermal picture for this sight (T)', cycleThermal));
-  if (!slim) { g.append(btn('Map', '', 'Topographic map (M)', openMap));
-    g.append(btn('Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); }
-  if (eng) { g.append(btn('Log', showLog ? 'on' : '', 'The event log', () => { showLog = !showLog; store.set('log', showLog); buildBar(); show(); }));
-    g.append(btn('FPS', showPerf ? 'on' : '', 'Frame rate and scene load in full', () => { showPerf = !showPerf; store.set('perf', showPerf); buildBar(); show(); })); }
-  g = grp(); g.append(btn(eng ? 'Display: engineer' : 'Display: simple', eng ? 'on' : '', 'Simple shows almost nothing; engineer shows everything (H)', () => setHud(eng ? 'simple' : 'engineer')));
+  let g = grp(); g.append(btn(playing ? 'pause' : 'play', playing ? 'Pause' : 'Play', '', 'Pause or carry on (space bar)', () => { playing = !playing; buildBar(); }));
+  if (!slim) { const rates = el('div', 'rates'); rates.title = 'Time rate'; for (const sp of [0.25, 1, 2, 4]) rates.append(btn(null, sp === 0.25 ? '¼×' : sp + '×', speed === sp ? 'on' : '', sp === 0.25 ? 'Quarter speed' : sp === 1 ? 'Real time' : sp + ' times faster', () => { speed = sp; buildBar(); })); g.append(rates); }
+  g = grp(); { const vb = btn('view', 'View: ' + (cur ? cur.name : 'free'), (barOpen ? 'open' : ''), 'Choose where you watch from: opens the list of views (keys 1 to 9)', () => { barOpen = !barOpen; buildBar(); }); vb.id = 'viewbtn'; vb.append(el('span', 'chev', barOpen ? '▾' : '▴')); g.append(vb); }
+  if (seat) g.append(btn('out', 'Back outside', '', 'Leave the inside view (Esc)', () => setView(lastOutside)));
+  if (SENSOR[cams.mode] || cams.mode === 'gnr') g.append(btn(null, 'Thermal: ' + (wantThermal() === 1 ? 'white hot' : wantThermal() === -1 ? 'black hot' : 'off'), 'on', 'Thermal picture for this sight (T)', cycleThermal));
+  if (!slim) { g = grp(); g.append(btn('map', 'Map', '', 'Topographic map (M)', openMap));
+    g.append(btn(sound.on ? 'sound' : 'mute', 'Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); }
+  g = grp(); g.append(btn('display', eng ? 'Engineer' : 'Simple', '', 'Display: engineer shows everything, simple shows almost nothing (H)', () => setHud(eng ? 'simple' : 'engineer')));
   if (!slim) g.append(director.button());   /* film director on or off (key F) */
-  if (!slim) g.append(btn('Menu', '', 'Back to the title screen', toTitle));
+  if (!slim) g.append(btn('menu', 'Menu', '', 'Back to the title screen', toTitle));
 }
+// the view picker is a pop-up: a click anywhere else closes it
+window.addEventListener('pointerdown', e => { if (barOpen && !(e.target.closest && e.target.closest('#bar'))) { barOpen = false; buildBar(); } }, true);
 $('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
 $('o-codebtn').onclick = () => { const msg = replayLoad($('o-code').value); if (msg) { $('o-note').textContent = msg; $('s-msg').textContent = msg; } };
 $('r-again').onclick = () => { replayStop(); start(); }; $('r-next').onclick = () => { replayStop(); set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = toTitle; $('r-numbers').onclick = () => openPage('numbers');
 window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } if (e.key === '[' || e.key === ']') { if (cams.mode === 'enemy' || cams.mode === 'troops') cams.cycle(battle.units, e.key === ']' ? 1 : -1); } if (e.code === 'KeyT') cycleThermal();
-  if (e.code === 'KeyH') setHud(hudMode === 'engineer' ? 'simple' : 'engineer'); if (e.code === 'Escape' && SEATV[cams.mode]) setView(lastOutside);
+  if (e.code === 'KeyH') setHud(hudMode === 'engineer' ? 'simple' : 'engineer'); if (e.code === 'KeyL' && hudMode === 'engineer') setLog(!logOpen);
+  if (e.code === 'Escape') { if (logOpen) setLog(false); else if (barOpen) { barOpen = false; buildBar(); } else if (SEATV[cams.mode]) setView(lastOutside); }
   const n = '123456789'.indexOf(e.key); if (n >= 0 && KEY_VIEWS[n]) setView(KEY_VIEWS[n]); });
 
 // Crew talk. The crew's lines are chosen by the sound engine itself (src/audio/crewtalk.js) from what happens in the battle:
@@ -410,7 +446,7 @@ const hkV = new THREE.Vector3();
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
-const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
+const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, get spectator() { return !!set.spectator; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
 const director = new Director(film), xray = new XRayPanel(film);
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
@@ -430,11 +466,12 @@ function frameBody(now) {
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   if (cams.mode !== lastMode && state === 'play') { buildBar(); show(); }   /* the view changed (a key, a button, or the camera falling back by itself): the bar and the boxes follow */
-  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
+  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
+  if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   director.update(dt); xray.update();
-  if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops'), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
+  if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
   if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
@@ -446,12 +483,12 @@ function frameBody(now) {
     if (showPerf) { const s = scene.stats(); hud.textContent = `${fps} fps   worst frame ${worst.toFixed(0)} ms   slow frames ${slow}\n${QUALITY[s.quality].name} graphics   ${Math.round(canvas.width)}×${Math.round(canvas.height)} (${Math.round(s.scale * 100)}% scale)\nsim ${simMs.toFixed(1)} ms   whole frame on the processor ${cpuMs.toFixed(1)} ms\nModels: tank ${tank.loaded ? (tank.variant || 'M1A2 SEPv2') : tank.failed ? 'FAILED (boxes)' : 'loading'}, enemy teams ${teams.filter(t => t.loaded).length}/${teams.length}, vehicles ${props.filter(p => p.view.loaded).length}/${props.length}\nGraphics chip: ${scene.gpu()}${scene.software ? '   << SOFTWARE DRAWING: the graphics card is not being used' : ''}\n${s.calls} draw calls   ${(s.triangles / 1e6).toFixed(2)} M triangles\n${s.trees} trees   ${s.buildings} buildings   particles ${scene.fx.n}`; } worst = 0; slow = 0; }
 }
 window.addEventListener('resize', () => scene.resize());
-const api = window.__beta = { props, get volleys() { return volleys; }, prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, interior, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state, hud: () => hudMode, setHud, setView, toTitle, titleShow,
+const api = window.__beta = { props, get volleys() { return volleys; }, prof(n = 30) { const T = {}, tm = (k, f) => { const a = performance.now(); for (let i = 0; i < n; i++) f(); T[k] = +((performance.now() - a) / n).toFixed(3); }; tm('step', () => battle.step()); tm('place', place); tm('volleys', () => volleys.update(battle.t, 0.016)); tm('cams', () => cams.update(0.016, ctx())); tm('log', drawLog); tm('end', () => { const e = ended; checkEnd(); ended = e; }); tm('sound', () => sound.ctx && sound.update(0.016, { drones: [] })); tm('marks', drawMarks); tm('status', drawStatus); tm('fx', () => scene.fx.update(0.016, scene.wind)); tm('trees', () => scene.trees.userData.update(scene.camera.position)); tm('matrices', () => scene.scene.updateMatrixWorld()); let nodes = 0; scene.scene.traverse(() => nodes++); T.nodes = nodes; T.logLen = battle.log.length; return T; }, bank: () => [simBank, tNow, battle === api.battle, battle.t], advance, sound, teams: () => teams, openMap, mapv, world, scene, battle: null, THREE, tank, cams, interior, set, ready: false, start, setPlaying(v) { playing = v; }, state: () => state, hud: () => hudMode, faces, hudBox, setHud, setView, toTitle, titleShow,
   /* the title's show, stepped by hand for tests: titleReset(seed) starts it, titleTick(dt) is one frame of dt seconds, titleInfo() says where it is */
   titleReset(seed) { demo.manual = true; demo.seed = seed; titleBattle(); }, titleTick(dt) { demo.manual = true; demoTick(dt, true); place(); volleys.update(Math.min(tNow, battle.t), dt); titleShow.side = 0.17; titleShow.update(dt, ctx(), true); }, titleAuto() { demo.manual = false; },
   titleInfo() { const c = scene.camera, T = battle.tank; return { t: +battle.t.toFixed(2), tNow: +tNow.toFixed(3), showT: +titleShow.t.toFixed(3), shot: titleShow.shot.key, live: demoLive(), seed: demo.seed, cam: [c.position.x - T.e, c.position.y, c.position.z + T.n].map(v => +v.toFixed(2)), alive: T.alive }; },
   runTo(t) { while (battle.t < t && battle.tank.alive) battle.step(); tNow = battle.t; place(); }, playFor(sec) { const n = Math.round(sec / battle.dt); for (let i = 0; i < n; i++) { battle.step(); if (battle._pending) battle.step(); tNow = battle.t; place(); volleys.update(battle.t, battle.dt); scene.fx.update(battle.dt); } },
   near(dist, height, brg) { const T = battle.tank, a = (brg || 200) * Math.PI / 180; this.view(T.e + Math.sin(a) * dist, T.n + Math.cos(a) * dist, 0, height, T.e, T.n); },
   view(e, n, dist, height, lookE, lookN) { cams.mode = 'free'; scene.controls.enabled = false; scene.camera.up.set(0, 1, 0); scene.camera.position.set(e, world.h(e, n) + height, -n); scene.camera.lookAt(lookE, world.h(lookE, lookN) + 2, -lookN); } };
-setFinish(set.biome, set.cond); state = 'title'; titleBattle(); buildTitle(); if (q.get('play') === '1') start(); else show();
+inside(); setFinish(set.biome, set.cond); state = 'title'; titleBattle(); buildTitle(); if (q.get('play') === '1') start(); else show();
 api.ready = true; $('veil').hidden = true; requestAnimationFrame(frame);
