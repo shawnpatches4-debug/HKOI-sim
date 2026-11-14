@@ -1,0 +1,11 @@
+// node tests/battle/study.js [battles] [waves] [force] [skill] [mission] [biome] : run the numbers for one scenario under the four setups
+const { HK, World, Battle } = require('./load.js'), Study = require('../../src/battle/study.js');
+const n = +(process.argv[2] || 30), waves = +(process.argv[3] || 3), forceKey = process.argv[4] || 'ambush', skill = process.argv[5] || 'trained', mission = process.argv[6] || 'hold', biome = process.argv[7] || 'farmland';
+const FORCES = { light: { force: [{ type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] }, ambush: { force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] }, standoff: { force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }], raid: { minR: 2000, window: 6 } }, drones: { force: [{ type: 'fpv', n: 2 }, { type: 'fpv_fiber', n: 1 }, { type: 'kornet', n: 1 }] }, heavy: { force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] } };
+const world = new World.World({ seed: 3, biome }), t0 = Date.now();
+const res = Study.run({ HK, Battle: Battle.Battle }, Object.assign({ world, skill, mission, waves, cfg: HK.defaultConfig() }, FORCES[forceKey]), n);
+console.log(`${n} battles each: ${biome}, ${forceKey} force, ${skill} crews, ${mission}, ${waves} wave(s). ${((Date.now() - t0) / 1000).toFixed(0)} s to run.`);
+for (const st of Study.SETUPS) { const r = res[st.key], pc = x => String(Math.round(100 * x)).padStart(3) + '%';
+  console.log(st.name.padEnd(14), 'vehicle survives', pc(r.survival), `(${pc(r.range[0]).trim()} to ${pc(r.range[1]).trim()})`, '| hits per battle', r.hitsPerBattle.toFixed(2), '| crew hurt', r.crewPerBattle.toFixed(2), '| threats', r.threatsPerBattle.toFixed(1), '| obscurant', Math.round(r.obsPerBattle), 'HE', Math.round(r.hePerBattle), '| teams destroyed', r.destroyedPerBattle.toFixed(1), '| mean length', Math.round(r.meanT), 's');
+  console.log('    per 100 threats:', Study.BUCKETS.filter(([k]) => r.chain[k]).map(([k, name]) => `${name} ${Math.round(100 * r.chain[k] / r.threats)}`).join(' | '));
+  if (Object.keys(r.why).length) console.log('    why the hits got through:', Object.entries(r.why).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} (${v})`).join('; ')); }
