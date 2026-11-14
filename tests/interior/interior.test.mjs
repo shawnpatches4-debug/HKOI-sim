@@ -32,13 +32,15 @@ function script(R, t) {
 }
 let fails = 0; const finals = [];
 for (const fps of [30, 60, 144, 240]) {
-  const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null;
+  const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null, maxThr = 0, maxSteer = 0, maxCup = 0, gearD = 0;
   for (let i = 0, t = 0; t < 60; i++, t = i * dt) {
     cams.mode = modes[Math.floor(t / 4) % 5]; script(R, t);
     try { I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: R.T.h }, volleys: R.volleys, cond: t > 50 ? 'night' : 'day', playing: true, speed: 1 }); if (I.owns(cams.mode)) I.drive(cams, dt); cams.snap = false; }
     catch (e) { fails++; if (fails < 4) console.log('EXCEPTION at t', t.toFixed(2), cams.mode, e.stack.split('\n').slice(0, 3).join(' | ')); }
     if (!I.built) continue;
     maxDoor = Math.max(maxDoor, I.st.door); maxRec = Math.max(maxRec, I.part.breech.position.z - I.part.breech.userData.home.z); maxHatch = Math.max(maxHatch, I.st.hatch); if (I.hkState === 'FIRING') sawFire++; if (I.warning) sawWarn++;
+    maxThr = Math.max(maxThr, -I.part.throttle.rotation.x); maxSteer = Math.max(maxSteer, Math.abs(I.st.steer)); maxCup = Math.max(maxCup, I.st.cup1 + I.st.cup2); if (I.st.gear > 0.9) gearD++;
+    if (Math.abs(t - 26) < dt / 2) I.setCupolaHatch(1); if (Math.abs(t - 28) < dt / 2) I.setCupolaHatch(2); if (Math.abs(t - 30) < dt / 2) I.setCupolaHatch(0);
     if (Math.abs(t - 8) < dt / 2) at8 = [I.st.door.toFixed(2), I.part.round.visible, I.part.block.position.y.toFixed(2)];
     const c = R.scene.camera; for (const v of [c.position.x, c.position.y, c.position.z, c.quaternion.w, I.head.z, I.head.x]) if (!Number.isFinite(v)) nb++;
     if (i % 97 === 0 && I.inside) { const p = I.pick(0, 0); if (p) I.describe(p); }
@@ -47,7 +49,7 @@ for (const fps of [30, 60, 144, 240]) {
   for (let i = 0; i < 40; i++) I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'night', playing: false, speed: 1 });
   I.turnHead(500, -300); I.zoomBy(-900); cams.mode = 'in_cdr'; I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'day', playing: true, speed: 1 }); I.drive(cams, dt);
   cams.mode = 'orbit'; I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'day', playing: true, speed: 1 });
-  const out = { fps, doorMax: +maxDoor.toFixed(3), recoilMax: +maxRec.toFixed(3), hatchMax: +maxHatch.toFixed(3), firingS: +(sawFire * dt).toFixed(2), warningS: +(sawWarn * dt).toFixed(2), at8, badNumbers: nb, sightCalls: I.stats.sightCalls, leftScene: !I.tur.parent && !I.hul.parent && !I.active, near: R.scene.camera.near };
+  const out = { fps, doorMax: +maxDoor.toFixed(3), recoilMax: +maxRec.toFixed(3), hatchMax: +maxHatch.toFixed(3), throttleMax: +maxThr.toFixed(2), steerMax: +maxSteer.toFixed(2), cupolaHatchMax: +maxCup.toFixed(2), inGearS: +(gearD * dt).toFixed(1), sightDraws: I.stats.sightDraws, firingS: +(sawFire * dt).toFixed(2), warningS: +(sawWarn * dt).toFixed(2), at8, badNumbers: nb, sightCalls: I.stats.sightCalls, leftScene: !I.tur.parent && !I.hul.parent && !I.active, near: R.scene.camera.near };
   finals.push(out); console.log(JSON.stringify(out));
 }
 const I = rig().I; I._build();

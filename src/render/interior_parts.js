@@ -213,7 +213,8 @@ export class Labels {
 // ---- the collector ----
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _c = new THREE.Color();
 export class Kit {
-  constructor(labels) { this.b = new Map(); this.labels = labels; this.frame = new THREE.Matrix4(); this.stack = []; this.tris = 0; }
+  // rec: one entry for every solid box, cylinder or ball (its place and size), kept for the overlap check in tests/interior; tag names the assembly it belongs to
+  constructor(labels) { this.b = new Map(); this.labels = labels; this.frame = new THREE.Matrix4(); this.stack = []; this.tris = 0; this.rec = []; this.tag = 'misc'; this._solid = false; }
   // work inside a moved and turned frame (a console, a seat): everything added until pop() is placed relative to it
   push(x, y, z, rx = 0, ry = 0, rz = 0) { this.stack.push(this.frame.clone()); _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz, 'YXZ')), _s.set(1, 1, 1)); this.frame.multiply(_m); return this; }
   pop() { this.frame.copy(this.stack.pop()); return this; }
@@ -223,16 +224,18 @@ export class Kit {
   // add any geometry: bucket name, colour [hex, kind], place and turn
   geo(bucket, g, col, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
     g = g.index ? g.toNonIndexed() : g.clone();   /* every piece in the same plain form, so they can be welded */
-    _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz, 'YXZ')), _s.set(sx, sy, sz)); _m.premultiply(this.frame); g.applyMatrix4(_m);
+    _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz, 'YXZ')), _s.set(sx, sy, sz)); _m.premultiply(this.frame);
+    if (this._solid) { g.computeBoundingBox(); this.rec.push({ tag: this.tag, bucket, m: _m.clone(), c: g.boundingBox.getCenter(new THREE.Vector3()), h: g.boundingBox.getSize(new THREE.Vector3()).multiplyScalar(0.5) }); this._solid = false; }
+    g.applyMatrix4(_m);
     const n = g.attributes.position.count, a = new Float32Array(n * 4); _c.setHex(col[0], THREE.SRGBColorSpace); for (let i = 0; i < n; i++) { a[i * 4] = _c.r; a[i * 4 + 1] = _c.g; a[i * 4 + 2] = _c.b; a[i * 4 + 3] = col[1]; }
     g.setAttribute('color', new THREE.BufferAttribute(a, 4)); if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
     if (!this.b.has(bucket)) this.b.set(bucket, []); this.b.get(bucket).push(g); this.tris += (g.index ? g.index.count : n) / 3; return this;
   }
-  box(b, w, h, d, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.BoxGeometry(w, h, d), col, x, y, z, rx, ry, rz); }
+  box(b, w, h, d, col, x, y, z, rx, ry, rz) { this._solid = true; return this.geo(b, new THREE.BoxGeometry(w, h, d), col, x, y, z, rx, ry, rz); }
   // cylinder along the y axis unless turned; seg sides
-  cyl(b, r0, r1, len, col, x, y, z, rx, ry, rz, seg = 12, open = false) { return this.geo(b, new THREE.CylinderGeometry(r0, r1, len, seg, 1, open), col, x, y, z, rx, ry, rz); }
-  ball(b, r, col, x, y, z, sx = 1, sy = 1, sz = 1) { return this.geo(b, new THREE.SphereGeometry(r, 10, 7), col, x, y, z, 0, 0, 0, sx, sy, sz); }
+  cyl(b, r0, r1, len, col, x, y, z, rx, ry, rz, seg = 12, open = false) { this._solid = !open; return this.geo(b, new THREE.CylinderGeometry(r0, r1, len, seg, 1, open), col, x, y, z, rx, ry, rz); }
+  ball(b, r, col, x, y, z, sx = 1, sy = 1, sz = 1) { this._solid = true; return this.geo(b, new THREE.SphereGeometry(r, 10, 7), col, x, y, z, 0, 0, 0, sx, sy, sz); }
   ring(b, R, r, col, x, y, z, rx, ry, rz, seg = 28, arc = Math.PI * 2) { return this.geo(b, new THREE.TorusGeometry(R, r, 6, seg, arc), col, x, y, z, rx, ry, rz); }
   plane(b, w, h, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.PlaneGeometry(w, h), col, x, y, z, rx, ry, rz); }
   // a pipe or cable through the given points
