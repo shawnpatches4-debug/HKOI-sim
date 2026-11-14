@@ -8,6 +8,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 1. Read `docs/HANDOFF.md` (current state and next tasks), then the last ~20 entries of `docs/WORKLOG.md`, then skim `docs/OVERHAUL_SPEC.md` (everything he asked for).
 2. `bash tools/setup.sh` once per fresh workspace. If `assets/` is empty, ask Shawn for `hkoi-assets.zip` and unzip it into `./assets` first.
 3. `bash tools/dev.sh check` must pass before you call anything done.
+4. **Before quoting or changing any survival or cut-rate figure, read `docs/HKOI_NUMBERS.md`** and measure with `node tests/study/hkoi_only.js 1000`. HKOI-only survival a few points above no protection, and a beam-cut rate of 1 to 10%, is what the model gives today with the 40 g round. It is not a bug to tune away.
 
 ## Rules he has set (do not relax these)
 - **Double-check everything.** Commit at every checkpoint, run the tests after every change, keep modules clean. He does not want to come back to a laggy, unfixable mess.
