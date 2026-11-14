@@ -32,7 +32,7 @@ const FORCES = {
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five waves']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
-const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true, graphic: true, figures: true, armour: false }, store.get('setup', {}));
+const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true, figures: true, armour: false }, store.get('setup', {}));
 if (q.get('waves')) set.waves = +q.get('waves') || 1;
 for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission']) if (q.get(k)) set[k] = q.get(k);
 if (q.get('owncrew')) set.crew = q.get('owncrew');   /* (the hash word crew=1 belongs to the interior's trial figures) */
@@ -277,8 +277,8 @@ function note() {
   $('s-note').textContent = (set.custom ? `Ladder raid "${set.custom.name}": ${set.custom.note} Ladder raids always use a trained crew with stress on. Pick an enemy force to leave the ladder. ` : F.note + '. ') + (set.spectator ? 'Spectator: every enemy team is shown and you can look through their sights.' : 'Fog of war: you see only what the vehicle\'s sensors and crew have found.');
   const live = $('t-live'), on = demoLive() || state === 'title' && (demo.forced === '1' || demo.forced !== '0' && scene.quality !== 'min' && !scene.software); live.className = on ? '' : 'still'; live.textContent = ''; live.append(el('i'), on ? 'LIVE: a battle with this setup is being fought behind the menu' : 'Still picture (Minimum graphics): the battle starts when you press Play');
 }
-// the settings that belong to the interior: blood, and the crew figures in the seats (the address can still switch them off: graphic=0, crew=0)
-function inside() { interior.graphic = set.graphic !== false && q.get('graphic') !== '0'; interior.crewOn = set.figures !== false && q.get('crew') !== '0'; }
+// the setting that belongs to the interior: the crew figures in the seats (the address can still switch them off: crew=0)
+function inside() { interior.graphic = q.get('graphic') !== '0';   /* graphic effects are always on (the owner's decision); only the address can switch them off, for pictures */ interior.crewOn = set.figures !== false && q.get('crew') !== '0'; }
 function buildTitle() {
   $('ver').textContent = VERSION;
   const again = () => { note(); preview(); };
@@ -286,7 +286,6 @@ function buildTitle() {
   seg('o-force', Object.entries(FORCES).map(([k, f]) => [k, f.name, f.note]), 'force', () => { set.custom = null; store.set('setup', set); again(); });
   seg('o-skill', SKILLS, 'skill', again); seg('o-mission', MISSIONS, 'mission', again); seg('o-waves', LENGTHS, 'waves', again);
   seg('o-crew', SKILLS, 'crew', again); seg('o-stress', [[true, 'On', 'Fear, wounds and overload slow the crew and can break it'], [false, 'Off', 'The crew works like a machine: never slower, never breaks']], 'stress', again);
-  seg('o-graphic', [[true, 'On', 'Blood is shown on a wounded or killed crewman, in the crew panel and inside the vehicle'], [false, 'Off', 'No blood: a wounded man is shown by his face and colour only']], 'graphic', inside);
   seg('o-figures', [[true, 'On', 'The crew sit in their seats inside the vehicle'], [false, 'Off', 'Empty seats']], 'figures', inside);
   seg('o-armour', [[false, 'Flat chance by weapon', 'A hit knocks the vehicle out with a fixed chance for each kind of weapon'], [true, 'The armour decides', 'The plate that is struck decides whether a hit knocks the vehicle out']], 'armour', again);
   seg('o-hud', HUDS, 'hud'); seg('o-spec', [[false, 'Fog of war'], [true, 'Spectator']], 'spectator', note);
@@ -461,7 +460,7 @@ function frameBody(now) {
       const line = rf ? (cams.onTarget ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : fl ? 'ROUND IN FLIGHT' : battle.t < (T.mainReady || 0) ? 'LOADING' : 'SCANNING';
       const txt = `${R ? 'RNG ' + String(Math.round(R / 10) * 10).padStart(4, '0') : 'RNG ----'}   MPAT   ${String(T.main).padStart(2, '0')} RDS\n${line}`; if ($('sight-data').textContent !== txt) $('sight-data').textContent = txt; const sym = (cams.gYaw == null ? 0 : Math.round(cams.gYaw)).toString().padStart(3, '0') + '°   ' + (scene.camera.fov < 10 ? '10×' : '3×'); if ($('sight-sym').textContent !== sym) $('sight-sym').textContent = sym; } }
   if (cams.mode !== lastMode && state === 'play') { buildBar(); show(); }   /* the view changed (a key, a button, or the camera falling back by itself): the bar and the boxes follow */
-  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: set.graphic !== false && q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
+  hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
   drawReplay(dt); drawSensors();
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
