@@ -101,7 +101,7 @@ export class VolleyView {
     return this.s.at(T.e, T.n, 2.6, out);
   }
   // what a round or missile lands on at a scene point: a building, trees, or open ground
-  _surf(x, z) { const W = this.b.world; if (W.buildingAt && W.buildingAt(x, -z, 2)) return 'wall'; const g = W.veg ? W.veg(x, -z) : null; return g && g.h > 2 ? 'trees' : null; }
+  _surf(x, z) { const W = this.b.world; if (W.buildingAt && W.buildingAt(x, -z, 2)) return 'wall'; const g = W.veg ? W.veg(x, -z) : null; return g && (g.cls === 4 || g.cls === 5) ? 'trees' : null; }   /* 4 forest, 5 tree line */
   _mode(th, tv) { let md = 'guided'; for (const p of th.viz.phases || []) if (p.t <= tv) md = p.mode; return md; }
 
   dispose() { this.s.scene.remove(this.group); for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear(); }
@@ -177,7 +177,7 @@ export class VolleyView {
         if (U.glow) { U.glow.visible = burning; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
-          const spacing = (drone ? 7 : rpg ? 2 : th.v > 320 ? 3.4 : 2.6) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
+          const spacing = (drone ? 7 : rpg ? 1.8 : th.v > 320 ? 3 : 2.3) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
           if (st.next < tv - 1.2) st.next = tv - 1.2;
           while (st.next <= tv && guard++ < 160) { const q = this.pos(v, th, l, st.next, this.tmp3);
             if (drone) fx.puff(q.x, q.y, q.z, 0, 0, 0, 1.6, 0.25, 0.9, 0.5, 0.52, 0.55, 0.1, 1, 0);

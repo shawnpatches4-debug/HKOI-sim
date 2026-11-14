@@ -45,7 +45,7 @@ void main() {
   vec4 n = texture2D(noise, q); float n2 = texture2D(noise, q * 2.7 + 0.37).g;
   float d = r + (n.r - 0.5) * 0.8 + (n2 - 0.5) * 0.36, m = (1.0 - smoothstep(0.3, 1.0, d));
   if (m < 0.004) discard;
-  vec3 N = normalize(vec3(vUv + (vec2(n.b, n2) - 0.5) * 0.9, sqrt(max(0.04, 1.0 - r * r))));
+  vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 1.5, sqrt(max(0.04, 1.0 - r * r))));
   float sun = dot(N, sunV) * 0.5 + 0.5, soft = smoothstep(vB.w - 0.05, vB.w + 0.3 * vSoft.y, vSoft.x);
   float a = vB.x * m * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
   float sunL = max(max(sunColor.r, sunColor.g), sunColor.b);
@@ -70,7 +70,7 @@ export class ObscurantCloud {
     const ib = this.ib = new THREE.InstancedInterleavedBuffer(this.data, STRIDE); ib.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aA', new THREE.InterleavedBufferAttribute(ib, 4, 0)); geo.setAttribute('aB', new THREE.InterleavedBufferAttribute(ib, 4, 4)); geo.setAttribute('aC', new THREE.InterleavedBufferAttribute(ib, 4, 8)); geo.instanceCount = 0;
     this.mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, premultipliedAlpha: true, vertexShader: VERT, fragmentShader: FRAG,
-      uniforms: { noise: { value: noiseTexture() }, fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 }, sunColor: { value: new THREE.Color(1, 1, 1) }, sunV: { value: new THREE.Vector3(0, 1, 0) }, thermal: { value: 0 }, night: { value: 0 }, tint: { value: new THREE.Color(0.12, 0.62, 0.95) } } });
+      uniforms: { noise: { value: noiseTexture() }, fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 }, sunColor: { value: new THREE.Color(1, 1, 1) }, sunV: { value: new THREE.Vector3(0, 1, 0) }, thermal: { value: 0 }, night: { value: 0 }, tint: { value: new THREE.Color(0.22, 0.68, 0.96) } } });
     this.mesh = new THREE.Mesh(geo, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = 9;
     this.sunW = new THREE.Vector3(0, 1, 0);
     this.mesh.onBeforeRender = (r, s, camera) => { this.mat.uniforms.sunV.value.copy(this.sunW).transformDirection(camera.matrixWorldInverse); };

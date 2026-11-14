@@ -88,11 +88,11 @@ void main() {
     vec4 n = texture2D(noise, q); float n2 = texture2D(noise, q * 2.6 + 0.37).g;
     float d = r + (n.r - 0.5) * 0.62 + (n2 - 0.5) * 0.3, m = (1.0 - smoothstep(0.22, 1.0, d));
     if (m < 0.004) discard;
-    vec3 N = normalize(vec3(vUv + (vec2(n.b, n2) - 0.5) * 0.9, sqrt(max(0.04, 1.0 - r * r))));
-    float sun = dot(N, sunV) * 0.5 + 0.5, fadeIn = smoothstep(0.0, 0.07, age), fadeOut = pow(1.0 - f, 1.25);   /* appears within a few hundredths of a second, whatever its life */
+    vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 1.5, sqrt(max(0.04, 1.0 - r * r))));   /* a rough bumpy surface, not a smooth ball */
+    float sun = dot(N, sunV) * 0.5 + 0.5, fadeIn = smoothstep(0.0, 0.04, age), fadeOut = pow(1.0 - f, 1.25);   /* appears within a few hundredths of a second, whatever its life */
     float soft = smoothstep(vSoft.y - 0.05, vSoft.y + 0.3 * vSoft.z + 0.05, vSoft.x);
     a = vCol.a * m * fadeIn * fadeOut * soft;
-    lit = vCol.rgb * (sunColor * (0.38 + 0.87 * sun) * (0.82 + 0.3 * n.a) + vFlare);
+    lit = vCol.rgb * (sunColor * (0.5 + 0.7 * sun) * (0.8 + 0.34 * n.a) + vFlare);
     lit = mix(lit, fogColor, vFog);
     if (thermal != 0.0) { lit = vec3(0.2 + 0.1 * sun); a *= 0.6; }
     if (kind > 0.5) {
@@ -113,7 +113,7 @@ void main() {
     emi = vCol.rgb * vHeat * (1.0 - f);
   } else if (kind < 4.5) {   /* flash: a bright core with a soft glow and a few rays */
     float ang = atan(vUv.y, vUv.x), rays = 0.5 + 0.5 * cos(ang * 5.0 + seed * 40.0) * cos(ang * 3.0 - seed * 17.0);
-    float glow = exp(-r * r * 5.0) + 0.35 * exp(-r * 2.6) * (0.55 + 0.45 * rays);
+    float glow = exp(-r * r * 11.0) + 0.1 * exp(-r * 3.2) * (0.4 + 0.6 * rays);
     glow *= 1.0 - smoothstep(0.75, 1.0, r);
     emi = (thermal != 0.0 ? vec3(1.0) : vCol.rgb) * vHeat * glow * (1.0 - f) * (1.0 - f) * vCol.a;
   } else {   /* tracer: a bright core with a coloured glow, longer than it is wide */
@@ -380,7 +380,7 @@ export class Particles {
     for (let i = 0; i < this.cnt(6 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, vx * 0.03 + (this.R() - 0.5) * 4, (this.R() - 0.5) * 3, vz * 0.03 + (this.R() - 0.5) * 4, 4 + this.R() * 4, 1.2 * k, 6 * k, 0.16, 0.16, 0.16, 0.55, 2, 0.15, 0, 0);
   }
   // one puff of a missile's smoke trail
-  trail(x, y, z, k = 1, c = 0.9) { this.spawn(KIND.SMOKE, x, y, z, (this.R() - 0.5) * 0.8, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.8, 4.5 + this.R() * 3.5, 0.7 * k, (3.2 + this.R() * 1.4) * k, c, c, c * 0.98, 0.75, 1, 0.12, 0, 0); }
+  trail(x, y, z, k = 1, c = 0.9) { const j = 0.5 * k; this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * j, y + (this.R() - 0.5) * j, z + (this.R() - 0.5) * j, (this.R() - 0.5) * 0.9, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.9, 4.5 + this.R() * 3.5, (1.5 + this.R() * 0.7) * k, (5 + this.R() * 3) * k, c, c, c * 0.98, 0.55, 1, 0.12, 0, 0); }
   // old name kept for callers that still use it: the cloud is now drawn by the obscurant layer, so this is only the fuze pop
   cloud(x, y, z) { this.cloudPop(x, y, z); }
 }
