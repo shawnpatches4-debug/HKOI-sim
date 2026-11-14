@@ -1,138 +1,129 @@
-// The four crewmen in their seats: the crew models of the owner's original simulator (assets/crew/crew_gunner.json, crew_loader.json,
-// crew_driver.json; the old page had no commander model, so the commander is a second copy of the gunner's), posed and driven the
-// way the old page did it (src/cab.js): a small library of poses given as turns of each joint, a short list of things each man does in
-// each state of mind, his head held at the seat's eye point. What is new: the state of mind is the battle's own crew model
-// (steady, strained, shaken, panicked; wounded; down), the hands are then brought onto the real controls, and they are lit by the
-// interior's lamps. Everything runs on the battle clock, so a replay shows the same thing.
+// The four crewmen in their seats: the crew MODELS of the owner's original simulator (assets/crew/crew_gunner.json, crew_loader.json,
+// crew_driver.json; there is no commander model, so the commander is the gunner's model with a khaki uniform and a lighter helmet so
+// that he can be told apart), animated fresh. The old page's pose-to-pose animation is not used.
 //
-// The models are loaded only through loadModel in units.js (the hosting page allows no other way). Until they have arrived, and if they
-// are missing, the seats are simply empty. A fault in here must never stop the interior: update() catches its own errors.
+// How they move: the method built for the enemy teams (figure.js). Each frame a man has a pose he is aiming for (which way each limb
+// points, how far his trunk leans, where his head is turned); every joint CHASES that on a damped spring worked out exactly, so it
+// eases off, never overshoots, arrives gently, and comes out the same at any frame rate. Then his hands are put exactly on their
+// controls (two-bone reach), with a grip that itself eases on and off, so hands stay on a moving T-bar or handle and never pop.
+// What he is aiming for comes from the battle: its crew model (steady, strained, shaken, panicked; wounded; down), the load cycle,
+// an impact about to land or just landed. All of it runs on the battle clock.
+//
+// The models are loaded only through loadModel in units.js. Until they arrive, or if they are missing, the seats are empty.
+// A fault in here must never stop the interior: update() catches its own errors.
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { DIM } from './interior_build.js';
+import { makeRig, solve, fk, reachQ, chaseJoint, chase, stiff, Y_POSING, NJ, J, Wp } from './figure.js';
 
-const DEG = Math.PI / 180, hsh = (a, b) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); };
-// ---- pose library of the old simulator: degrees [x, y, z] for each joint, layered (legs, trunk, arms, head)
-const PL = {
-  seat: { L_Thigh: [0, 0, 90], R_Thigh: [0, 0, 90], L_Calf: [0, 0, -90], R_Calf: [0, 0, -90] },
-  seatHigh: { L_Thigh: [0, 0, 78], R_Thigh: [0, 0, 82], L_Calf: [0, 0, -100], R_Calf: [0, 0, -85] },
-  crouch: { L_Thigh: [0, 0, 75], R_Thigh: [0, 0, 70], L_Calf: [0, 0, -110], R_Calf: [0, 0, -105] },
-  recline: { L_Thigh: [0, 0, 62], R_Thigh: [0, 0, 62], L_Calf: [0, 0, -50], R_Calf: [0, 0, -54], Spine: [0, 0, -48] },   /* deeper than the old page's: this hull is lower */
-  armsDown: { L_UpperArm: [0, 48, -8], R_UpperArm: [0, -48, -8], L_Forearm: [0, 0, -12], R_Forearm: [0, 0, -12] },
-  yoke: { L_UpperArm: [0, 30, -58], R_UpperArm: [0, -30, -58], L_Forearm: [0, 0, -55], R_Forearm: [0, 0, -55] },
-  handle: { L_UpperArm: [0, 30, -35], R_UpperArm: [0, -25, -48], L_Forearm: [0, 0, -75], R_Forearm: [0, 0, -65] },
-  overhead: { L_UpperArm: [0, 10, -150], R_UpperArm: [0, -45, -10], L_Forearm: [0, 0, -30], R_Forearm: [0, 0, -15] },
-  scope: { L_UpperArm: [0, 15, -130], R_UpperArm: [0, -15, -130], L_Forearm: [0, 0, -70], R_Forearm: [0, 0, -70] },
-  point: { L_UpperArm: [0, 30, -35], R_UpperArm: [0, -20, -100], L_Forearm: [0, 0, -75], R_Forearm: [0, 0, -12] },
-  guard: { L_UpperArm: [0, 10, -125], R_UpperArm: [0, -10, -125], L_Forearm: [0, 0, -115], R_Forearm: [0, 0, -115] },
-  tbar: { L_UpperArm: [0, 25, -40], R_UpperArm: [0, -25, -40], L_Forearm: [0, 0, -35], R_Forearm: [0, 0, -35] },
-  slump: { L_UpperArm: [0, 40, -15], R_UpperArm: [0, -38, -20], L_Forearm: [0, 0, -10], R_Forearm: [0, 0, -8] },
+const hsh = (a, b) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// this skeleton's joint names in the plain names figure.js works with (other names pass through, so the enemy figures are not disturbed)
+const NAME = { Pelvis: 'Hips', Spine: 'Spine', Spine1: 'Spine1', Spine2: 'Spine2', Neck: 'Neck', Head: 'Head' };
+for (const [s, S] of [['L', 'Left'], ['R', 'Right']]) Object.assign(NAME, { [s + '_Clavicle']: S + 'Shoulder', [s + '_UpperArm']: S + 'Arm', [s + '_Forearm']: S + 'ForeArm', [s + '_Hand']: S + 'Hand', [s + '_Thigh']: S + 'UpLeg', [s + '_Calf']: S + 'Leg', [s + '_Foot']: S + 'Foot', [s + '_Toe0']: S + 'ToeBase' });
+export const crewBoneName = n => { if (/^Bip01/.test(n)) { const k = n.replace(/^Bip01[_ ]?/, '').replace(/ /g, '_'); return NAME[k] || n; } return n.replace(/^mixamorig:?/, ''); };
+const FILE = { gnr: 'gunner', cdr: 'gunner', ldr: 'loader', drv: 'driver' }, HULL = { drv: true };
+// which way each man faces in the interior's frame (degrees, 0 = along the gun), and his resting pose: limb directions in his own
+// frame [his left, up, forward], and how far his trunk leans forward (tip, radians; negative = lying back)
+const SEATED = { tip: 0.06, thigh: [0.13, -0.08, 1], shin: [0, -1, 0.12], foot: [0, -0.25, 1], upper: [0.28, -0.85, 0.4], fore: [-0.08, -0.25, 1] };
+const BASE = {
+  gnr: { face: 0, ...SEATED, tip: 0.2, upper: [0.22, -0.7, 0.68], fore: [-0.12, 0.05, 1] },
+  cdr: { face: 0, ...SEATED, thigh: [0.14, -0.3, 1], shin: [0, -1, 0.05] },
+  ldr: { face: 50, ...SEATED },
+  drv: { face: 0, ...SEATED, tip: -0.9, thigh: [0.13, 0.5, 1], shin: [0, -0.55, 0.85], foot: [0, 0.5, 1], upper: [0.2, -0.3, 0.95], fore: [-0.1, 0.35, 1] },
 };
-const merge = (...ps) => { const o = {}; for (const p of ps) for (const k in p) o[k] = p[k].slice(); return o; };
-const HUNCH = { L_Clavicle: [0, -12, 0], R_Clavicle: [0, 12, 0] };
-// What each man does in each state: [seconds, pose, hands stay on the controls]. From the old table, with the loader seated (this turret
-// is too low for him to stand) and "panic" keeping the old page's frozen and frantic actions.
-const A = (s, p, grip = true) => [s, p, grip];
-const ACT = {
-  gnr: { legs: PL.seat,
-    calm: [A(5, merge(PL.yoke, { Spine1: [0, 0, 16], Head: [0, 0, 8] })), A(2.5, merge(PL.yoke, { Spine1: [-18, 0, 10], Head: [-35, 0, 4] }))],
-    alert: [A(4, merge(PL.yoke, { Spine1: [0, 0, 22], Head: [0, 0, 12] })), A(1.2, merge(PL.yoke, { Spine1: [-12, 0, 16], Head: [-40, 0, 2] }))],
-    stressed: [A(3, merge(PL.yoke, HUNCH, { Spine1: [0, 0, 28], Neck: [0, 0, 6], Head: [0, 0, 16] })), A(0.8, merge(PL.yoke, { Spine1: [0, 0, 18], Head: [0, 0, 2], R_UpperArm: [0, -15, -120], R_Forearm: [0, 0, -120] }), false)],
-    panic: [A(1.3, merge(PL.yoke, HUNCH, { Spine1: [0, 0, 32], Neck: [0, 0, 8], Head: [0, 0, 16] })), A(1.5, merge(PL.guard, HUNCH, { Spine1: [0, 0, 30], Head: [0, 0, 22] }), false), A(0.6, merge(PL.yoke, HUNCH, { Spine1: [-10, 0, 28], Head: [-45, 0, 6] }))],
-    shock: [A(9, merge(PL.guard, { Spine1: [0, 0, 40], Head: [0, 0, 28] }), false)] },
-  cdr: { legs: PL.seatHigh,
-    calm: [A(5, merge(PL.handle, { Spine1: [0, 0, 4], Head: [0, 0, -8] })), A(3, merge(PL.handle, { Spine1: [-14, 0, 8], Head: [-48, 0, 12] })), A(3, merge(PL.armsDown, { Spine1: [0, 0, 22], Head: [0, 0, 30], R_Forearm: [0, 0, -70] }), false)],
-    alert: [A(2.5, merge(PL.handle, { Spine1: [0, 0, 4], Head: [0, 0, -8] })), A(1.6, merge(PL.handle, { Spine1: [-14, 0, 8], Head: [-48, 0, 12] })), A(1.5, merge(PL.handle, { Spine1: [0, 0, 10], Head: [0, 0, 4], R_Forearm: [0, 0, -80] }))],
-    stressed: [A(1.6, merge(PL.point, { Spine1: [0, 0, 4] }), false), A(1.4, merge(PL.handle, { Spine1: [-14, 0, 10], Head: [-48, 0, 12], L_UpperArm: [0, 20, -95], L_Forearm: [0, 0, -125] }), false), A(1.3, merge(PL.handle, { Spine1: [0, 0, 30], Head: [0, 0, 18] }))],
-    panic: [A(0.9, merge(PL.point, HUNCH, { Spine1: [0, 0, 16] }), false), A(1.6, merge(PL.guard, HUNCH, { Spine1: [-12, 0, 20], Head: [-30, 0, 22] }), false), A(0.7, merge(PL.handle, HUNCH, { Spine1: [0, 0, 12], Head: [0, 0, -8] }))],
-    shock: [A(9, merge(PL.guard, { Spine1: [0, 0, 34], Head: [0, 0, 25] }), false)] },
-  ldr: { legs: PL.seat,
-    calm: [A(6, merge(PL.armsDown, { Spine1: [0, 0, 6], L_Forearm: [0, 0, -60], R_Forearm: [0, 0, -50] }), false), A(3, merge(PL.armsDown, { Spine1: [60, 0, 6], Head: [40, 0, 6] }), false)],
-    alert: [A(3, merge(PL.scope, { Spine1: [0, 0, 8], Head: [0, 0, -12] }), false), A(1.5, merge(PL.handle, { Spine1: [40, 0, 10], Head: [30, 0, 10] }), false)],
-    stressed: [A(1.8, merge(PL.overhead, { Spine1: [0, 0, 10], Head: [0, 0, -10] }), false), A(1.4, merge(PL.handle, { Spine1: [50, 0, 14], Head: [40, 0, 4] }), false)],
-    panic: [A(1.0, merge(PL.overhead, HUNCH, { Spine1: [0, 0, 16], Head: [0, 0, 6], R_UpperArm: [0, -10, -150], R_Forearm: [0, 0, -30] }), false), A(1.4, merge(PL.guard, HUNCH, { Spine1: [0, 0, 26], Head: [0, 0, 20] }), false)],
-    shock: [A(9, merge(PL.guard, { Spine1: [0, 0, 35], Head: [0, 0, 25] }), false)],
-    load: [A(1, merge(PL.tbar, { Spine1: [60, 0, 18], Head: [20, 0, 6], L_UpperArm: [0, 25, -75], R_UpperArm: [0, -25, -75] }))] },
-  drv: { legs: PL.recline,
-    calm: [A(8, merge(PL.tbar)), A(3, merge(PL.tbar, { Head: [0, 0, 18] }))],
-    alert: [A(4, merge(PL.tbar, { Spine1: [0, 0, 8] }))],
-    stressed: [A(2, merge(PL.tbar, { Spine1: [0, 0, 16], Head: [0, 0, -6] })), A(1, merge(PL.tbar, { Spine1: [0, 0, 12], Head: [25, 0, 10] }))],
-    panic: [A(1.0, merge(PL.tbar, HUNCH, { Spine1: [0, 0, 20], Head: [0, 0, -8] })), A(1.5, merge(PL.guard, HUNCH, { Spine1: [0, 0, 14], Head: [0, 0, 14] }), false)],
-    shock: [A(9, merge(PL.guard, { Spine1: [0, 0, -8] }), false)] },
+// where each man looks, and for how long, when nothing else has his attention: [seconds, look (radians, + = to his left), nod (+ = down), what]
+const GAZE = {
+  gnr: [[5, 0, 0.08, 'sight'], [1.6, -0.55, 0.42, 'computer'], [4, 0, 0.1, 'sight'], [1.2, 0.1, 0.5, 'panel']],
+  cdr: [[3.2, 0.05, 0.42, 'display'], [2.6, -0.95, 0.32, 'HKOI panel'], [2.2, 0.5, -0.12, 'ports'], [2.2, -0.45, -0.12, 'ports'], [1.8, 0, -0.1, 'ports']],
+  ldr: [[4, 0.1, 0.2, 'breech'], [2.5, -0.6, 0.05, 'radios'], [2.2, 0.65, -0.25, 'periscope']],
+  drv: [[6, 0, -0.1, 'vision blocks'], [1.6, -0.5, 0.2, 'display'], [4, 0.12, -0.1, 'vision blocks'], [1.3, 0.5, 0.22, 'master panel']],
 };
-const WOUND = { L_UpperArm: [0, 22, -62], L_Forearm: [0, 0, -128], R_UpperArm: [0, -40, -18], R_Forearm: [0, 0, -20], Spine1: [10, 14, 20], Head: [14, 8, 18] };   /* left hand clamped to the wound, folded over it */
-const DOWN = merge(PL.slump, { Spine: [0, 6, 18], Spine1: [-8, 16, 38], Neck: [0, 0, 14], Head: [18, 10, 34] });                                             /* slumped where he sat */
-const PHASE = { steady: 'calm', strained: 'alert', shaken: 'stressed', panicked: 'panic' };
-const FILE = { gnr: 'gunner', cdr: 'gunner', ldr: 'loader', drv: 'driver' }, ROT = { gnr: Math.PI, cdr: Math.PI, ldr: Math.PI * 0.72, drv: Math.PI }, HULL = { drv: true };
-const qX = new THREE.Quaternion(), qY = new THREE.Quaternion(), qZ = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _t = new THREE.Vector3(), _q = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _pole = new THREE.Vector3(), _e = new THREE.Euler();
 
 function bloodTexture() {   /* blotches for a blood-soaked uniform: repeats over the figure */
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); let s = 17; const R = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; x.clearRect(0, 0, 128, 128);
-  for (let i = 0; i < 60; i++) { const r = 3 + R() * (i < 8 ? 26 : 9); x.fillStyle = `rgba(${96 + R() * 40 | 0},${R() * 10 | 0},${R() * 8 | 0},${0.6 + R() * 0.4})`; for (const [ox, oy] of [[0, 0], [128, 0], [0, 128], [-128, 0], [0, -128]]) { x.beginPath(); x.ellipse(R() * 0 + (i * 37 % 128) + ox, (i * 61 % 128) + oy, r, r * 0.7, i, 0, 7); x.fill(); } }
+  for (let i = 0; i < 60; i++) { const r = 3 + R() * (i < 8 ? 26 : 9); x.fillStyle = `rgba(${96 + R() * 40 | 0},${R() * 10 | 0},${R() * 8 | 0},${0.6 + R() * 0.4})`; for (const [ox, oy] of [[0, 0], [128, 0], [0, 128], [-128, 0], [0, -128]]) { x.beginPath(); x.ellipse((i * 37 % 128) + ox, (i * 61 % 128) + oy, r, r * 0.7, i, 0, 7); x.fill(); } }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 
 export class CrewFigures {
-  // cab: (opts) => a material of the interior (opts.skinned for these figures); groups { tur, hul }; base: the asset folder
-  constructor(cab, groups, base) {
-    this.G = groups; this.cab = cab; this.men = {}; this.ready = false; this.failed = false; this.tris = 0; this.blood = null; this.err = 0;
-    if (!base || typeof fetch === 'undefined') { this.failed = true; return; }
+  // cab: (opts) => a material of the interior (opts.skinned for these figures); groups { tur, hul }; base: the asset folder.
+  // given (tests only): { gunner, loader, driver } ready-made figures to use instead of loading the files
+  constructor(cab, groups, base, given) {
+    this.G = groups; this.cab = cab; this.men = {}; this.ready = false; this.failed = false; this.tris = 0; this.blood = null; this.err = 0; this.lastT = null; this.measure = null;
+    if (given) { this._all(given); return; }
+    if (!base || typeof fetch === 'undefined' || typeof location === 'undefined') { this.failed = true; return; }
     import('./units.js').then(U => Promise.all(['gunner', 'loader', 'driver'].map(k => U.loadModel(base + 'crew/crew_' + k + '.json')))).then(([g, l, d]) => {
-      if (!g || !l || !d) { this.failed = true; return; } const src = { gunner: g, loader: l, driver: d }; this.blood = bloodTexture();
-      for (const r of ['gnr', 'cdr', 'ldr', 'drv']) this.men[r] = this._make(src[FILE[r]], r); this.ready = true;
+      if (!g || !l || !d) { this.failed = true; return; } this.blood = bloodTexture(); this._all({ gunner: cloneSkinned(g), loader: cloneSkinned(l), driver: cloneSkinned(d), gunner2: cloneSkinned(g) });
     }).catch(e => { this.failed = true; console.warn('crew figures not shown:', e && e.message); });
   }
-  _make(src, role) {
-    const m = cloneSkinned(src), B = {}, rest = {}, mats = [], g = new THREE.Group(); let tris = 0;
-    m.traverse(o => { if (o.isBone) B[o.name.replace(/^Bip01[_ ]/, '').replace(/ /g, '_')] = o;
-      if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; const n = (o.material && o.material.name) || ''; if (/knife|pistol/.test(n)) { o.visible = false; return; }
-        // tank crew, not infantry (as the old page did): plain coveralls instead of camouflage, a dark crew helmet
-        const tint = /_body$/.test(n) ? [0.62, 0.64, 0.5] : /_helmet$/.test(n) ? [0.3, 0.31, 0.27] : /_equipment$/.test(n) ? [0.56, 0.53, 0.42] : [1, 1, 1];
-        const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; mat.userData.cloth = /_body$|_equipment$/.test(n); o.material = mat; mats.push(mat);
-        tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
-    for (const k in B) rest[k] = B[k].quaternion.clone(); g.add(m); g.rotation.y = ROT[role]; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
-    return { g, m, B, rest, mats, role, P: {}, lvl: -1 };
+  _all(src) { for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const m = this._make(r === 'cdr' ? (src.gunner2 || src.gunner_cdr) : src[FILE[r]], r); if (!m) { this.failed = true; return; } this.men[r] = m; } this.ready = true; }
+  _make(fig, role) {
+    if (!fig) return null; const mats = [], g = new THREE.Group(); let tris = 0; fig.position.set(0, 0, 0); fig.rotation.set(0, 0, 0); fig.updateMatrixWorld(true);
+    const rig = makeRig(fig, crewBoneName); if (!rig) { console.warn('crew figure: the skeleton is not the one expected'); return null; }
+    fig.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; const n = (o.material && o.material.name) || ''; if (/knife|pistol/.test(n)) { o.visible = false; return; }
+      // tank crew, not infantry: plain coveralls instead of camouflage and a dark crew helmet; the commander in khaki with a lighter helmet
+      const cdr = role === 'cdr', tint = /_body$/.test(n) ? (cdr ? [0.74, 0.66, 0.48] : [0.6, 0.63, 0.48]) : /_helmet$/.test(n) ? (cdr ? [0.5, 0.46, 0.33] : [0.28, 0.29, 0.25]) : /_equipment$/.test(n) ? [0.56, 0.53, 0.42] : [1, 1, 1];
+      if (this.cab) { const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; o.material = mat; mats.push(mat); }
+      tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+    const B = BASE[role]; g.add(fig); g.rotation.y = Math.PI - B.face * Math.PI / 180; g.visible = false; this.G[HULL[role] ? 'hul' : 'tur'].add(g); this.tris += tris;
+    const Q = () => Array.from({ length: NJ }, () => new THREE.Quaternion()), D = Array.from({ length: NJ }, () => null);
+    for (const n of ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot']) D[J[n]] = [0, -1, 0];
+    const sp = () => ({ x: 0, v: 0, g: 0 });
+    return { g, fig, rig, mats, role, D, X: { tip: 0, roll: 0, yaw: 0, twist: 0, look: 0, nod: 0 }, goal: Q(), prev: Q(), cur: Q(), draw: Q(), vel: Array.from({ length: NJ }, () => new THREE.Vector3()), fresh: true,
+      head: [sp(), sp(), sp()], grip: [sp(), sp()], hand: [[sp(), sp(), sp()], [sp(), sp(), sp()]], lvl: -1, head0: fig.getObjectByProperty('isBone', true) && rig.bones[J.Head], handErr: [0, 0], speedJump: 0 };
   }
-  // joints: every one back to rest, then the pose's turns (the old page's applyPose)
-  _apply(r, P) { for (const k in r.rest) { const b = r.B[k], p = P[k]; b.quaternion.copy(r.rest[k]); if (!p) continue; qZ.setFromAxisAngle(AZ, (p[2] || 0) * DEG); qY.setFromAxisAngle(AY, (p[1] || 0) * DEG); qX.setFromAxisAngle(AX, (p[0] || 0) * DEG); b.quaternion.multiply(qZ).multiply(qY).multiply(qX); } }
-  // which action of a list is running at battle time t, and the one before it with how far the change-over has got (so the man moves, not jumps)
-  _pick(list, t, seed) { let tot = 0; for (const a of list) tot += a[0]; let u = ((t + seed * 3.7) % tot + tot) % tot, i = 0; while (u >= list[i][0]) { u -= list[i][0]; i++; } return [list[i], list[(i + list.length - 1) % list.length], Math.min(1, u / 0.4)]; }
-  // bring a hand onto a point (in the group's frame): turn the upper arm and forearm so the wrist reaches it, elbow held down and out
-  _reach(r, side, target, grp) {
-    const up = r.B[side + '_UpperArm'], fo = r.B[side + '_Forearm'], ha = r.B[side + '_Hand']; if (!up || !fo || !ha) return;
-    up.getWorldPosition(_a); fo.getWorldPosition(_b); ha.getWorldPosition(_c); const l1 = _b.distanceTo(_a), l2 = _c.distanceTo(_b); _t.set(target[0], target[1], target[2]); grp.localToWorld(_t);
-    _d.copy(_t).sub(_a); const want = _d.length() || 1e-4, dist = Math.max(Math.abs(l1 - l2) * 1.05 + 1e-4, Math.min(want, (l1 + l2) * 0.985)); _d.divideScalar(want);
-    const along = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist), out = Math.sqrt(Math.max(0, l1 * l1 - along * along));
-    _e.set(side === 'L' ? -0.5 : 0.5, -1, 0).transformDirection(grp.matrixWorld); _e.addScaledVector(_d, -_e.dot(_d)); if (_e.lengthSq() < 1e-6) _e.set(0, -1, 0); _e.normalize();
-    const elbow = _e.multiplyScalar(out).addScaledVector(_d, along).add(_a), wrist = _t.copy(_a).addScaledVector(_d, dist);
-    this._turn(up, _b.sub(_a).normalize(), _c.copy(elbow).sub(_a).normalize()); fo.getWorldPosition(_b); ha.getWorldPosition(_c); this._turn(fo, _c.sub(_b).normalize(), _d.copy(wrist).sub(_b).normalize());
-  }
-  _turn(b, from, to) { _q.setFromUnitVectors(from, to); b.getWorldQuaternion(_wq); b.parent.getWorldQuaternion(_pq); b.quaternion.copy(_pq.invert().multiply(_q.multiply(_wq))); b.updateMatrixWorld(true); }
 
-  // men: { gnr: { on, head [x,y,z], hands [[x,y,z],[x,y,z]] (left, right), state, status, frozen, brace, flinch, bodyOnly, blood, load (0..1 or -1) }, ... }; t = battle time
-  update(men, t) {
+  // men: { gnr: { on, head [x,y,z], hands [[x,y,z],[x,y,z]] (left, right; in the interior's frame), state, status, frozen, brace, flinch, bodyOnly, blood, load, rise }, ... }
+  // t = battle time, dt = battle seconds since the last call (0 while paused)
+  update(men, t, dt) {
     if (!this.ready) return;
-    try { for (const role of ['gnr', 'cdr', 'ldr', 'drv']) { const r = this.men[role], M = men[role], on = !!(M && M.on); if (r.g.visible !== on) r.g.visible = on; if (!on) continue;
-      const Rr = ACT[role], grp = this.G[HULL[role] ? 'hul' : 'tur'], down = M.status === 'down', hurt = M.status === 'wounded'; let grip = true, P;
-      if (down) { P = merge(Rr.legs, DOWN); grip = false; }
-      else { const list = M.flinch > 0.55 ? Rr.shock : role === 'ldr' && M.load >= 0.05 && M.load < 0.86 ? Rr.load : Rr[M.frozen ? 'panic' : PHASE[M.state] || 'calm'], [cur, prev, k] = this._pick(list, t, role.charCodeAt(0));
-        P = merge(Rr.legs, cur[1]); grip = cur[2];
-        if (k < 1) { const Q = merge(Rr.legs, prev[1]), e = k * k * (3 - 2 * k); for (const j in Q) if (!P[j]) P[j] = [0, 0, 0]; for (const j in P) { const q = Q[j] || [0, 0, 0], p = P[j]; p[0] = q[0] + (p[0] - q[0]) * e; p[1] = q[1] + (p[1] - q[1]) * e; p[2] = q[2] + (p[2] - q[2]) * e; } if (!prev[2]) grip = grip && k > 0.6; }
-        if (hurt) { for (const j in WOUND) { const w = WOUND[j], p = P[j] || (P[j] = [0, 0, 0]); if (/Arm$|Forearm$/.test(j)) { p[0] = w[0]; p[1] = w[1]; p[2] = w[2]; } else { p[0] += w[0]; p[1] += w[1]; p[2] += w[2]; } } }
-        // breathing; tremor when shaken or worse; thrown by an impact; shoulders up and head down when a hit is about to land
-        const add = (j, x, y, z) => { const p = P[j] || (P[j] = [0, 0, 0]); p[0] += x; p[1] += y; p[2] += z; }, bad = M.state === 'panicked' || M.state === 'shaken' ? (M.state === 'panicked' ? 1 : 0.55) : 0;
-        add('Spine1', 0, 0, Math.sin(t * 1.5 + role.charCodeAt(1)) * (1 + bad * 1.5) + M.flinch * 12 + M.brace * 7); add('Head', (hsh(Math.floor(t * 13), 3) - 0.5) * 5 * bad, 0, (hsh(Math.floor(t * 13), 8) - 0.5) * 4 * bad + M.flinch * 9 + M.brace * 8);
-        if (M.brace || bad) { add('L_Clavicle', 0, -8 * Math.max(M.brace, bad), 0); add('R_Clavicle', 0, 8 * Math.max(M.brace, bad), 0); } }
-      this._apply(r, P);
-      // the viewer in this seat: no head of his own in front of his eyes (the old page did the same), but his own arms and legs
-      const hs = M.bodyOnly ? 0.001 : 1; if (r.B.Head && r.B.Head.scale.x !== hs) r.B.Head.scale.setScalar(hs);
-      // stand him so that his head is at the seat's eye point
-      r.g.position.set(0, 0, 0); r.g.updateMatrixWorld(true); r.B.Head.getWorldPosition(_a); grp.worldToLocal(_a); r.g.position.set(M.head[0] - _a.x, M.head[1] - _a.y - 0.06 - (down ? 0.1 : 0), M.head[2] - _a.z + 0.05); r.g.updateMatrixWorld(true);
-      if (grip && !down) { if (!(hurt)) this._reach(r, 'L', M.hands[0], grp); this._reach(r, 'R', M.hands[1], grp); }
-      // blood: the uniform darkens and stains, more for the dead than for the wounded (the old page's treatment, made plain to see)
-      const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.62, 0.2, 0.18] : lvl === 1 ? [0.85, 0.5, 0.46] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.62 : 0; } }
-    } } catch (e) { if (this.err++ < 3) console.warn('crew figure fault:', e && e.message); }
+    try {
+      dt = this.lastT == null ? 0 : t - this.lastT;   /* the battle's own clock: the same whether it is played, stepped or replayed */
+      const jump = this.lastT == null || dt < -1e-6 || dt > 2; this.lastT = t; if (jump) dt = 0;   /* a new battle, a rewind or a long skip: settle at once instead of chasing across the gap */
+      for (const role of ['gnr', 'cdr', 'ldr', 'drv']) { const r = this.men[role], M = men[role], on = !!(M && M.on); if (r.g.visible !== on) r.g.visible = on; if (!on) { r.fresh = true; continue; } this._man(r, M, t, dt, jump); }
+    } catch (e) { if (this.err++ < 3) console.warn('crew figure fault:', e && e.message); }
+  }
+  _man(r, M, t, dt, jump) {
+    const role = r.role, B = BASE[role], D = r.D, X = r.X, sd = [1, -1], down = M.status === 'down', hurt = M.status === 'wounded', panic = !down && (M.state === 'panicked' || M.frozen), shaken = M.state === 'shaken', strained = M.state === 'strained';
+    const seed = role.charCodeAt(0) + role.charCodeAt(1), set = (n, v, k) => { const d = D[J[n]]; d[0] = v[0] * k; d[1] = v[1]; d[2] = v[2]; };
+    // ---- what he is aiming for
+    for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left', k = sd[i]; set(S + 'UpLeg', B.thigh, k); set(S + 'Leg', B.shin, k); set(S + 'Foot', B.foot, k); set(S + 'Arm', B.upper, k); set(S + 'ForeArm', B.fore, k); }
+    // attention: where his head is turned (it moves from one thing to the next on its spring, never snapping)
+    let look = 0, nod = 0; { const L = GAZE[role], per = strained ? 0.6 : shaken ? 0.45 : 1; let tot = 0; for (const a of L) tot += a[0] * per; let u = ((t + seed * 1.7) % tot + tot) % tot, i = 0; while (u >= L[i][0] * per) { u -= L[i][0] * per; i++; } look = L[i][1]; nod = L[i][2]; }
+    let tip = B.tip, roll = 0.018 * Math.sin(t * 0.31 + seed), twist = 0, gripL = 1, gripR = 1;
+    tip += 0.012 * Math.sin(t * 1.45 + seed);                                                                           /* breathing */
+    if (strained) tip += 0.05; if (shaken) { tip += 0.11; look += (hsh(Math.floor(t * 6), seed) - 0.5) * 0.1; nod += 0.08; }
+    if (role === 'ldr' && M.load >= 0.05 && M.load < 0.86) { look = M.load < 0.4 ? -1.0 : 0.25; nod = 0.25; twist = M.load < 0.4 ? -0.55 : 0.2; tip += 0.12; }      /* at the rack, then at the breech */
+    if (role === 'cdr' && M.rise > 0.02) { nod = -0.05; look *= 0.6; }
+    const br = Math.max(M.brace || 0, 0), fl = M.flinch || 0; tip += 0.2 * br + 0.42 * fl; nod += 0.28 * br + 0.45 * fl; if (br > 0.5) look *= 0.3;   /* bracing for a hit about to land; thrown by one that has */
+    if (panic) { tip += 0.3; nod = 0.55; look = (hsh(Math.floor(t * 1.3), seed) - 0.5) * 0.5; gripL = gripR = 0; for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left'; set(S + 'Arm', [0.32, 0.25, 0.9], sd[i]); set(S + 'ForeArm', [-0.45, 0.88, 0.05], sd[i]); } }   /* hands to his helmet */
+    if (hurt) { tip += 0.2; roll += 0.17; nod += 0.3; look = 0.15; gripL = 0; set('LeftArm', [0.18, -0.9, 0.38], 1); set('LeftForeArm', [-0.85, 0.22, 0.48], 1); }                                   /* left hand clamped to the wound, working one-handed */
+    if (down) { tip = role === 'drv' ? B.tip + 0.1 : 0.78; roll = 0.3 * (hsh(seed, 9) < 0.5 ? -1 : 1); nod = 0.72; look = 0.3; gripL = gripR = 0; for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left'; set(S + 'Arm', [0.16, -1, 0.12], sd[i]); set(S + 'ForeArm', [0.05, -1, 0.3], sd[i]); } }
+    if (M.rise > 0.02) { const k = M.rise; for (let i = 0; i < 2; i++) { const S = i ? 'Right' : 'Left'; set(S + 'UpLeg', [0.13, -0.08 - 0.9 * k, 1 - 0.7 * k], sd[i]); } }   /* standing up into the open hatch */
+    X.tip = tip; X.roll = roll; X.twist = twist; X.look = clamp(look, -1.2, 1.2); X.nod = clamp(nod, -0.4, 0.9);
+    solve(r.rig, D, X, r.goal);
+    // ---- every joint chases it
+    const slow = down ? 0.45 : hurt ? 0.7 : 1, first = r.fresh || jump; r.speedJump = 0;
+    for (let i = 0; i < NJ; i++) { if (first) { r.cur[i].copy(r.goal[i]); r.vel[i].set(0, 0, 0); } else if (dt > 1e-6) { const w = r.vel[i], w0x = w.x, w0y = w.y, w0z = w.z; chaseJoint(r.cur[i], w, r.prev[i], r.goal[i], Y_POSING[i] * slow * 0.55, dt); const dj = Math.hypot(w.x - w0x, w.y - w0y, w.z - w0z); if (dj > r.speedJump) r.speedJump = dj; } r.prev[i].copy(r.goal[i]); r.draw[i].copy(r.cur[i]); }
+    // his head is held at the seat's eye point (the point itself eases when he rises or slumps), and the grip of each hand eases on and off
+    const hy = M.head[1] - (down ? 0.16 : hurt ? 0.05 : 0) - 0.05 * fl, HG = [M.head[0], hy, M.head[2]], yh = stiff(0.16), yg = stiff(0.14), GG = [gripL, gripR];
+    for (let k = 0; k < 3; k++) { const s = r.head[k]; if (first) { s.x = HG[k]; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, HG[k], yh, dt); s.g = HG[k]; }
+    for (let k = 0; k < 2; k++) { const s = r.grip[k]; if (first) { s.x = GG[k]; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, GG[k], yg, dt); s.g = GG[k]; }
+    // where his hands should be: they follow their controls closely (a short spring, so a control that jumps does not jerk the arm)
+    const yc = stiff(0.035); for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) { const s = r.hand[i][k], gk = M.hands[i][k]; if (first) { s.x = gk; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, gk, yc, dt, 1); s.g = gk; }
+    r.fresh = false;
+    // ---- stand him so that his eyes are at the eye point, then put his hands on the controls
+    fk(r.rig, r.draw); const ry = r.g.rotation.y, c = Math.cos(ry), s = Math.sin(ry), hp = Wp[J.Head], ex = hp.x, ey = hp.y + 0.075, ez = hp.z + 0.09;   /* his eyes: a little above and ahead of the head joint */
+    r.g.position.set(r.head[0].x - (c * ex + s * ez), r.head[1].x - ey, r.head[2].x - (-s * ex + c * ez));
+    for (let i = 0; i < 2; i++) { const g = clamp(r.grip[i].x, 0, 1); if (g < 0.01) { r.handErr[i] = 0; continue; } const S = i ? 'Right' : 'Left', H = r.hand[i];
+      const dx = H[0].x - r.g.position.x, dy = H[1].x - r.g.position.y, dz = H[2].x - r.g.position.z; _t.set(c * dx - s * dz, dy, s * dx + c * dz);                        /* the control, in his own frame */
+      _pole.set(sd[i] * 0.65, -0.7, -0.25); reachQ(r.rig, r.draw, S, _t, _pole, g * g * (3 - 2 * g));
+      if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Wp[J[S + 'Hand']].distanceTo(_v) : 0; r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
+    for (let i = 0; i < NJ; i++) r.rig.bones[i].quaternion.copy(r.draw[i]);
+    // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
+    const hb = r.rig.bones[J.Head], hs = M.bodyOnly ? 0.001 : 1; if (hb.scale.x !== hs) hb.scale.setScalar(hs);
+    // blood: the uniform darkens and stains, more for the dead than for the wounded
+    const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.7, 0.26, 0.22] : lvl === 1 ? [0.9, 0.6, 0.55] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
   }
   hide() { for (const k in this.men) this.men[k].g.visible = false; }
   triCount() { return Math.round(this.tris); }

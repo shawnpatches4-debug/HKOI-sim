@@ -90,6 +90,19 @@ async def main():
                              ('loader_down_from_cdr_40s', "(stage(40, 'kill', 'ldr'), crewAs({ ldr: { status: 'down' }, gnr: { status: 'ok', state: 'steady' } }), lk('in_cdr', -80, -22, 1))"), ('loader_down_from_gnr_side', "lk('in_gnr', -100, -4, 1, [-0.3, 0.2, 0.5])"),
                              ('driver_panicked_shoulder', "(crewAs({ drv: { state: 'panicked' }, ldr: { status: 'ok' } }), lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1]))"), ('all_shaken_cut_smoke_3s', "(stage(3, 'pen', 'gnr'), crewAs({ drv: { state: 'shaken' }, gnr: { state: 'shaken', status: 'wounded' }, cdr: { state: 'strained' }, ldr: { state: 'panicked' } }), cutv(5.2, 2.0, 3.0))"), ('cut_above_after_hit', "cutv(-0.6, -1.5, 8.5)"),
                              ('cdr_own_seat_no_arm', "lk('in_cdr', 0, 0, 1)")]: await shot('crew2_' + name, js)
+        if which == 'strips':   # short runs of stills, a fixed step of battle time apart: a load cycle, a hit, the commander's head moving between his tasks
+            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
+            for i in range(80):
+                st = await pg.evaluate('JSON.stringify(__beta.interior.stats)')
+                if '"crewReady":true' in st or '"crewFailed":true' in st: break
+                await pg.wait_for_timeout(1500)
+            print('crew', st)
+            for i in range(7): await shot(f'strip_head_turn_{i}', f"(__beta.runTo(__beta.battle.t + 0.7), lk('in_ldr', 30, 2, 1.5))")
+            print('load', await pg.evaluate('stepTo(b => !b.tank.loaded && b.tank.loadT > 0.2 && !(b.tank.ai && b.tank.ai.ldr && b.tank.ai.ldr.up))'))
+            for i in range(9): await shot(f'strip_load_{i}', f"(__beta.runTo(__beta.battle.t + {0.0 if i == 0 else 0.7}), lk('in_cdr', -62, -20, 1))")
+            await pg.evaluate("""void (window.stageAt = (T) => { const b = __beta.battle, V = __beta.THREE; b.interiorHits = [{ T, pen: true, kill: false, minor: false, s: 1.6, e: new V.Vector3(1.7, 0.35, -0.3), d: new V.Vector3(-1, -0.03, 0.1).normalize(), comps: { gps: 'damaged' }, crew: { gnr: 'wounded' }, idx: 7 }]; })""")
+            T0 = await pg.evaluate('__beta.battle.t + 1.0'); await pg.evaluate(f'void stageAt({T0})')
+            for i, dtt in enumerate([0.9, 0.15, 0.25, 0.5, 1.0, 2.5, 8]): await shot(f'strip_hit_{i}', f"(__beta.runTo(__beta.battle.t + {dtt}), lk('in_ldr', 30, 2, 1.2))")
         if which == 'cuts':   # the cutaway from every side, at rest and again with the turret laid on a target
             CU = [('left', "cutv(-5.2, 2.4, 3.0)"), ('right', "cutv(5.2, 2.0, 3.0)"), ('above', "cutv(-0.6, -1.5, 8.5)"), ('front_left', "cutv(-3.6, 5.2, 2.0)"), ('rear_right_high', "cutv(3.2, -3.4, 5.6)")]
             for name, js in CU: await shot('cut_' + name, js)

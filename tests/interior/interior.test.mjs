@@ -37,14 +37,25 @@ function script(R, t) {
   V.aimAt = t > 17 && t < 20 ? new THREE.Vector3(300, 20, -400) : null; tank.recoil = t > 18 && t < 19 ? 0.12 * ((t * 7) % 1) : 0;
   T.ai.ldr.up = t > 42 && t < 48; T.alive = t < 55;
 }
+// the crew: bone trees read straight from the model files (no drawing needed to test how they move)
+const fs = await import('node:fs'), ASSETS = process.env.HK_ASSETS || '';
+function boneTree(file) { const d = JSON.parse(fs.readFileSync(file, 'utf8')), N = d.nodes.map(n => { const b = new THREE.Bone(); b.name = (n.name || '').replace(/ /g, '_'); if (n.translation) b.position.fromArray(n.translation); if (n.rotation) b.quaternion.fromArray(n.rotation); if (n.scale) b.scale.fromArray(n.scale); if (n.matrix) { new THREE.Matrix4().fromArray(n.matrix).decompose(b.position, b.quaternion, b.scale); } return b; });
+  d.nodes.forEach((n, i) => (n.children || []).forEach(c => N[i].add(N[c]))); const root = new THREE.Group(); for (const i of d.scenes[d.scene || 0].nodes) root.add(N[i]); return root; }
+const haveCrew = ASSETS && ['gunner', 'loader', 'driver'].every(k => fs.existsSync(`${ASSETS}/crew/crew_${k}.json`));
+const { CrewFigures } = await import('./render/interior_crewfig.js');
+const crewOf = I => { const m = k => boneTree(`${ASSETS}/crew/crew_${k}.json`); const c = new CrewFigures(null, { tur: I.tur, hul: I.hul }, null, { gunner: m('gunner'), loader: m('loader'), driver: m('driver'), gunner2: m('gunner') }); c.measure = true; return c; };
+const SAMPLE = [9.5, 18.5, 26, 37.5, 47, 56.5], samples = {};
 let fails = 0; const finals = [];
 for (const fps of [30, 60, 144, 240]) {
-  const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; let shakeMax = 0, smoke37 = null, smoke45 = null, crewBad = 0, crewInst = 0, bloodEnd = '', flick21 = null; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null, maxThr = 0, maxSteer = 0, maxCup = 0, gearD = 0;
+  const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; const crew = { jump: 0, hand: 0, bad: 0 }; let shakeMax = 0, smoke37 = null, smoke45 = null, crewBad = 0, crewInst = 0, bloodEnd = '', flick21 = null; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null, maxThr = 0, maxSteer = 0, maxCup = 0, gearD = 0;
   for (let i = 0, t = 0; t < 60; i++, t = i * dt) {
     cams.mode = modes[Math.floor(t / 4) % 5]; script(R, t);
     try { I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: R.T.h }, volleys: R.volleys, cond: t > 50 ? 'night' : 'day', playing: true, speed: 1 }); if (I.owns(cams.mode)) I.drive(cams, dt); cams.snap = false; }
     catch (e) { fails++; if (fails < 4) console.log('EXCEPTION at t', t.toFixed(2), cams.mode, e.stack.split('\n').slice(0, 3).join(' | ')); }
     if (!I.built) continue;
+    if (haveCrew && (!I.crewFig || !I.crewFig.measure)) { I.crewFig = crewOf(I); if (fps === 30 && !globalThis._said) { globalThis._said = 1; console.log('crew skeletons ready:', I.crewFig.ready, 'failed:', I.crewFig.failed, 'men:', Object.keys(I.crewFig.men).join(',')); } }
+    if (haveCrew && I.crewFig.ready && t > 0.5) { for (const k in I.crewFig.men) { const m = I.crewFig.men[k]; if (!m.g.visible) continue; crew.jump = Math.max(crew.jump, m.speedJump * (fps / 60)); if (k === 'gnr' || k === 'drv') crew.hand = Math.max(crew.hand, m.handErr[0], m.handErr[1]); for (const q of m.draw) if (!Number.isFinite(q.x + q.y + q.z + q.w)) crew.bad++; }
+      for (const st of SAMPLE) if (Math.abs(t - st) < dt / 2) (samples[st] = samples[st] || {})[fps] = Object.values(I.crewFig.men).map(m => m.draw.map(q => q.clone())); }
     maxDoor = Math.max(maxDoor, I.st.door); maxRec = Math.max(maxRec, I.part.breech.position.z - I.part.breech.userData.home.z); maxHatch = Math.max(maxHatch, I.st.hatch); if (I.hkState === 'FIRING') sawFire++; if (I.warning) sawWarn++;
     maxThr = Math.max(maxThr, I.st.thr); maxSteer = Math.max(maxSteer, Math.abs(I.st.steer)); maxCup = Math.max(maxCup, I.st.cup1 + I.st.cup2); if (I.st.gear > 0.9) gearD++;
     if (Math.abs(t - 26) < dt / 2) I.setCupolaHatch(1); if (Math.abs(t - 28) < dt / 2) I.setCupolaHatch(2); if (Math.abs(t - 30) < dt / 2) I.setCupolaHatch(0);
@@ -58,9 +69,11 @@ for (const fps of [30, 60, 144, 240]) {
   for (let i = 0; i < 40; i++) I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'night', playing: false, speed: 1 });
   I.turnHead(500, -300); I.zoomBy(-900); cams.mode = 'in_cdr'; I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'day', playing: true, speed: 1 }); I.drive(cams, dt);
   cams.mode = 'orbit'; I.update(dt, { on: true, battle: R.battle, shown: { e: 100, n: 200, h: 30 }, volleys: R.volleys, cond: 'day', playing: true, speed: 1 });
-  const out = { fps, doorMax: +maxDoor.toFixed(3), recoilMax: +maxRec.toFixed(3), hatchMax: +maxHatch.toFixed(3), throttleMax: +maxThr.toFixed(2), steerMax: +maxSteer.toFixed(2), cupolaHatchMax: +maxCup.toFixed(2), inGearS: +(gearD * dt).toFixed(1), sightDraws: I.stats.sightDraws, shakeMax: +shakeMax.toFixed(2), flickAfterStoppedHit: flick21, smoke1sAfterPenetration: smoke37, smoke9sAfter: smoke45, blood: bloodEnd, crewTriangles: I.stats.crewTriangles, crewBadNumbers: crewBad, alarmAtEnd: I.alarm, firingS: +(sawFire * dt).toFixed(2), warningS: +(sawWarn * dt).toFixed(2), at8, badNumbers: nb, sightCalls: I.stats.sightCalls, leftScene: !I.tur.parent && !I.hul.parent && !I.active, near: R.scene.camera.near };
+  const out = { fps, doorMax: +maxDoor.toFixed(3), recoilMax: +maxRec.toFixed(3), hatchMax: +maxHatch.toFixed(3), throttleMax: +maxThr.toFixed(2), steerMax: +maxSteer.toFixed(2), cupolaHatchMax: +maxCup.toFixed(2), inGearS: +(gearD * dt).toFixed(1), sightDraws: I.stats.sightDraws, shakeMax: +shakeMax.toFixed(2), flickAfterStoppedHit: flick21, smoke1sAfterPenetration: smoke37, smoke9sAfter: smoke45, blood: bloodEnd, crewTriangles: I.stats.crewTriangles, crewJointSpeedJump60: +crew.jump.toFixed(3), crewHandOffControlMm: +(crew.hand * 1000).toFixed(1), crewBad: crew.bad, crewBadNumbers: crewBad, alarmAtEnd: I.alarm, firingS: +(sawFire * dt).toFixed(2), warningS: +(sawWarn * dt).toFixed(2), at8, badNumbers: nb, sightCalls: I.stats.sightCalls, leftScene: !I.tur.parent && !I.hul.parent && !I.active, near: R.scene.camera.near };
   finals.push(out); console.log(JSON.stringify(out));
 }
+if (haveCrew) { let worst = 0; for (const st of SAMPLE) { const S = samples[st]; if (!S || !S[30] || !S[240]) continue; for (const f of [60, 144, 240]) if (S[f]) S[f].forEach((man, mi) => man.forEach((q, j) => { const a = q.angleTo(S[30][mi][j]); if (a > worst) worst = a; })); }
+  console.log(`crew: largest difference of any joint between 30 and 60/144/240 frames a second at ${SAMPLE.length} sampled moments: ${(worst * 180 / Math.PI).toFixed(2)} degrees`); } else console.log('crew: model files not on this machine (set HK_ASSETS): crew motion NOT tested');
 const I = rig().I; I._build();
 console.log('stats', JSON.stringify(I.stats), 'exceptions/failures', fails, 'indicator lights', Object.keys(IND).length, 'labels full', I.labels.full);
 if (process.env.LIST) for (const c of I.controls) console.log((c.locked ? 'crew ' : 'FREE ') + c.g + ' ' + c.type.padEnd(7) + c.name);

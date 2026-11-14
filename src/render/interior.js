@@ -258,7 +258,7 @@ export class Interior {
     { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.5, lit.x * k), Math.min(0.48, lit.y * k), Math.min(0.46, lit.z * k)); }
     SHARED.uCabY.value = _v.set(0, 0, 0).applyMatrix4(this.tur.matrixWorld).y; { const h = FX.last, U = SHARED.uSmokeAt.value; if (h && h.pen) { _v.copy(h.e).addScaledVector(h.d, 0.4).applyMatrix4(this.hul.matrixWorld); U.set(_v.x, _v.y, _v.z, (FX.fire ? 1.4 : 1.3 * Math.exp(-FX.lastAge / 7))); } else U.w = 0; }
     this.fx.update(FX, this.graphic);
-    this._crew(s, FX, info, seat, loading);
+    this._crew(s, FX, info, seat, loading, sdt);
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
 
@@ -280,7 +280,7 @@ export class Interior {
   setCupolaHatch(state, now) { this.cupHatch = state; for (const c of this.controls || []) if (c.key === 'cdrHatch') c.state = state; if (now) { this.st.cup1 = state === 1 ? 1 : 0; this.st.cup2 = state === 2 ? 1 : 0; this._cupPose(); } }
   // What each crewman is doing this moment, handed to the figures: where his head and hands are, how he is bearing up (from the battle's
   // crew model), whether he is hurt (the damage reports), whether a hit is about to land.
-  _crew(s, FX, info, seat, loading) {
+  _crew(s, FX, info, seat, loading, sdt) {
     if (!this.crewFig) { const base = s.volleys && s.volleys.assetBase; if (!base && !this._noBase) return; this.crewFig = new CrewFigures(o => cabMaterial(o), { tur: this.tur, hul: this.hul }, base); }
     if (!this.crewOn) { this.crewFig.hide(); return; }
     const cs = this.crewS, P = this.part, T = s.battle.tank, gone = !!(cs && cs.abandoned), men = this._men || (this._men = { gnr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, cdr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, ldr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, drv: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] } });
@@ -289,16 +289,16 @@ export class Interior {
     for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
       M.on = !gone; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
       M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
-      M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; }
-    if (this.cupHatch >= 1 && men.cdr.state === 'steady') men.cdr.head[1] += SEATS.in_cdr.up * 0.75;   /* looking out through the ports when the hatch is up */
+      M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; M.rise = 0; }
+    if (this.cupHatch >= 1 && men.cdr.status === 'ok' && men.cdr.state !== 'panicked') { men.cdr.head[1] += SEATS.in_cdr.up * 0.75 * Math.max(this.st.cup1, this.st.cup2) + 0.5 * this.st.cup2; men.cdr.rise = this.st.cup2; }   /* up at the ports when the hatch is raised; head and shoulders out when it is open */
     grip(P.yoke, -0.135, 0.06, 0.01, men.gnr.hands[0]); grip(P.yoke, 0.135, 0.06, 0.01, men.gnr.hands[1]);
     grip(P.tbar, -0.225, -0.036, 0.0, men.drv.hands[0]); grip(P.tbar, 0.225, -0.036, 0.0, men.drv.hands[1]);
     men.cdr.hands[0][0] = 0.5; men.cdr.hands[0][1] = 0.16; men.cdr.hands[0][2] = 0.02; men.cdr.hands[1][0] = 0.96; men.cdr.hands[1][1] = 0.04; men.cdr.hands[1][2] = 0.14;
     { const H = men.ldr.hands, ra = this.roundAt; if (ra && this.loadF >= 0.1) { H[0][0] = ra.x - 0.05; H[0][1] = ra.y - 0.03; H[0][2] = ra.z - 0.12; H[1][0] = ra.x + 0.04; H[1][1] = ra.y - 0.02; H[1][2] = ra.z + (this.loadF > 0.56 ? 0.5 : 0.3); }   /* left hand under the nose, right hand at the base: he rams with the right */
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
-    if (s.battle.tank.ai && s.battle.tank.ai.ldr && s.battle.tank.ai.ldr.up && this.st.hatch > 0.6) { const M = men.ldr; M.head[0] = DIM.HAT[0]; M.head[1] = DIM.RF + 0.42; M.head[2] = DIM.HAT[1] - 0.05; M.hands[0] = [DIM.HAT[0] - 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; M.hands[1] = [DIM.HAT[0] + 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; }
+    if (s.battle.tank.ai && s.battle.tank.ai.ldr && s.battle.tank.ai.ldr.up && this.st.hatch > 0.6) { const M = men.ldr; M.head[0] = DIM.HAT[0]; M.head[1] = DIM.RF + 0.42; M.head[2] = DIM.HAT[1] - 0.05; M.hands[0] = [DIM.HAT[0] - 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; M.hands[1] = [DIM.HAT[0] + 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; M.rise = this.st.hatch; }
     if (gone) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); }   /* bailed out: hatches open, seats empty */
-    this.crewFig.update(men, s.battle.t); this.stats.crewTriangles = this.crewFig.triCount(); this.stats.crewReady = this.crewFig.ready; this.stats.crewFailed = this.crewFig.failed;
+    this.crewFig.update(men, s.battle.t, sdt); this.stats.crewTriangles = this.crewFig.triCount(); this.stats.crewReady = this.crewFig.ready; this.stats.crewFailed = this.crewFig.failed;
   }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {
