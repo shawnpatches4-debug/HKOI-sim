@@ -2,7 +2,30 @@
 import * as THREE from 'three';
 
 // one set of uniforms that the ground, trees and roofs all read, so a change of weather reaches everything at once
-export const ENV = { snow: { value: 0 }, wet: { value: 0 }, time: { value: 0 } };
+export const ENV = { snow: { value: 0 }, wet: { value: 0 }, time: { value: 0 },
+  sunDir: { value: new THREE.Vector3(0, 1, 0) },     // towards the sun (or moon), in scene axes
+  glow: { value: new THREE.Color(0, 0, 0) },         // how much the haze brightens when you look towards the sun
+  wind: { value: new THREE.Vector3(1, 0, 0.3) } };   // wind direction on the ground (x, z) and strength (y unused)
+
+// Haze that brightens towards the sun, for any standard material: the far ground, woods and roofs melt into the same glowing
+// air the sky shows near the sun, instead of into one flat fog colour. The sky (sky.js) uses the same sum, so they meet cleanly.
+export const HAZE_GLSL = `vec3 hkHaze(vec3 fogCol, vec3 glow, float towardSun){ float s = max(towardSun, 0.0), s2 = s * s, s8 = s2 * s2 * s2 * s2; return fogCol + glow * (0.22 * s2 + 0.78 * s8 * s8); }`;
+export function atmosphere(mat) {
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.hkSunDir = ENV.sunDir; sh.uniforms.hkGlow = ENV.glow;
+    if (!/varying vec3 vWp;/.test(sh.vertexShader)) sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#ifdef USE_INSTANCING\nvWp = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+    if (!/varying vec3 vWp;/.test(sh.fragmentShader)) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 hkSunDir; uniform vec3 hkGlow;\n' + HAZE_GLSL)
+      .replace('#include <fog_fragment>', `#ifdef USE_FOG
+        { float hkF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, hkHaze(fogColor, hkGlow, dot(normalize(vWp - cameraPosition), hkSunDir)), hkF); }
+      #endif`);
+  };
+  mat.customProgramCacheKey = () => 'hkatm' + (prevKey ? prevKey.call(mat) : '');
+  return mat;
+}
 
 // Adds snow on upward faces and a wet darkening to any standard material. `amount` scales how readily snow settles on it.
 export function weatherise(mat, amount = 1) {
