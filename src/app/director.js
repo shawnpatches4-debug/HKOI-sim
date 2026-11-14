@@ -70,7 +70,8 @@ export class Director {
     const t = Math.min(A.tNow, b.t);
     // the caption line
     const c = this.plan.captionAt(t), text = c ? c.text : '';
-    if (text !== this.capText) { this.capText = text; if (text) this.cap.textContent = text; this.cap.style.opacity = text ? 1 : 0; }
+    if (text !== this.capText) { this.capText = text; if (text) this.cap.textContent = text; this.cap.style.opacity = text ? 1 : 0;
+      const bar = document.getElementById('bar'), top = bar && !bar.hidden ? bar.getBoundingClientRect().top : 0; if (top > 0) this.cap.style.bottom = Math.round(innerHeight - top + 12) + 'px'; }   /* sit just above the control bar, however tall it is */
     // Instant replay of the engagement's decisive moment from another angle. Only while the battle is being watched again (the page's
     // Replay), where jumping in time is the page's own, tested machinery: the director asks it to go back, films, and asks it to return.
     if (this.rp) { if (!this.ctrl || !A.review) this._again(null); else if (t >= this.rp.to) { const r = this.rp; this._again(null); A.seek(r.at + 0.05); return; } }   /* forward again: the same battle carries on */

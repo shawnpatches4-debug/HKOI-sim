@@ -58,7 +58,7 @@ export class XRayPanel {
 
   // open on hit number i of the battle; big = in the middle of the page (debrief), otherwise the small panel at the top right
   open(battle, i, big) {
-    const DMG = (typeof DMG !== 'undefined' ? DMG : window.DMG); this.list = hitsOf(battle, DMG); if (!this.list.length) return false;
+    this.list = hitsOf(battle, typeof DMG !== 'undefined' ? DMG : window.DMG);   /* dmg.js declares DMG as a page global, which is not a property of window */ if (!this.list.length) return false;
     if (!this.view) { try { this.view = new XRayView(this.cv); } catch (e) { console.error(e); return false; } }
     this.box.classList.toggle('big', !!big); this.box.hidden = false; this.open_ = true; this.big = !!big; this.touched = !!big;
     this.view.setShell(this.app.tank); this.show(i);
