@@ -74,7 +74,7 @@
       const p = Math.min(0.8, M.kill * Math.exp(-R / M.fall) * (caught ? 1.6 : 1) * (open ? 1.25 : 0.8)) * (moving ? 0.6 : 1), hit = !(opt && opt.noKill) && this.rng.random() < p;
       const rec = { t: this.t, dur: BURST, id: u.id, e: tg.k.e, n: tg.k.n, R, w: wKey, coax: wKey === 'coax', m2: wKey === 'm2', m240: wKey === 'm240', hit }; this._mg = rec; (this.mgs = this.mgs || []).push(rec);
       if (opt && opt.first) this.say(this.t, 'tank', wKey === 'm2' ? 'CDR' : wKey === 'm240' ? 'LDR' : 'GNR', `${M.name} engages ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m.`, opt.why || `located team in view inside ${M.rmax} m; ${heavy ? 'accurate fire: the team is pinned' : 'long range: harassing fire only'}`);
-      if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; tg.k.done = true; this.say(this.t + BURST, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by ${M.name.toLowerCase()} fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst at this range${moving ? ', firing on the move' : ''}`); }
+      if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; tg.k.done = true; this.ev(this.t + BURST, 'team_lost', { uid: u.id, by: wKey }); this.say(this.t + BURST, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by ${M.name.toLowerCase()} fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst at this range${moving ? ', firing on the move' : ''}`); }
       return rec;
     },
 
@@ -86,7 +86,7 @@
         const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.3 : veg >= 2 ? 0.5 : 1, close = R < 400 ? 6 : R < 800 ? 3 : R < 1500 ? 1.5 : 1,   /* men a few hundred metres away fill the thermal sight: far easier to pick out than at two kilometres */ moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
         const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30;
         const p = Math.min(0.6, 0.03 * Math.exp(-R / 1500) * cover * close * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1));   /* chance per second (assumed) */
-        if (this.rng.random() < p) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t });
+        if (this.rng.random() < p) { u.known = true; this.ev(this.t, 'located', { uid: u.id, how: 'thermal' }); if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t });
           this.say(this.t, 'tank', inSector ? 'GNR' : 'CDR', `${inSector ? 'Gunner' : 'Commander'} picks up a heat signature: ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m${veg >= 4 ? ' in the trees' : veg >= 2 ? ' in scrub' : ' in the open'}.`, `thermal scan, about ${(p * 100).toFixed(1)}% a second for this team here`); } }
       // a located team that is still in view stays tracked as it moves
       for (const k of T.known) { if (k.done) continue; const u = this.units.find(q => q.id === k.id); if (u && u.alive && (u.e !== k.e || u.n !== k.n) && W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) { k.e = u.e; k.n = u.n; k.t = this.t; } }
@@ -126,7 +126,9 @@
       const hk = this._hkoiTurret();
       if (hk != null) { const d = angDiff(hk, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360; if (this._rf) { this._rf = null; } A.w.main = 'turret given to HKOI'; A.w.hkoi = 'engaging an incoming threat'; return; }
       A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar silent, waiting for a warning';
-      const tg = this._targets(), pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
+      const tg = this._targets(); let pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
+      // the gunner finishes what he started: he leaves a target he is already laying on only for a more dangerous one
+      if (pick && this._rf) { const cur = tg.find(q => q.k === this._rf.k); if (cur && cur.los && cur.R <= 4200 && !(cur.moving && cur.R > 800) && cur.danger >= pick.danger) pick = cur; }
       if (!pick) { this._rf = null; A.w.main = T.main > 0 ? 'no target in view' : 'no multi-purpose rounds left'; return; }
       const { k, u, R } = pick, want = brgOf(T.e, T.n, k.e, k.n), d = angDiff(want, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360;
       const why = pick.danger === 4 ? 'its missile is in the air' : pick.danger === 3 ? 'it can fire on us' : pick.danger === 2 ? 'reloading' : 'moving';
@@ -147,7 +149,7 @@
       // within tens of metres (assumed: 60% at 500 m, 46% at 1 km, 18% at 2 km, never under 12%; trees cut it, open ground and a team caught moving raise it)
       const moving = (T.v || 0) > 1.5, tof = R / 1140, vg = this.world.veg(u.e, u.n).cls, caught = u.state === 'moving' || u.state === 'setup';
       const p = Math.max(0.12, Math.min(0.7, 0.75 - R / 3500)) * (vg >= 4 ? 0.75 : vg >= 2 ? 0.9 : 1.1) * (caught ? 1.25 : 1) * (moving ? 0.6 : 1), roll = this.rng.random();
-      T.main--; T.loaded = false; T.loadT = 0; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, wtxt;
+      T.main--; T.loaded = false; T.loadT = 0; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, wtxt; this.ev(this.t, 'gun', { uid: u.id, R: Math.round(R), tof: +tof.toFixed(2), hit: roll < p }); if (roll < p) this.ev(this.t + tof, 'team_lost', { uid: u.id, by: 'main' });
       if (roll < p) { hit = true; u.alive = false; u.state = 'dead'; k.done = true; this.killedByTank = (this.killedByTank || 0) + 1; text = `Main gun round on ${u.spec.name} #${u.id + 1} at ${(R / 1000).toFixed(2)} km: position destroyed.`; wtxt = `aimed fire at a located position (about ${Math.round(p * 100)}% at this range${moving ? ', on the move' : ''})`; }
       else { this._suppress(u, true, 6); if (u.ammo > 0 && this._displace(u, 'a tank round has just landed beside it')) { /* it packs up; the crew will see it go if it stays in view */ } else if (k.shots >= 3) k.done = true; text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team pinned${u.state === 'moving' ? ' and pulling out' : ''}.`; wtxt = 'a near miss: a dug-in team is a small target at this range'; }
       this.say(this.t + tof, 'tank', 'GNR', text, wtxt); this.shots.push({ t: this.t, tof, from: { e: T.e, n: T.n }, to: { e: k.e + (hit ? 0 : (this.rng.random() - 0.5) * 14), n: k.n + (hit ? 0 : (this.rng.random() - 0.5) * 14) }, hit, there: true });
@@ -175,7 +177,7 @@
       const A = this._crew(), L = A.ldr, T = this.tank; if (!L.ok) return; const upAt = t => L.upAt.some(iv => t >= iv[0] && t <= iv[1]);
       let p = 0; for (const a of v.rec.aps || []) if (upAt(v.t0 + a.t)) p = 1 - (1 - p) * (1 - 0.08);   /* Trophy firing with a man in the hatch (assumed 8% each) */
       if ((v.rec.hits || 0) > 0 && upAt(v.tEnd - 1)) p = 1 - (1 - p) * (1 - 0.5);                          /* a hit on the vehicle with a man in the hatch (assumed 50%) */
-      if (p > 0 && this.rng.random() < p) { L.ok = false; L.up = false; if (T.st && T.st.crew) T.st.crew.ldr = 'wounded'; this.say(this.t, 'tank', 'CDR', 'Loader hit while up in his hatch. The commander will have to load.', `exposed during the engagement (about ${Math.round(p * 100)}% this time); the main gun now takes ${LOAD_S_NO_LOADER} s to load and the M240 is silent`); }
+      if (p > 0 && this.rng.random() < p) { L.ok = false; L.up = false; this.ev(this.t, 'loader_hit', {}); if (T.st && T.st.crew) T.st.crew.ldr = 'wounded'; this.say(this.t, 'tank', 'CDR', 'Loader hit while up in his hatch. The commander will have to load.', `exposed during the engagement (about ${Math.round(p * 100)}% this time); the main gun now takes ${LOAD_S_NO_LOADER} s to load and the M240 is silent`); }
     },
     // ================= the commander: mission, where to fight from, when to move =================
     // Missions (chosen at setup): 'hold' a battle position with two alternates, 'advance' to an objective in bounds between covered
@@ -218,7 +220,7 @@
       const top = th.slice().sort((p, q) => q.w - p.w).slice(0, 3), memo = new Map();
       const cost = (e, n) => { const key = Math.round(e / 50) * 100003 + Math.round(n / 50); let x = memo.get(key); if (x == null) { x = 0; for (const o of top) if (W.los(o.e, o.n, 1.3, e, n, 1.6).clear) x += 1.2 * o.w; memo.set(key, x); } return x; };
       const route = W.path(T.e, T.n, c.e, c.n, { grid: 50, tank: true, cost: top.length ? cost : null });
-      T.route = route && route.length > 1 ? route.slice(1).concat([[c.e, c.n]]) : [[c.e, c.n]]; T.routeI = 0; T.vmax = vmax; T.mode = 'moving'; T.modeSince = this.t; T.goal = { e: c.e, n: c.n };
+      T.route = route && route.length > 1 ? route.slice(1).concat([[c.e, c.n]]) : [[c.e, c.n]]; T.routeI = 0; T.vmax = vmax; T.mode = 'moving'; T.modeSince = this.t; T.goal = { e: c.e, n: c.n }; this.ev(this.t, 'tank_move', { to: [Math.round(c.e), Math.round(c.n)] });
       if (why) this.say(this.t, 'tank', 'CDR', why.text, why.why);
     },
     // which way the hull should face when halted: front to the worst threat, turned a little to show the side that still has Trophy shots

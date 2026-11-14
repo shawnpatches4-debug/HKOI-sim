@@ -82,6 +82,11 @@
         this.say(0, 'setup', null, `Battle on ${this.world.biome.name}, map seed ${this.world.seed}. ${this.units.length} enemy teams in position.`);
       }
 
+      // Events, for anything that wants to follow the fight without reading sentences (film director, captions, voices, debrief):
+      // { t, type, ... }. Engagements are worked out when they start, so events can lie a few seconds in the FUTURE: a camera can be in
+      // place before the thing happens. Types: ambush, launch, drone_launch, hkoi_fire, trophy, end (a threat's end: by = what ended it,
+      // killing), gun (main gun shot: hit), team_lost, located, move, wave, lull, loader_hit, vehicle_lost, over.
+      ev(t, type, o) { (this.events = this.events || []).push(Object.assign({ t: +t.toFixed(2), type }, o || {})); }
       say(t, kind, who, text, why) { this.log.push({ t: +t.toFixed(2), kind, who, text, why: why || null }); }
 
       // ---------------------------------------------------------------- setting up the enemy
@@ -98,7 +103,7 @@
       }
       // the lull is over: the next wave moves into position on another side of the vehicle and sets up
       _nextWave() {
-        const T = this.tank, n0 = this.units.length; this.wave++; this.waveFrom = n0; this.waveT0 = this.t; this.opened = false; this.openedAt = null; this._waitSince = null; this.tactic = this.tactic || null;
+        const T = this.tank, n0 = this.units.length; this.wave++; this.waveFrom = n0; this.waveT0 = this.t; this.ev(this.t, 'wave', { wave: this.wave }); this.opened = false; this.openedAt = null; this._waitSince = null; this.tactic = this.tactic || null;
         const side = (this.waveBrg == null ? this.rng.random() * 360 : this.waveBrg + 100 + this.rng.random() * 160) % 360; this.waveBrg = side;
         const kind = (this.wave - 1) % 3; this._waveRaid = kind === 0 ? { minR: 1500, window: 6 } : null;
         this._place(this._waveForce(this.wave), side);
@@ -155,7 +160,7 @@
         for (const u of this.units) this._unit(u, dt);
         this._commander();
         this._morale();
-        if (this._locQ && this._locQ.length) this._locQ = this._locQ.filter(q => { if (this.t < q.t) return true; const u = q.u, T = this.tank; if (u.alive && !u.gone && !u.known) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); this.say(this.t, 'tank', 'CDR', `${u.spec.name} #${u.id + 1} located at ${Math.round(Math.hypot(u.e - T.e, u.n - T.n) / 10) * 10} m.`, q.how); } return false; });
+        if (this._locQ && this._locQ.length) this._locQ = this._locQ.filter(q => { if (this.t < q.t) return true; const u = q.u, T = this.tank; if (u.alive && !u.gone && !u.known) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t }); this.ev(this.t, 'located', { uid: u.id }); this.say(this.t, 'tank', 'CDR', `${u.spec.name} #${u.id + 1} located at ${Math.round(Math.hypot(u.e - T.e, u.n - T.n) / 10) * 10} m.`, q.how); } return false; });
         this._finishVolleys();
         this._returnFire();
         this._machineGuns();
@@ -275,7 +280,7 @@
         const memo = new Map(), seenCost = (e, n) => { const key = Math.round(e / 30) * 100003 + Math.round(n / 30); let x = memo.get(key); if (x == null) { const v = W.veg(e, n).cls, R = Math.hypot(T.e - e, T.n - n); x = (v >= 4 ? 0 : v >= 2 ? 0.15 : 0.6) + (R < 2500 && W.los(T.e, T.n, 2.6, e, n, 1.2).clear ? 2.5 : 0); memo.set(key, x); } return x; };   /* each square is looked at once */
         const route = W.path(u.e, u.n, best.c.e, best.c.n, { grid: 30, tank: false, cost: seenCost });
         let j = u.sites.indexOf(best.c); if (j < 0) { u.sites.push(best.c); j = u.sites.length - 1; }
-        u.site = j; u.route = route && route.length > 1 ? route.slice(1) : null; u.routeI = 0; u.state = 'moving'; u.since = this.t; u.down = false; { const hop = best.dMe < 150, prepared = u.sites.indexOf(best.c) >= 0 && u.sites.indexOf(best.c) < 3; u.packUntil = this.t + (PACK[sp.key] || 8) * (hop ? 0.4 : 1); u.setupK = hop ? 0.4 : prepared ? 0.6 : 1; }   /* a short hop is carried assembled; a prepared alternate needs less setting up (assumed) */ u.moveWhy = why; u.shotsHere = 0; u.spd = 0; u.seek = !/gun turning|landed beside|gave the position away|nerves|two shots|pinned/.test(why || '');
+        u.site = j; u.route = route && route.length > 1 ? route.slice(1) : null; u.routeI = 0; u.state = 'moving'; u.since = this.t; u.down = false; { const hop = best.dMe < 150, prepared = u.sites.indexOf(best.c) >= 0 && u.sites.indexOf(best.c) < 3; this.ev(this.t, 'move', { uid: u.id, to: [Math.round(best.c.e), Math.round(best.c.n)] }); u.packUntil = this.t + (PACK[sp.key] || 8) * (hop ? 0.4 : 1); u.setupK = hop ? 0.4 : prepared ? 0.6 : 1; }   /* a short hop is carried assembled; a prepared alternate needs less setting up (assumed) */ u.moveWhy = why; u.shotsHere = 0; u.spd = 0; u.seek = !/gun turning|landed beside|gave the position away|nerves|two shots|pinned/.test(why || '');
         this.say(this.t, 'enemy', u.id, text || `${sp.name} #${u.id + 1} moves ${Math.round(best.dMe / 10) * 10} m to ${best.sees ? 'a position that looks onto the vehicle' : 'a covered position'}${route ? ', keeping to cover' : ''}.`, why); return true;
       }
       // A rocket team closes on the vehicle: a spot 150 to 300 m from where it was last reported, in cover, with a view of it, on its
@@ -308,8 +313,8 @@
         if (able.length === 0) done = 'No team of this group is left able to fight.';
         else if (stuck || this.opened && able.length / n <= S.breakAt && able.length < n) { for (const u of able) { u.gone = true; u.known = false; } for (const k of this.tank.known) k.done = true; done = stuck ? 'The group could not get a shot and pulls back.' : `Enemy breaks contact: ${able.length} of ${n} teams still able to fight, and they pull out.`; }
         if (!done) return;
-        if (last) { this.say(this.t, 'enemy', null, done, `${this.skill} crews give up at this point`); this.over = { result: 'won', text: this.nWaves > 1 ? `All ${this.nWaves} enemy groups were beaten off.` : 'The enemy broke contact.' }; return; }
-        const lull = 35 + this.rng.random() * 30; this.waveAt = this.t + lull;
+        if (last) { this.say(this.t, 'enemy', null, done, `${this.skill} crews give up at this point`); this.ev(this.t, 'over', { result: 'won' }); this.over = { result: 'won', text: this.nWaves > 1 ? `All ${this.nWaves} enemy groups were beaten off.` : 'The enemy broke contact.' }; return; }
+        const lull = 35 + this.rng.random() * 30; this.waveAt = this.t + lull; this.ev(this.t, 'lull', { wave: this.wave, until: +(this.t + lull).toFixed(1) });
         this.say(this.t, 'enemy', null, `${done} A lull: about ${Math.round(lull / 5) * 5} s before the next group can be in position.`, `wave ${this.wave + 1} of ${this.nWaves} is over`);
       }
       // can anyone on the enemy side see the vehicle (so that crews firing over a hill can be given its position)?
@@ -343,7 +348,7 @@
         else if (waited >= S.open) why = `the leader has held fire for ${Math.round(waited)} s and will not wait longer`;
         else if (ready.length >= want && waited >= S.open * 0.5) why = 'enough teams are ready; the vehicle is hull-down but the leader will not wait for better';
         if (!why) return;
-        this.opened = true; this.openedAt = this.t;
+        this.opened = true; this.openedAt = this.t; this.ev(this.t, 'ambush', { wave: this.wave, teams: ready.map(u => u.id) });
         this.say(this.t, 'enemy', null, `Enemy leader springs the ambush: ${why}.`, 'from now on every team fights on its own');
         this._fireVolley(ready.concat(this._soon(ready)), exposed, waited, { atWill: false, why });
         this._waitSince = null;
@@ -355,7 +360,7 @@
         // expert pilots swing round to come from behind the hull, where HKOI's mount is masked (assumed 70% of the time, 25% further to fly)
         if (S.pilot === 'expert' && r.random() < 0.7) { brg = (T.h + 180 + (r.random() - 0.5) * 40 + 360) % 360; R *= 1.25; how = 'swinging round to come from behind'; } else if (S.pilot === 'trained') how = 'low, using the ground';
         const fly = Math.max(0, R - DRONE_TERMINAL) / tt.speed; u.ammo--; u.fired++; u.lastShotT = this.t; u.state = 'guiding'; u.since = this.t; u.sight = 0; u.hasShot = false;
-        this.transit.push({ u, key: u.spec.key, brg, R0: R, t0: this.t, arrive: this.t + fly });
+        this.transit.push({ u, key: u.spec.key, brg, R0: R, t0: this.t, arrive: this.t + fly }); this.ev(this.t, 'drone_launch', { uid: u.id, R: Math.round(R), arrive: +(this.t + fly).toFixed(1) });
         this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1} launches a drone, ${how}: ${(R / 1000).toFixed(1)} km to fly, about ${Math.round(R / tt.speed)} s.`, 'the other teams do not wait for it');
       }
       // Teams that do not have their shot yet but will within a few seconds (they can see the vehicle and are nearly laid on, or nearly
@@ -453,6 +458,12 @@
         if (rec.killed && rec.kill_t != null) { let stop = null; for (const p of plan.path) { if (p[0] >= rec.kill_t) { if (!stop) stop = p.slice(); p[1] = stop[1]; p[2] = stop[2]; p[3] = stop[3]; p[4] = 0; } } }
         const v = { i: this.volleys.length, t0: this.t, tEnd: this.t + rec.t_end, at, path: plan.path, rec, cfg: res.c, launches, exposed, plan, masks };
         this.volleys.push(v);
+        for (const th of rec.threats) { const l = launches.find(q => q.u.id === th.uid) || {}, end = th.viz.end, by = th.state === 'hit' ? 'hit' : (th.defeated_by || th.state);
+          this.ev(this.t + th.t0, 'launch', { v: v.i, idx: th.idx, uid: th.uid, key: th.key, R: Math.round(l.R || 0), brg: Math.round(l.brg || 0), arrival: !!l.arrival });
+          if (th.viz.fired != null) this.ev(this.t + th.viz.fired, 'hkoi_fire', { v: v.i, idx: th.idx, key: th.key });
+          this.ev(this.t + end.t, 'end', { v: v.i, idx: th.idx, uid: th.uid, key: th.key, by, how: end.type, killing: !!end.killing }); }
+        for (const a of rec.aps || []) this.ev(this.t + a.t, 'trophy', { v: v.i, brg: Math.round(a.brg) });
+        if (rec.killed) this.ev(this.t + (rec.kill_t != null ? rec.kill_t : rec.t_end), 'vehicle_lost', { v: v.i });
         const names = launches.map(l => `${l.u.spec.name} #${l.u.id + 1} at ${(l.R / 1000).toFixed(2)} km, ${Math.round(l.brg).toString().padStart(3, '0')}`).join('; ');
         this.say(this.t, 'volley', null, `${how.atWill ? 'Enemy fire' : 'Enemy ambush'} (engagement ${v.i + 1}): ${names}.`, `${v_mode}${how.why && !how.atWill ? '; ' + how.why : ''}; vehicle ${exposed === 'none' ? 'fully exposed' : exposed === 'hull' ? 'hull-down' : 'in cover'}`);
         masks.forEach((m, i) => { if (m != null) this.say(this.t + launches[i].t0 + 1, 'enemy', launches[i].u.id, `${launches[i].u.spec.name} #${launches[i].u.id + 1} loses sight of the vehicle behind cover.`, 'sight line broken'); });
