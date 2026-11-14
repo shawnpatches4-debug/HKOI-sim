@@ -88,7 +88,7 @@ async def main():
             await pg.click('#o-setup'); await pg.wait_for_timeout(500)
             v = await vis('setup', 't-main'); n = await js('({ crew: document.querySelectorAll("#o-crew button").length, stress: document.querySelectorAll("#o-stress button").length, hud: document.querySelectorAll("#o-hud button").length, ground: document.querySelectorAll("#o-biome button").length, cond: document.querySelectorAll("#o-cond button").length, force: document.querySelectorAll("#o-force button").length, skill: document.querySelectorAll("#o-skill button").length, waves: document.querySelectorAll("#o-waves button").length, mission: document.querySelectorAll("#o-mission button").length, fits: document.querySelector("#setup .card").getBoundingClientRect().bottom <= innerHeight })')
             print('setup:', v, n)
-            need(v['setup'] and n['crew'] == 4 and n['stress'] == 2 and n['hud'] == 2 and n['ground'] == 4 and n['cond'] == 8 and n['force'] == 5 and n['skill'] == 4 and n['waves'] == 3 and n['mission'] == 3, 'the setup panel is missing choices')
+            need(v['setup'] and n['crew'] == 4 and n['stress'] == 2 and n['hud'] == 2 and n['ground'] == 4 and n['cond'] == 8 and n['force'] >= 5 and n['skill'] == 4 and n['waves'] == 3 and n['mission'] == 3, 'the setup panel is missing choices')
             need(n['fits'], 'the setup panel does not fit the window')
             await shot('setup', 2500)
             await ev('[...document.querySelectorAll("#o-crew button")].find(x => x.textContent === "Veteran").click()'); await ev('[...document.querySelectorAll("#o-stress button")].find(x => x.textContent === "Off").click()'); await pg.wait_for_timeout(1500)

@@ -13,8 +13,12 @@ export class SeatUI {
       const now = performance.now(); if (now - this.hoverT < 90) return; this.hoverT = now;
       const c2 = this.I.pick(...this.ndc(e)); canvas.style.cursor = c2 ? 'pointer' : 'grab'; if (c2 && now > this.sayT) this.show(this.I.describe(c2), 1600, true);
     });
-    const up = e => { if (!this.down) return; const was = this.moved; this.down = null; if (!this.I.inside || was) return; const c2 = this.I.pick(...this.ndc(e)); if (c2) this.show(this.I.operate(c2), 4200); };
+    const up = e => { if (!this.down) return; const was = this.moved; this.down = null; if (!this.I.inside || was) return; if (this.I.optic) { this.I.lookThrough(null); return; } const c2 = this.I.pick(...this.ndc(e)); if (c2) this.show(this.I.operate(c2), 4200); };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', () => { this.down = null; });
+    (typeof window !== 'undefined' ? window : canvas).addEventListener('keydown', e => { const I = this.I; if (!I.inside || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === 'Escape' && I.optic) { I.lookThrough(null); e.stopImmediatePropagation(); e.preventDefault(); }   /* first Esc sits back from the optic; the next one leaves the seat as before */
+      else if (e.code === 'KeyV') { const c = I.optic ? null : I.primaryOptic(); I.lookThrough(c); if (c) this.show(c.name + ' · click, V or Esc to sit back' + (c.optic.ring != null ? '; A and D step round the ring.' : '.'), 4200); }
+      else if ((e.code === 'KeyA' || e.code === 'KeyD') && I.optic && I.optic.optic.ring != null) { I.stepOptic(e.code === 'KeyD' ? 1 : -1); e.stopImmediatePropagation(); e.preventDefault(); } }, true);
     canvas.addEventListener('wheel', e => { if (!this.I.inside) return; e.preventDefault(); this.I.zoomBy(e.deltaY); }, { passive: false });
   }
   ndc(e) { const r = this.cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1)]; }

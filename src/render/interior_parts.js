@@ -65,6 +65,7 @@ const VS = /* glsl */`
 // the same for the crew figures: their joints are applied first (three.js does the joint arithmetic), then everything as above
 const VS_SKIN = /* glsl */`
   #include <skinning_pars_vertex>
+  attribute float aArm;
   varying vec3 vW; varying vec3 vN; varying vec3 vO; varying vec3 vON; varying vec4 vC; varying vec2 vUv;
   ${DEPTH_VS}
   void main() {
@@ -72,7 +73,7 @@ const VS_SKIN = /* glsl */`
     #include <skinbase_vertex>
     #include <skinnormal_vertex>
     #include <skinning_vertex>
-    vO = transformed; vON = objectNormal; vC = vec4(0.0, 0.0, 0.0, 1.0); vUv = uv;
+    vO = transformed; vON = objectNormal; vC = vec4(aArm, 0.0, 0.0, 1.0); vUv = uv;
     vec4 w = modelMatrix * vec4(transformed, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * objectNormal);
     cabDepth(viewMatrix * w);
   }`;
@@ -99,12 +100,12 @@ const FS = /* glsl */`
     vec3 v = normalize(cameraPosition - vW);
     float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb;
     #ifdef CMAP
-      if (uNearCut > 0.0 && distance(cameraPosition, vW) < uNearCut) discard;   /* the viewer's own head, collar and chest are left out; his arms and legs stay */
+      if (uNearCut > 0.0 && (vC.r < 0.5 || distance(cameraPosition, vW) < uNearCut)) discard;   /* the viewer's own body: only his arms and hands are drawn */
       alb = uTint;
       #ifdef HASMAP
         alb *= texture2D(uCMap, vUv).rgb * 1.5;
       #endif
-      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.75, bt.a * uBloodAmt); }   /* blood soaking the uniform */
+      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.42, bt.a * uBloodAmt); }   /* blood soaking the uniform */
     #endif
     float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
@@ -186,22 +187,29 @@ export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSi
 // rendered each frame; mode 0 colour picture, 1 green one-colour picture, -1 the same with light and dark swapped.
 export function screenMaterial(map, live = null) {
   const u = { uInside: SHARED.uInside, uExpo: SHARED.uExpo, uClip: SHARED.uClip, uClipOn: SHARED.uClipOn, uTime: SHARED.uTime,
-    uGlitch: SHARED.uGlitch, uSimT: SHARED.uSimT, uWeak: { value: 0 }, uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
+    uGlitch: SHARED.uGlitch, uSimT: SHARED.uSimT, uWeak: { value: 0 }, uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uPx: { value: new THREE.Vector2(1 / 512, 1 / 512) }, uLines: { value: 160 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; ${DEPTH_VS}
       void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; cabDepth(viewMatrix * w); }`,
-    fragmentShader: /* glsl */`uniform float uGlitch; uniform float uWeak; uniform float uSimT; uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint;
+    fragmentShader: /* glsl */`uniform float uGlitch; uniform float uWeak; uniform float uSimT; uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint; uniform vec2 uPx; uniform float uLines;
       varying vec2 vUv; varying vec3 vW; ${CLIP_FS}
       void main() {
         cabClip(vW, 0.0);
         float gl = clamp(max(uGlitch, uWeak), 0.0, 1.0); vec2 uvg = vUv; if (gl > 0.001) { float row = floor(vUv.y * 22.0) + floor(uSimT * 27.0) * 7.0; uvg.x += (fract(sin(row * 12.9898) * 43758.5453) - 0.5) * 0.22 * gl * step(0.45, fract(sin(row * 78.233) * 43758.5453)); }   /* torn rows */
         vec3 c = vec3(0.004, 0.008, 0.006);
         if (uHasLive > 0.5) {
-          vec3 l = texture2D(uLive, uvg).rgb * uGain; l = l / (l + vec3(0.6));
+          vec3 l = texture2D(uLive, uvg).rgb;   /* the small view is drawn in scene light: give it the scene's own exposure and tone curve, as the main view gets */
+          #ifdef TONE_MAPPING
+            l = toneMapping(l);
+          #else
+            l = l * uGain; l = l / (l + vec3(0.6));
+          #endif
           if (abs(uMode) > 0.5) { float g = dot(l, vec3(0.3, 0.55, 0.15)); g = smoothstep(0.02, 0.85, g); if (uMode < 0.0) g = 1.0 - g; l = uTint * g; }
           c = l * (0.92 + 0.08 * sin(vUv.y * 420.0));
         }
-        vec4 o = texture2D(uMap, uvg); c = mix(c, o.rgb, o.a); c *= 1.0 - 0.55 * gl * step(0.6, fract(sin(floor(uSimT * 23.0) * 91.7) * 43758.5));
+        vec4 o = texture2D(uMap, uvg); c = mix(c, o.rgb, o.a);
+        { vec2 d = uPx * 2.5; vec4 h = texture2D(uMap, uvg + vec2(d.x, 0.0)) + texture2D(uMap, uvg - vec2(d.x, 0.0)) + texture2D(uMap, uvg + vec2(0.0, d.y)) + texture2D(uMap, uvg - vec2(0.0, d.y)); c += h.rgb * h.a * 0.07 * (1.0 - o.a * 0.6); }   /* a little glow round lit symbols */
+        { float fine = clamp(1.0 - fwidth(vUv.y) * uLines * 0.9, 0.0, 1.0); c *= 1.0 - 0.10 * fine * (0.5 + 0.5 * sin(vUv.y * uLines * 6.2832)); c *= 1.0 + 0.07 * smoothstep(0.9, 1.0, fract(vUv.y * 0.6 + uSimT * 0.31)); }   /* display lines, and the refresh passing down the glass */ c *= 1.0 - 0.55 * gl * step(0.6, fract(sin(floor(uSimT * 23.0) * 91.7) * 43758.5));
         gl_FragColor = vec4(c * uBright * 1.25 * uExpo, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

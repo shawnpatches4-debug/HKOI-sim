@@ -70,6 +70,7 @@ export class Hud {
       const c = { card: el('div', 'st'), title: el('b'), tag: el('i', 'tag'), line: el('div', 'sl'), mags: el('div', 'sa'), fact: el('div', 'sf'), mag: [] }, sh = el('div', 'sh');
       sh.append(c.title, c.tag); c.card.append(sh, c.line, c.mags, c.fact); this.$(pan === 'def' ? 'defences' : 'crew').append(c.card); n.st[k] = c;
     }
+    n.common = el('div', 'why'); this.$('crewmen').append(n.common);   /* the reason the whole crew shares, said once */
     n.radar = row('defences', 'Radar');
     n.group = row('enemybox', 'Group'); n.teams = row('enemybox', 'Teams'); n.near = row('enemybox', 'Nearest'); n.fired = row('enemybox', 'Fired');
   }
@@ -222,6 +223,10 @@ export class Hud {
     const B = board, doing = {
       cdr: B.CDR ? B.CDR.line : '', drv: B.DRV ? [B.DRV.line.replace(/\.$/, '')].concat((B.CDR && B.CDR.facts || []).filter(f => /facing/.test(f))).join(', ') : '',
       gnr: B.MAIN ? `${B.MAIN.state}: ` + (B.MAIN.target ? `${B.MAIN.target.name}, ${B.MAIN.target.range}` : B.MAIN.line) : '', ldr: B.M240 ? ((B.M240.facts || [])[0] || B.M240.line) : '' };
+    // the reason for a man's state is shown under him only when it is his own; one that the whole crew shares is said once, under the four
+    const seen = {}; for (const r of MEN) { const m = crew.who[r]; if (crew.on && m.status !== 'down' && m.why && m.why !== 'nothing yet') seen[m.why] = (seen[m.why] || 0) + 1; }
+    const shared = Object.keys(seen).filter(w => seen[w] > 1).sort((a, b) => seen[b] - seen[a])[0] || '';
+    this.put(n.common, shared ? `Whole crew: ${shared}` : '', 'why', true); if (n.common.hidden !== !shared) n.common.hidden = !shared;
     for (const r of MEN) {
       const m = crew.who[r], x = n.men[r], down = m.status === 'down', dead = down && /killed/.test(m.busy || ''), k = down ? 3 : Math.max(0, STATES.indexOf(m.state));
       const word = dead ? 'killed' : down ? 'out of action' : /frozen/.test(m.busy || '') ? 'frozen' : m.state + (m.status === 'wounded' ? ', wounded' : '');
@@ -230,7 +235,7 @@ export class Hud {
       this.put(x.tag, dead ? 'KILLED' : down ? 'OUT OF ACTION' : '', 'tag', true); const rc = 'man m' + k + (down ? ' down' : '') + (/frozen/.test(m.busy || '') ? ' frozen' : ''); if (x.row._c !== rc) { x.row._c = rc; x.row.className = rc; }
       const d = !sum.alive ? 'vehicle destroyed' : down ? (m.busy || 'out of action') : doing[r] || '-'; this.put(x.doing, d, 'do', true); if (x.doing.title !== d) x.doing.title = d;
       const [fx, tone] = this.effect(r, m, crew); this.put(x.fx, fx, 'fx ' + tone); if (x.fx.title !== fx) x.fx.title = fx;
-      const why = !crew.on || down ? '' : m.why && m.why !== 'nothing yet' ? `Last: ${m.why}` : ''; this.put(x.why, why, 'why', true); if (x.why.title !== `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '')) x.why.title = `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '');
+      const why = !crew.on || down ? '' : m.why && m.why !== 'nothing yet' && m.why !== shared ? `His own: ${m.why}` : ''; this.put(x.why, why, 'why', true); if (x.why.hidden !== !why) x.why.hidden = !why; if (x.why.title !== `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '')) x.why.title = `stress ${Math.round(m.stress * 100)}%` + (m.why ? ': ' + m.why : '');
     }
   }
   miniFaces(crew) {
