@@ -317,7 +317,7 @@ export class Interior {
 
     { const lids = !(cut && this.cutTop); if (P.hatch.visible !== lids) P.hatch.visible = P.cupHatch.visible = lids; }   /* with the roof lifted off, the two hatch lids go with it */
     // ---- displays
-    this._box(SEATS[mode] && !this.headOut && !cut ? mode : null);
+    this._box(SEATS[mode] && !cut ? (this.headOut ? (mode === 'in_ldr' ? 'hatch' : null) : mode) : mode === 'outside' && this.st.hatch > 0.02 ? 'hatch' : null);
     this._sights(dt, s, seat, cut); if (mode === 'outside' || this.headOut) { this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
@@ -472,6 +472,7 @@ export class Interior {
       this.boxed = list; }
     else if (!on && this.boxed) { for (const x of this.boxed) { x.m.clippingPlanes = x.cp || null; x.m.clipIntersection = !!x.ci; x.m.needsUpdate = true; } this.boxed = null; }
     if (!on) return; const drv = mode === 'in_drv', G = drv ? this.hul : this.tur, lo = drv ? [-0.8, -1.4, -5.2] : [-1.3, -1.3, -1.3], hi = drv ? [0.8, -0.2, DIM.DZ + 0.95] : [1.3, DIM.RF + 0.8, 1.75];
+    if (mode === 'hatch') { const hx = DIM.HAT[0], hz = DIM.HAT[1], r = DIM.HATR + 0.02; lo[0] = hx - r; lo[1] = DIM.RF - 0.3; lo[2] = hz - r; hi[0] = hx + r; hi[1] = DIM.RF + 0.2; hi[2] = hz + r; }
     for (let i = 0; i < 6; i++) { const ax = i >> 1, sg = i & 1 ? 1 : -1; _v2.set(0, 0, 0).setComponent(ax, sg); _v.set(0, 0, 0).setComponent(ax, sg > 0 ? hi[ax] : lo[ax]); _v.applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); this.boxPl[i].setFromNormalAndCoplanarPoint(_v2, _v); }
   }
 }
