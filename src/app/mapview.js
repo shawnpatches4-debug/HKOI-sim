@@ -22,7 +22,7 @@ export class MapView {
     x.putImageData(img, 0, 0);
     const P = (e, nn) => [(e + half) / m, (half - nn) / m]; x.lineCap = x.lineJoin = 'round';
     for (const r of w.roads) { for (const [col, wd] of [['#6b5a48', r.w * 1.6 / m + 2.2], ['#f4ecd6', r.w * 1.6 / m + 0.8]]) { x.strokeStyle = col; x.lineWidth = wd; x.beginPath(); r.pts.forEach((p, i) => { const [a, b] = P(p[0], p[1]); if (i) x.lineTo(a, b); else x.moveTo(a, b); }); x.stroke(); } }
-    x.fillStyle = '#3d3a36'; for (const b of w.buildings) { const [a, bb] = P(b.e, b.n); x.save(); x.translate(a, bb); x.rotate(b.rot); x.fillRect(-b.w / m / 2, -b.d / m / 2, Math.max(1.5, b.w / m), Math.max(1.5, b.d / m)); x.restore(); }
+    x.fillStyle = '#3d3a36'; for (const b of w.buildings) { const [a, bb] = P(b.e, b.n); x.save(); x.translate(a, bb); x.rotate(-b.rot);   /* north is up on the map, so a turn that is anticlockwise on the ground is a negative canvas turn (matches world.buildingAt) */ x.fillRect(-b.w / m / 2, -b.d / m / 2, Math.max(1.5, b.w / m), Math.max(1.5, b.d / m)); x.restore(); }
     // grid every kilometre
     x.strokeStyle = 'rgba(40,60,90,.28)'; x.lineWidth = 1; for (let g = -half; g <= half; g += 1000) { const [a] = P(g, 0), [, b] = P(0, g); x.beginPath(); x.moveTo(a, 0); x.lineTo(a, S); x.moveTo(0, b); x.lineTo(S, b); x.stroke(); }
     return c;
