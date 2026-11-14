@@ -104,7 +104,8 @@ const FS = /* glsl */`
         alb *= texture2D(uCMap, vUv).rgb * 1.5;
       #endif
       { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.75, bt.a * uBloodAmt); }   /* blood soaking the uniform */
-    #endif float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
+    #endif
+    float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
       vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05;
       #ifdef NOGLOW
