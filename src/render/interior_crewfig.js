@@ -74,6 +74,7 @@ export class CrewFigures {
       head: [sp(), sp(), sp()], grip: [sp(), sp()], hand: [[sp(), sp(), sp()], [sp(), sp(), sp()]], lvl: -1, head0: fig.getObjectByProperty('isBone', true) && rig.bones[J.Head], handErr: [0, 0], speedJump: 0 };
   }
 
+  // (snap: head and hands go straight to their points, without the springs: the viewer's own figure, whose head is the camera)
   // men: { gnr: { on, head [x,y,z], hands [[x,y,z],[x,y,z]] (left, right; in the interior's frame), state, status, frozen, brace, flinch, bodyOnly, blood, load, rise }, ... }
   // t = battle time, dt = battle seconds since the last call (0 while paused)
   update(men, t, dt) {
@@ -109,10 +110,10 @@ export class CrewFigures {
     for (let i = 0; i < NJ; i++) { if (first) { r.cur[i].copy(r.goal[i]); r.vel[i].set(0, 0, 0); } else if (dt > 1e-6) { const w = r.vel[i], w0x = w.x, w0y = w.y, w0z = w.z; chaseJoint(r.cur[i], w, r.prev[i], r.goal[i], Y_POSING[i] * slow * 0.55, dt); const dj = Math.hypot(w.x - w0x, w.y - w0y, w.z - w0z); if (dj > r.speedJump) r.speedJump = dj; } r.prev[i].copy(r.goal[i]); r.draw[i].copy(r.cur[i]); }
     // his head is held at the seat's eye point (the point itself eases when he rises or slumps), and the grip of each hand eases on and off
     const hy = M.head[1] - (down ? 0.16 : hurt ? 0.05 : 0) - 0.05 * fl, HG = [M.head[0], hy, M.head[2]], yh = stiff(0.16), yg = stiff(0.14), GG = [gripL, gripR];
-    for (let k = 0; k < 3; k++) { const s = r.head[k]; if (first) { s.x = HG[k]; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, HG[k], yh, dt); s.g = HG[k]; }
+    for (let k = 0; k < 3; k++) { const s = r.head[k]; if (first || M.snap) { s.x = HG[k]; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, HG[k], yh, dt); s.g = HG[k]; }
     for (let k = 0; k < 2; k++) { const s = r.grip[k]; if (first) { s.x = GG[k]; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, GG[k], yg, dt); s.g = GG[k]; }
     // where his hands should be: they follow their controls closely (a short spring, so a control that jumps does not jerk the arm)
-    const yc = stiff(0.035); for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) { const s = r.hand[i][k], gk = M.hands[i][k]; if (first) { s.x = gk; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, gk, yc, dt, 1); s.g = gk; }
+    const yc = stiff(0.035); for (let i = 0; i < 2; i++) for (let k = 0; k < 3; k++) { const s = r.hand[i][k], gk = M.hands[i][k]; if (first || M.snap) { s.x = gk; s.v = 0; } else if (dt > 1e-6) chase(s, s.g, gk, yc, dt, 1); s.g = gk; }
     r.fresh = false;
     // ---- stand him so that his eyes are at the eye point, then put his hands on the controls
     if (M.face != null) r.g.rotation.y = Math.PI - M.face * Math.PI / 180; else if (r.g.rotation.y !== Math.PI - B.face * Math.PI / 180) r.g.rotation.y = Math.PI - B.face * Math.PI / 180;   /* the loader up in his hatch turns with his gun */

@@ -154,6 +154,7 @@ async def main():
                 for vn, y, p in [('fwd', 0, 10), ('right', 90, 10), ('left', -90, 10), ('rear', 178, 10), ('down', 0, -30)]:
                     await shot(f'cdr_{nm}_eye_{vn}', f"lk('in_cdr', {y}, {p}, 1)")
                     if vn == 'fwd': print(nm, await pg.evaluate("JSON.stringify((() => { const I = __beta.interior, e = I.tur.worldToLocal(__beta.scene.camera.position.clone()); return { eye: [+e.x.toFixed(3), +e.y.toFixed(3), +e.z.toFixed(3)], headOut: I.headOut, near: __beta.scene.camera.near, cup1: +I.st.cup1.toFixed(2), cup2: +I.st.cup2.toFixed(2), cap: I.capMode, caps: (I.cap || []).length }; })())"))
+                await pg.evaluate('void __beta.runTo(__beta.battle.t + 2)')   # the figures move on the battle clock: let the commander get up (or down) before he is pictured from outside
                 for vn, d, u, o in [('front_right', 2.6, 0.9, 50), ('right', 2.4, 0.7, 100), ('rear_right', 2.6, 1.1, 150)]:
                     await shot(f'cdr_{nm}_outside_{vn}', f"cupv({d}, {u}, {o})")
             await pg.evaluate("void (__beta.interior.setCupolaHatch(0, true), __beta.interior.cupUser = false)")

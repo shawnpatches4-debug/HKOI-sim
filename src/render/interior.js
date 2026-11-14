@@ -354,6 +354,7 @@ export class Interior {
     // inside of the ring, or on top of it.
     { const C = men.cdr, k1 = this._cupK(0), k2 = this._cupK(1), [CX, CZ] = DIM.CUP, me = this.mode === 'in_cdr' && !this.eyeOff && this.cdrEye && k1 > 0.02, ok = C.status === 'ok' && C.state !== 'panicked';
       if (me) { C.head[0] = this.cdrEye.x; C.head[1] = this.cdrEye.y; C.head[2] = this.cdrEye.z; } else if (ok && k1 > 0) { this._cdrEye(1, 0, _v); C.head[0] = _v.x; C.head[1] = _v.y; C.head[2] = _v.z; }
+      C.snap = this.mode === 'in_cdr' && !this.eyeOff;   /* his own body under the camera: it must never lag behind the eye (also while the battle is paused and the hatch is moved) */
       C.rise = ok || me ? Math.max(0.8 * k1, k2) : 0;
       const fy = me ? (((SEATS.in_cdr.yaw0 + this.look.yaw) % 360 + 540) % 360 - 180) : 0, fs = Math.sin(fy * DEG), fc = Math.cos(fy * DEG); if (me) C.face = fy;   /* up in his hatch his body turns with his head (it turns in the cupola), so his own arms never swing across his view */
       const rim = (sx, a, f) => [CX + fc * sx * a + fs * f, 0, CZ - fc * f + fs * sx * a];   /* a point on the rim: a to his side, f ahead of him */
