@@ -85,7 +85,7 @@ need(V.errors === 0, 'no faults in the story' + (V.lastError ? ': ' + V.lastErro
 // ---- 3. rewind and jump ----
 console.log('rewind');
 const jump = to => { tt = to; k = Math.round(to * 60); fb.t = Math.ceil(tt * 10 - 1e-6) / 10; V.update(fb, { t: tt, all: true, teams }); };
-jump(9.5); { const w = V.view(106); need(!w.settled && w.turret.position.distanceTo(w.turret0) < 1e-6 && w.scorch <= 0, 'back before the kill: turret on, paint clean'); need(Math.abs(V.view(101).group.rotation.z) < 0.3 && V.view(101).riders.get(7).state === 'in', 'UAZ upright again, team aboard'); need(V.view(104).trackOff == null, 'track back on'); }
+jump(9.5); { const w = V.view(106); need(!w.settled && w.turret.position.distanceTo(w.turret0) < 1e-6 && w.scorch <= 0, 'back before the kill: turret on, paint clean'); need(Math.abs(V.view(101).group.rotation.z) < 0.3 && V.view(101).riders.get(7).state === 'in', 'UAZ upright again, team aboard'); need(V.view(104).trackOff == null && !V.view(104).strip.visible, 'track back on'); need(!V.view(106).strip && !V.view(107).strip, 'a destroyed vehicle does not count as a thrown track'); V.update(fb, { t: tt, all: true, teams }); need(!V.view(104).strip.visible, 'and stays on the next frame'); }
 jump(23.0); { const w = V.view(106); need(w.turret.position.y > w.turret0.y + 2, 'jump into the middle of the kill: turret in the air'); }
 const before = { ...sc.calls }; jump(900); need(V.view(106).settled && Math.abs(V.view(106).turret.position.x - V.view(106).turret0.x) > 2.2, 'jump far ahead: settled wreck, turret beside it'); need((sc.calls.secondary || 0) === (before.secondary || 0) && (sc.calls.vehicleHit || 0) === (before.vehicleHit || 0), 'no explosions replayed by a jump');
 need(V.errors === 0, 'no faults');
@@ -98,5 +98,17 @@ if (process.argv[2] === 'cost') {
   jump(9.5); for (const [id, name] of [[109, 'UAZ-469'], [105, 'BMP-2'], [106, 'T-72B3'], [110, 'T-90M']]) { const w = V.view(id), out = [];
     for (const lod of [0, 1, 2]) { w.lod = lod; for (const p of w.pieces) { const q = p.userData.lod; p.visible = q === 'near' ? lod === 0 : q === 'detail' ? lod < 2 : q === 'mid' ? lod === 1 : lod === 2; } let n = 0, t = 0; w.group.traverse(o => { if (o.isMesh && o.visible && !o.userData.hot) { let v = true; for (let p = o.parent; p; p = p.parent) if (!p.visible) v = false; if (v) { n++; t += tri(o); } } }); out.push(n + ' pieces, ' + Math.round(t) + ' triangles'); }
     console.log('  ' + name.padEnd(8) + ' close: ' + out[0] + '   middle: ' + out[1] + '   far: ' + out[2]); w.lod = -1; }
+}
+// ---- 5. outlines of chosen moments, for tests/motion/vehicle_sheet.py (a look at the poses without a browser) ----
+if (process.argv[2] === 'dump') {
+  const shots = [[9.5, 109, 'UAZ halted'], [9.5, 105, 'BMP-2 halted'], [9.5, 106, 'T-72B3 halted'], [9.5, 110, 'T-90M halted'], [13.3, 101, 'UAZ: team getting out'], [14.2, 101, 'UAZ: team out'], [21, 110, 'T-90M firepower kill'], [20, 104, 'T-90M mobility kill'],
+    [23.0, 106, 'T-72 turret going up'], [26, 106, 'T-72 turret down'], [26, 107, 'BMP-2 destroyed'], [30.5, 101, 'UAZ thrown'], [33, 101, 'UAZ wreck and riders']], out = [], P = new THREE.Vector3();
+  jump(0); go(0.1);
+  for (const [t, id, title] of shots) { if (t < tt) jump(t - 0.2); go(t); const w = V.view(id), lines = [], bones = []; w.group.updateMatrixWorld(true); if (w.loose) w.loose.updateMatrixWorld(true);
+    const mesh = (o, col) => { const g = o.geometry, p = g.attributes.position, n = (g.index ? g.index.count : p.count) / 3, step = Math.max(1, Math.floor(n / 900)); for (let i = 0; i < n; i += step) for (let c = 0; c < 3; c++) { const k = g.index ? g.index.getX(i * 3 + c) : i * 3 + c; P.fromBufferAttribute(p, k).applyMatrix4(o.matrixWorld); lines.push(+P.x.toFixed(3), +P.y.toFixed(3), +P.z.toFixed(3)); } };
+    const walk = (o, vis) => { vis = vis && o.visible; if (!vis) return; if (o.isSkinnedMesh) return; if (o.isMesh && !o.userData.hot && !o.isInstancedMesh) mesh(o); if (o.isBone && o.parent && o.parent.isBone) { const a = o.getWorldPosition(new THREE.Vector3()), b = o.parent.getWorldPosition(new THREE.Vector3()); bones.push(+a.x.toFixed(3), +a.y.toFixed(3), +a.z.toFixed(3), +b.x.toFixed(3), +b.y.toFixed(3), +b.z.toFixed(3)); } for (const c of o.children) walk(c, vis); };
+    walk(w.group, true); if (w.loose) walk(w.loose, true);
+    out.push({ title: title + '  (t = ' + t + ' s)', at: [w.X.x, sc.world.h(w.X.x, w.N.x), -w.N.x], h: w.H.x, lines, bones }); }
+  fs.writeFileSync(process.argv[3], JSON.stringify(out)); console.log('wrote', process.argv[3]);
 }
 console.log(fails.length ? 'VEHICLE MOTION FAIL (' + fails.length + ')' : 'VEHICLE MOTION PASS'); process.exit(fails.length ? 1 : 0);

@@ -141,8 +141,9 @@ export class VehicleView {
     if (!cat && this.throwOff) { this.throwOff = false; this.throwBusy = false; }
     const when = eff => d && d.effect === eff ? d.t : C.snap ? old : C.t;
     if (cat && this.tCat == null) this.tCat = when('catastrophic'); if (!cat) this.tCat = null;
-    if (v.mobile === false && this.tMob == null) this.tMob = when('mobility'); if (v.mobile !== false) this.tMob = null;
-    if (v.canFire === false && this.tFp == null) this.tFp = when('firepower'); if (v.canFire !== false) this.tFp = null;
+    const crewed = !cat && v.state !== 'abandoned';                           /* (a wreck or an abandoned vehicle also reports that it cannot move or fire: that is not a thrown track or a jammed turret) */
+    if (v.mobile === false && this.tMob == null && crewed) this.tMob = when('mobility'); if (v.mobile !== false) this.tMob = null;
+    if (v.canFire === false && this.tFp == null && crewed) this.tFp = when('firepower'); if (v.canFire !== false) this.tFp = null;
     if (v.state === 'abandoned' && this.tAb == null) this.tAb = C.snap ? old : C.t; if (v.state !== 'abandoned') this.tAb = null;
     if (isNew) { this.dmgSig = sig; this.hitNew = d && !C.snap && C.t - d.t < 1.2 ? d : null; }
   }
@@ -195,6 +196,7 @@ export class VehicleView {
   _parts() {
     if (!this.ready) return;
     if (this.tMob != null || this.trackOff != null) { const side = dice(this.id, 3) < 0.5 ? 1 : -1; for (const t of this.tracks) if (t.side === side && this.lod === 0) t.mesh.visible = false; }
+    if (this.strip) this.strip.visible = this.trackOff != null && this.lod < 2;
     if (this.lid) this.lid.visible = this.lod < 2 && (this.tAb != null || this.tFp != null || this.tCat != null);
   }
 
@@ -307,7 +309,7 @@ export class VehicleView {
       const a = t - this.tMob, side = dice(id, 3) < 0.5 ? 1 : -1;
       if (this.trackOff == null && !this.S.wheeled) { this.trackOff = side; this._parts(); this._strip(side); }
       if (!cat && a < 30 && dt > 0 && vis) { this.acc += dt * 7 * (1 - a / 30); while (this.acc >= 1) { this.acc -= 1; this._fresh(); const p = this._world([side * this.S.gauge, 0.7, (fx.R() - 0.5) * 3], _v); fx.puff(p.x, p.y, p.z, (fx.R() - 0.5), 1.2 + fx.R(), (fx.R() - 0.5), 4 + fx.R() * 4, 0.7, 3.6, 0.4, 0.39, 0.37, 0.4, 0.8, 0.35); } }
-    } else if (this.trackOff != null) { this.trackOff = null; if (this.strip) this.strip.visible = false; this.lod = -1; }
+    } else if (this.trackOff != null) { this.trackOff = null; this.lod = -1; this._parts(); }
     // a firepower kill: dark smoke out of the hatches, thinning over a minute
     if (this.tFp != null && !cat) {
       const a = t - this.tFp; if (a >= 0 && a < 60 && dt > 0 && vis && this.U.hatch) { this.acc2 = (this.acc2 || 0) + dt * 12 * (1 - a / 60); while (this.acc2 >= 1) { this.acc2 -= 1; this._fresh(); const h = this.U.hatch[(fx.R() * this.U.hatch.length) | 0], p = this._world(h, _v); fx.puff(p.x, p.y, p.z, (fx.R() - 0.5) * 0.8, 2.2 + fx.R() * 1.5, (fx.R() - 0.5) * 0.8, 5 + fx.R() * 5, 0.6, 4.5, 0.07, 0.07, 0.07, 0.6, 0.6, 0.5); } }
