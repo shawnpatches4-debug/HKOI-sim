@@ -385,7 +385,8 @@ export class Interior {
     const U = this.st.ldrU, firing = !!(mg && B.t >= mg.t && B.t <= mg.t + (mg.dur || 3)), recent = !!(mg && B.t >= mg.t && B.t < mg.t + (mg.dur || 3) + 4); this.mgFiring = firing;
     let want = 0, wantP = 0; if (recent && U > 0.8) { want = clamp((((Math.atan2(mg.e - T.e, mg.n - T.n) / DEG - (this.turBrg || 0) + 540) % 360) - 180), -110, 110);
       const W = this.s && this.s.world, R = Math.max(5, Math.hypot(mg.e - T.e, mg.n - T.n)); if (W && W.h && tk.m240Tip) { tk.m240Tip.getWorldPosition(_on); const th = W.h(mg.e, mg.n) + 0.6; if (Number.isFinite(th)) wantP = clamp(Math.atan2(th - _on.y, R) / DEG, -10, 35); } }   /* laid on the target: along the ground, a little down */
-    { const bdt = this.mgT != null ? clamp(B.t - this.mgT, 0, 1.5) : 0; this.mgT = B.t; this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, bdt); this.mgPitch = ease(this.mgPitch, wantP, 3.5, bdt); }
+    { let bdt = this.mgT != null ? clamp(B.t - this.mgT, 0, 1.5) : 0; this.mgT = B.t; if (mg) { const since = recent ? B.t - mg.t : B.t - (mg.t + (mg.dur || 3) + 4); if (since >= 0 && since < bdt) bdt = since; }   /* a new aim counts from the moment it was given, not from the last frame: the same at any frame rate */
+      this.st.mgYaw = ease(this.st.mgYaw, want, 3.5, bdt); this.mgPitch = ease(this.mgPitch, wantP, 3.5, bdt); }
     pv.rotation.y = -this.st.mgYaw * DEG; this.mgCradle.rotation.x = -this.mgPitch * DEG;
     this.mgMesh.position.copy(this.mgHome); if (firing && U > 0.97) this.mgMesh.position.z -= 0.012 * (Math.sin(B.t * 75) > 0.2 ? 1 : 0);   /* recoil of each round */
     pv.updateWorldMatrix(true, true); this.tur.updateWorldMatrix(true, false); const M = this.mgM.copy(this.tur.matrixWorld).invert().multiply(this.mgCradle.matrixWorld);   /* the gun's frame, in the interior's frame */
