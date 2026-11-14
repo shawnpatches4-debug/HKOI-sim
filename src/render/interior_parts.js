@@ -235,9 +235,8 @@ export function lampMaterial() {
 // Dirty glass of a vision block: a faint streaked film in front of the real world outside.
 export function glassMaterial() {
   const c = canvas(128, 64), x = c.getContext('2d'), R = rnd(11); x.clearRect(0, 0, 128, 64);
-  for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(205,215,200,${0.03 + R() * 0.07})`; x.fillRect(R() * 128, 0, 1 + R() * 5, 64); }
-  for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(60,55,45,${0.08 + R() * 0.15})`; x.beginPath(); x.arc(R() * 128, R() * 64, 0.5 + R() * 1.6, 0, 7); x.fill(); }
-  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(95,140,125,0.34)'); g.addColorStop(0.3, 'rgba(105,145,130,0.10)'); g.addColorStop(1, 'rgba(120,150,140,0.12)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
+  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(95,140,125,0.16)'); g.addColorStop(0.25, 'rgba(105,145,130,0.05)'); g.addColorStop(1, 'rgba(120,150,140,0.06)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
+  for (const [x0, y0, x1, y1] of [[0, 0, 10, 0], [128, 0, 118, 0], [0, 0, 0, 7], [0, 64, 0, 57]]) { const e = x.createLinearGradient(x0, y0, x1, y1); e.addColorStop(0, 'rgba(10,16,14,0.5)'); e.addColorStop(1, 'rgba(10,16,14,0)'); x.fillStyle = e; x.fillRect(0, 0, 128, 64); }   /* plain clear glass with a faint tint, darker at the edges where the prism meets its frame */
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.ShaderMaterial({ uniforms: { uInside: SHARED.uInside, uMap: { value: t }, uExpo: SHARED.uExpo, uDay: { value: new THREE.Vector3(1, 1, 1) } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`varying vec2 vUv; ${DEPTH_VS} void main() { vUv = uv; cabDepth(modelViewMatrix * vec4(position, 1.0)); }`,

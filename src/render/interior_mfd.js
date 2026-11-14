@@ -127,7 +127,7 @@ function gps(x, W, H, D) {
   sideKeys(x, W, H, 4, ['AMP', 'COAX', 'LRF', 'POL'], [D.gpsMag === 10 ? '10X' : '3X', 'TIS', 'DAY', 'BST'], ['AMP', 'TIS', D.gpsMag === 10 ? '10X' : '3X', D.rf && D.wait > 1.2 ? 'LRF' : ''], g, 17);
   text(x, D.gunLine, cx, H - 58, 24, D.gunLine === 'OFF' ? C.rd : g, 'center');
   if (D.loaded && D.main > 0) { box(x, g, cx - 84, H - 46, 168, 30); text(x, 'GUN READY', cx, H - 24, 22, g, 'center'); } else if (D.main > 0) text(x, 'LOADING', cx, H - 24, 22, C.am, 'center'); else text(x, 'NO ROUNDS', cx, H - 24, 22, C.rd, 'center');
-  text(x, `MAIN ${pad(D.main, 2)}`, 84, H - 24, 22, g); text(x, `GUN ${relWord(D.rel)}`, W - 84, H - 24, 20, g, 'right');
+  text(x, `MAIN ${pad(D.main, 2)}`, 84, H - 24, 22, g); text(x, Math.abs(D.rel) < 2 ? 'GUN FRONT' : Math.abs(D.rel) > 178 ? 'GUN REAR' : `GUN ${D.rel > 0 ? 'R' : 'L'}${pad(Math.abs(D.rel), 3)}`, W - 84, H - 24, 20, g, 'right');
   if (D.tgt) text(x, up(D.tgt.name) + '  ' + up(D.tgt.range), cx, 92, 20, g, 'center', 600);
   if (!D.gpsLive) text(x, D.liveNote, cx, 120, 18, 'rgba(157,255,176,.75)', 'center', 600);
   if (D.warning && D.blink) text(x, 'MISSILE WARNING', cx, H - 92, 24, C.rd, 'center');
