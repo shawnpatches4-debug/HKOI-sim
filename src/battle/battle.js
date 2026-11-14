@@ -61,6 +61,7 @@
         { const wx = ({ fog: 'fog', rain: 'rain', snow: 'haze' })[opt.cond]; if (wx && this.cfg0.env && this.cfg0.env.weather !== wx) { this.cfg0 = JSON.parse(JSON.stringify(this.cfg0)); this.cfg0.env.weather = wx; this.lookup = this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {}; } }
         this.skill = SKILL[opt.skill] ? opt.skill : 'trained'; this.cond = opt.cond || 'day';
         this.dt = opt.dt || 0.1;
+        this.crewOpt = { on: opt.crewStress !== false, quality: opt.crewQuality };   /* crew.js: the tank crew's stress model (crewStress: false switches it off; crewQuality: green, trained, expert or veteran) */
         this.t = 0;
         this.log = [];          // { t, kind, who, text, why }
         this.volleys = [];      // resolved volleys, each with the engine's record
@@ -159,6 +160,7 @@
         if (this._pending) { const f = this._pending; this._pending = null; f(); this._finishVolleys(); return; }
         const dt = this.dt; this.t += dt;
         if (!this.tank.alive) return;
+        this._crewStep(dt);   /* crew.js: the crew's stress moves on one step */
         this._moveTank(dt);
         for (const u of this.units) this._unit(u, dt);
         this._commander();
@@ -192,7 +194,7 @@
       // hides the vehicle from where the warnings point. Returns the path the engine will use: [[t, east, north, heading, speed], ...]
       _drivePlan(at, warnT, observers, tEnd, firstImpact, holdForHkoi) {
         const W = this.world, path = [], T0 = -3, PDT = 0.1; let e = 0, n = 0, h = at.h, v = at.v || 0, goal = null, reached = false;
-        const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2;
+        const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2 + this._crewAdd('react', 1.6);   /* crew.js: stress slows the order and the driver */
         let cover = null;
         if (warnT != null && observers.length) { const c = W.coverFrom(at.e, at.n, observers, { radius: 260, step: 24 }).filter(q => this._drivable(at.e, at.n, q.e, q.n)); cover = c.length ? c[0] : null;
           // Go only for cover that hides the hull from every firer AND can be reached before the first missile arrives. Otherwise hold still:
@@ -439,7 +441,7 @@
         // can HKOI handle this on its own terms? Missiles it can blind (beam riders and command-guided), launched from far enough out to give it time,
         // and no more than two arriving close together (three at once swamp it: 2% stopped in the engine against 44% when six seconds apart)
         const blindable = launches.filter(l => (l.key === 'kornet' || l.key === 'saclos') && l.R >= 1000), others = launches.filter(l => !blindable.includes(l) && l.key !== 'rpg');
-        const holdForHkoi = this.cfg0.hkoi_enabled !== false && (T.st.obs == null || T.st.obs >= 12) && blindable.length >= 1 && blindable.length <= 2 && others.length === 0;
+        const holdForHkoi = this.cfg0.hkoi_enabled !== false && (T.st.obs == null || T.st.obs >= 12) && blindable.length >= 1 && blindable.length <= 2 && others.length === 0 && !this._crewFlinch();   /* crew.js: a shaken commander may not hold still */
         const plan = this._drivePlan(at, warnT, observers, tEnd, imp.length ? Math.min(...imp) : null, holdForHkoi);
         // which guided missiles lose their gunner's sight line because the vehicle got behind something
         const masks = launches.map((l, i) => {
@@ -565,6 +567,8 @@
       }
     }
     const TA = deps.TankAI || (typeof HKTankAI !== 'undefined' ? HKTankAI : null); if (TA) TA.install(Battle, SKILL);   /* the tank crew's drills live in tankai.js */
+    /* the crew's stress and panic live in crew.js; without that file every hook answers "no change" */
+    const CW = deps.Crew || (typeof HKCrew !== 'undefined' ? HKCrew : null); if (CW) CW.install(Battle, { HK, DMG: deps.DMG }); else Object.assign(Battle.prototype, { _crewStep() {}, _crewAdd() { return 0; }, _crewMul() { return 1; }, _crewOut() { return false; }, _crewFlinch() { return false; } });
     return { Battle, TEAMS, SKILL };
   }
 
