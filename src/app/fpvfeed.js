@@ -96,7 +96,7 @@ export class FpvFeed {
     this._dom(); const cams = o.cams, S = cams.s, cam = S.camera, W = o.world, T = o.tank;
     if (!this.on) { this.on = true; this.el.hidden = false; this.sig = {}; this.last = null; document.body.classList.add('fpv-on');
       /* nobody tells this module when the battle screen is left: it looks for itself, and also gives up if it has not been called for a while */
-      this._watch = setInterval(() => { const st = window.__beta && window.__beta.state ? window.__beta.state() : 'play'; if (st !== 'play' || performance.now() - this.seen > 3000) this._off(); }, 250); }
+      this._watch = setInterval(() => { const st = window.__beta && window.__beta.state ? window.__beta.state() : 'play'; if (st !== 'play' || performance.now() - this.seen > 10000) this._off(); }, 250); }
     this.seen = performance.now();
     const u = this.unit = this.pick(o), tp = S.at(T.e, T.n, 2.2, this._tp || (this._tp = cam.position.clone())); if (!this._v) this._v = cam.position.clone();
     if (!u) { this._show({ phase: 'none' }, 0, false, 'В ЭТОМ БОЮ НЕТ ДРОНОВ · no drone crew in this battle', false, o); cam.position.set(tp.x - 40, tp.y + 18, tp.z + 40); cam.up.set(0, 1, 0); cam.lookAt(tp); this._fov(cam, 60); return; }

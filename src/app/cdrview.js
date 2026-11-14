@@ -185,7 +185,7 @@ export class CommanderView {
     // no empty strip beside the map: where the map is bigger than the window its edge stays at or beyond the window's edge
     // (the list is see-through and may lie over map), and where it is smaller it sits in the middle
     const half = M.world ? M.world.half : 4000, hw = cv.width / dpr / 2 / sc, hh = cv.height / dpr / 2 / sc;
-    M.cx = hw >= half ? 0 : Math.max(-half + hw, Math.min(half - hw, M.cx)); M.cn = hh >= half ? 0 : Math.max(-half + hh, Math.min(half - hh, M.cn));
+    M.cx = hw - left / sc / 2 >= half ? -left / sc / 2 : Math.max(-half + hw - left / sc, Math.min(half - hw, M.cx));   /* the map's west edge may come in as far as the list's edge, no further */ M.cn = hh >= half ? 0 : Math.max(-half + hh, Math.min(half - hh, M.cn));
   }
 
   // ------------------------------------------------------------------ pieces of the picture
@@ -261,7 +261,7 @@ export class CommanderView {
       mid = this._midOf(pts);
     }
     x.globalAlpha = 1;
-    if (mid && alpha > 0.3 && loud) {
+    if (mid && alpha > 0.3 && loud && !(o.to === 'all' && kind === 'hold_fire' && !picked)) {   /* an order to everyone is marked on every symbol and written in the list */
       const who = a.who ? a.who.name : o.to === 'all' ? 'All teams' : 'Team', left = o.t_eta != null ? o.t_eta - t : null;
       let text = orderText(o, who); if (left != null) text = text.replace(/,?\s*(about\s*)?\d+(\.\d+)?\s*(min|s|sec)\.?$/i, '');
       if (o.done) text += ' · done'; else if (left != null) text += left > 0.5 ? ` · ${o.by === 'uaz' ? 'by UAZ, ' : ''}arrives in ${mmss(left)}` : ' · arriving';
@@ -306,7 +306,7 @@ export class CommanderView {
     else { x.font = `700 ${9 * dpr}px ui-monospace, Menlo, monospace`; x.textAlign = 'center'; x.fillText('CDR', 0, 3.2 * dpr); x.textAlign = 'left'; }
     if (o.cdr) { x.strokeStyle = o.dead ? '#3a3a3a' : INK.ownDark; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(-w, -h); x.lineTo(-w, -h - 11 * dpr); x.stroke(); x.fillStyle = o.dead ? '#6d6d6d' : INK.own; x.beginPath(); x.moveTo(-w, -h - 11 * dpr); x.lineTo(-w + 9 * dpr, -h - 8 * dpr); x.lineTo(-w, -h - 5 * dpr); x.closePath(); x.fill(); }   /* the commander's pennant */
     if (o.dead) { x.strokeStyle = '#1c1c1c'; x.lineWidth = 2.2 * dpr; x.beginPath(); x.moveTo(-w - 3 * dpr, -h - 3 * dpr); x.lineTo(w + 3 * dpr, h + 3 * dpr); x.moveTo(-w - 3 * dpr, h + 3 * dpr); x.lineTo(w + 3 * dpr, -h - 3 * dpr); x.stroke(); }
-    if (o.hold && !o.dead) { x.strokeStyle = '#111'; x.lineWidth = 2.4 * dpr; x.beginPath(); x.arc(0, 0, w * 1.42, 0, 6.283); x.moveTo(-w * 1.0, w * 1.0); x.lineTo(w * 1.0, -w * 1.0); x.stroke(); }   /* hold fire: ringed and barred */
+    if (o.hold && !o.dead) { x.strokeStyle = 'rgba(17,17,17,.8)'; x.lineWidth = 1.8 * dpr; x.beginPath(); x.arc(0, 0, w * 1.42, 0, 6.283); x.moveTo(-w * 1.0, w * 1.0); x.lineTo(w * 1.0, -w * 1.0); x.stroke(); }   /* hold fire: ringed and barred */
     x.restore();
   }
 
