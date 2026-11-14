@@ -195,7 +195,7 @@ const BODY = /* glsl */`
     vec3 roadCol = hkRoad * stoneTex * (0.86 + 0.28 * n2) * (1.0 - rut * 0.22);
     roadCol = mix(roadCol, mc.rgb * dcol * 0.9, crown * 0.7);
     base = mix(base, roadCol, road);
-    hkTilt += rdir * (cos(phF) * aF * 0.55 + (cos(phL) * aL + cos(phT) * aT) * 0.4) * (1.0 - road);
+    hkTilt += rdir * (cos(phF) * aF * 0.4 + (cos(phL) * aL + cos(phT) * aT) * 0.4) * (1.0 - road);
     hkRough = 0.96 - 0.06 * road * hkAsphalt;
 
     // wet ground: darker, and standing water in furrow bottoms, wheel ruts and hollows

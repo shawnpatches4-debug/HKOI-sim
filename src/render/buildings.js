@@ -116,8 +116,8 @@ const ROOF = /* glsl */`
 
 function styled(mat, body, glass) {
   mat.onBeforeCompile = sh => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aStyle; varying vec3 vBox; varying vec3 vBoxN; varying vec3 vScale; varying vec4 vStyle;').replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBox; varying vec3 vBoxN; varying vec3 vScale; varying vec4 vStyle;\n' + NOISE).replace('#include <color_fragment>', body);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aStyle; varying vec3 vBox; varying vec3 vBoxN; flat varying vec3 vScale; flat varying vec4 vStyle;').replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VERT);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBox; varying vec3 vBoxN; flat varying vec3 vScale; flat varying vec4 vStyle;\n' + NOISE).replace('#include <color_fragment>', body);
     if (glass) sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.06, hkGlass);');
   };
   const m = atmosphere(weatherise(mat, glass ? 0.25 : 1.2)); m.customProgramCacheKey = () => 'hkbuilding' + (glass ? 'w' : 'r'); return m;
