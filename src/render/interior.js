@@ -14,7 +14,9 @@ import { SeatUI } from '../app/seats.js';
 const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), ease = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
 const DOME = [null, [2.3, 2.1, 1.75], [2.0, 0.16, 0.1], [0.25, 1.5, 1.25]];   // dome lamp settings: off, white, red, blue-green
-const DOME_NAME = ['off', 'white', 'red', 'blue-green'];
+const DOME_NAME = ['off', 'white', 'red', 'blue-green'], HATCH_NAME = ['closed', 'open-protected', 'open'];
+// how often each small view of the outside is redrawn, seconds (at most one of them in any frame)
+const SIGHT_EVERY = { gps: 0.05, citv: 0.08, lp: 0.07, gas: 0.25 };
 const BRT = [0.3, 0.6, 1.0, 1.45], CREW_NAMES = ['Gunner', 'Commander', 'Loader', 'Driver'], DOME_IDS = ['domeR', 'domeL', 'domeD'];
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _ray = new THREE.Raycaster();
 
@@ -27,11 +29,12 @@ export class Interior {
     this.warnTone = false;       // the same, while the HKOI tone switch is on (a flag for the sound module; nothing plays it yet)
     this.intercomVol = 0.75;     // what the intercom volume knobs are set to, 0 to 1 (a value for the sound module)
     this.look = { yaw: 0, pitch: 0, zoom: 1 }; this.head = { z: 0, vz: 0, x: 0, vx: 0, up: 0 };
+    this.cupHatch = 0;           // commander's hatch: 0 closed, 1 open-protected, 2 open (the viewer's choice; the battle has no state for it)
     this.domeMode = 1; this.domeUser = false; this.hkPage = 0; this.toneOn = true; this.lampTestT = 0; this.hkFireT = 0; this.clock = 0;
-    this.st = { door: 0, block: 0, hatch: 0, rec: 9, slew: 0, steer: 0, arm: 1 }; this.last = { main: null, yaw: null, hdg: null, v: 0, recoil: 0, t: null };
+    this.st = { door: 0, block: 0, hatch: 0, rec: 9, slew: 0, steer: 0, arm: 1, cup1: 0, cup2: 0, thr: 0, gear: 0 }; this.last = { main: null, yaw: null, hdg: null, v: 0, recoil: 0, t: null };
     this.stats = { triangles: 0, meshes: 0, sightCalls: 0, controls: 0 };
-    this.brt = { gps: 1, citv: 1, comp: 1, hkoi: 1, drv: 1 };   /* what the brightness knobs of the displays are set to */
-    this.plane = new THREE.Plane(); this.ext = null; this.citvYaw = null; this.sightT = 0; this.sightN = 0; this.keys = {};
+    this.brt = { gps: 1, citv: 1, comp: 1, hkoi: 1, drv: 1, lp: 1, gas: 1 };   /* what the brightness knobs of the displays are set to */
+    this.due = {}; this.plane = new THREE.Plane(); this.ext = null; this.citvYaw = null; this.sightT = 0; this.sightN = 0; this.keys = {};
     // PROPOSAL ONLY: crew figures are parked by the owner. They are loaded only when the page address carries crew=1 (to take pictures for him to judge).
     this.crewOn = typeof location !== 'undefined' && new URLSearchParams((location.hash || '').slice(1)).get('crew') === '1'; this.crew = null;
     this.ui = typeof document !== 'undefined' && scene3d && scene3d.canvas ? new SeatUI(scene3d.canvas, this) : null;
@@ -47,7 +50,9 @@ export class Interior {
     for (const [kit, grp] of [[B.T, this.tur], [B.H, this.hul]]) for (const b of ['shell', 'fit', 'label', 'lamp']) { const m = kit.mesh(b, M[b]); if (m) { grp.add(m); meshes++; } }
     // parts that move on their own
     const P = this.part = {};
-    for (const [key, d] of Object.entries(B.moving)) { if (!d.build) continue; const k = new Kit(labels); d.build(k); const g = new THREE.Group(); for (const [b, mat] of [['p', M.fit], ['label', M.label]]) { const m = k.mesh(b, mat); if (m) { g.add(m); meshes++; } } tris += k.tris;
+    // audit: every solid piece with the assembly it belongs to, for the overlap check (tests/interior/overlap.test.mjs)
+    this.audit = []; for (const r of B.T.rec) this.audit.push({ g: 'tur', node: null, ...r }); for (const r of B.H.rec) this.audit.push({ g: 'hul', node: null, ...r });
+    for (const [key, d] of Object.entries(B.moving)) { if (!d.build) continue; const k = new Kit(labels); k.tag = 'part:' + key; d.build(k); const g = new THREE.Group(); for (const r of k.rec) this.audit.push({ g: d.g, node: g, ...r }); for (const [b, mat] of [['p', M.fit], ['label', M.label]]) { const m = k.mesh(b, mat); if (m) { g.add(m); meshes++; } } tris += k.tris;
       if (d.pos) g.position.fromArray(d.pos); if (d.quat) g.quaternion.copy(d.quat); if (d.rx) g.rotation.x = d.rx; g.userData.home = g.position.clone(); g.userData.q0 = g.quaternion.clone(); P[key] = g; }
     for (const [key, d] of Object.entries(B.moving)) if (P[key]) (d.parent ? P[d.parent] : G[d.g]).add(P[key]);
     P.round.visible = false;
@@ -60,9 +65,9 @@ export class Interior {
     // displays
     this.cv = {}; this.scr = {};
     const mkScreen = (key, w, h, opaque) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; this.cv[key] = { c, x: c.getContext('2d'), t, key: '', opaque }; return screenMaterial(t); };
-    const SM = { gps: mkScreen('gps', 320, 200), citv: mkScreen('citv', 320, 200), comp: mkScreen('comp', 320, 144, true), hkoi: mkScreen('hkoi', 512, 320, true), drv: mkScreen('drv', 384, 240, true) };
+    const SM = { gps: mkScreen('gps', 320, 200), citv: mkScreen('citv', 320, 200), comp: mkScreen('comp', 320, 144, true), hkoi: mkScreen('hkoi', 512, 320, true), drv: mkScreen('drv', 384, 240, true), lp: mkScreen('lp', 256, 80), gas: mkScreen('gas', 128, 128) };
     for (const d of B.screens) { const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.h), SM[d.key]); m.position.copy(d.pos); m.quaternion.copy(d.quat); m.frustumCulled = false; G[d.g].add(m); this.scr[d.key] = SM[d.key]; meshes++; tris += 2; }
-    this.scr.gps.uniforms.uMode.value = 1; this.scr.citv.uniforms.uMode.value = 1; for (const k of ['comp', 'hkoi', 'drv']) this.scr[k].uniforms.uMode.value = 0;
+    this.scr.gps.uniforms.uMode.value = 1; this.scr.citv.uniforms.uMode.value = 1; for (const k of ['comp', 'hkoi', 'drv', 'lp', 'gas']) this.scr[k].uniforms.uMode.value = 0;   /* the periscope and the telescope are plain glass: a colour picture */
     // controls the viewer can click: one drawn set per kind and group
     this.controls = B.controls; this.ctlMesh = {};
     const shapes = { toggle: k => { k.cyl('c', 0.009, 0.009, 0.006, COL.steel, 0, 0, 0.003, Math.PI / 2, 0, 0, 8); k.cyl('c', 0.0032, 0.0048, 0.026, COL.steel, 0, 0, 0.018, Math.PI / 2, 0, 0, 6); k.ball('c', 0.0058, COL.steel, 0, 0, 0.031); },
@@ -72,7 +77,7 @@ export class Interior {
       const im = new THREE.InstancedMesh(geo, M.fit, list.length); im.frustumCulled = false; list.forEach((c, i) => { c.mesh = im; c.i = i; c.anim = 0; this._poseControl(c); }); im.instanceMatrix.needsUpdate = true; G[g].add(im); meshes++; this.ctlMesh[g + type] = im; }
     // lamps (the lighting of the interior): where each one hangs
     const D = DIM; this.lamps = [
-      { g: 'tur', p: new THREE.Vector3(0.1, D.RF - 0.1, 0.62), r: 1.7 }, { g: 'tur', p: new THREE.Vector3(-0.75, D.RF - 0.1, -0.42), r: 1.7 }, { g: 'hul', p: new THREE.Vector3(-0.2, D.DRF - 0.1, D.DZ + 0.7), r: 1.3 },
+      { g: 'tur', p: new THREE.Vector3(0.05, D.RF - 0.1, 0.82), r: 1.7 }, { g: 'tur', p: new THREE.Vector3(-0.98, D.RF - 0.1, -0.45), r: 1.7 }, { g: 'hul', p: new THREE.Vector3(-0.2, D.DRF - 0.1, D.DZ + 0.7), r: 1.3 },
       { g: 'tur', p: new THREE.Vector3(0.93, 0.2, 0.16), r: 0.55 },                            /* glow of the HKOI display */
       { g: 'tur', p: new THREE.Vector3(D.HAT[0], D.RF - 0.02, D.HAT[1]), r: 1.5 },             /* daylight through the loader's hatch when it is open */
       { g: 'tur', p: new THREE.Vector3(D.CUP[0], D.RF + 0.12, D.CUP[1]), r: 0.6 },             /* daylight through the cupola's vision blocks */
@@ -85,6 +90,7 @@ export class Interior {
   // ---------------------------------------------------------------- controls
   // where the drawn lever, knob or button of a control sits for its present state
   _poseControl(c) {
+    if (!c.mesh) return;   /* a caption spot (a port, a hatch handle) has no lever of its own */
     let s = c.state; if (c.anim > 0) s = c.type === 'knob' ? c.state + Math.sin(c.anim * Math.PI) * 0.8 : c.anim > 0.5 ? 1 - c.state : c.state; if (c.press > 0) s = 1;
     _q.copy(c.quat); _v.copy(c.pos);
     if (c.type === 'toggle') _q.multiply(_q2.setFromAxisAngle(_v2.set(1, 0, 0), s ? -0.5 : 0.5));
@@ -100,10 +106,11 @@ export class Interior {
     return seat ? best : null;
   }
   _crewSet(key, state) { for (const c of this.controls) if (c.key === key && c.state !== state) { c.state = state; this._poseControl(c); } }
-  describe(c) { return c.name + (c.locked ? '' : ' · ' + this._stateName(c)); }
-  _stateName(c) { if (c.key === 'dome') return DOME_NAME[c.state]; if (c.type === 'button') return 'push'; if (c.type === 'knob') return `${c.state + 1} of ${c.n}`; return c.state ? 'on' : 'off'; }
+  describe(c) { return c.name + (c.locked || (c.type === 'spot' && !c.key) ? '' : ' · ' + this._stateName(c)); }
+  _stateName(c) { if (c.key === 'dome') return DOME_NAME[c.state]; if (c.key === 'cdrHatch') return HATCH_NAME[c.state]; if (c.type === 'button') return 'push'; if (c.type === 'knob') return `${c.state + 1} of ${c.n}`; return c.state ? 'on' : 'off'; }
   // the viewer clicks a control. Returns the line to show.
   operate(c) {
+    if (c.type === 'spot' && !c.key) return c.name + (c.locked ? ' · the crew works this.' : '');
     if (c.locked) { c.anim = 1; return c.name + ' · the crew works this one: it springs back.'; }
     if (c.type === 'button') { c.press = 0.35; if (c.key === 'lampTest') this.lampTestT = 1.3; if (c.key === 'hkPage') this.hkPage = (this.hkPage + 1) % 3; this._poseControl(c); return c.name; }
     c.state = (c.state + 1) % c.n; if (c.key) for (const o of this.controls) if (o.key === c.key && o !== c) { o.state = c.state; this._poseControl(o); } this._poseControl(c); this._apply(c);
@@ -111,11 +118,12 @@ export class Interior {
   }
   _apply(c) {
     const k = c.key, U = n => this.scr[n].uniforms; if (!k) return;
+    if (k === 'cdrHatch') { this.cupHatch = c.state; return; }
     if (k === 'dome') { this.domeMode = c.state; this.domeUser = true; } else if (k === 'gpsPol') U('gps').uMode.value = c.state ? -1 : 1; else if (k === 'citvPol') U('citv').uMode.value = c.state ? -1 : 1;
     else if (k === 'gpsBrt') this.brt.gps = BRT[c.state]; else if (k === 'citvBrt') this.brt.citv = BRT[c.state]; else if (k === 'compBrt') this.brt.comp = BRT[c.state]; else if (k === 'hkBrt') this.brt.hkoi = BRT[c.state]; else if (k === 'drvBrt') this.brt.drv = BRT[c.state];
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
   }
-  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; const k = 0.16 / this.look.zoom; this.look.yaw = clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0); this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
+  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
   zoomBy(d) { this.look.zoom = clamp(this.look.zoom * Math.exp(-d * 0.0012), 1, 3.4); }
 
   // ---------------------------------------------------------------- entering and leaving
@@ -159,7 +167,7 @@ export class Interior {
     this.st.block = ease(this.st.block, !T.loaded && r > 0.5 ? 1 : 0, 8, sdt || dt * 0.5); P.block.position.y = -0.2 * this.st.block;
     { const R = P.round, slot = Math.max(0, Math.min(17, T.main - 1)), p = this.rackSlot(-1, slot);                                          /* the round: out of its tube, then on the loading tray, then rammed */
       if (loading && f > 0.1 && f < 0.36) { R.visible = true; R.position.set(p[0], p[1], p[2] + 0.45 - 0.75 * clamp((f - 0.1) / 0.22, 0, 1)); }
-      else if (loading && f >= 0.5 && f < 0.82) { R.visible = true; R.position.set(0, D.GY, 0.62 - 1.05 * clamp((f - 0.56) / 0.24, 0, 1)); }
+      else if (loading && f >= 0.5 && f < 0.82) { R.visible = true; R.position.set(0, D.GY, 0.25 - 1.05 * clamp((f - 0.56) / 0.24, 0, 1)); }
       else R.visible = false;
       const nReady = clamp(T.main - (T.loaded ? 0 : 0), 0, 18) - (loading && f > 0.1 ? 1 : 0), nSemi = clamp(T.ap == null ? 18 : T.ap, 0, 18);
       if (nReady !== this._nR || nSemi !== this._nS) { this._nR = nReady; this._nS = nSemi; const z = _m.makeScale(0, 0, 0); for (let i = 0; i < 36; i++) { const here = i < 18 ? i < nReady : i - 18 < nSemi; if (here) { const q = this.rackSlot(i < 18 ? -1 : 1, i % 18); this.rounds.setMatrixAt(i, _m.makeTranslation(q[0], q[1], q[2])); } else this.rounds.setMatrixAt(i, z.makeScale(0, 0, 0)); } this.rounds.instanceMatrix.needsUpdate = true; } }
@@ -169,7 +177,10 @@ export class Interior {
     const yaw = this.tank.turretYaw || 0, hdg = s.shown ? s.shown.h : T.h, v = T.v || 0;
     if (L.yaw != null && dt > 1e-4) { const rate = clamp((((yaw - L.yaw + 540) % 360) - 180) / dt / 40, -1, 1); this.st.slew = ease(this.st.slew, rate, 10, dt); const tr = clamp((((hdg - L.hdg + 540) % 360) - 180) / dt / 25, -1, 1); this.st.steer = ease(this.st.steer, s.playing ? tr : 0, 6, dt); }
     L.yaw = yaw; L.hdg = hdg; const acc = dt > 1e-4 && s.playing ? clamp((v - L.v) / Math.max(dt * (s.speed || 1), 1e-3), -4, 4) : 0; L.v = v;
-    P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(-0.5, 0, 0); P.tbar.rotateY(-this.st.steer * 0.6); P.gear.rotation.x = v > 0.3 ? -0.45 : v < -0.3 ? 0.45 : 0;
+    P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(0.3, 0, 0); P.tbar.rotateY(-this.st.steer * 0.55);   /* the T-bar turns about its stem */
+    this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.x = -this.st.thr * 1.2;   /* twist grip: more power, more twist */
+    this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.x = -this.st.gear * 0.5;
+    this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose();
     // head: leans against acceleration and jolts with the main gun
     { const H = this.head; let left = Math.min(dt, 0.1); while (left > 1e-5) { const h = Math.min(left, 1 / 120); H.vz += (-90 * H.z - 13 * H.vz + acc * 0.9) * h; H.z = clamp(H.z + H.vz * h, -0.06, 0.06); H.vx += (-90 * H.x - 13 * H.vx - this.st.steer * Math.abs(v) * 0.5) * h; H.x = clamp(H.x + H.vx * h, -0.04, 0.04); left -= h; } }
 
@@ -208,7 +219,7 @@ export class Interior {
     for (const k in this.brt) this.scr[k].uniforms.uBright.value = this.brt[k] * (dead ? 0.1 : 1);
     const hb = this.scr.hkoi.uniforms.uBright.value, gb = this.scr.gps.uniforms.uBright.value;
     LC[3].set(0.1, 0.42, 0.4).multiplyScalar(hb * (T.alive ? 1 : 0)); LC[7].set(0.1, 0.4, 0.16).multiplyScalar(gb * (T.alive ? 1 : 0));
-    LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * 1.3); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
+    LC[4].copy(_v).multiplyScalar(dayK * 3.2 * this.st.hatch); LC[5].copy(_v).multiplyScalar(dayK * (1.3 + 1.2 * this.st.cup1 + 3.2 * this.st.cup2)); LC[6].copy(_v).multiplyScalar(dayK * 1.1);
     const a = dome && !dead ? 0.045 : 0.012; SHARED.uAmb.value.set(a + dayK * 0.02 + (dome ? dome[0] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[1] * 0.012 : 0), a + dayK * 0.02 + (dome ? dome[2] * 0.012 : 0));
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
     this.mat.glass.uniforms.uDay.value.copy(_v).multiplyScalar(dayK * 0.9);
@@ -220,14 +231,15 @@ export class Interior {
     this._sights(dt, s, seat, cut); this._draw(dt, s, hk, info);
   }
 
+  _cupPose() { const h = this.part.cupHatch; h.position.y = h.userData.home.y + 0.11 * this.st.cup1; h.rotation.x = 1.75 * this.st.cup2; }
+  setCupolaHatch(state, now) { this.cupHatch = state; for (const c of this.controls || []) if (c.key === 'cdrHatch') c.state = state; if (now) { this.st.cup1 = state === 1 ? 1 : 0; this.st.cup2 = state === 2 ? 1 : 0; this._cupPose(); } }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
     const yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch;
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
-    const lean = (L.zoom - 1) * 0.07;
-    _v.set(S.eye[0] + H.x - Math.sin(yaw * DEG) * -lean, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z - Math.cos(yaw * DEG) * lean);
+    _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z);   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
     g.updateWorldMatrix(true, false); cam.position.copy(_v).applyMatrix4(g.matrixWorld);
     g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4, 'YXZ'))); cam.up.set(0, 1, 0);
     const near = S.near || 0.5; if (cam.near !== near) { if (this.near0 == null) this.near0 = cam.near; cam.near = near; cam.updateProjectionMatrix(); }
@@ -237,7 +249,7 @@ export class Interior {
 
   // ---------------------------------------------------------------- the two sight pictures (a small extra view of the outside, at most one a frame)
   _sights(dt, s, seat, cut) {
-    const q = this.s.quality, ok = q !== 'min' && q !== 'low' && !this.s.software_off, want = !ok ? [] : this.mode === 'in_gnr' ? ['gps'] : this.mode === 'in_cdr' || cut ? ['citv', 'gps'] : [];
+    const q = this.s.quality, ok = q !== 'min' && q !== 'low' && !this.s.software_off, want = !ok ? [] : this.mode === 'in_gnr' ? ['gps', 'gas'] : this.mode === 'in_cdr' || cut ? ['citv', 'gps'] : this.mode === 'in_ldr' ? ['lp'] : [];
     const B = s.battle, T = B.tank, tw = this.s.world;
     // where the commander's viewer points: it sweeps on its own and stops on a team the crew has found and can see
     this.tur.getWorldDirection(_v); const turBrg = Math.atan2(-_v.x, _v.z) / DEG;   /* the group's own +z points backward, so its direction is turned round */
@@ -247,11 +259,16 @@ export class Interior {
     if (ct) { const wantB = Math.atan2(ct.e - T.e, ct.n - T.n) / DEG, d = ((wantB - this.citvYaw + 540) % 360) - 180; this.citvYaw = (this.citvYaw + clamp(d, -60 * sdt, 60 * sdt) + 360) % 360; this.citvOn = Math.abs(d) < 1; } else { this.citvYaw = (this.citvYaw + 12 * sdt + 360) % 360; this.citvOn = false; }
     const rf = B._rf, aim = rf ? rf.k : null; this.gpsOn = false; if (aim) { const wantB = Math.atan2(aim.e - T.e, aim.n - T.n) / DEG; this.gpsOff = ((wantB - this.turBrg + 540) % 360) - 180; this.gpsOn = Math.abs(this.gpsOff) < 0.8; }
     this.gpsMag = aim && Math.abs(this.gpsOff) < 8 ? 10 : 3; this.citvMag = ct && this.citvOn ? 10 : 3;
-    for (const k of ['gps', 'citv']) this.scr[k].uniforms.uHasLive.value = this.rt[k] && want.includes(k) ? 1 : 0;
-    this.sightT -= dt; if (!want.length || this.sightT > 0 || !T.alive) return; this.sightT = 1 / 21;   /* about twenty pictures a second in all, whatever the frame rate */
-    const key = want[this.sightN++ % want.length], R = this.s.renderer, cam = this.sightCam;
-    if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(320, 200, { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; }
-    if (key === 'gps') { cam.position.set(0.66, DIM.RF + 0.3, -1.0).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = this.gpsMag === 10 ? 4.1 : 13.5; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
+    for (const k in SIGHT_EVERY) this.scr[k].uniforms.uHasLive.value = this.rt[k] && want.includes(k) ? 1 : 0;
+    // each wanted view has its own clock; the most overdue one is drawn, and never more than one in a frame
+    let key = null, worst = 0; for (const k of want) { this.due[k] = (this.due[k] == null ? 0 : this.due[k]) - dt; if (this.due[k] <= worst) { worst = this.due[k]; key = k; } }
+    if (!key || !T.alive) return; this.due[key] = SIGHT_EVERY[key]; this.stats.sightDraws = (this.stats.sightDraws || 0) + 1;
+    const R = this.s.renderer, cam = this.sightCam, SZ = { gps: [320, 200], citv: [320, 200], lp: [256, 80], gas: [128, 128] }[key];
+    if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(SZ[0], SZ[1], { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; }
+    cam.aspect = SZ[0] / SZ[1];
+    if (key === 'lp') { cam.position.set(DIM.HAT[0], DIM.RF + 0.32, DIM.HAT[1] - DIM.HATR - 0.2).applyMatrix4(this.tur.matrixWorld); const b = (this.turBrg - 20) * DEG; cam.fov = 12.5; _v.set(cam.position.x + Math.sin(b) * 300, cam.position.y - 14, cam.position.z - Math.cos(b) * 300); }   /* unity power: about 40 degrees wide, 12 high */
+    else if (key === 'gas') { cam.position.set(0.41, DIM.GY + 0.35, -1.9).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = 8; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }   /* fixed 8 power, 8 degrees */
+    else if (key === 'gps') { cam.position.set(0.66, DIM.RF + 0.3, -1.0).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = this.gpsMag === 10 ? 4.1 : 13.5; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
     else { cam.position.set(-0.55, DIM.RF + 0.55, -0.7).applyMatrix4(this.tur.matrixWorld); const b = this.citvYaw * DEG, Rg = ct ? Math.hypot(ct.e - T.e, ct.n - T.n) : 1200, ty = ct ? tw.h(ct.e, ct.n) + 1 : cam.position.y - Rg * 0.0117; cam.fov = this.citvMag === 10 ? 2.1 : 8.2; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
     cam.up.set(0, 1, 0); cam.lookAt(_v); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     const tv = this.tank.group.visible, prev = R.getRenderTarget(), c0 = R.info.render.calls, fxU = this.s.fx && this.s.fx.mat && this.s.fx.mat.uniforms.scale, sc0 = fxU ? fxU.value : 0;
@@ -302,7 +319,7 @@ export class Interior {
     { const v = T.v || 0, kmh = Math.round(Math.abs(v) * 3.6), hdg = Math.round(((s.shown ? s.shown.h : T.h) % 360 + 360) % 360) % 360, gear = v > 0.3 ? 'D' : v < -0.3 ? 'R' : 'N', blink = this.warning && Math.floor(this.clock * 2.2) % 2 ? 1 : 0;
       const x = begin('drv', [kmh, hdg, gear, blink, this.warning, T.alive, Math.round(this.tank.turretYaw || 0)].join('|'));
       if (x) { const cy = '#7ff0e6'; x.fillStyle = cy; x.textAlign = 'left'; x.font = `700 76px ${F}`; x.fillText(String(kmh).padStart(2, ' '), 18, 86); x.font = `700 24px ${F}`; x.fillText('KM/H', 122, 86); x.fillText('HDG ' + pad(hdg, 3), 236, 46); x.fillText('GEAR ' + gear, 236, 86);
-        x.font = `700 22px ${F}`; { const rel = ((this.tank.turretYaw || 0) % 360 + 540) % 360 - 180; x.fillText('GUN  ' + (Math.abs(rel) < 2 ? 'OVER THE FRONT' : (rel > 0 ? 'RIGHT ' : 'LEFT ') + pad(Math.abs(rel), 3) + '°'), 18, 128); } x.fillText(T.alive ? 'ENGINE RUNNING' : 'ENGINE STOPPED', 18, 160);
+        x.font = `700 22px ${F}`; { const rel = ((this.tank.turretYaw || 0) % 360 + 540) % 360 - 180; x.fillText('GUN  ' + (Math.abs(rel) < 2 ? 'OVER THE FRONT' : (rel > 0 ? 'RIGHT ' : 'LEFT ') + pad(Math.abs(rel), 3) + '°'), 18, 128); } x.fillText(T.alive ? 'ENGINE RUNNING' : 'ENGINE STOPPED', 18, 158); x.font = `600 14px ${F}`; x.fillStyle = '#4fb0a8'; x.fillText('ENGINE RPM AND FUEL: NOT MODELLED IN THE SIMULATOR', 18, 178); x.fillStyle = cy;
         if (blink) { x.fillStyle = '#ff5040'; x.fillRect(10, 186, 364, 40); x.fillStyle = '#020806'; } else x.fillStyle = this.warning ? '#ff5040' : '#5cff7a'; x.font = `700 24px ${F}`; x.textAlign = 'center'; x.fillText(this.warning ? 'MISSILE WARNING' : T.alive ? 'NO WARNING' : 'VEHICLE KNOCKED OUT', 192, 214); } }
   }
 }
