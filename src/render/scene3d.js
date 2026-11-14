@@ -17,11 +17,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // fogI and the second number in each sky colour are brightness: the picture is worked out in real light levels and then exposed
 // like a camera, so a bright sky needs values above 1. glow = how strongly the haze lights up towards the sun.
 export const CONDITIONS = {
-  day: { name: 'Day', el: 36, az: 150, sun: '#fff0d8', sunI: 3.4, sky: '#b4cbe8', ground: '#6b644a', hemiI: 0.85, fog: '#bccbdb', fogI: 1.25, fogD: 0.00015, glow: ['#ffe9c4', 0.35], exposure: 0.6, tint: '#fff8ee', shadow: '#eef3ff', sat: 1.06, contrast: 1.1, envI: 0.9,
+  day: { name: 'Day', el: 36, az: 150, sun: '#fff0d8', sunI: 3.4, sky: '#b4cbe8', ground: '#6b644a', hemiI: 0.85, fog: '#bccbdb', fogI: 1.25, fogD: 0.00015, glow: ['#ffe9c4', 0.35], cloudShade: 0.3, exposure: 0.6, tint: '#fff8ee', shadow: '#eef3ff', sat: 1.06, contrast: 1.1, envI: 0.9,
     sky: { zenith: ['#2f62b4', 1.7], horizon: ['#a8c6e6', 1.7], disc: ['#fff3dc', 70], halo: ['#ffe8c6', 0.55], cloudLit: ['#ffffff', 2.3], cloudDark: ['#8d9db4', 1.15], cover: 0.3, soft: 0.13, cirrus: 0.16, hazeTop: 9 } },
-  dawn: { name: 'Dawn', el: 7, az: 95, sun: '#ff9c58', sunI: 3.6, sky: '#8ea2cc', ground: '#4a4038', hemiI: 0.6, fog: '#c9a48e', fogI: 0.8, fogD: 0.00026, glow: ['#ff9440', 1.6], exposure: 0.78, tint: '#ffe6cc', shadow: '#d6def8', sat: 1.08, contrast: 1.12, envI: 0.75,
+  dawn: { name: 'Dawn', el: 7, az: 95, sun: '#ff9c58', sunI: 3.6, sky: '#8ea2cc', ground: '#4a4038', hemiI: 0.6, fog: '#c9a48e', fogI: 0.8, fogD: 0.00026, glow: ['#ff9440', 1.6], cloudShade: 0.2, exposure: 0.78, tint: '#ffe6cc', shadow: '#d6def8', sat: 1.08, contrast: 1.12, envI: 0.75,
     sky: { zenith: ['#35548f', 0.9], horizon: ['#f2b98c', 1.25], disc: ['#ffd9a8', 60], halo: ['#ff9648', 1.5], cloudLit: ['#ffbd92', 1.7], cloudDark: ['#59587a', 0.75], cover: 0.45, soft: 0.25, cirrus: 0.7, hazeTop: 7 } },
-  dusk: { name: 'Dusk', el: 5, az: 265, sun: '#ff8748', sunI: 3.4, sky: '#8792c2', ground: '#463c37', hemiI: 0.6, fog: '#bf9482', fogI: 0.75, fogD: 0.00028, glow: ['#ff7e36', 1.7], exposure: 0.82, tint: '#ffdfc6', shadow: '#d0d4f6', sat: 1.08, contrast: 1.12, envI: 0.75,
+  dusk: { name: 'Dusk', el: 5, az: 265, sun: '#ff8748', sunI: 3.4, sky: '#8792c2', ground: '#463c37', hemiI: 0.6, fog: '#bf9482', fogI: 0.75, fogD: 0.00028, glow: ['#ff7e36', 1.7], cloudShade: 0.2, exposure: 0.82, tint: '#ffdfc6', shadow: '#d0d4f6', sat: 1.08, contrast: 1.12, envI: 0.75,
     sky: { zenith: ['#30477f', 0.85], horizon: ['#ee9f78', 1.2], disc: ['#ffc890', 55], halo: ['#ff8040', 1.6], cloudLit: ['#ff9f7c', 1.6], cloudDark: ['#4c4a6e', 0.7], cover: 0.5, soft: 0.25, cirrus: 0.7, hazeTop: 7 } },
   overcast: { name: 'Overcast', el: 50, az: 180, sun: '#e3e7ec', sunI: 1.0, sky: '#b2bbc4', ground: '#56564e', hemiI: 1.35, fog: '#aab3bb', fogI: 0.95, fogD: 0.00038, glow: ['#dfe6ee', 0.08], wind: 1.4, exposure: 0.62, tint: '#f2f6fa', shadow: '#eaf0f6', sat: 0.88, contrast: 1.08, envI: 1.0,
     sky: { zenith: ['#9aa3ac', 1.0], horizon: ['#b4bcc4', 1.0], disc: ['#ffffff', 0], halo: ['#e6ebf0', 0.25], cloudLit: ['#c9d0d7', 1.25], cloudDark: ['#727a84', 0.9], cover: 1.0, soft: 0.6, hazeTop: 6 } },
@@ -102,8 +102,8 @@ export class Scene3D {
   // warm their group says they are (userData.heat, 0 to 1; assumed values), the sky goes cold, and the picture is shown as brightness only.
   setThermal(mode) {
     mode = mode || 0; const was = this.thermal || 0; this.thermal = mode; this.grade.uniforms.thermal.value = mode; this.post = !this.Q.plain || mode !== 0;
-    if (!!mode !== !!was) { if (mode) { this._thSky = this.sky.visible; this._thBg = this.scene.background; this._thFog = this.scene.fog.color.clone(); this._thExp = this.renderer.toneMappingExposure; this.sky.visible = false; this.scene.background = new THREE.Color('#1c1f1d'); this.scene.fog.color.set('#3a3e3a'); this.renderer.toneMappingExposure = 0.5; this._thGlow = ENV.glow.value.clone(); ENV.glow.value.setScalar(0); }
-      else { this.sky.visible = this._thSky; this.scene.background = this._thBg; this.scene.fog.color.copy(this._thFog); this.renderer.toneMappingExposure = this._thExp; ENV.glow.value.copy(this._thGlow); } }
+    if (!!mode !== !!was) { if (mode) { this._thSky = this.sky.visible; this._thBg = this.scene.background; this._thFog = this.scene.fog.color.clone(); this._thExp = this.renderer.toneMappingExposure; this.sky.visible = false; this.scene.background = new THREE.Color('#1c1f1d'); this.scene.fog.color.set('#3a3e3a'); this.renderer.toneMappingExposure = 0.5; this._thGlow = ENV.glow.value.clone(); ENV.glow.value.setScalar(0); this._thCloud = ENV.cloud.value; ENV.cloud.value = 0; }
+      else { this.sky.visible = this._thSky; this.scene.background = this._thBg; this.scene.fog.color.copy(this._thFog); this.renderer.toneMappingExposure = this._thExp; ENV.glow.value.copy(this._thGlow); ENV.cloud.value = this._thCloud; } }
     this._heat(mode !== 0); this._heatAt = this.clock + 2;
   }
   _heat(on) { const walk = (o, heat) => { if (o.userData && o.userData.heat != null) heat = o.userData.heat; if (o.isMesh && o.material) for (const m of [].concat(o.material)) { if (!m || !m.emissive) continue; if (m.userData.e0 == null) { m.userData.e0 = m.emissive.getHex(); m.userData.ei0 = m.emissiveIntensity; } if (on) { m.emissive.setScalar(1); m.emissiveIntensity = heat * 3.2; } else { m.emissive.setHex(m.userData.e0); m.emissiveIntensity = m.userData.ei0; } } for (const c of o.children) walk(c, heat); }; walk(this.units, 0.5); }
@@ -129,7 +129,7 @@ export class Scene3D {
   setCondition(key) {
     const C = CONDITIONS[key] || CONDITIONS.day; this.condition = key;
     const el = C.el * Math.PI / 180, az = C.az * Math.PI / 180, dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)); this.sunDir = dir;
-    ENV.sunDir.value.copy(dir); ENV.wind.value.set(0.94, C.wind == null ? 1 : C.wind, 0.34); ENV.glow.value.set(C.glow[0]).multiplyScalar(C.glow[1]); this.skyDome.set(C.sky, C.fog); this.skyDome.uniforms.fogCol.value.multiplyScalar(C.fogI || 1);
+    ENV.sunDir.value.copy(dir); ENV.wind.value.set(0.94, C.wind == null ? 1 : C.wind, 0.34); ENV.cloud.value = C.cloudShade || 0; ENV.glow.value.set(C.glow[0]).multiplyScalar(C.glow[1]); this.skyDome.set(C.sky, C.fog); this.skyDome.uniforms.fogCol.value.multiplyScalar(C.fogI || 1);
     this.sun.color.set(C.sun); this.sun.intensity = C.sunI; this.hemi.color.set(C.sky); this.hemi.groundColor.set(C.ground); this.hemi.intensity = C.hemiI;
     this.scene.fog.color.set(C.fog).multiplyScalar(C.fogI || 1); this.scene.fog.density = C.fogD; this.renderer.toneMappingExposure = C.exposure;
     this.scene.background = null;

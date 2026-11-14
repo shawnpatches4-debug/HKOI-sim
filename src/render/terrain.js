@@ -137,7 +137,7 @@ const BODY = /* glsl */`
     vec2 wuv = wuv0 + (vec2(n1, hk_n(vWp.zx * 0.41 + 5.0)) - 0.5) * (3.2 / hkGrid.w) + (vec2(n3, hk_n(vWp.zx * 2.3 + 1.7)) - 0.5) * (1.2 / hkGrid.w);
     vec4 mc = texture2D(hkCol, wuv), c1 = texture2D(hkC1, wuv), c2 = texture2D(hkC2, wuv); c2.a = texture2D(hkC2, wuv0).a;
     float wSoil = c1.r, wLow = c1.g, wTall = c1.b, wFor = c2.r, wScrub = c2.g, wBuilt = c2.b, crop = wLow + wTall;
-    float steep = smoothstep(0.90, 0.74, gN.y + (n1 - 0.5) * 0.07);
+    float steep = smoothstep(0.955, 0.86, gN.y + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.04);
 
     // rows: furrows in plough, drill rows in crops, and the paired wheel lines a sprayer leaves through a crop
     float fe = vWp.x, fn = -vWp.z; vec2 fxz = vec2(fe * hkGrid.x + fn * hkGrid.y, -fe * hkGrid.y + fn * hkGrid.x);

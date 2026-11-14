@@ -73,7 +73,7 @@ const WALL = /* glsl */`
     } else if (top && kind < 2.5) { wall = vec3(0.16, 0.16, 0.165) * (0.75 + 0.5 * grain);
     } else if (kind < 3.5) { wall = brick * (1.0 - 0.5 * smoothstep(vScale.y - 0.5, vScale.y, v));   /* chimney, sooty at the top */
     } else if (kind < 4.5) {   /* picket fence: upright boards with gaps and pointed tops, on two rails */
-      float pk = fract(u / 0.14) - 0.5, tipH = vScale.y - 0.09 + abs(pk) * 0.3, picket = step(abs(pk), 0.34) * step(v, tipH - 0.12 * step(0.5, an.y));
+      float pk = fract(u / 0.14) - 0.5, tipH = vScale.y - abs(pk) * 0.4, picket = step(abs(pk), 0.34) * step(v, tipH - 0.12 * step(0.5, an.y));
       float rail = step(abs(v - 0.3), 0.04) + step(abs(v - vScale.y + 0.3), 0.04);
       if (picket + rail < 0.5 && far < 0.6) discard;
       wall *= (0.7 + 0.5 * hb(vec2(floor(u / 0.14), seed * 9.0))) * (0.85 + 0.3 * grain) * mix(1.0, 0.62, far * (1.0 - step(0.5, picket + rail)));
