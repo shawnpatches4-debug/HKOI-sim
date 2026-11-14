@@ -45,14 +45,16 @@ export function buildInterior(labels) {
 
   // a control the viewer can click: placed in the current frame of kit k at (u, v) on the panel face
   const ctl = (k, g, type, u, v, name, o = {}) => {
-    const c = { g, type, pos: k.at(u, v, 0.003), quat: k.quat(), name, n: o.n || 2, state: o.state || 0, locked: !!o.locked, key: o.key || null, lamp: o.lamp != null ? o.lamp : null, r: o.r || 0.024, big: o.big || 1 };
+    const c = { g, type, pos: k.at(u, v, 0.003), quat: k.quat(), name, n: o.n || 2, state: o.state || 0, locked: !!o.locked, key: o.key || null, lamp: o.lamp != null ? o.lamp : null, r: o.r || 0.024, big: o.big || 1, optic: o.optic || null };
     controls.push(c);
     if (o.label) k.label(o.label, o.lh || 0.016, u, v + (o.above ? 0.03 : -0.03) * c.big, 0.0015, 0, 0, 0, o.style || 'panel', { size: 26 });
     if (type === 'button' && o.lampHex) { c.lamp = ind(o.key || name); k.lamp(c.lamp, 0.016, 0.006, o.lampHex, u, v + 0.014, 0.002); }
     return c;
   };
   // a display: the glass is its own mesh (made by the caller); here only the bezel and where it goes
-  const screen = (k, g, key, w, h, u, v) => {
+  const screen = (k, g, key, w, h, u, v, nSide = 0, nBottom = 0) => {
+    for (let i = 0; i < nSide; i++) for (const sx of [-1, 1]) k.box('fit', 0.007, 0.006, 0.004, C.gunm, u + sx * (w / 2 + 0.0065), v + h * (0.5 - (i + 0.5) / nSide), 0.0035);   /* bezel keys, level with their labels on the glass */
+    for (let i = 0; i < nBottom; i++) k.box('fit', 0.012, 0.006, 0.004, C.gunm, u + w * ((i + 0.5) / nBottom - 0.5), v - h / 2 - 0.0065, 0.0035);
     k.box('fit', w + 0.022, h + 0.022, 0.012, C.black, u, v, -0.004); k.box('fit', w + 0.004, h + 0.004, 0.004, C.glass, u, v, 0.0015);
     screens.push({ g, key, w, h, pos: k.at(u, v, 0.0045), quat: k.quat() });
   };
@@ -135,7 +137,7 @@ export function buildInterior(labels) {
   const gx = 0.66;
   // primary sight housing with the eyepiece display, its hood and brow pad
   T.box('fit', 0.42, 0.44, 0.4, C.cream, gx, 0.2, -1.1); T.box('fit', 0.36, 0.36, 0.07, C.creamD, gx, 0.24, -0.875);
-  T.push(gx, 0.19, -0.838); screen(T, 'tur', 'gps', 0.2, 0.125, 0, 0);
+  T.push(gx, 0.19, -0.838); screen(T, 'tur', 'gps', 0.2, 0.125, 0, 0, 4);
   for (const s of [-1, 1]) T.box('fit', 0.008, 0.15, 0.07, C.rubber, s * 0.112, 0, 0.035); T.box('fit', 0.232, 0.008, 0.07, C.rubber, 0, 0.079, 0.035); T.box('fit', 0.232, 0.008, 0.045, C.rubber, 0, -0.079, 0.022);
   T.geo('fit', new THREE.TorusGeometry(0.06, 0.016, 6, 14, Math.PI), C.rubber, 0, 0.088, 0.062);
   T.label('GUNNER\'S PRIMARY SIGHT', 0.02, 0, 0.2, -0.0005, 0, 0, 0, 'plate'); T.lamp(ind('gnrWarn'), 0.07, 0.022, 0xff2a1a, -0.105, 0.125, -0.0005); T.label('MISSILE', 0.012, -0.105, 0.148, -0.0005, 0, 0, 0, 'danger', { size: 22 });
@@ -163,7 +165,7 @@ export function buildInterior(labels) {
   // auxiliary sight: a plain 8-power telescope that looks out beside the gun; its eyepiece shows its own small view of the outside
   T.tag = 'aux-sight';
   T.cyl('fit', 0.036, 0.036, 0.46, C.black, 0.41, GY + 0.16, -1.07, Math.PI / 2, 0, 0, 10); T.ring('fit', 0.04, 0.012, C.rubber, 0.41, GY + 0.16, -0.826, 0, 0, 0, 12);
-  T.push(0.41, GY + 0.16, -0.838); screens.push({ g: 'tur', key: 'gas', w: 0.062, h: 0.062, pos: T.at(0, 0, 0.002), quat: T.quat() }); ctl(T, 'tur', 'spot', 0, 0, 'Auxiliary sight: an 8-power telescope fixed beside the gun, the gunner\'s back-up if the main sight fails', { r: 0.05 }); T.pop();
+  T.push(0.41, GY + 0.16, -0.838); screens.push({ g: 'tur', key: 'gas', w: 0.062, h: 0.062, pos: T.at(0, 0, 0.002), quat: T.quat() }); ctl(T, 'tur', 'spot', 0, 0, 'Auxiliary sight: an 8-power telescope fixed beside the gun, the gunner\'s back-up if the main sight fails', { r: 0.05, optic: { kind: 'gas' } }); T.pop();
   T.label('AUX SIGHT 8X', 0.013, 0.41, GY + 0.215, -0.84, 0, 0, 0, 'plate', { size: 22 });
   // ballistic computer panel on the right wall, turned toward the gunner
   console_(T, 1.07, 0.06, -0.72, -0.1, -1.05, 0.3, 0.26, 0.09, C.olive, () => {
@@ -183,7 +185,7 @@ export function buildInterior(labels) {
   T.box('fit', 0.38, 0.06, 0.34, C.cloth, 0.58, -0.36, 0.46); T.box('fit', 0.38, 0.44, 0.06, C.cloth, 0.58, -0.11, 0.67, 0.1); T.cyl('fit', 0.045, 0.045, 0.59, C.steel, 0.58, -0.686, 0.46, 0, 0, 0, 10); T.box('fit', 0.34, 0.025, 0.24, C.floor, 0.58, -0.78, 0.16); for (const s of [-1, 1]) T.box('fit', 0.03, 0.18, 0.03, C.steel, 0.58 + s * 0.14, -0.883, 0.16);
   // commander's display unit: the picture from his independent viewer
   console_(T, 0.6, 0.31, -0.1, -0.22, 0.06, 0.32, 0.25, 0.12, C.olive, () => {
-    screen(T, 'tur', 'citv', 0.22, 0.14, -0.02, 0.022); T.label('COMMANDER\'S DISPLAY', 0.014, -0.02, 0.108, 0.0015, 0, 0, 0, 'panel');
+    screen(T, 'tur', 'citv', 0.22, 0.14, -0.02, 0.022, 4); T.label('COMMANDER\'S DISPLAY', 0.014, -0.02, 0.108, 0.0015, 0, 0, 0, 'panel');
     for (let i = 0; i < 6; i++) T.box('fit', 0.026, 0.016, 0.006, C.black, -0.115 + i * 0.038, -0.075, 0.003); ['SCAN', 'DESIG', 'MAG', 'MAP', 'NAV', 'MENU'].forEach((s, i) => T.label(s, 0.008, -0.115 + i * 0.038, -0.095, 0.0015, 0, 0, 0, 'panel', { size: 20 }));
     ctl(T, 'tur', 'button', -0.115, -0.075, 'Viewer scan (the commander\'s viewer sweeps by itself and stops on what it finds)', { locked: true });
     ctl(T, 'tur', 'button', -0.077, -0.075, 'Designate: hand the target to the gunner (the commander does this himself)', { locked: true });
@@ -196,7 +198,7 @@ export function buildInterior(labels) {
   T.cyl('fit', 0.034, 0.034, 0.56, C.cream, 0.93, 0.3, -0.6, Math.PI / 2 - 0.08, 0, 0, 10); T.ring('fit', 0.034, 0.014, C.rubber, 0.93, 0.278, -0.325, 0, 0, 0, 12); T.label('SIGHT EXTENSION', 0.013, 0.93, 0.35, -0.45, -0.2, 0, 0, 'plate', { size: 22 });
   // ---- the HKOI control panel: the 30 mm station's display, state lights and switches, on the right wall at the commander's hand
   console_(T, 1.085, 0.175, 0.08, -0.32, -1.12, 0.46, 0.36, 0.1, C.oliveD, () => {
-    T.label('HKOI  30 MM STATION', 0.024, -0.075, 0.158, 0.0015, 0, 0, 0, 'cyan', { size: 34 }); screen(T, 'tur', 'hkoi', 0.27, 0.17, -0.075, 0.045);
+    T.label('HKOI  30 MM STATION', 0.024, -0.075, 0.158, 0.0015, 0, 0, 0, 'cyan', { size: 34 }); screen(T, 'tur', 'hkoi', 0.27, 0.17, -0.075, 0.045, 5);
     [['hkRadar', 'RADAR', 0xffb020], ['hkTrack', 'TRACK', 0x30ff60], ['hkFire', 'FIRE', 0xff2a1a], ['hkArmed', 'ARMED', 0x30ff60]].forEach(([id, s, hex], i) => { const v = 0.115 - i * 0.045; T.lamp(ind(id), 0.05, 0.022, hex, 0.135, v, 0.002); T.label(s, 0.012, 0.19, v, 0.0015, 0, 0, 0, 'panel', { size: 22 }); });
     ctl(T, 'tur', 'toggle', -0.19, -0.085, 'HKOI master arm (the system is armed for the mission; the crew does not safe it in contact)', { locked: true, state: 1, label: 'MASTER ARM', lh: 0.012 });
     ctl(T, 'tur', 'knob', -0.115, -0.085, 'HKOI mode: safe, commander\'s consent, automatic (set to automatic for the mission)', { n: 3, state: 2, locked: true, label: 'SAFE-SEMI-AUTO', lh: 0.012 });
@@ -234,14 +236,14 @@ export function buildInterior(labels) {
       T.push(px - Math.sin(a) * 0.026, (yb + yt) / 2, pz + Math.cos(a) * 0.026, 0, -a, 0); for (const sx of [-1, 1]) { T.box('fit', 0.012, yt - yb, 0.012, C.black, sx * 0.052, 0, 0.004); for (const sy of [-1, 1]) T.cyl('fit', 0.0055, 0.0055, 0.006, C.steel, sx * 0.028, sy * 0.045, 0.002, Math.PI / 2, 0, 0, 6); } T.box('fit', 0.05, 0.03, 0.004, C.blackP, 0, 0, 0.001); T.pop();
       const b = i * 45 * Math.PI / 180, bx = CX + Math.sin(b) * (R - 0.012), bz = CZ - Math.cos(b) * (R - 0.012);
       T.box('fit', 0.2, 0.018, 0.04, C.rubber, bx, yt - 0.003, bz, 0, -b, 0); T.box('fit', 0.2, 0.014, 0.05, C.black, bx, yb + 0.004, bz, 0, -b, 0);
-      T.push(bx, (yb + yt) / 2, bz, 0, -b, 0); ctl(T, 'tur', 'spot', 0, 0, `Observation port: looks out to the ${DIRS[i]} of the turret`, { r: 0.075 }); T.pop(); }
+      T.push(bx, (yb + yt) / 2, bz, 0, -b, 0); ctl(T, 'tur', 'spot', 0, 0, `Observation port: looks out to the ${DIRS[i]} of the turret`, { r: 0.075, optic: { kind: 'block', ring: i } }); T.pop(); }
     T.push(CX, yt + 0.035, CZ + R - 0.004, 0, Math.PI, 0); T.box('fit', 0.09, 0.05, 0.03, C.steel, 0, 0, 0.015); T.label('HATCH', 0.014, 0, 0.012, 0.031, 0, 0, 0, 'plate', { size: 22 });
     ctl(T, 'tur', 'spot', 0, -0.012, 'Commander\'s hatch handle: closed, open-protected (lid raised a hand\'s width on its post), open (swung aside and locked)', { key: 'cdrHatch', n: 3, r: 0.05 }); T.pop();
     // The commander's hatch: the lid hangs on an arm from a post at the back of the cupola. Open-protected = lid and arm slide 10 cm up
     // the post and stay over the opening; open = they swing aside round the post and lock.
     const PZ = R + 0.075;   /* the post stands just outside the ring, at the back */
-    moving.cupPost = { g: 'tur', out: true, build: k => { k.cyl('p', 0.024, 0.024, 0.3, C.steel, 0, 0.15, 0, 0, 0, 0, 10); k.box('p', 0.09, 0.05, 0.1, C.creamD, 0, 0.025, -0.04); k.cyl('p', 0.03, 0.03, 0.012, C.gunm, 0, 0.3, 0, 0, 0, 0, 10); }, pos: [CX, yt + 0.04, CZ + PZ] };
-    moving.cupHatch = { g: 'tur', out: true, build: k => { k.cyl('p', R + 0.035, R + 0.035, 0.03, C.cream, 0, 0, -PZ, 0, 0, 0, 28); k.cyl('p', R - 0.02, R - 0.02, 0.012, C.creamD, 0, -0.02, -PZ, 0, 0, 0, 24);
+    moving.cupPost = { g: 'tur', out: true, build: k => { k.cyl('p', 0.024, 0.024, 0.3, C.steel, 0, 0.15, 0, 0, 0, 0, 10); k.box('p', 0.09, 0.05, 0.1, C.olive, 0, 0.025, -0.04); k.cyl('p', 0.03, 0.03, 0.012, C.gunm, 0, 0.3, 0, 0, 0, 0, 10); }, pos: [CX, yt + 0.04, CZ + PZ] };
+    moving.cupHatch = { g: 'tur', out: true, build: k => { k.cyl('p', R + 0.035, R + 0.035, 0.03, C.olive, 0, 0, -PZ, 0, 0, 0, 28); k.cyl('p', R - 0.02, R - 0.02, 0.012, C.creamD, 0, -0.02, -PZ, 0, 0, 0, 24);
       k.box('p', 0.07, 0.03, PZ + 0.1, C.steel, 0, 0.028, -(PZ + 0.1) / 2 + 0.03); k.cyl('p', 0.04, 0.04, 0.07, C.gunm, 0, 0.0, 0, 0, 0, 0, 10);                         /* the arm over the lid and its collar on the post */
       k.cyl('p', 0.008, 0.008, 0.12, C.steel, 0, -0.045, -PZ - 0.12, 0, 0, Math.PI / 2, 8); k.box('p', 0.02, 0.03, 0.02, C.steel, -0.05, -0.03, -PZ - 0.12); k.box('p', 0.02, 0.03, 0.02, C.steel, 0.05, -0.03, -PZ - 0.12);   /* inside handle */
       k.box('p', 0.05, 0.03, 0.09, C.steel, 0, -0.03, -PZ + R - 0.08); k.label('LATCH', 0.012, 0, -0.046, -PZ + R - 0.08, Math.PI / 2, 0, 0, 'plate', { size: 22 }); }, pos: [CX, yt + 0.132, CZ + PZ] };
@@ -256,7 +258,7 @@ export function buildInterior(labels) {
   T.ring('fit', D.HATR, 0.028, C.steel, HX, RF, HZ, Math.PI / 2, 0, 0, 28); T.cyl('shell', D.HATR, D.HATR, 0.05, C.cream, HX, RF + 0.025, HZ, 0, 0, 0, 24, true);
   // The loader's hatch: hinged at the back, with a spring arm that helps him lift it and holds it open.
   T.box('fit', 0.3, 0.04, 0.05, C.steel, HX, RF + 0.05, HZ + D.HATR + 0.035); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX, RF + 0.065, HZ + D.HATR + 0.01, 0, 0, Math.PI / 2, 8);   /* hinge block and pin on the roof */
-  moving.hatch = { g: 'tur', out: true, build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.cream, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', D.HATR - 0.03, D.HATR - 0.03, 0.012, C.creamD, 0, -0.02, -D.HATR, 0, 0, 0, 20);
+  moving.hatch = { g: 'tur', out: true, build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.olive, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', D.HATR - 0.03, D.HATR - 0.03, 0.012, C.creamD, 0, -0.02, -D.HATR, 0, 0, 0, 20);
     for (const sx of [-1, 1]) k.box('p', 0.035, 0.035, 0.1, C.steel, sx * 0.1, 0.0, -0.04);                                                                                   /* hinge lugs */
     k.box('p', 0.03, 0.02, 0.3, C.gunm, 0.22, -0.02, -0.17, 0.0, 0.0, 0); k.cyl('p', 0.018, 0.018, 0.16, C.steel, 0.22, -0.035, -0.06, Math.PI / 2, 0, 0, 8);          /* spring arm and its cylinder */
     k.cyl('p', 0.012, 0.012, 0.18, C.yellow, 0, -0.05, -D.HATR - 0.08, 0, 0, Math.PI / 2, 8); for (const sx of [-1, 1]) k.box('p', 0.02, 0.04, 0.02, C.steel, sx * 0.08, -0.03, -D.HATR - 0.08); k.box('p', 0.06, 0.03, 0.05, C.steel, 0.2, -0.03, -D.HATR - 0.1); }, pos: [HX, RF + 0.065, HZ + D.HATR] };
@@ -265,7 +267,7 @@ export function buildInterior(labels) {
   // his periscope, in the roof ahead of the hatch: its glass shows its own small view of the outside, forward and a little to the left
   T.box('fit', 0.26, 0.1, 0.13, C.black, HX, RF - 0.051, HZ - D.HATR - 0.15); T.box('fit', 0.2, 0.022, 0.008, C.creamD, HX, RF - 0.115, HZ - D.HATR - 0.12, 0.0);
   T.push(HX, RF - 0.05, HZ - D.HATR - 0.0845); screens.push({ g: 'tur', key: 'lp', w: 0.2, h: 0.0625, pos: T.at(0, 0, 0.002), quat: T.quat() }); T.box('fit', 0.215, 0.076, 0.004, C.glass, 0, 0, 0.0);
-  ctl(T, 'tur', 'spot', 0, 0, 'Loader\'s periscope: looks forward and a little left over the turret roof', { r: 0.08 }); T.pop();
+  ctl(T, 'tur', 'spot', 0, 0, 'Loader\'s periscope: looks forward and a little left over the turret roof; at the eyepiece, drag to traverse it', { r: 0.08, optic: { kind: 'lp' } }); T.pop();
   T.label('PERISCOPE', 0.012, HX, RF - 0.115, HZ - D.HATR - 0.1155, 0, 0, 0, 'plate', { size: 22 });
   for (const s of [-1, 1]) T.geo('fit', new THREE.TorusGeometry(0.05, 0.011, 6, 10, Math.PI), C.yellow, HX + s * 0.25, RF - 0.012, HZ - 0.4, Math.PI, 0, 0);
   // his seat on the basket, and his knee switch for the ammunition door
@@ -288,6 +290,8 @@ export function buildInterior(labels) {
     ctl(T, 'tur', 'toggle', 0.145, 0.012, `Radio ${r ? 'B' : 'A'} squelch: harmless`, { key: 'squelch' + r, state: 1, label: 'SQL', lh: 0.011 });
     T.lamp(ind('radio' + r), 0.012, 0.012, 0x30ff60, 0.145, 0.055, 0.002, 0, 0, 0, true); for (let i = 0; i < 5; i++) T.box('fit', 0.02, 0.012, 0.005, C.black, -0.14 + i * 0.028, -0.055, 0.003);
   });
+  console_(T, -1.172, 0.01, -0.2, 0, Math.PI / 2, 0.27, 0.2, 0.05, C.olive, () => { screen(T, 'tur', 'ldr', 0.2, 0.125, 0, -0.012, 4); T.label('LOADER\'S PANEL', 0.012, 0, 0.082, 0.0015, 0, 0, 0, 'panel', { size: 22 });
+    ctl(T, 'tur', 'spot', 0, -0.012, 'Loader\'s panel: rounds left in the ready rack, breech, ammunition door, gun safe or armed, his machine gun', { r: 0.09 }); });
   intercom(T, 'tur', -1.172, 0.4, -0.62, Math.PI / 2, 'Loader');
   T.label('LOADER', 0.03, -1.19, 0.47, 0.1, 0, Math.PI / 2, 0, 'stencil'); T.lamp(ind('ldrWarn'), 0.07, 0.025, 0xff2a1a, -1.19, 0.47, -0.3, 0, Math.PI / 2, 0); T.label('MISSILE WARNING', 0.013, -1.19, 0.44, -0.3, 0, Math.PI / 2, 0, 'danger', { size: 22 });
   // turret lock, fire extinguisher, and stowage. What stands on the basket floor is inside the ring; the rest hangs on the walls above it.
@@ -376,11 +380,11 @@ export function buildInterior(labels) {
     moving.throttle = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.019, 0.019, 0.105, C.rubber, 0, 0, 0, 0, 0, 0, 10); for (let i = 0; i < 5; i++) k.cyl('p', 0.0205, 0.0205, 0.005, C.black, 0, -0.04 + i * 0.02, 0, 0, 0, 0, 10); k.cyl('p', 0.023, 0.023, 0.01, C.black, 0, 0.055, 0, 0, 0, 0, 10); k.box('p', 0.006, 0.09, 0.008, C.white, 0, 0, 0.0195); k.cyl('p', 0.024, 0.024, 0.012, C.steel, 0, -0.058, 0, 0, 0, 0, 10); }, pos: [0.225, -0.036, 0] };
     moving.gear = { g: 'hul', parent: 'tbar', build: k => { k.cyl('p', 0.004, 0.004, 0.034, C.steel, 0, 0.017, 0, 0, 0, 0, 6); k.ball('p', 0.008, C.red, 0, 0.037, 0); }, pos: [0, 0.006, 0.027] };
     H.push(0, yb - 0.16, zb + 0.2); ctl(H, 'hul', 'spot', 0, 0, 'T-bar: turn it to steer, twist the right grip for power, gear selector on the hub (the driver works it: watch it move)', { locked: true, r: 0.09 }); H.pop();
-    for (const [i, x] of [[0, -0.31], [1, 0], [2, 0.31]]) { H.push(x, (yb + DRF) / 2, zb + 0.05); ctl(H, 'hul', 'spot', 0, 0, `Driver's vision block: looks out ${['to the left front', 'straight ahead', 'to the right front'][i]}`, { r: 0.09 }); H.pop(); }
+    for (const [i, x] of [[0, -0.31], [1, 0], [2, 0.31]]) { H.push(x, (yb + DRF) / 2, zb + 0.05); ctl(H, 'hul', 'spot', 0, 0, `Driver's vision block: looks out ${['to the left front', 'straight ahead', 'to the right front'][i]}`, { r: 0.09, optic: { kind: 'block', yaw: [-32, 0, 32][i] } }); H.pop(); }
     // pedals
     H.box('fit', 0.2, 0.02, 0.14, C.floor, 0, HF + 0.16, DZ - 0.72, 0.9); H.box('fit', 0.04, 0.2, 0.03, C.steel, 0, HF + 0.08, DZ - 0.68, 0.5); H.box('fit', 0.09, 0.02, 0.2, C.floor, -0.28, HF + 0.1, DZ - 0.6, 0.5);
     // driver's display, right of the column
-    console_(H, 0.3, yb - 0.115, zb + 0.05, -0.1, -0.3, 0.3, 0.2, 0.05, C.olive, () => { screen(H, 'hul', 'drv', 0.2, 0.125, -0.035, 0.012); H.label('DRIVER\'S DISPLAY', 0.012, -0.035, 0.086, 0.0015, 0, 0, 0, 'panel', { size: 22 });
+    console_(H, 0.3, yb - 0.115, zb + 0.05, -0.1, -0.3, 0.3, 0.2, 0.05, C.olive, () => { screen(H, 'hul', 'drv', 0.2, 0.125, -0.035, 0.012, 0, 5); H.label('DRIVER\'S DISPLAY', 0.012, -0.035, 0.086, 0.0015, 0, 0, 0, 'panel', { size: 22 });
       ctl(H, 'hul', 'knob', 0.115, 0.045, 'Driver\'s display brightness', { n: 4, state: 2, key: 'drvBrt', label: 'BRT', lh: 0.011 }); ctl(H, 'hul', 'button', 0.115, -0.03, 'Driver\'s display page (only one page here: speed, heading, gear, gun direction)', { key: 'drvPage', label: 'PAGE', lh: 0.011 }); H.lamp(ind('drvWarn'), 0.05, 0.016, 0xff2a1a, -0.105, -0.075, 0.002); });
     // master panel, left of the column
     console_(H, -0.3, yb - 0.115, zb + 0.05, -0.1, 0.3, 0.3, 0.2, 0.05, C.olive, () => { H.label('DRIVER\'S MASTER PANEL', 0.012, 0, 0.086, 0.0015, 0, 0, 0, 'panel', { size: 22 });

@@ -61,6 +61,7 @@ export class CrewFigures {
     if (!fig) return null; const mats = [], g = new THREE.Group(); let tris = 0; fig.position.set(0, 0, 0); fig.rotation.set(0, 0, 0); fig.updateMatrixWorld(true);
     const rig = makeRig(fig, crewBoneName); if (!rig) { console.warn('crew figure: the skeleton is not the one expected'); return null; }
     fig.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; const n = (o.material && o.material.name) || ''; if (/knife|pistol/.test(n)) { o.visible = false; return; }
+      if (o.isSkinnedMesh && o.skeleton && !o.geometry.attributes.aArm) { const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, bn = o.skeleton.bones.map(b => (/UpperArm|Forearm|Hand|Finger/i.test(b.name) ? 1 : 0)), a = new Float32Array(si.count); for (let i = 0; i < si.count; i++) { let w = 0; for (let k = 0; k < 4; k++) w += bn[si.getComponent(i, k)] * sw.getComponent(i, k); a[i] = w; } o.geometry.setAttribute('aArm', new THREE.BufferAttribute(a, 1)); }   /* how much of each point belongs to an arm: from his own eyes a man sees only his arms */
       // tank crew, not infantry: plain coveralls instead of camouflage and a dark crew helmet; the commander in khaki with a lighter helmet
       const cdr = role === 'cdr', tint = /_body$/.test(n) ? (cdr ? [0.74, 0.66, 0.48] : [0.6, 0.63, 0.48]) : /_helmet$/.test(n) ? (cdr ? [0.5, 0.46, 0.33] : [0.28, 0.29, 0.25]) : /_equipment$/.test(n) ? [0.56, 0.53, 0.42] : [1, 1, 1];
       if (this.cab) { const mat = this.cab({ skinned: true, map: o.material ? o.material.map : null, tint, blood: this.blood }); mat.userData.tint0 = tint; o.material = mat; mats.push(mat); }
@@ -123,7 +124,7 @@ export class CrewFigures {
       if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Math.abs(Wp[J[S + 'Hand']].distanceTo(_v) - 0.075) : 0;   /* how far the palm is from the grip (the wrist is meant to be 7.5 cm short of it) */ r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
     for (let i = 0; i < NJ; i++) r.rig.bones[i].quaternion.copy(r.draw[i]);
     // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
-    const cut = M.bodyOnly ? 0.34 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
+    const cut = M.bodyOnly ? 0.14 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }
     // blood: the uniform darkens and stains, more for the dead than for the wounded
     const lvl = M.blood === 'killed' ? 2 : M.blood ? 1 : 0; if (lvl !== r.lvl) { r.lvl = lvl; for (const m of r.mats) { const t0 = m.userData.tint0, k = lvl === 2 ? [0.6, 0.3, 0.27] : lvl === 1 ? [0.88, 0.66, 0.62] : [1, 1, 1]; m.uniforms.uTint.value.set(t0[0] * k[0], t0[1] * k[1], t0[2] * k[2]); m.uniforms.uBloodAmt.value = lvl === 2 ? 1 : lvl === 1 ? 0.75 : 0; } }
   }

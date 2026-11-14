@@ -13,6 +13,7 @@ import { SeatUI } from '../app/seats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { InteriorFx, hitList, fxState } from './interior_fx.js';
 import { CrewFigures } from './interior_crewfig.js';
+import { drawMfd, MFD } from './interior_mfd.js';
 
 const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), sm = x => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }, ease = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
@@ -21,7 +22,7 @@ const DOME_NAME = ['off', 'white', 'red', 'blue-green'], HATCH_NAME = ['closed',
 // how often each small view of the outside is redrawn, seconds (at most one of them in any frame)
 const SIGHT_EVERY = { gps: 0.05, citv: 0.08, lp: 0.07, gas: 0.25 };
 const BRT = [0.3, 0.6, 1.0, 1.45], CREW_NAMES = ['Gunner', 'Commander', 'Loader', 'Driver'], DOME_IDS = ['domeR', 'domeL', 'domeD'];
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _ray = new THREE.Raycaster();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1), _ray = new THREE.Raycaster(), _on = new THREE.Vector3();
 
 export class Interior {
   constructor(scene3d, tank, cams, opts = {}) {
@@ -33,7 +34,7 @@ export class Interior {
     this.intercomVol = 0.75;     // what the intercom volume knobs are set to, 0 to 1 (a value for the sound module)
     this.look = { yaw: 0, pitch: 0, zoom: 1 }; this.head = { z: 0, vz: 0, x: 0, vx: 0, up: 0 };
     this.cupHatch = 0; this.cupUser = false;   // commander's hatch: 0 closed, 1 open-protected, 2 open. It follows the crew (closed when they are closed down, open-protected otherwise) until the viewer moves its handle
-    this.domeMode = 1; this.domeUser = false; this.hkPage = 0; this.toneOn = true; this.lampTestT = 0; this.hkFireT = 0; this.clock = 0;
+    this.domeMode = 1; this.domeUser = false; this.hkPage = 0; this.toneOn = true; this.lampTestT = 0; this.hkFireT = 0; this.clock = 0; this.optic = null; this.opT = 1; this.opCur = null; this.opFrom = null; this.lpYaw = 0;
     this.st = { door: 0, block: 0, hatch: 0, rec: 9, slew: 0, steer: 0, arm: 1, cup1: 0, cup2: 0, thr: 0, gear: 0, ldrU: 0, mgYaw: 0 }; this.last = { main: null, yaw: null, hdg: null, v: 0, recoil: 0, t: null };
     this.stats = { triangles: 0, meshes: 0, sightCalls: 0, controls: 0 };
     this.brt = { gps: 1, citv: 1, comp: 1, hkoi: 1, drv: 1, lp: 1, gas: 1 };   /* what the brightness knobs of the displays are set to */
@@ -75,9 +76,10 @@ export class Interior {
       const im = this.rounds = new THREE.InstancedMesh(g, M.fit, 36); im.frustumCulled = false; this.rackSlot = B.moving.rack.slot; for (let i = 0; i < 36; i++) { const p = this.rackSlot(i < 18 ? -1 : 1, i % 18); _m.makeTranslation(p[0], p[1], p[2]); im.setMatrixAt(i, _m); } im.instanceMatrix.needsUpdate = true; this.tur.add(im); meshes++; }
     // displays
     this.cv = {}; this.scr = {};
-    const mkScreen = (key, w, h, opaque) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; this.cv[key] = { c, x: c.getContext('2d'), t, key: '', opaque }; return screenMaterial(t); };
-    const SM = { gps: mkScreen('gps', 320, 200), citv: mkScreen('citv', 320, 200), comp: mkScreen('comp', 320, 144, true), hkoi: mkScreen('hkoi', 512, 320, true), drv: mkScreen('drv', 384, 240, true), lp: mkScreen('lp', 256, 80), gas: mkScreen('gas', 128, 128) };
-    for (const d of B.screens) { const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.h), SM[d.key]); m.position.copy(d.pos); m.quaternion.copy(d.quat); m.frustumCulled = false; G[d.g].add(m); this.scr[d.key] = SM[d.key]; meshes++; tris += 2; }
+    const mkScreen = (key, w, h, opaque) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; this.cv[key] = { c, x: c.getContext('2d'), t, key: '', opaque }; const m = screenMaterial(t); m.uniforms.uPx.value.set(1 / w, 1 / h); m.uniforms.uLines.value = h / 2; return m; };
+    const mfd = k => mkScreen(k, MFD[k].w, MFD[k].h, !!MFD[k].opaque);
+    const SM = { gps: mfd('gps'), citv: mfd('citv'), comp: mfd('comp'), hkoi: mfd('hkoi'), drv: mfd('drv'), ldr: mfd('ldr'), lp: mkScreen('lp', 256, 80), gas: mkScreen('gas', 128, 128) };
+    this.screenDefs = B.screens; for (const d of B.screens) { const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.h), SM[d.key]); m.position.copy(d.pos); m.quaternion.copy(d.quat); m.frustumCulled = false; G[d.g].add(m); this.scr[d.key] = SM[d.key]; meshes++; tris += 2; }
     this.scr.gps.uniforms.uMode.value = 1; this.scr.citv.uniforms.uMode.value = 1; for (const k of ['comp', 'hkoi', 'drv', 'lp', 'gas']) this.scr[k].uniforms.uMode.value = 0;   /* the periscope and the telescope are plain glass: a colour picture */
     // controls the viewer can click: one drawn set per kind and group
     this.controls = B.controls; this.ctlMesh = {};
@@ -128,7 +130,27 @@ export class Interior {
   describe(c) { return c.name + (c.locked || (c.type === 'spot' && !c.key) ? '' : ' · ' + this._stateName(c)); }
   _stateName(c) { if (c.key === 'dome') return DOME_NAME[c.state]; if (c.key === 'cdrHatch') return HATCH_NAME[c.state]; if (c.type === 'button') return 'push'; if (c.type === 'knob') return `${c.state + 1} of ${c.n}`; return c.state ? 'on' : 'off'; }
   // the viewer clicks a control. Returns the line to show.
+  // ---- putting the eye to a periscope, a vision block or the auxiliary sight
+  // lookThrough(control) moves the viewer's eye up to that optic over 0.4 s (the same path at any frame rate); lookThrough(null) sits him back.
+  lookThrough(c) {
+    c = c || null; if (c === this.optic) return; if (c && (!c.optic || !SEATS[this.mode] || c.g !== SEATS[this.mode].g)) return;
+    this.opFrom = this.opCur ? { ...this.opCur } : null; this.opT = this.opFrom ? 0 : 1;
+    if (c && !this.optic) this.lookSeat = { ...this.look }; this.optic = c;
+    if (c) { this.look.yaw = 0; this.look.pitch = 0; this.look.zoom = 1; this.lpYaw = 0; this.eyeOff = null; } else if (this.lookSeat) { Object.assign(this.look, this.lookSeat); this.lookSeat = null; }
+  }
+  // for pictures and tests: the eye straight in front of one display, which then fills most of the view
+  faceScreen(key) { const d = (this.screenDefs || []).find(q => q.key === key); if (d) this.lookThrough({ g: d.g, pos: d.pos, quat: d.quat, name: key, optic: { kind: 'screen', dist: d.w * 0.95, fov: 40 } }); return !!d; }
+  // the commander steps round his ring of ports: dir +1 = the next port to the right
+  stepOptic(dir) { const O = this.optic; if (!O || O.optic.ring == null) return false; const c = this.controls.find(q => q.optic && q.optic.ring === (O.optic.ring + dir + 8) % 8); if (c) this.lookThrough(c); return !!c; }
+  // the optic this seat would use first (the V key): the port the commander is facing, the loader's periscope, the gunner's auxiliary sight, the driver's centre block
+  primaryOptic() {
+    const S = SEATS[this.mode]; if (!S) return null; const L = this.controls.filter(q => q.optic && q.g === S.g); if (!L.length) return null;
+    if (this.mode === 'in_cdr') { const want = Math.round((((S.yaw0 + this.look.yaw) % 360 + 360) % 360) / 45) % 8; return L.find(q => q.optic.ring === want) || null; }
+    if (this.mode === 'in_ldr') return L.find(q => q.optic.kind === 'lp') || null; if (this.mode === 'in_gnr') return L.find(q => q.optic.kind === 'gas') || null;
+    return L.find(q => q.optic.kind === 'block' && !q.optic.yaw) || L[0];
+  }
   operate(c) {
+    if (c.optic) { if (!SEATS[this.mode] || c.g !== SEATS[this.mode].g) return c.name; this.lookThrough(c); return c.name + ' · click or press Esc to sit back' + (c.optic.ring != null ? '; A and D step round the ring.' : '.'); }
     if (c.type === 'spot' && !c.key) return c.name + (c.locked ? ' · the crew works this.' : '');
     if (c.locked) { c.anim = 1; return c.name + ' · the crew works this one: it springs back.'; }
     if (c.type === 'button') { c.press = 0.35; if (c.key === 'lampTest') this.lampTestT = 1.3; if (c.key === 'hkPage') this.hkPage = (this.hkPage + 1) % 3; this._poseControl(c); return c.name; }
@@ -142,7 +164,11 @@ export class Interior {
     else if (k === 'gpsBrt') this.brt.gps = BRT[c.state]; else if (k === 'citvBrt') this.brt.citv = BRT[c.state]; else if (k === 'compBrt') this.brt.comp = BRT[c.state]; else if (k === 'hkBrt') this.brt.hkoi = BRT[c.state]; else if (k === 'drvBrt') this.brt.drv = BRT[c.state];
     else if (k === 'hkTone') this.toneOn = !!c.state; else if (k === 'icomVol') this.intercomVol = c.state / (c.n - 1); else if (k === 'backlight') SHARED.uBack.value = [0, 0.35, 0.7, 1.1][c.state];
   }
-  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return; this.eyeOff = null; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
+  turnHead(dx, dy) { const S = SEATS[this.mode]; if (!S) return;
+    if (this.optic) { const O = this.optic.optic; if (O.kind === 'lp') { this.lpYaw = clamp(this.lpYaw - dx * 0.1, -60, 60); return; } if (O.kind === 'gas') return;
+      this.look.yaw -= dx * 0.1; this.look.pitch = clamp(this.look.pitch + dy * 0.1, -12, 12);
+      if (O.ring != null && Math.abs(this.look.yaw) > 24) this.stepOptic(this.look.yaw > 0 ? 1 : -1); else this.look.yaw = clamp(this.look.yaw, -28, 28); return; }
+    this.eyeOff = null; const k = 0.16 / this.look.zoom; this.look.yaw = S.yawLim >= 180 ? ((this.look.yaw - dx * k + 540) % 360) - 180 : clamp(this.look.yaw - dx * k, -S.yawLim - S.yaw0, S.yawLim - S.yaw0);   /* the commander can turn right round in his cupola */ this.look.pitch = clamp(this.look.pitch + dy * k, S.pitch[0] - S.pitch0, S.pitch[1] - S.pitch0); }
   // for tests and pictures: point the head (degrees from the seat's own forward) and set the zoom; survives a change of seat made in the same breath
   setLook(yaw, pitch, zoom = 1, off = null) { this.look.yaw = yaw; this.look.pitch = pitch; this.look.zoom = zoom; this.pendingLook = { yaw, pitch, zoom }; this.eyeOff = off; this.pendingOff = off; }   /* off: [x, y, z] metres from the seat's eye, for a picture taken from beside the crewman's place; yaw and pitch are then unlimited */
   zoomBy(d) { this.look.zoom = clamp(this.look.zoom * Math.exp(-d * 0.0012), 1, 3.4); }
@@ -162,7 +188,7 @@ export class Interior {
   _marks(show) { const m = typeof document !== 'undefined' && document.getElementById('marks'); if (m) m.style.visibility = show ? '' : 'hidden'; }
   // from a seat, the roof machine guns of the outside model are drawn from both sides (they are open shells: from below one saw sky through them)
   _dbl(on) { if (on && !this.dbl) { const list = [], seen = new Set(), root = this.tank.turret; if (!root) return; root.traverse(o => { if (!o.isMesh || !o.material) return; for (const m of [].concat(o.material)) if (m && /^M2|M240/.test(m.name || '') && !seen.has(m)) { seen.add(m); list.push([m, m.side]); m.side = THREE.DoubleSide; m.needsUpdate = true; } }); this.dbl = list; } else if (!on && this.dbl) { for (const [m, sd] of this.dbl) { m.side = sd; m.needsUpdate = true; } this.dbl = null; } }
-  _leave() { this._marks(true); this._near(); this._dbl(false); this._mgRest(); if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
+  _leave() { this._marks(true); this._near(); this._dbl(false); this._box(null); this._mgRest(); if (this.tur.parent) this.tur.parent.remove(this.tur); if (this.hul.parent) this.hul.parent.remove(this.hul); this._cutOff(); this.active = false; this.mode = null; this.inside = false; this.warning = this.warnTone = false; if (this.ui) this.ui.hide(); }
   // the cutaway: the outside model is sliced by a plane that always faces the viewer, and shown from both sides so the far half reads as a shell
   _cutOn() { if (this.ext) return; const seen = new Set(), list = []; const root = this.tank.model || this.tank.group; root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && !seen.has(m)) { seen.add(m); list.push({ m, side: m.side, cp: m.clippingPlanes }); m.side = THREE.DoubleSide; m.clippingPlanes = [this.plane]; m.needsUpdate = true; } }); this.ext = list; }
   _cutOff() { if (!this.ext) return; for (const x of this.ext) { x.m.side = x.side; x.m.clippingPlanes = x.cp || null; x.m.needsUpdate = true; } this.ext = null; }
@@ -212,7 +238,7 @@ export class Interior {
       if (spells && !hurt) { u = 0; for (const sp of spells) { if (B.t < sp[0]) continue; const top = Math.min(1, (Math.min(B.t, sp[1]) - sp[0]) / 4), v = B.t < sp[1] ? top : top * clamp(1 - (B.t - sp[1]) / 2, 0, 1); if (v > u) u = v; } }
       else if (hurt) u = Math.max(0, this.st.ldrU - (sdt || 0) / 1.2);
       this.st.ldrU = u; }
-    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.1) / 0.2), cs0 && cs0.abandoned ? 1 : 0); P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
+    const U = this.st.ldrU; this.st.hatch = Math.max(sm((U - 0.12) / 0.28), cs0 && cs0.abandoned ? 1 : 0);   /* the lid goes up under his hands over about a second, not ahead of them */ P.hatch.rotation.x = this.st.hatch * 1.5;   /* unlatched and pushed up and back on its hinge until the spring arm holds it */
     this._mg(B, T, sdt || 0);
     // the handles follow the turret, the T-bar follows the steering
     const yaw = this.tank.turretYaw || 0, hdg = s.shown ? s.shown.h : T.h, v = T.v || 0;
@@ -291,7 +317,8 @@ export class Interior {
 
     { const lids = !(cut && this.cutTop); if (P.hatch.visible !== lids) P.hatch.visible = P.cupHatch.visible = lids; }   /* with the roof lifted off, the two hatch lids go with it */
     // ---- displays
-    this._sights(dt, s, seat, cut); if (mode === 'outside') this._outsideOnly(); else { this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
+    this._box(SEATS[mode] && !this.headOut && !cut ? mode : null);
+    this._sights(dt, s, seat, cut); if (mode === 'outside' || this.headOut) { this._outsideOnly(); this.wasOut = true; } else { if (this.wasOut) { this.wasOut = false; for (const g of [this.tur, this.hul]) for (const c of g.children) if (!c.userData.crew && !c.userData.hole) c.visible = true; } this.part.ldrHole.visible = this.part.cupHole.visible = false; this._draw(dt, s, hk, info); }
   }
 
   _cupPose() { const h = this.part.cupHatch; h.position.y = h.userData.home.y + 0.1 * Math.max(this.st.cup1, Math.min(1, this.st.cup2 * 3)); h.rotation.y = -2.5 * sm((this.st.cup2 - 0.3) / 0.7); }   /* up its post first, then swung aside round it */
@@ -316,7 +343,7 @@ export class Interior {
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
     if (this.st.ldrU > 0.004) {   // the climb, acted: reach for the lid's handle, push it open, hands to the rim, up through the opening, onto the gun
       const M = men.ldr, U = this.st.ldrU, H = M.hands, hx = DIM.HAT[0], hz = DIM.HAT[1], hr = DIM.HATR; this._ldrHead(U, _v); M.head[0] = _v.x; M.head[1] = _v.y; M.head[2] = _v.z; M.up = U; M.rise = sm((U - 0.42) / 0.3); M.load = -1;
-      const a = sm((U - 0.02) / 0.1), b = sm((U - 0.36) / 0.08), c = sm((U - 0.8) / 0.14); P.hatch.updateMatrix(); M.firing = this.mgFiring && U > 0.97; M.aim = -this.st.mgYaw * DEG * 0.6;
+      const a = sm((U - 0.02) / 0.1), b = sm((U - 0.3) / 0.1), c = sm((U - 0.8) / 0.14); P.hatch.updateMatrix(); M.firing = this.mgFiring && U > 0.97; M.aim = -this.st.mgYaw * DEG * 0.6;
       for (let i = 0; i < 2; i++) { const sx = i ? 1 : -1, sh = M.firing ? 0.005 * Math.sin(s.battle.t * 75 + i) : 0;
         _v.set(sx * 0.09, -0.05, -hr - 0.08).applyMatrix4(P.hatch.matrix);                                                    /* the handle under the lid, wherever the lid is */
         let x = H[i][0] + (_v.x - H[i][0]) * a, y = H[i][1] + (_v.y - H[i][1]) * a, z = H[i][2] + (_v.z - H[i][2]) * a;
@@ -349,23 +376,33 @@ export class Interior {
   drive(cams, dt) {
     const S = SEATS[cams.mode]; if (!S || !this.active) return false; const g = S.g === 'tur' ? this.tur : this.hul, cam = this.s.camera, L = this.look, H = this.head;
     let yaw = S.yaw0 + L.yaw, pitch = S.pitch0 + L.pitch; const U = cams.mode === 'in_ldr' ? this.st.ldrU : 0, upK = sm((U - 0.6) / 0.3);
-    if (U > 0.002) { pitch += 44 * sm(U / 0.12) * (1 - sm((U - 0.42) / 0.3)) + (10 - S.pitch0) * 0 + (-6 - S.pitch0) * upK * 0 + 8 * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun */
+    if (U > 0.002) { pitch += 52 * sm(U / 0.1) * (1 - sm((U - 0.42) / 0.3)) + (10 - S.pitch0) * 0 + (-6 - S.pitch0) * upK * 0 + 8 * upK; yaw += (this.st.mgYaw - S.yaw0) * upK; }   /* he looks up at his hatch as he works it, then along his gun */
     // the commander lifts his head into the cupola to look out through the vision blocks, and drops below the roof to look at his displays
     if (S.up) H.up = ease(H.up, clamp((pitch + 20) / 12, 0, 1), cams.snap ? 1e3 : 7, dt);
     _v.set(S.eye[0] + H.x, S.eye[1] + (S.up ? S.up * H.up : 0) + Math.sin(this.clock * 1.3) * 0.0015, S.eye[2] + H.z); if (U > 0.002) { this._ldrHead(U, _v); if (this.mgFiring && U > 0.97) { _v.y += 0.004 * Math.sin(this.simT * 75); _v.z += 0.003 * Math.sin(this.simT * 75 + 1); } } if (this.eyeOff) { _v.x += this.eyeOff[0]; _v.y += this.eyeOff[1]; _v.z += this.eyeOff[2]; }
-    { const out = _v.y > DIM.RF + 0.05 ? 0 : 1; if (SHARED.uInside.value !== out) SHARED.uInside.value = SHARED.uInsideF.value = out; this.headOut = !out; }   /* once his eyes are above the roof the outside model is drawn in the ordinary way */   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
+    // at an optic: the eye goes to a place just inside its glass and looks out along it; the move there and back is a fixed 0.4 s blend
+    if (this.opMode !== cams.mode) { this.opMode = cams.mode; this.optic = null; this.opT = 1; this.lookSeat = null; this.opCur = null; }
+    let fovT = S.fov / L.zoom; const O = this.optic;
+    if (O || this.opT < 1) {
+      if (O) { const k = O.optic, rt = k.kind !== 'block'; _on.set(0, 0, 1).applyQuaternion(O.quat); _v.copy(O.pos).addScaledVector(_on, k.dist || (k.kind === 'lp' ? 0.25 : k.kind === 'gas' ? 0.15 : 0.12));
+        yaw = Math.atan2(-_on.x, _on.z) / DEG + (k.yaw || 0) + (rt ? 0 : L.yaw); pitch = Math.asin(clamp(-_on.y, -1, 1)) / DEG + (rt ? 0 : L.pitch); fovT = k.fov || (rt ? 30 : 50); }
+      const F = this.opFrom, K = F ? sm(this.opT) : 1; if (F && K < 1) { _v.x = F.x + (_v.x - F.x) * K; _v.y = F.y + (_v.y - F.y) * K; _v.z = F.z + (_v.z - F.z) * K; yaw = F.yaw + ((((yaw - F.yaw) % 360) + 540) % 360 - 180) * K; pitch = F.pitch + (pitch - F.pitch) * K; fovT = F.fov + (fovT - F.fov) * K; }
+      this.opT = Math.min(1, this.opT + dt / 0.4);
+    }
+    { const c = this.opCur || (this.opCur = {}); c.x = _v.x; c.y = _v.y; c.z = _v.z; c.yaw = yaw; c.pitch = pitch; c.fov = fovT; }
+    { const out = _v.y > DIM.RF + 0.05 && !O && this.opT >= 1 ? 0 : 1; if (SHARED.uInside.value !== out) SHARED.uInside.value = SHARED.uInsideF.value = out; this.headOut = !out; }   /* once his eyes are above the roof the outside model is drawn in the ordinary way */   /* the wheel narrows the view; the eye itself does not move forward, so it can never pass through a console */
     g.updateWorldMatrix(true, false);
     { const sh = this.fxS ? Math.min(2.2, this.fxS.shake) : 0; if (sh > 0.02) { const t = Math.floor(this.simT * 40), n = k => (Math.sin((t + k * 17.3) * 127.1) * 43758.5453 % 1); _v.x += n(1) * sh * 0.022; _v.y += n(2) * sh * 0.02; _v.z += n(3) * sh * 0.016; this.shakeRoll = n(5) * sh * 0.04; } else this.shakeRoll = 0; }   /* the whole compartment jumps */
     cam.position.copy(_v).applyMatrix4(g.matrixWorld);
     g.getWorldQuaternion(_q); cam.quaternion.copy(_q).multiply(_q2.setFromEuler(_e.set(pitch * DEG, -yaw * DEG, -H.x * 0.4 + (this.shakeRoll || 0), 'YXZ'))); cam.up.set(0, 1, 0);
     const near = this.headOut ? 0.12 : (S.near || 0.5) + (S.nearUp ? (S.nearUp - S.near) * H.up : 0); if (Math.abs(cam.near - near) > 0.004) { if (this.near0 == null) this.near0 = cam.near; cam.near = near; cam.updateProjectionMatrix(); }
-    const fov = S.fov / L.zoom; if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = cams.snap ? fov : cam.fov + (fov - cam.fov) * Math.min(1, dt * 10); cam.updateProjectionMatrix(); }
+    const fov = fovT; if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = cams.snap || O || this.opT < 1 ? fov : cam.fov + (fov - cam.fov) * Math.min(1, dt * 10); cam.updateProjectionMatrix(); }
     return true;
   }
 
   // ---------------------------------------------------------------- the two sight pictures (a small extra view of the outside, at most one a frame)
   _sights(dt, s, seat, cut) {
-    const q = this.s.quality, ok = q !== 'min' && q !== 'low' && !this.s.software_off, want = !ok ? [] : this.mode === 'in_gnr' ? ['gps', 'gas'] : this.mode === 'in_cdr' || cut ? ['citv', 'gps'] : this.mode === 'in_ldr' ? ['lp'] : [];
+    const q = this.s.quality, ok = q !== 'min' && q !== 'low' && !this.s.software_off, want = !ok ? [] : this.mode === 'in_gnr' ? ['gps', 'gas'] : this.mode === 'in_cdr' || cut ? ['citv', 'gps'] : this.mode === 'in_ldr' ? ['lp'] : [], at = this.optic && (this.optic.optic.kind === 'lp' || this.optic.optic.kind === 'gas') ? this.optic.optic.kind : null; if (at && !want.includes(at)) want.push(at);
     const B = s.battle, T = B.tank, tw = this.s.world;
     // where the commander's viewer points: it sweeps on its own and stops on a team the crew has found and can see
     this.tur.getWorldDirection(_v); const turBrg = Math.atan2(-_v.x, _v.z) / DEG;   /* the group's own +z points backward, so its direction is turned round */
@@ -378,11 +415,12 @@ export class Interior {
     for (const k in SIGHT_EVERY) this.scr[k].uniforms.uHasLive.value = this.rt[k] && want.includes(k) ? 1 : 0;
     // each wanted view has its own clock; the most overdue one is drawn, and never more than one in a frame
     let key = null, worst = 0; for (const k of want) { this.due[k] = (this.due[k] == null ? 0 : this.due[k]) - dt; if (this.due[k] <= worst) { worst = this.due[k]; key = k; } }
+    if (at) key = at;   /* the optic the eye is at is drawn every frame */
     if (!key || !T.alive) return; this.due[key] = SIGHT_EVERY[key]; this.stats.sightDraws = (this.stats.sightDraws || 0) + 1;
-    const R = this.s.renderer, cam = this.sightCam, SZ = { gps: [320, 200], citv: [320, 200], lp: [256, 80], gas: [128, 128] }[key];
-    if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(SZ[0], SZ[1], { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; }
+    const R = this.s.renderer, cam = this.sightCam, SZ = key === at ? (key === 'lp' ? [1280, 400] : [720, 720]) : { gps: [640, 400], citv: [640, 400], lp: [640, 200], gas: [256, 256] }[key];
+    if (!this.rt[key]) { this.rt[key] = new THREE.WebGLRenderTarget(SZ[0], SZ[1], { type: THREE.HalfFloatType, depthBuffer: true }); this.scr[key].uniforms.uLive.value = this.rt[key].texture; } else if (this.rt[key].width !== SZ[0]) this.rt[key].setSize(SZ[0], SZ[1]);
     cam.aspect = SZ[0] / SZ[1];
-    if (key === 'lp') { cam.position.set(DIM.HAT[0], DIM.RF + 0.32, DIM.HAT[1] - DIM.HATR - 0.2).applyMatrix4(this.tur.matrixWorld); const b = (this.turBrg - 20) * DEG; cam.fov = 12.5; _v.set(cam.position.x + Math.sin(b) * 300, cam.position.y - 14, cam.position.z - Math.cos(b) * 300); }   /* unity power: about 40 degrees wide, 12 high */
+    if (key === 'lp') { cam.position.set(DIM.HAT[0], DIM.RF + 0.32, DIM.HAT[1] - DIM.HATR - 0.2).applyMatrix4(this.tur.matrixWorld); const b = (this.turBrg - 20 + (this.lpYaw || 0)) * DEG; cam.fov = 12.5; _v.set(cam.position.x + Math.sin(b) * 300, cam.position.y - 14, cam.position.z - Math.cos(b) * 300); }   /* unity power: about 40 degrees wide, 12 high */
     else if (key === 'gas') { cam.position.set(0.41, DIM.GY + 0.35, -1.9).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = 8; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }   /* fixed 8 power, 8 degrees */
     else if (key === 'gps') { cam.position.set(0.66, DIM.RF + 0.3, -1.0).applyMatrix4(this.tur.matrixWorld); const b = this.turBrg * DEG, Rg = aim ? Math.hypot(aim.e - T.e, aim.n - T.n) : 1500, ty = aim ? tw.h(aim.e, aim.n) + 1 : cam.position.y - Rg * 0.0053; cam.fov = this.gpsMag === 10 ? 4.1 : 13.5; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
     else { cam.position.set(-0.55, DIM.RF + 0.55, -0.7).applyMatrix4(this.tur.matrixWorld); const b = this.citvYaw * DEG, Rg = ct ? Math.hypot(ct.e - T.e, ct.n - T.n) : 1200, ty = ct ? tw.h(ct.e, ct.n) + 1 : cam.position.y - Rg * 0.0117; cam.fov = this.citvMag === 10 ? 2.1 : 8.2; _v.set(cam.position.x + Math.sin(b) * Rg, ty, cam.position.z - Math.cos(b) * Rg); }
@@ -396,48 +434,44 @@ export class Interior {
   // ---------------------------------------------------------------- what the displays show (redrawn only when something on them changes)
   _draw(dt, s, hk, info) {
     this.drawT = (this.drawT || 0) - dt; if (this.drawT > 0) return; this.drawT = 0.1;   /* ten times a second is plenty for numbers and lists */
-    const B = s.battle, T = B.tank, st = T.st || {}, rf = B._rf, wait = rf ? Math.max(0, rf.at - B.t) : 0, pad = (n, w) => String(Math.round(n)).padStart(w, '0'), F = '"DIN Alternate", "Arial Narrow", Arial, sans-serif';
-    const begin = (k, key) => { const c = this.cv[k]; if (c.key === key) return null; c.key = key; const x = c.x; if (c.opaque) { x.fillStyle = '#020806'; x.fillRect(0, 0, c.c.width, c.c.height); } else x.clearRect(0, 0, c.c.width, c.c.height); c.t.needsUpdate = true; return x; };
-    const live = k => this.scr[k].uniforms.uHasLive.value > 0.5, loading = !T.loaded && T.main > 0;
-    // gunner's primary sight: reticle, range, ammunition, what the gunner is doing
-    { const line = !T.alive ? 'OFF' : rf ? (this.gpsOn ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : this.st.rec < 2.5 ? 'ROUND AWAY' : loading ? 'LOADING' : T.main <= 0 ? 'NO MP ROUNDS' : 'SCANNING';
-      const x = begin('gps', [line, rf ? Math.round(rf.R / 10) : '-', T.main, this.gpsMag, Math.round(this.turBrg), live('gps'), T.loaded].join('|'));
-      if (x) { const g = '#9dffb0'; x.strokeStyle = g; x.fillStyle = g; x.lineWidth = 1.6; x.beginPath(); for (const [a, b, c, d] of [[160, 20, 160, 82], [160, 118, 160, 180], [60, 100, 142, 100], [178, 100, 260, 100], [150, 100, 156, 100], [164, 100, 170, 100]]) { x.moveTo(a, b); x.lineTo(c, d); } for (let i = 1; i <= 3; i++) { x.moveTo(160 - 5, 118 + i * 14); x.lineTo(160 + 5, 118 + i * 14); } x.stroke(); x.fillRect(159, 99, 2, 2);
-        x.font = `700 15px ${F}`; x.textAlign = 'left'; x.fillText(rf ? 'RNG ' + pad(Math.round(rf.R / 10) * 10, 4) : 'RNG ----', 10, 20); x.textAlign = 'right'; x.fillText(`MPAT  ${pad(T.main, 2)} RDS`, 310, 20); x.fillText(`${this.gpsMag}X`, 310, 190); x.textAlign = 'left'; x.fillText(line, 10, 190); x.textAlign = 'center'; x.fillText(pad(this.turBrg % 360, 3) + '°', 160, 14);
-        if (T.loaded && T.main > 0) { x.strokeRect(118, 180, 84, 15); x.font = `700 12px ${F}`; x.fillText('GUN READY', 160, 192); }
-        if (!live('gps')) { x.font = `600 12px ${F}`; x.fillStyle = 'rgba(157,255,176,.7)'; x.fillText(this.mode === 'in_gnr' || this.mode === 'in_cdr' || this.mode === 'cut' ? 'SYMBOLS ONLY: PICTURE NEEDS MEDIUM GRAPHICS OR BETTER' : 'PICTURE SHOWN FROM THE GUNNER\'S AND COMMANDER\'S SEATS', 160, 60); } } }
-    // commander's display: his own viewer
-    { const x = begin('citv', [Math.round(this.citvYaw || 0), this.citvMag, this.citvOn, !!this.citvTgt, live('citv'), this.warning && Math.floor(this.clock * 2.2) % 2].join('|'));
-      if (x) { const g = '#9dffb0'; x.strokeStyle = g; x.fillStyle = g; x.lineWidth = 1.5; x.strokeRect(130, 75, 60, 50); x.beginPath(); x.moveTo(160, 60); x.lineTo(160, 85); x.moveTo(160, 115); x.lineTo(160, 140); x.moveTo(110, 100); x.lineTo(140, 100); x.moveTo(180, 100); x.lineTo(210, 100); x.stroke();
-        x.font = `700 15px ${F}`; x.textAlign = 'left'; x.fillText('CITV', 10, 20); x.fillText(this.citvTgt ? (this.citvOn ? 'TARGET HELD' : 'SLEWING TO TARGET') : 'AUTO SCAN', 10, 190); x.textAlign = 'right'; x.fillText(`${this.citvMag}X`, 310, 190); x.fillText('BRG ' + pad((this.citvYaw || 0) % 360, 3), 310, 20);
-        if (this.warning && Math.floor(this.clock * 2.2) % 2) { x.fillStyle = '#ff5040'; x.textAlign = 'center'; x.fillText('MISSILE WARNING', 160, 44); }
-        if (!live('citv')) { x.font = `600 12px ${F}`; x.fillStyle = 'rgba(157,255,176,.7)'; x.textAlign = 'center'; x.fillText(this.mode === 'in_cdr' || this.mode === 'cut' ? 'SYMBOLS ONLY: PICTURE NEEDS MEDIUM GRAPHICS OR BETTER' : 'PICTURE SHOWN FROM THE COMMANDER\'S SEAT', 160, 60); } } }
-    // ballistic computer
-    { const rel = ((this.tank.turretYaw || 0) % 360 + 540) % 360 - 180, x = begin('comp', [rf ? Math.round(rf.R / 10) : '-', T.main, T.loaded, Math.round(rel), T.alive].join('|'));
-      if (x) { x.fillStyle = '#7ff0a0'; x.font = `700 20px ${F}`; x.textAlign = 'left'; const rows = [['RANGE', rf ? pad(Math.round(rf.R / 10) * 10, 4) + ' M' : '---- M'], ['AMMO', 'MPAT'], ['ROUNDS', pad(T.main, 2) + ' MP  ' + pad(T.ap == null ? 0 : T.ap, 2) + ' KE'], ['GUN', !T.alive ? 'OFF' : T.loaded ? 'LOADED' : T.main > 0 ? 'LOADING' : 'EMPTY'], ['TURRET', (rel >= 0 ? 'R ' : 'L ') + pad(Math.abs(rel), 3) + '°']]; rows.forEach((r, i) => { x.fillText(r[0], 12, 26 + i * 26); x.fillText(r[1], 130, 26 + i * 26); }); } }
-    // HKOI panel: state, rounds, threats, a small all-round scope
-    { const list = info.slice().sort((p, q) => p.range - q.range).slice(0, 5), blink = this.warning && Math.floor(this.clock * 2.2) % 2 ? 1 : 0;
-      const x = begin('hkoi', [hk, st.obs, st.he, st.apsL, st.apsR, this.hkPage, blink, this.hkTracks, this.hkPage === 2 && this.crewS && this.crewS.on ? ['cdr', 'gnr', 'ldr', 'drv'].map(r => this.crewS.who[r].state + Math.round(this.crewS.who[r].stress * 20) + this.crewS.who[r].status).join() + this.crewS.buttoned : '', T.alive, Math.round(this.turBrg / 3), list.map(m => m.tt.short + Math.round(m.range / 20) + (m.tracked ? 't' : m.cued ? 'c' : '')).join(',')].join('|'));
-      if (x) { const cy = '#7ff0e6', am = '#ffb020', rd = '#ff5040', gr = '#5cff7a'; x.textAlign = 'left'; x.fillStyle = cy; x.font = `700 22px ${F}`; x.fillText('HKOI  30 MM', 12, 28);
-        const sc = hk === 'FIRING' ? rd : hk === 'SEARCH' ? cy : hk === 'OFF' ? '#557' : am; x.fillStyle = sc; x.fillRect(190, 8, 180, 28); x.fillStyle = '#020806'; x.textAlign = 'center'; x.font = `700 20px ${F}`; x.fillText(hk, 280, 29); x.textAlign = 'left';
-        x.font = `700 19px ${F}`; const num = v => (v == null ? '--' : String(v)); x.fillStyle = st.obs != null && st.obs < 40 ? am : cy; x.fillText('OBSCURANT  ' + num(st.obs), 12, 64); x.fillStyle = st.he != null && st.he < 40 ? am : cy; x.fillText('HE AIRBURST  ' + num(st.he), 190, 64);
-        x.fillStyle = cy; x.fillText(`TROPHY  L ${num(st.apsL)}  R ${num(st.apsR)}`, 12, 90); x.fillText(`TRACKS ${this.hkTracks || 0}   AUTO`, 250, 90); x.strokeStyle = '#2c6f6a'; x.lineWidth = 1; x.beginPath(); x.moveTo(8, 102); x.lineTo(504, 102); x.stroke();
-        if (this.hkPage === 2) { const cs = this.crewS; x.fillText('CREW', 12, 128); x.font = `600 17px ${F}`;
-          if (!cs || !cs.on) x.fillText('NO CREW REPORT', 12, 156); else { ['cdr', 'gnr', 'ldr', 'drv'].forEach((r, i) => { const m = cs.who[r]; x.fillStyle = m.status === 'down' ? rd : m.stress_level > 1 ? rd : m.stress_level ? am : cy; x.fillText(`${String(m.name).toUpperCase().slice(0, 10).padEnd(11)} ${String(m.status === 'down' ? 'DOWN' : m.state).toUpperCase().slice(0, 12).padEnd(13)} STRESS ${Math.round(m.stress * 100)}%`, 12, 154 + i * 23); }); x.fillStyle = cy; x.fillText(cs.abandoned ? 'VEHICLE ABANDONED' : cs.buttoned ? 'HATCHES CLOSED' : 'HATCHES OPEN', 12, 250); } }
-        else if (this.hkPage === 1) { x.fillText('ROUNDS PAGE', 12, 128); x.font = `600 17px ${F}`; x.fillText('Obscurant rounds blind a guided missile\'s', 12, 156); x.fillText('link with a cloud in its path. HE airburst', 12, 178); x.fillText('rounds are for drones and close threats.', 12, 200); x.fillText(`Trophy countermeasures left: ${num(st.apsL)} and ${num(st.apsR)}`, 12, 230); }
-        else { x.font = `700 17px ${F}`; x.fillStyle = '#4fb0a8'; x.fillText('THREAT        RANGE     BRG    STATE', 12, 124); if (!list.length) { x.fillStyle = cy; x.fillText(hk === 'OFF' ? 'SYSTEM OFF' : 'RADAR SCANNING · NO TRACKS', 12, 152); }
-          list.forEach((m, i) => { x.fillStyle = m.tracked ? gr : m.cued ? am : cy; const y = 150 + i * 24; x.fillText(String(m.tt.short || 'THREAT').toUpperCase().slice(0, 11), 12, y); x.fillText(pad(m.range, 4) + ' M', 130, y); x.fillText(pad((m.brg + 360) % 360, 3), 222, y); x.fillText(m.tracked ? 'TRACKED' : m.cued ? 'CUED' : 'WARNING', 282, y); }); }
-        // scope: the vehicle at the centre, north up; a line for the turret, a dot for each threat in the air
-        { const ox = 432, oy = 196, R = 62; x.strokeStyle = '#2c6f6a'; x.lineWidth = 1.5; for (const r of [R, R * 0.5]) { x.beginPath(); x.arc(ox, oy, r, 0, 6.3); x.stroke(); } x.fillStyle = '#4fb0a8'; x.font = `700 13px ${F}`; x.textAlign = 'center'; x.fillText('N', ox, oy - R - 4); x.fillText('4 KM', ox, oy + R + 14);
-          const tb = this.turBrg * DEG; x.strokeStyle = cy; x.beginPath(); x.moveTo(ox, oy); x.lineTo(ox + Math.sin(tb) * R * 0.45, oy - Math.cos(tb) * R * 0.45); x.stroke();
-          for (const m of list) { const b = (m.brg || 0) * DEG, rr = Math.min(1, m.range / 4000) * R; x.fillStyle = m.tracked ? gr : m.cued ? am : rd; x.beginPath(); x.arc(ox + Math.sin(b) * rr, oy - Math.cos(b) * rr, 4, 0, 6.3); x.fill(); } x.textAlign = 'left'; }
-        if (blink) { x.fillStyle = rd; x.fillRect(8, 282, 496, 30); x.fillStyle = '#020806'; x.textAlign = 'center'; x.font = `700 21px ${F}`; x.fillText('MISSILE WARNING', 256, 304); }
-        else { x.fillStyle = this.warning ? rd : '#4fb0a8'; x.textAlign = 'center'; x.font = `700 17px ${F}`; x.fillText(this.warning ? 'MISSILE WARNING' : hk === 'SEARCH' ? 'RADAR SCANNING · NOTHING IN THE AIR' : ' ', 256, 303); } } }
-    // driver's display
-    { const v = T.v || 0, kmh = Math.round(Math.abs(v) * 3.6), hdg = Math.round(((s.shown ? s.shown.h : T.h) % 360 + 360) % 360) % 360, gear = v > 0.3 ? 'D' : v < -0.3 ? 'R' : 'N', blink = this.warning && Math.floor(this.clock * 2.2) % 2 ? 1 : 0;
-      const x = begin('drv', [kmh, hdg, gear, blink, this.warning, T.alive, Math.round(this.tank.turretYaw || 0)].join('|'));
-      if (x) { const cy = '#7ff0e6'; x.fillStyle = cy; x.textAlign = 'left'; x.font = `700 76px ${F}`; x.fillText(String(kmh).padStart(2, ' '), 18, 86); x.font = `700 24px ${F}`; x.fillText('KM/H', 122, 86); x.fillText('HDG ' + pad(hdg, 3), 236, 46); x.fillText('GEAR ' + gear, 236, 86);
-        x.font = `700 22px ${F}`; { const rel = ((this.tank.turretYaw || 0) % 360 + 540) % 360 - 180; x.fillText('GUN  ' + (Math.abs(rel) < 2 ? 'OVER THE FRONT' : (rel > 0 ? 'RIGHT ' : 'LEFT ') + pad(Math.abs(rel), 3) + '°'), 18, 128); } x.fillText(T.alive ? 'ENGINE RUNNING' : 'ENGINE STOPPED', 18, 158); x.font = `600 14px ${F}`; x.fillStyle = '#4fb0a8'; x.fillText('ENGINE RPM AND FUEL: NOT MODELLED IN THE SIMULATOR', 18, 178); x.fillStyle = cy;
-        if (blink) { x.fillStyle = '#ff5040'; x.fillRect(10, 186, 364, 40); x.fillStyle = '#020806'; } else x.fillStyle = this.warning ? '#ff5040' : '#5cff7a'; x.font = `700 24px ${F}`; x.textAlign = 'center'; x.fillText(this.warning ? 'MISSILE WARNING' : T.alive ? 'NO WARNING' : 'VEHICLE KNOCKED OUT', 192, 214); } }
+    const B = s.battle, T = B.tank, st = T.st || {}, rf = B._rf, wait = rf ? Math.max(0, rf.at - B.t) : 0, loading = !T.loaded && T.main > 0, live = k => this.scr[k].uniforms.uHasLive.value > 0.5;
+    // the battle's own status board (per station: state, target, rounds of the full load), read a few times a second
+    this.boardT = (this.boardT || 0) - 0.1; if (this.boardT <= 0 || !this.board) { this.boardT = 0.3; const list = B.tankBoard ? B.tankBoard() : []; this.board = {}; for (const r of list) this.board[r.key] = r; }
+    const bd = this.board, M = B._max || {}, max = { main: M.main || Math.max(T.main || 0, 18), m240: M.m240 || 800, obs: M.obs || 150, he: M.he || 150, aps: M.aps || 4 };
+    const hull = (((s.shown ? s.shown.h : T.h) || 0) % 360 + 360) % 360, rel = ((this.tank.turretYaw || 0) % 360 + 540) % 360 - 180, v = T.v || 0, gl = SHARED.uGlitch.value > 0.3;
+    // each threat in the air: where it is, how long it has left, and what the station is doing about it
+    const vols = (B.volleys || []).slice(-4);
+    const threats = info.map(m => { const th = m.th || {}, vol = vols.find(q => q.rec && q.rec.threats && q.rec.threats.includes(th)), tv = vol ? B.t - vol.t0 : null, fired = th.viz ? th.viz.fired : null, by = th.defeated_by || '';
+      const tti = tv != null && th.impact != null ? Math.max(0, th.impact - tv) : (th.v > 0 ? m.range / th.v : null), shot = fired != null && tv != null && tv >= fired;
+      const act = shot ? (by === 'hkoi_he' ? 'AIRBURST FIRED' : th.sever_m != null && m.range <= th.sever_m ? 'BEAM CUT' : 'OBSCURANT FIRED') : m.tracked ? (fired != null ? 'LAYING GUN' : by === 'aps' ? 'HANDED TO TROPHY' : 'TRACKING') : m.cued ? 'CUED' : 'DETECTED';
+      return { no: (th.idx != null ? th.idx : 0) + 1, name: (m.tt && m.tt.short) || (m.drone ? 'drone' : 'threat'), range: m.range, brg: ((m.brg || 0) % 360 + 360) % 360, tti, act, tone: shot ? 'ok' : m.tracked ? 'busy' : m.cued ? 'warn' : 'bad' }; }).sort((p, q) => (p.tti == null ? 99 : p.tti) - (q.tti == null ? 99 : q.tti));
+    const seatSees = this.mode === 'in_gnr' || this.mode === 'in_cdr' || this.mode === 'cut';
+    const D = { t: B.t, alive: !!T.alive, warning: !!this.warning, blink: Math.floor(this.clock * 2.2) % 2 === 1, hk, hkPage: this.hkPage, tracks: this.hkTracks || 0, threats, st: { obs: st.obs, he: st.he, apsL: st.apsL, apsR: st.apsR }, max,
+      turBrg: ((this.turBrg || 0) % 360 + 360) % 360, hull, rel, sweep: Math.floor(B.t * 4) * 24 % 360, crew: this.crewS, hkLine: (bd.HKOI && bd.HKOI.line) || '', hkFact: (bd.HKOI && bd.HKOI.facts && bd.HKOI.facts[0]) || '',
+      faults: [['RADAR', T.alive ? 'SCANNING' : 'OFF', T.alive ? 'ok' : 'bad'], ['GUN DRIVE', T.alive ? 'OK' : 'OFF', T.alive ? 'ok' : 'bad'], ['OBSCURANT FEED', st.obs > 0 ? 'OK' : 'EMPTY', st.obs > 0 ? 'ok' : 'bad'], ['AIRBURST FEED', st.he > 0 ? 'OK' : 'EMPTY', st.he > 0 ? 'ok' : 'bad'],
+        ['TROPHY LEFT', st.apsL > 0 ? 'READY' : 'EMPTY', st.apsL > 0 ? 'ok' : 'bad'], ['TROPHY RIGHT', st.apsR > 0 ? 'READY' : 'EMPTY', st.apsR > 0 ? 'ok' : 'bad'], ['DATA BUS', gl ? 'FAULT' : 'OK', gl ? 'bad' : 'ok'], ['POWER', T.alive ? 'OK' : 'OFF', T.alive ? 'ok' : 'bad']],
+      rf: rf ? { R: rf.R } : null, wait, main: T.main || 0, loaded: !!T.loaded, loading, gpsMag: this.gpsMag, gpsLive: live('gps'), tgt: bd.MAIN && bd.MAIN.target,
+      gunLine: !T.alive ? 'OFF' : rf ? (this.gpsOn ? (wait > 1.2 ? 'LASING' : 'ON THE WAY IN ' + wait.toFixed(1)) : 'TRAVERSING') : this.st.rec < 2.5 ? 'ROUND AWAY' : loading ? 'LOADING' : T.main <= 0 ? 'NO ROUNDS' : 'SCANNING',
+      liveNote: seatSees ? 'SYMBOLS ONLY: PICTURE NEEDS MEDIUM GRAPHICS OR BETTER' : 'PICTURE SHOWN FROM THE GUNNER\'S AND COMMANDER\'S SEATS',
+      citvYaw: ((this.citvYaw || 0) % 360 + 360) % 360, citvMag: this.citvMag, citvOn: !!this.citvOn, citvTgt: !!this.citvTgt, citvLive: live('citv'), cdrLine: (bd.CDR && bd.CDR.line) || '',
+      solution: !T.alive ? 'OFF' : rf ? (this.gpsOn ? 'SOLUTION' : 'LAYING') : 'NO TARGET',
+      fcs: [['LASER', T.alive ? 'OK' : 'OFF', T.alive ? 'ok' : 'bad'], ['THERMAL', T.alive ? 'ON' : 'OFF', T.alive ? 'ok' : 'bad'], ['GUN', T.loaded ? 'ARMED' : 'SAFE', T.loaded ? 'warn' : 'ok'], ['DATA BUS', gl ? 'FAULT' : 'OK', gl ? 'bad' : 'ok'], ['HKOI', hk, hk === 'OFF' ? 'bad' : hk === 'SEARCH' ? 'ok' : 'warn'], ['TROPHY', (st.apsL || 0) + (st.apsR || 0) > 0 ? 'READY' : 'EMPTY', (st.apsL || 0) + (st.apsR || 0) > 0 ? 'ok' : 'bad']],
+      kmh: Math.round(Math.abs(v) * 3.6), gear: v > 0.3 ? 'D' : v < -0.3 ? 'R' : 'N', rpm: T.alive ? 900 + 1900 * Math.min(1, Math.abs(this.st.thr || 0)) : 0, steer: clamp(this.st.steer || 0, -1, 1),
+      cautions: [Math.abs(rel) > 25 ? ['GUN OVER THE SIDE', 'warn'] : null, gl ? ['ELECTRICAL FAULT', 'bad'] : null, (this.smoke || 0) > 0.25 ? ['SMOKE IN THE VEHICLE', 'bad'] : null, this.crewS && this.crewS.on && this.crewS.who.drv.status !== 'ok' ? ['DRIVER ' + String(this.crewS.who.drv.status).toUpperCase(), 'bad'] : null].filter(Boolean),
+      ldrUp: this.st.ldrU > 0.5, door: this.st.door || 0, armed: this.st.arm > 0.5, m240: T.m240 || 0, m240State: (bd.M240 && bd.M240.state) || (this.st.ldrU > 0.5 ? 'manned' : 'stowed') };
+    for (const k in MFD) drawMfd(k, this.cv[k], D);
+  }
+
+  // From a seat, the outside model is left out inside a box round the crew space (and a little above the roof), so that its own
+  // fittings, lids and sight heads never stand in a port, a periscope or an open hatchway. Beyond the box (gun barrel, hull front,
+  // track guards) it is still seen. The machine guns keep their own materials and stay.
+  _box(mode) {
+    const on = !!mode; if (on && !this.boxed) { const seen = new Set(), list = []; const root = this.tank.model || this.tank.group;
+      if (!this.boxPl) this.boxPl = Array.from({ length: 6 }, () => new THREE.Plane());
+      root.traverse(o => { let p = o; while (p) { if (p.userData && p.userData.cab) return; p = p.parent; } if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && !seen.has(m) && !/^M2|M240/.test(m.name || '')) { seen.add(m); list.push({ m, cp: m.clippingPlanes, ci: m.clipIntersection }); m.clippingPlanes = this.boxPl; m.clipIntersection = true; m.needsUpdate = true; } });
+      this.boxed = list; }
+    else if (!on && this.boxed) { for (const x of this.boxed) { x.m.clippingPlanes = x.cp || null; x.m.clipIntersection = !!x.ci; x.m.needsUpdate = true; } this.boxed = null; }
+    if (!on) return; const drv = mode === 'in_drv', G = drv ? this.hul : this.tur, lo = drv ? [-0.8, -1.4, -5.2] : [-1.3, -1.3, -1.3], hi = drv ? [0.8, -0.2, DIM.DZ + 0.95] : [1.3, DIM.RF + 0.8, 1.75];
+    for (let i = 0; i < 6; i++) { const ax = i >> 1, sg = i & 1 ? 1 : -1; _v2.set(0, 0, 0).setComponent(ax, sg); _v.set(0, 0, 0).setComponent(ax, sg > 0 ? hi[ax] : lo[ax]); _v.applyMatrix4(G.matrixWorld); _v2.transformDirection(G.matrixWorld); this.boxPl[i].setFromNormalAndCoplanarPoint(_v2, _v); }
   }
 }
