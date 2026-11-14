@@ -116,7 +116,11 @@ export function buildInterior(labels) {
   // the breech: ring, sliding block, chamber mouth, operating handle. Its own part so that it can recoil.
   moving.breech = { g: 'tur', build: k => {
     k.box('p', 0.5, 0.46, 0.4, C.steel, 0, 0, -0.2); k.cyl('p', 0.17, 0.17, 0.3, C.gunm, 0, 0, -0.5, Math.PI / 2, 0, 0, 16); k.cyl('p', 0.21, 0.21, 0.05, C.gunm, 0, 0, 0.0, Math.PI / 2, 0, 0, 18);
-    k.cyl('p', 0.066, 0.066, 0.012, C.glass, 0, 0.0, 0.03, Math.PI / 2, 0, 0, 16); k.box('p', 0.06, 0.2, 0.04, C.red, 0.28, 0.02, -0.1, 0, 0, -0.45); k.cyl('p', 0.022, 0.022, 0.09, C.red, 0.34, 0.11, -0.1, Math.PI / 2, 0, 0, 8);
+    k.cyl('p', 0.066, 0.066, 0.012, C.glass, 0, 0.0, 0.03, Math.PI / 2, 0, 0, 16); /* both flanks of the breech ring: a machined groove, four large bolts and a data plate, so it reads as the breech and not as a blank plate */
+    for (const sd of [-1, 1]) { k.box('p', 0.004, 0.03, 0.36, C.gunm, sd * 0.251, -0.06, -0.2); for (const [y, z] of [[0.16, -0.06], [0.16, -0.34], [-0.17, -0.06], [-0.17, -0.34]]) k.cyl('p', 0.02, 0.02, 0.012, C.gunm, sd * 0.254, y, z, 0, 0, Math.PI / 2, 6);
+      k.label('120 MM GUN M256\nBREECH RING', 0.05, sd * 0.2515, 0.06, -0.2, 0, sd * Math.PI / 2, 0, 'plate'); k.label('RECOIL 300 MM  >>>', 0.02, sd * 0.2515, -0.13, -0.2, 0, sd * Math.PI / 2, 0, 'warn'); }
+    /* breech operating handle: a short red lever with a knob, low on the right flank and well inside the guard */
+    k.box('p', 0.025, 0.13, 0.03, C.red, 0.268, -0.02, -0.33); k.ball('p', 0.022, C.red, 0.275, 0.06, -0.33);
     k.box('p', 0.16, 0.09, 0.12, C.olive, -0.2, 0.275, -0.2); k.label('FIRING CIRCUIT', 0.018, -0.2, 0.275, -0.138, 0, 0, 0, 'plate'); }, pos: [0, GY, -0.42] };
   moving.block = { g: 'tur', parent: 'breech', build: k => { k.box('p', 0.25, 0.32, 0.045, C.gunm, 0, 0, 0); k.box('p', 0.21, 0.03, 0.05, C.steel, 0, 0.13, 0.003); }, pos: [0, 0, 0.045] };
   // loader's safe / armed handle on the guard
