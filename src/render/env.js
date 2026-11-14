@@ -2,7 +2,37 @@
 import * as THREE from 'three';
 
 // one set of uniforms that the ground, trees and roofs all read, so a change of weather reaches everything at once
-export const ENV = { snow: { value: 0 }, wet: { value: 0 }, time: { value: 0 } };
+export const ENV = { snow: { value: 0 }, wet: { value: 0 }, time: { value: 0 },
+  sunDir: { value: new THREE.Vector3(0, 1, 0) },     // towards the sun (or moon), in scene axes
+  glow: { value: new THREE.Color(0, 0, 0) },         // how much the haze brightens when you look towards the sun
+  wind: { value: new THREE.Vector3(1, 1, 0.3) },     // wind direction on the ground (x, z) and its strength (y)
+  cloud: { value: 0 } };                             // how dark the drifting shadows of clouds are on the land (0 = none)
+
+// Haze that brightens towards the sun, for any standard material: the far ground, woods and roofs melt into the same glowing
+// air the sky shows near the sun, instead of into one flat fog colour. The sky (sky.js) uses the same sum, so they meet cleanly.
+export const HAZE_GLSL = `vec3 hkHaze(vec3 fogCol, vec3 glow, float towardSun){ float s = max(towardSun, 0.0), s2 = s * s, s8 = s2 * s2 * s2 * s2; return fogCol + glow * (0.22 * s2 + 0.78 * s8 * s8); }`;
+// broad soft shadows of clouds drifting over the land (the same for everything that uses atmosphere(), so they line up)
+const CLOUD_GLSL = `
+  float hka_h(vec2 p){ return fract(sin(dot(p, vec2(269.5, 183.3))) * 43758.5453); }
+  float hka_n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hka_h(i), hka_h(i + vec2(1, 0)), f.x), mix(hka_h(i + vec2(0, 1)), hka_h(i + vec2(1, 1)), f.x), f.y); }
+  float hkCloudShade(vec2 xz, float t){ vec2 p = xz / 560.0 + vec2(t * 0.014, t * 0.005); return smoothstep(0.42, 0.72, hka_n(p) * 0.65 + hka_n(p * 2.3 + 7.0) * 0.35); }`;
+export function atmosphere(mat) {
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.hkSunDir = ENV.sunDir; sh.uniforms.hkGlow = ENV.glow; sh.uniforms.hkCloud = ENV.cloud; sh.uniforms.hkTimeA = ENV.time;
+    if (!/varying vec3 vWp;/.test(sh.vertexShader)) sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#ifdef USE_INSTANCING\nvWp = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+    if (!/varying vec3 vWp;/.test(sh.fragmentShader)) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 hkSunDir; uniform vec3 hkGlow; uniform float hkCloud; uniform float hkTimeA;\n' + HAZE_GLSL + CLOUD_GLSL)
+      .replace('#include <fog_fragment>', `#ifdef USE_FOG
+        { gl_FragColor.rgb *= 1.0 - hkCloud * hkCloudShade(vWp.xz, hkTimeA);
+          float hkF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, hkHaze(fogColor, hkGlow, dot(normalize(vWp - cameraPosition), hkSunDir)), hkF); }
+      #endif`);
+  };
+  mat.customProgramCacheKey = () => 'hkatm' + (prevKey ? prevKey.call(mat) : '');
+  return mat;
+}
 
 // Adds snow on upward faces and a wet darkening to any standard material. `amount` scales how readily snow settles on it.
 export function weatherise(mat, amount = 1) {
@@ -70,11 +100,15 @@ export class Precipitation {
 
 // The last pass: contrast, colour balance, vignette and film grain for a filmed look. All mild; set per condition.
 export const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
+  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 }, px: { value: new THREE.Vector2(1 / 1280, 1 / 720) }, sharp: { value: 0 }, fringe: { value: 0 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; uniform vec2 px; uniform float sharp; uniform float fringe; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-    void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
+      /* a lens, not a perfect window: a touch of crispness on fine detail, and the faintest colour fringe towards the corners */
+      if (sharp > 0.0) { vec3 around = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb; c = max(c + (c - around * 0.25) * sharp, 0.0); }
+      if (fringe > 0.0 && thermal == 0.0) { vec2 off = (vUv - 0.5) * dot(vUv - 0.5, vUv - 0.5) * fringe; c.r = mix(c.r, texture2D(tDiffuse, vUv - off).r, 0.7); c.b = mix(c.b, texture2D(tDiffuse, vUv + off).b, 0.7); }
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, sat); c = (c - 0.5) * contrast + 0.5; c *= mix(shadowTint, tint, smoothstep(0.0, 0.6, l));
       vec2 q = vUv - 0.5; c *= 1.0 - vignette * dot(q, q) * 1.6;
       // thermal imager: brightness only, stretched, with the coarse grain and faint line structure of an imager; white or black for hot
