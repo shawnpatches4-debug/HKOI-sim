@@ -17,7 +17,7 @@
   // Enemy weapon teams. key = the engine's threat type. aim = seconds of steady sight needed before firing.
   // needsLos = the gunner must keep seeing the target until impact (the missile is lost if the target gets behind cover).
   const TEAMS = {
-    kornet: { name: 'Kornet team', key: 'kornet', rmin: 150, rmax: 5000, aim: 5, needsLos: true, ammo: 3, reload: 22, setup: 35, move: 2.2, agl: 1.1 },
+    kornet: { name: 'Kornet team', key: 'kornet', rmin: 2000, rmax: 5000, aim: 5, needsLos: true, ammo: 3, reload: 22, setup: 35, move: 2.2, agl: 1.1 },
     saclos: { name: 'Konkurs team', key: 'saclos', rmin: 100, rmax: 3800, aim: 5, needsLos: true, ammo: 3, reload: 26, setup: 40, move: 2.0, agl: 1.1 },
     rpg: { name: 'RPG team', key: 'rpg', rmin: 60, rmax: 420, aim: 2.5, needsLos: false, ammo: 4, reload: 9, setup: 6, move: 3.2, agl: 1.3 },
     sal: { name: 'Laser designator team', key: 'sal', rmin: 800, rmax: 6000, aim: 8, needsLos: true, ammo: 2, reload: 45, setup: 50, move: 2.0, agl: 1.4 },
@@ -57,8 +57,11 @@
         this.rng = new HK.RNG(HK.seedFor(this.seed, 9001));
         this.cfg0 = opt.cfg || HK.defaultConfig();
         this.lookup = opt.lookup || (this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {});
+        /* the weather of the chosen conditions reaches the engine's cloud and sensor physics (rain washes the cloud out and brings wind, fog and falling snow cut what lasers and sensors see). Snow as haze is an assumption. */
+        { const wx = ({ fog: 'fog', rain: 'rain', snow: 'haze' })[opt.cond]; if (wx && this.cfg0.env && this.cfg0.env.weather !== wx) { this.cfg0 = JSON.parse(JSON.stringify(this.cfg0)); this.cfg0.env.weather = wx; this.lookup = this.cfg0.hkoi_enabled ? HK.meetLookup(this.cfg0) : {}; } }
         this.skill = SKILL[opt.skill] ? opt.skill : 'trained'; this.cond = opt.cond || 'day';
         this.dt = opt.dt || 0.1;
+        this.crewOpt = { on: opt.crewStress !== false, quality: opt.crewQuality };   /* crew.js: the tank crew's stress model (crewStress: false switches it off; crewQuality: green, trained, expert or veteran) */
         this.t = 0;
         this.log = [];          // { t, kind, who, text, why }
         this.volleys = [];      // resolved volleys, each with the engine's record
@@ -78,6 +81,7 @@
         // later waves are built from it (see _waveForce) and come from another direction once the wave before has been beaten.
         const force0 = opt.force || [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }];
         this.force0 = force0; this.nWaves = Math.max(1, Math.min(6, opt.waves | 0 || 1)); this.wave = 0; this.waveAt = null; this.waveFrom = 0;
+        if (this.mission === 'hold' && !opt.tank && this._pickStart) this._pickStart();
         this._place(this._waveForce(0));
         this.say(0, 'setup', null, `Battle on ${this.world.biome.name}, map seed ${this.world.seed}. ${this.units.length} enemy teams in position.`);
       }
@@ -119,11 +123,11 @@
         const anchors = O && side == null ? [0.5, 0.35, 0.65, 0.2, 0.8, 1].map(f => ({ e: T0.e + (O.e - T0.e) * f, n: T0.n + (O.n - T0.n) * f })) : [{ e: T0.e, n: T0.n }];
         const inSide = s => side == null || Math.abs(angDiff(brgOf(T0.e, T0.n, s.e, s.n), side)) < 75;   /* a later wave comes from one side */
         const apart = (s, d) => taken.every(q => Math.hypot(q.e - s.e, q.n - s.n) > d);
-        const concealed = (spec, A) => { const out = [], lo = Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 80), hi = Math.max(lo + 100, Math.min(spec.rmax * 0.8, 2200)); for (let q = 0; q < 300 && out.length < 8; q++) { const a = r.random() * 6.283, d = lo + r.random() * (hi - lo), e = A.e + Math.sin(a) * d, n = A.n + Math.cos(a) * d; if (!W.inside(e, n) || !W.passable(e, n, false)) continue; if (q < 200 && W.veg(e, n).cls < 2) continue; out.push({ e, n, d, score: 0 }); } return out; };
+        const concealed = (spec, A) => { const out = [], lo = Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 80, raid && spec.key !== 'rpg' ? raid.minR * 0.5 : 0), hi = Math.max(lo + 100, Math.min(spec.rmax * 0.8, 2200)); for (let q = 0; q < 300 && out.length < 8; q++) { const a = r.random() * 6.283, d = lo + r.random() * (hi - lo), e = A.e + Math.sin(a) * d, n = A.n + Math.cos(a) * d; if (!W.inside(e, n) || !W.passable(e, n, false)) continue; if (q < 200 && W.veg(e, n).cls < 2) continue; out.push({ e, n, d, score: 0 }); } return out; };
         for (const f of force) {
           const spec = TEAMS[f.type]; if (!spec) continue;
           let pool = []; if (spec.indirect) pool = this._hiddenSites(spec).filter(inSide);
-          else for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, raid && spec.key !== 'rpg' ? raid.minR : 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; }
+          else for (const far of (raid && spec.key !== 'rpg' ? [raid.minR, raid.minR * 0.75, raid.minR * 0.5, 0] : [0])) { if (pool.length >= 4) break; for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, far), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; } }   /* a stand-off group that finds no firing point that far out comes closer in steps rather than giving up its sight line */
           if (side != null) { const p2 = pool.filter(inSide); if (p2.length) pool = p2; }
           for (let k = 0; k < (f.n || 1); k++) {
             let pick = pool.find(s => apart(s, 350)) || pool.find(s => apart(s, 200)) || pool.find(s => apart(s, 120));
@@ -156,6 +160,7 @@
         if (this._pending) { const f = this._pending; this._pending = null; f(); this._finishVolleys(); return; }
         const dt = this.dt; this.t += dt;
         if (!this.tank.alive) return;
+        this._crewStep(dt);   /* crew.js: the crew's stress moves on one step */
         this._moveTank(dt);
         for (const u of this.units) this._unit(u, dt);
         this._commander();
@@ -189,7 +194,7 @@
       // hides the vehicle from where the warnings point. Returns the path the engine will use: [[t, east, north, heading, speed], ...]
       _drivePlan(at, warnT, observers, tEnd, firstImpact, holdForHkoi) {
         const W = this.world, path = [], T0 = -3, PDT = 0.1; let e = 0, n = 0, h = at.h, v = at.v || 0, goal = null, reached = false;
-        const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2;
+        const react = warnT == null ? 1e9 : warnT + 1.6 + (this.tank.st.fatigue || 0) * 2 + this._crewAdd('react', 1.6);   /* crew.js: stress slows the order and the driver */
         let cover = null;
         if (warnT != null && observers.length) { const c = W.coverFrom(at.e, at.n, observers, { radius: 260, step: 24 }).filter(q => this._drivable(at.e, at.n, q.e, q.n)); cover = c.length ? c[0] : null;
           // Go only for cover that hides the hull from every firer AND can be reached before the first missile arrives. Otherwise hold still:
@@ -436,7 +441,7 @@
         // can HKOI handle this on its own terms? Missiles it can blind (beam riders and command-guided), launched from far enough out to give it time,
         // and no more than two arriving close together (three at once swamp it: 2% stopped in the engine against 44% when six seconds apart)
         const blindable = launches.filter(l => (l.key === 'kornet' || l.key === 'saclos') && l.R >= 1000), others = launches.filter(l => !blindable.includes(l) && l.key !== 'rpg');
-        const holdForHkoi = this.cfg0.hkoi_enabled !== false && (T.st.obs == null || T.st.obs >= 12) && blindable.length >= 1 && blindable.length <= 2 && others.length === 0;
+        const holdForHkoi = this.cfg0.hkoi_enabled !== false && (T.st.obs == null || T.st.obs >= 12) && blindable.length >= 1 && blindable.length <= 2 && others.length === 0 && !this._crewFlinch();   /* crew.js: a shaken commander may not hold still */
         const plan = this._drivePlan(at, warnT, observers, tEnd, imp.length ? Math.min(...imp) : null, holdForHkoi);
         // which guided missiles lose their gunner's sight line because the vehicle got behind something
         const masks = launches.map((l, i) => {
@@ -562,6 +567,8 @@
       }
     }
     const TA = deps.TankAI || (typeof HKTankAI !== 'undefined' ? HKTankAI : null); if (TA) TA.install(Battle, SKILL);   /* the tank crew's drills live in tankai.js */
+    /* the crew's stress and panic live in crew.js; without that file every hook answers "no change" */
+    const CW = deps.Crew || (typeof HKCrew !== 'undefined' ? HKCrew : null); if (CW) CW.install(Battle, { HK, DMG: deps.DMG }); else Object.assign(Battle.prototype, { _crewStep() {}, _crewAdd() { return 0; }, _crewMul() { return 1; }, _crewOut() { return false; }, _crewFlinch() { return false; } });
     return { Battle, TEAMS, SKILL };
   }
 
