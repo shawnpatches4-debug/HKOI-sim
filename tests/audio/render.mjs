@@ -85,6 +85,7 @@ async function fx() {
   await one('launch_small_400m', 5, 'out', x => x.launch(400, false)); await one('launch_big_2000m', 10, 'out', x => x.launch(2000, true));
   await one('whoosh', 3, 'out', x => x.whoosh(0.5, 0.5));
   await one('hit_inside', 8, 'in', x => x.hit(false));
+  await one('hit_penetration_inside', 8, 'in', x => { x.hit(false); x.penetration(1.6); }); await one('nearmiss_inside', 3, 'in', x => x.nearMiss(0.22));
   await one('smoke_out', 4, 'out', x => x.smoke(20)); await one('crackthump_800m', 5, 'out', x => x.crackThump(800, 1100, 8, true));
 }
 
@@ -128,8 +129,8 @@ async function talk() {
   s = await render('talk_repeats', 30, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: Array.from({ length: 6 }, (_, i) => [0.5 + i * 4.6, x => { x.cue('GNR', 'ontheway', 1); x.cue('LDR', 'up', 1, { delay: 2, ttl: 3 }); }]) }); save('talk_repeats', s);
   // from outside the vehicle the crew is not heard
   s = await render('talk_from_outside', 8, { voices: true, state: st('orbit'), setup: x => x.mix.setBus('world', 0), acts: [[0.5, x => x.cue('GNR', 'ready', 0)], [4, x => x.cue('CDR', 'cease', 1)]] }); save('talk_from_outside', s);
-  // every clip of the release list once, one a second and a half apart, for the speech recogniser (crew2_index.json)
-  const idx = JSON.parse(fs.readFileSync(path.join(ASSETS, 'crew2_index.json'), 'utf8')), all = [];
+  // every clip of the release list once, one a second and a half apart, for the speech recogniser (crew3_index.json)
+  const idx = JSON.parse(fs.readFileSync(path.join(ASSETS, 'crew3_index.json'), 'utf8')), all = [];
   for (const who in idx.e) for (const ev in idx.e[who]) idx.e[who][ev].forEach((x, i) => all.push([who, ev, i, x]));
   let tt = 0.3; const plan = all.map(a => { const at = tt; tt += a[3][2] / 0.95 + 0.9; return [at, a]; });
   s = await render('talk_every_clip', tt + 1, { voices: true, state: st('gnr'), setup: x => x.mix.setBus('world', 0), acts: plan.map(([at, a]) => [at, x => { x.icom.lastAsk = {}; const L = x.icom.index.e[a[0]][a[1]]; x.icom.lastClip[a[0] + '.' + a[1]] = []; const keep = L.slice(); L.length = 0; L.push(keep[a[2]]); x.cue(a[0], a[1], keep[a[2]][3], { ttl: 0.5 }); x.icom.update(); L.length = 0; keep.forEach(k => L.push(k)); }]) });
@@ -188,5 +189,27 @@ async function slots() {
   await render('slot_wind_loop', 4, { prepare, state: () => ({ view: 'orbit', cond: 'day', alive: false, speed: 0, drones: [], talking: false }) });
 }
 
-const scenes = { fx, beds, talk, battle, compare, slots };
+// what the interior reports after a penetration (hitPulse, alarm) and a fire, fed to update() the way the page does
+async function inside() {
+  const I = { inside: true, intercomVol: 0.75, toneOn: true, hitPulse: null, alarm: false, fxS: { fire: false } }, b = { t: 0 };
+  const s = await render('inside_penetration_alarm_fire', 20, { voices: true, setup: x => x.mix.setBus('world', 0),
+    state: t => { b.t = t; I.simT = t; if (t >= 2) { I.hitPulse = { t: 2, strength: 1.6, penetrated: true }; I.alarm = t < 12; } I.fxS.fire = t > 13; return { view: 'in_gnr', cond: 'day', speed: 0, heading: 0, turret: 0, alive: true, camDist: 2, drones: [], talking: true, battle: null, interior: I }; },
+    acts: [[2.0, x => x.hit(false)], [2.6, x => x.cue('CDR', 'hit', 2, { pri: 3, ttl: 3 })], [4.4, x => x.cue('ANY', 'wound', 2, { pri: 3, ttl: 3 })], [6.5, x => x.cue('DRV', 'track', 2, { pri: 2, ttl: 4 })]] });
+  fs.writeFileSync(path.join(OUT, 'inside_penetration_alarm_fire.json'), JSON.stringify({ said: s.icom.said, dropped: s.icom.dropped }, null, 1));
+}
+
+// the same half minute from every kind of view the page has: the crew talking while the 30 mm, the main gun, Trophy and
+// a blast go off. tests/audio/check.py: nothing clips, inside is dull and outside is not, the crew is heard only from seats.
+async function views() {
+  for (const view of ['orbit', 'chase', 'cdr', 'in_cdr', 'in_gnr', 'in_ldr', 'in_drv', 'cut', 'enemy']) {
+    const cam = view === 'enemy' ? 1500 : view === 'orbit' || view === 'chase' || view === 'cut' ? 25 : 3, g30 = t0 => [0, 1, 2, 3, 4, 5].map(i => [t0 + i * 0.3, x => x.gun30(cam)]);
+    const s = await render('view_' + view, 26, { voices: true, seed: 7, state: () => ({ view, cond: 'day', biome: 'farmland', speed: 4, heading: 0, turret: 0, alive: true, camDist: cam, rate: 1, drones: [], talking: false }),
+      acts: [[1.0, x => x.cue('GNR', 'ready', 0, { ttl: 4 })], [4.0, x => x.cue('LDR', 'ready', 0, { ttl: 4 })], ...g30(4.2), [7.0, x => x.cue('DRV', 'ready', 0, { ttl: 4 })], [7.6, x => x.gun120(cam)],
+        [10.5, x => x.cue('CDR', 'redcon', 0, { ttl: 4 })], ...g30(11.0), [13.2, x => x.aps(cam)], [14.5, x => x.cue('CDR', 'cease', 1, { ttl: 4 })], [15.0, x => x.explosion(cam + 20, 1.4)], ...g30(15.4),
+        [18.5, x => x.cue('GNR', 'ontheway', 1, { ttl: 4 })], [18.6, x => { for (let i = 0; i < 8; i++) x.mg(cam, true); }], [21, x => x.cue('DRV', 'ack_fwd', 1, { ttl: 4 })], ...g30(21.2)] });
+    fs.writeFileSync(path.join(OUT, 'view_' + view + '.json'), JSON.stringify({ said: s.icom.said, dropped: s.icom.dropped }, null, 1));
+  }
+}
+
+const scenes = { fx, beds, talk, battle, compare, slots, inside, views };
 for (const name of want.length ? want : Object.keys(scenes)) { const t0 = Date.now(); await scenes[name](); console.log('scene', name, 'rendered in', ((Date.now() - t0) / 1000).toFixed(1), 's'); }

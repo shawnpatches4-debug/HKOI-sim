@@ -1,7 +1,7 @@
 {
   "pack": "crew_dialogs_ground_en_us",
-  "note": "The crew lines of the release build, chosen clip by clip from the owner's human voice pack (tools/audio/build_crew.py cuts them into assets/crew2_*.mp3). Each entry: event -> [[clip number, delivery 0 calm / 1 tense / 2 shouted, words as the speech recogniser and a re-check understood them], ...]. Nobody has listened. Events are spoken by src/audio/crewtalk.js; an event that is not here is silent in the simulator.",
-  "prefix": "crew2",
+  "note": "The crew lines of the release build, chosen clip by clip from the owner's human voice pack (tools/audio/build_crew.py cuts them into assets/crew2_*.mp3). Each entry: event -> [[clip number, delivery 0 calm / 1 tense / 2 shouted, words as the speech recogniser and a re-check understood them], ...]. Nobody has listened (clips 329, 331 and 333: the first word was heard as careful or doubtful). Events are spoken by src/audio/crewtalk.js; an event that is not here is silent in the simulator.",
+  "prefix": "crew3",
   "e": {
     "CDR": {
       "drv_back": [[181, 0, "Driver, reverse!"], [180, 1, "Driver, reverse!"], [179, 2, "Driver, reverse!"]],
@@ -15,7 +15,7 @@
       "hit": [[475, 0, "We have been hit, checking systems."], [316, 1, "They hit us! Check for damage!"], [317, 2, "We have been hit!"]],
       "cease": [[319, 0, "Target, cease fire."], [320, 1, "Target, target, cease fire."], [321, 2, "Target, cease fire!"]],
       "reengage": [[325, 0, "Re-engaging!"], [326, 0, "Re-engaging!"], [343, 0, "Re-engaging!"], [327, 1, "Re-engaging!"], [328, 1, "Re-engaging!"], [330, 1, "Re-engaging!"], [332, 2, "Re-engaging!"], [345, 2, "Re-engaging!"]],
-      "reengage_doubt": [[344, 0, "Doubtful, re-engaging."], [329, 0, "Doubtful (first word unsure), re-engaging!"], [333, 1, "Doubtful (first word unsure), re-engaging!"], [331, 2, "Doubtful (first word unsure), re-engaging!"]],
+      "reengage_doubt": [[344, 0, "Doubtful, re-engaging."], [329, 0, "Doubtful, re-engaging!"], [333, 1, "Doubtful, re-engaging!"], [331, 2, "Doubtful, re-engaging!"]],
       "load_sabot": [[175, 0, "Load sabot!"], [173, 1, "Load sabot!"], [174, 2, "Load sabot!"]],
       "reload": [[190, 0, "Reload!"], [188, 1, "Reload!"], [189, 2, "Reload!"]],
       "loader_down": [[440, 0, "Loader unconscious!"], [287, 0, "We lost the loader!"], [288, 1, "Loader has been knocked out."], [441, 2, "We lost the loader!"]]
@@ -27,6 +27,11 @@
       "ready": [[262, 0, "Gunner ready, gun indexed."], [261, 1, "Gunner ready, gun indexed."], [263, 2, "Gunner ready, gun indexed."]],
       "mg": [[293, 0, "Machine gun indexed."], [292, 1, "Machine gun indexed."], [294, 2, "Machine gun indexed."]],
       "misfire": [[295, 0, "Misfire!"], [454, 1, "Misfire!"], [453, 2, "Gun misfire!"]],
+      "cdr_down": [[464, 0, "Commander down! Gunner taking command!"], [308, 1, "Commander is unconscious! Gunner taking command!"], [466, 2, "Commander is unconscious! Gunner taking command!"]],
+      "gun_out": [[264, 0, "Gun is out of action!"], [266, 1, "Gun has been knocked out."], [265, 2, "They knocked out the gun!"]],
+      "trav_out": [[455, 0, "Traverse drive is out."], [456, 1, "We lost traverse drive!"], [457, 2, "Traverse drive is down."]],
+      "fcs_out": [[432, 1, "We lost fire control system."]],
+      "elec_out": [[424, 1, "Electronic equipment is out!"]],
       "gun_back": [[268, 0, "Gun is back in action."], [267, 1, "Gun is back in action!"], [269, 2, "Gun is back in action!"]],
       "range_300": [[206, 1, "300!"]], "range_350": [[207, 1, "350!"]], "range_400": [[208, 1, "400!"]], "range_450": [[209, 1, "450!"]],
       "range_500": [[210, 1, "500!"]], "range_550": [[211, 1, "550!"]], "range_600": [[212, 1, "600!"]], "range_650": [[213, 1, "650!"]],
@@ -46,6 +51,10 @@
       "ack_fwd": [[379, 0, "Roger, moving forward."], [381, 1, "Wilco, moving forward."], [380, 2, "Affirmative, moving forward."]],
       "ack_left": [[397, 0, "Roger, turning left."], [398, 1, "Affirmative, turning left."], [399, 2, "Wilco, turning left."]],
       "ack_right": [[402, 0, "Roger, turning right."], [400, 1, "Roger, turning right."], [401, 2, "Affirmative, turning right."]],
+      "track": [[392, 0, "The track was hit!"], [391, 0, "We lost the track! We are on road wheels!"], [388, 1, "We lost the track!"], [393, 1, "TC, the track was hit."], [387, 2, "We threw a track!"], [389, 2, "TC, we lost the track!"]],
+      "trans": [[394, 0, "Transmission is gone."], [396, 1, "The drive train has been hit. We are sitting ducks."], [395, 2, "TC, we lost the transmission."]],
+      "fuel": [[356, 0, "We are losing fuel. I think the tank has been hit."], [355, 1, "TC, we are losing fuel!"], [359, 2, "Fuel tank has been hit."]],
+      "power": [[374, 0, "TC, I am losing power here."], [375, 1, "TC, RPMs are dropping."]],
       "onmove": [[244, 0, "On the move!"], [245, 1, "On the move!"], [243, 2, "On the move!"]]
     },
     "ANY": {

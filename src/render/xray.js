@@ -9,7 +9,7 @@
 // Frame, as in dmg.js: x to the vehicle's right, y up, z to the rear, metres from the hull centre at ground level.
 import * as THREE from 'three';
 
-export const XRAY_COLOURS = { ok: '#4b7f8c', damaged: '#ffb020', destroyed: '#ff3b2f', crew_ok: '#5be38f', wounded: '#ffb020', killed: '#c01414', jet: '#ffd9a0', line: '#fff2a8' };
+export const XRAY_COLOURS = { ok: '#4b7f8c', damaged: '#ffb020', destroyed: '#ff3b2f', crew_ok: '#5be38f', wounded: '#ff5a2a', killed: '#b00d0d', jet: '#ffd9a0', line: '#fff2a8' };
 const SPALL = 35 * Math.PI / 180;   /* the half-angle of the spall cone in dmg.js */
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -96,6 +96,14 @@ export class XRayView {
       // stopped by the plate: the blast splashes back off it
       const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.05, 0.55, 20, 1, true), new THREE.MeshBasicMaterial({ color: '#ffb347', transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }));
       sp.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(UP, D.clone().negate())); sp.position.copy(E).addScaledVector(D, -0.3); this.hit.add(sp);
+    }
+    // The crew, shown plainly: a wounded man is marked with blood on and around him; a dead man is slumped over in his seat in a pool of it.
+    // (Which man is hurt comes from the damage model; the blood itself is drawn for the eye and is not a measurement.)
+    for (const id in this.byId) { const p = this.byId[id]; if (!p.c.crew) continue; const st = h.crew[id]; p.grp.rotation.set(0, 0, 0); if (st !== 'wounded' && st !== 'killed') continue;
+      const dead = st === 'killed', r = p.c.r, at = new THREE.Vector3().fromArray(p.c.turret ? DMG.rot(p.c.p, -h.turA) : p.c.p), red = dead ? '#7a0606' : '#b00d0d', rnd = k => { const x = Math.sin((k + 1) * 127.1 + h.idx * 31.7 + id.length * 7.3) * 43758.5453; return x - Math.floor(x); };
+      if (dead) p.grp.rotation.set(0.5, 0, 1.05);
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(r * (dead ? 1.9 : 1.0), 20), new THREE.MeshBasicMaterial({ color: red, side: THREE.DoubleSide })); pool.rotation.x = -Math.PI / 2; pool.position.set(at.x, at.y - r * 1.25, at.z); this.hit.add(pool);
+      for (let k = 0; k < (dead ? 16 : 8); k++) { const d = new THREE.Mesh(new THREE.SphereGeometry(r * (0.07 + rnd(k) * 0.13), 8, 6), new THREE.MeshBasicMaterial({ color: '#c81010' })); d.position.set(at.x + (rnd(k + 20) - 0.5) * r * 2.6, at.y + (rnd(k + 40) - 0.6) * r * 2.2, at.z + (rnd(k + 60) - 0.5) * r * 2.6); this.hit.add(d); }
     }
     // look from the side the hit came from, a little above (from straight above for an attack from the top)
     this.az = Math.atan2(-D.x, -D.z) + 0.75; this.el = h.top ? 0.75 : 0.36; this.dist = 13.5;

@@ -36,7 +36,7 @@ A new pack (guns, explosions, engines) takes the same steps 1, 3, 4, 5 with its 
 ### Release crew voices (human recordings only)
 | File | What | Made by |
 |---|---|---|
-| assets/crew2_cdr.mp3, crew2_gnr.mp3, crew2_ldr.mp3, crew2_drv.mp3, crew2_any.mp3, crew2_hq.mp3, crew2_index.json (2.2 MB together, not in git) | 126 clips of the crew pack above, chosen clip by clip in `tools/audio/crew_release.json` (in git): the tank crew and the radio net. Same unconfirmed source and licence as the pack. | `python3 -I tools/audio/build_crew.py <work> assets` |
+| assets/crew3_cdr.mp3, crew3_gnr.mp3, crew3_ldr.mp3, crew3_drv.mp3, crew3_any.mp3, crew3_hq.mp3, crew3_index.json (2.7 MB together, kept out of the repository; the page loads these, and falls back to the earlier 126-clip crew2_* set when they are missing) | 151 clips of the crew pack above, chosen clip by clip in `tools/audio/crew_release.json` (in git): the tank crew and the radio net. Same unconfirmed source and licence as the pack. | `python3 -I tools/audio/build_crew.py <work> assets` |
 
 The tank crew no longer uses any machine-made speech. The older strips voice_cdr / voice_gnr / voice_ldr / voice_drv (Kokoro text-to-speech) and voice_panic (generated) stay on disk but are not loaded. Still used from the old set: voice_ru.mp3 (the enemy calls, cut from the Russian crew pack Shawn supplied: human) and screams.mp3 (0 A.D., Wildfire Games, CC-BY-SA 3.0: human), both through voice_index.json.
 Who says what, and which events are silent because the pack has no line, is in `src/audio/crewtalk.js`; `node tests/audio/crewtalk.test.mjs` prints the silent lines with counts.
@@ -56,11 +56,12 @@ Entry: `{ "file": "sfx/name.mp3", "start": seconds, "len": seconds, "gain": 1 }`
 | flyby, crack | a missile passing; the crack of a supersonic round passing | |
 | explosion_small, explosion_medium, explosion_large, airburst | blasts by size | close and dry |
 | hit_in | a round striking the vehicle, heard inside | |
+| pen_in, nearmiss_in | heard inside: a round coming through the armour (crack, spall, venting), on top of hit_in; a near miss | |
 | smoke_discharge | the smoke grenade dischargers | |
 | turbine_in_loop, turbine_out_loop, tracks_loop | engine inside / outside, tracks | must loop cleanly; pitch follows the throttle |
 | wind_loop, rain_loop, rain_roof_loop | weather outside; rain on the armour heard inside | must loop cleanly |
 
-Still synthesised with no slot yet: drone motors, turret traverse whir, track squeal, creaks, birds and insects, the far battle rumble, the warning tones and intercom clicks.
+Still synthesised with no slot yet: the fire and penetration alarm, a fire burning inside, drone motors, turret traverse whir, track squeal, creaks, birds and insects, the far battle rumble, the warning tones and intercom clicks.
 Measuring sound without ears: `node tests/audio/render.mjs <scratch folder with node-web-audio-api> assets <out>` renders the real sound code to WAV files, `python3 tests/audio/check.py <out>` passes or fails them, `python3 tests/audio/analyse.py <out> --png <name>` draws spectrograms, `python3 -I tests/audio/hear.py <scene.wav> <Whisper model>` lets a speech recogniser listen to an intercom scene. `bash tools/dev.sh sound <out>` runs the crew-line checks and the page test (tests/beta/sound.py).
 
 ## Enemy tanks: T-72B3 and T-90M (made 14 Nov 2026 from the line-up packs in models_src/)
