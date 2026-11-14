@@ -117,8 +117,9 @@ export class CrewFigures {
     r.g.position.set(r.head[0].x - (c * ex + s * ez), r.head[1].x - ey, r.head[2].x - (-s * ex + c * ez));
     for (let i = 0; i < 2; i++) { const g = clamp(r.grip[i].x, 0, 1); if (g < 0.01) { r.handErr[i] = 0; continue; } const S = i ? 'Right' : 'Left', H = r.hand[i];
       const dx = H[0].x - r.g.position.x, dy = H[1].x - r.g.position.y, dz = H[2].x - r.g.position.z; _t.set(c * dx - s * dz, dy, s * dx + c * dz);                        /* the control, in his own frame */
+      _v.copy(_t).sub(Wp[J[S + 'Arm']]).normalize(); _t.addScaledVector(_v, -0.075);   /* the wrist stops a palm's length short, so the palm and fingers, not the wrist, are on the grip */
       _pole.set(sd[i] * 0.65, -0.7, -0.25); reachQ(r.rig, r.draw, S, _t, _pole, g * g * (3 - 2 * g));
-      if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Wp[J[S + 'Hand']].distanceTo(_v) : 0; r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
+      if (this.measure) { fk(r.rig, r.draw); const dxm = M.hands[i][0] - r.g.position.x, dym = M.hands[i][1] - r.g.position.y, dzm = M.hands[i][2] - r.g.position.z; _v.set(c * dxm - s * dzm, dym, s * dxm + c * dzm); r.handErr[i] = g > 0.99 ? Math.abs(Wp[J[S + 'Hand']].distanceTo(_v) - 0.075) : 0;   /* how far the palm is from the grip (the wrist is meant to be 7.5 cm short of it) */ r.reachLeft = _v.distanceTo(Wp[J[S + 'Arm']]) - (r.rig.upper + r.rig.fore); } }
     for (let i = 0; i < NJ; i++) r.rig.bones[i].quaternion.copy(r.draw[i]);
     // the viewer in this seat: no head of his own before his eyes, but his own arms and hands on his controls
     const cut = M.bodyOnly ? 0.34 : 0; if (r.cut !== cut) { r.cut = cut; for (const m of r.mats) m.uniforms.uNearCut.value = cut; }

@@ -89,7 +89,7 @@ async def main():
             for name, js in [('gunner_wounded_from_cdr_40s', "(stage(40, 'pen', 'gnr'), crewAs({ gnr: { status: 'wounded', state: 'shaken' } }), lk('in_cdr', 8, -22, 1))"), ('gunner_wounded_from_above_right', "lk('in_gnr', 150, -30, 1, [0.25, 0.25, 0.75])"), ('gunner_own_seat_stains', "lk('in_gnr', 95, -20, 1)"),
                              ('loader_down_from_cdr_40s', "(stage(40, 'kill', 'ldr'), crewAs({ ldr: { status: 'down' }, gnr: { status: 'ok', state: 'steady' } }), lk('in_cdr', -80, -22, 1))"), ('loader_down_from_gnr_side', "lk('in_gnr', -100, -4, 1, [-0.3, 0.2, 0.5])"),
                              ('driver_panicked_shoulder', "(crewAs({ drv: { state: 'panicked' }, ldr: { status: 'ok' } }), lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1]))"), ('all_shaken_cut_smoke_3s', "(stage(3, 'pen', 'gnr'), crewAs({ drv: { state: 'shaken' }, gnr: { state: 'shaken', status: 'wounded' }, cdr: { state: 'strained' }, ldr: { state: 'panicked' } }), cutv(5.2, 2.0, 3.0))"), ('cut_above_after_hit', "cutv(-0.6, -1.5, 8.5)"),
-                             ('cdr_own_seat_no_arm', "lk('in_cdr', 0, 0, 1)")]: await shot('crew2_' + name, js)
+                             ('cdr_own_seat_no_arm', "lk('in_cdr', 0, 0, 1)")]: await shot('crew2_' + name, '(' + js + ', __beta.runTo(__beta.battle.t + 0.6), __beta.runTo(__beta.battle.t + 0.6), __beta.runTo(__beta.battle.t + 0.6))')   # the men move on the battle clock: let it run on a little so each picture shows the settled state
         if which == 'strips':   # short runs of stills, a fixed step of battle time apart: a load cycle, a hit, the commander's head moving between his tasks
             await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
             for i in range(80):
