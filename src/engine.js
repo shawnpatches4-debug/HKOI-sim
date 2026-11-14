@@ -48,7 +48,7 @@ function defaultConfig() {
     // combined arms: an enemy tank the crew must fight with the main gun while missiles and drones come in (off by default)
     duel: { on: false, R: 1800, brg: 15, t0: 2, first_shot_s: [3, 7], reload_s: 7.5, p_hit_ref: 0.75, own_lay_s: 2.2, own_reload_s: 6, own_p_hit_ref: 0.92, own_p_kill: 0.75, turret_dps: 40, max_shots: 8 },
     ew: { drone_jammer: false, jam_p: 0.6 },
-    aps: { enabled: true, radar_cue: true, radar_range_m: 1000, mag_per_side: 3, reset_s: 0.6, pk_cued: 0.9, pk_uncued: 0.8, pk_drone: 0.3, inhibit_with_dismounts: 0.5 },
+    aps: { enabled: true, radar_cue: true, radar_range_m: 1000, mag_per_side: 3, reset_s: 0.6, pk_cued: 0.9, pk_uncued: 0.85, pk_drone: 0.3, inhibit_with_dismounts: 0.5 },
   };
 }
 

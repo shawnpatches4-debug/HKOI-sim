@@ -71,7 +71,7 @@
     const c = cfgFor(HK, base, setup); if (!sc || sc.preset === 'old') return c;
     const mix = {}; let teams = 0; for (const f of sc.force || []) { const k = TYPE[f.type]; if (!k || !HK.THREATS[k]) continue; mix[k] = (mix[k] || 0) + (f.n || 1); teams += f.n || 1; }
     if (teams) { c.enemy.mix = mix; c.enemy.raid_size = Math.max(1, Math.min(6, teams)); }
-    c.enemy.window_s = sc.raid ? sc.raid.window : 3; c.enemy.kornet_min_m = sc.raid ? sc.raid.minR : 400; if (sc.jitter != null) c.enemy.gunner_jitter_mrad = sc.jitter; if (sc.pilot) c.enemy.drone_skill = sc.pilot;
+    c.enemy.window_s = sc.raid ? sc.raid.window : 3; c.enemy.kornet_min_m = Math.max(2000, sc.raid ? sc.raid.minR : 0);   /* Shawn: Kornet teams fire from 2 to 5 km, never close */ if (sc.jitter != null) c.enemy.gunner_jitter_mrad = sc.jitter; if (sc.pilot) c.enemy.drone_skill = sc.pilot;
     if (c.crew) c.crew.enabled = false;
     return c;
   }

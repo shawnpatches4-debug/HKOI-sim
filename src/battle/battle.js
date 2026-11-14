@@ -17,7 +17,7 @@
   // Enemy weapon teams. key = the engine's threat type. aim = seconds of steady sight needed before firing.
   // needsLos = the gunner must keep seeing the target until impact (the missile is lost if the target gets behind cover).
   const TEAMS = {
-    kornet: { name: 'Kornet team', key: 'kornet', rmin: 150, rmax: 5000, aim: 5, needsLos: true, ammo: 3, reload: 22, setup: 35, move: 2.2, agl: 1.1 },
+    kornet: { name: 'Kornet team', key: 'kornet', rmin: 2000, rmax: 5000, aim: 5, needsLos: true, ammo: 3, reload: 22, setup: 35, move: 2.2, agl: 1.1 },
     saclos: { name: 'Konkurs team', key: 'saclos', rmin: 100, rmax: 3800, aim: 5, needsLos: true, ammo: 3, reload: 26, setup: 40, move: 2.0, agl: 1.1 },
     rpg: { name: 'RPG team', key: 'rpg', rmin: 60, rmax: 420, aim: 2.5, needsLos: false, ammo: 4, reload: 9, setup: 6, move: 3.2, agl: 1.3 },
     sal: { name: 'Laser designator team', key: 'sal', rmin: 800, rmax: 6000, aim: 8, needsLos: true, ammo: 2, reload: 45, setup: 50, move: 2.0, agl: 1.4 },
