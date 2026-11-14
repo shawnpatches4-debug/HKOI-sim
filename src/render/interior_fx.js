@@ -48,9 +48,9 @@ function bloodTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); let s = 91; const R = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   x.clearRect(0, 0, 256, 256);
   for (let q = 0; q < 4; q++) { const ox = (q % 2) * 128, oy = (q >> 1) * 128;   /* four different stains on one sheet */
-    for (let i = 0; i < 26; i++) { const a = R() * 6.283, d = Math.pow(R(), 1.7) * 46, r = 3 + R() * (i < 5 ? 20 : 8); x.fillStyle = `rgba(${52 + R() * 30 | 0},${4 + R() * 8 | 0},${4 + R() * 6 | 0},1)`; x.beginPath(); x.ellipse(ox + 64 + Math.cos(a) * d, oy + 56 + Math.sin(a) * d * 0.8, r, r * (0.6 + R() * 0.5), a, 0, 7); x.fill(); }
-    for (let i = 0; i < 5; i++) { const px = ox + 40 + R() * 48; x.fillStyle = 'rgba(46,5,5,1)'; x.fillRect(px, oy + 58, 2 + R() * 3, 20 + R() * 44); }   /* runs */
-    for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(60,6,6,1)'; x.beginPath(); x.arc(ox + 8 + R() * 112, oy + 8 + R() * 112, 0.6 + R() * 1.8, 0, 7); x.fill(); } }
+    for (let i = 0; i < 26; i++) { const a = R() * 6.283, d = Math.pow(R(), 1.7) * 46, r = 3 + R() * (i < 5 ? 20 : 8); x.fillStyle = `rgba(${96 + R() * 44 | 0},${3 + R() * 9 | 0},${3 + R() * 7 | 0},1)`; x.beginPath(); x.ellipse(ox + 64 + Math.cos(a) * d, oy + 56 + Math.sin(a) * d * 0.8, r, r * (0.6 + R() * 0.5), a, 0, 7); x.fill(); }
+    for (let i = 0; i < 5; i++) { const px = ox + 40 + R() * 48; x.fillStyle = 'rgba(104,5,5,1)'; x.fillRect(px, oy + 58, 2 + R() * 4, 24 + R() * 44); }   /* runs */
+    for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(112,6,6,1)'; x.beginPath(); x.arc(ox + 8 + R() * 112, oy + 8 + R() * 112, 0.8 + R() * 2.4, 0, 7); x.fill(); } }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -65,7 +65,7 @@ export class InteriorFx {
     const sp = this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.004, 0.004, 0.05), glow, this.N); sp.frustumCulled = false; sp.visible = false; groups.hul.add(sp);
     // blood: three stains by each seat (on the seat, on the wall or floor beyond it), all one mesh a seat
     const mat = this.bloodMat = cab({ labels: bloodTexture() }); this.stains = {};
-    for (const [r, def] of Object.entries(pack)) { const geo = [], P = def.planes; P.forEach((p, i) => { const g = new THREE.PlaneGeometry(p[6], p[7]), uv = g.attributes.uv, q = (i + r.length) % 4; for (let k = 0; k < uv.count; k++) uv.setXY(k, ((q % 2) + uv.getX(k)) / 2, ((q >> 1) + uv.getY(k)) / 2);
+    for (const [r, def] of Object.entries(pack)) { const geo = [], P = def.planes; P.forEach((p, i) => { const g = new THREE.PlaneGeometry(p[6] * 1.45, p[7] * 1.45), uv = g.attributes.uv, q = (i + r.length) % 4; for (let k = 0; k < uv.count; k++) uv.setXY(k, ((q % 2) + uv.getX(k)) / 2, ((q >> 1) + uv.getY(k)) / 2);
         g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(p[0], p[1], p[2]), new THREE.Quaternion().setFromEuler(new THREE.Euler(p[3], p[4], p[5], 'YXZ')), new THREE.Vector3(1, 1, 1))); const n = g.attributes.position.count, col = new Float32Array(n * 4).fill(1); for (let k = 0; k < n; k++) col[k * 4 + 3] = 0; g.setAttribute('color', new THREE.BufferAttribute(col, 4)); geo.push(g.toNonIndexed()); });
       const m = new THREE.Mesh(merge(geo), mat); m.frustumCulled = false; m.visible = false; m.renderOrder = 5; groups[def.g].add(m); this.stains[r] = m; }
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._d = new THREE.Vector3(); this._z = new THREE.Vector3(0, 0, 1); this._s = new THREE.Vector3(1, 1, 1);

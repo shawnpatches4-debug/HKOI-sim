@@ -32,7 +32,8 @@ export const SHARED = {
   uTime: { value: 0 },
   uSimT: { value: 0 },                                     // the battle clock (what the hit effects run on)
   uSmoke: { value: 0 }, uSmokeCol: { value: new THREE.Vector3(0.3, 0.3, 0.3) },   // smoke and dust hanging in the compartment
-  uGlitch: { value: 0 },                                   // displays tearing after a hit
+  uGlitch: { value: 0 },
+  uCabY: { value: 0 }, uSmokeAt: { value: new THREE.Vector4(0, 0, 0, 0) },   // height of the turret ring in the world; where the latest penetration came in (w = how strongly smoke still pours from it)                                   // displays tearing after a hit
 };
 
 const DEPTH_VS = /* glsl */`
@@ -61,9 +62,27 @@ const VS = /* glsl */`
     cabDepth(viewMatrix * w);
   }`;
 
+// the same for the crew figures: their joints are applied first (three.js does the joint arithmetic), then everything as above
+const VS_SKIN = /* glsl */`
+  #include <skinning_pars_vertex>
+  varying vec3 vW; varying vec3 vN; varying vec3 vO; varying vec3 vON; varying vec4 vC; varying vec2 vUv;
+  ${DEPTH_VS}
+  void main() {
+    vec3 objectNormal = normal; vec3 transformed = position;
+    #include <skinbase_vertex>
+    #include <skinnormal_vertex>
+    #include <skinning_vertex>
+    vO = transformed; vON = objectNormal; vC = vec4(0.0, 0.0, 0.0, 1.0); vUv = uv;
+    vec4 w = modelMatrix * vec4(transformed, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * objectNormal);
+    cabDepth(viewMatrix * w);
+  }`;
+
 const FS = /* glsl */`
   uniform vec3 uLampPos[${NLAMP}]; uniform vec3 uLampCol[${NLAMP}]; uniform float uLampR[${NLAMP}];
-  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol; uniform float uInsideF;
+  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol; uniform float uInsideF; uniform float uSimT; uniform float uCabY; uniform vec4 uSmokeAt;
+  #ifdef CMAP
+    uniform sampler2D uCMap; uniform vec3 uTint; uniform sampler2D uBloodT; uniform float uBloodAmt;
+  #endif
   uniform sampler2D uWear; uniform sampler2D uTread;
   #ifdef LABELS
     uniform sampler2D uAtlas;
@@ -78,7 +97,14 @@ const FS = /* glsl */`
     cabClip(vW, uShell);
     vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
     vec3 v = normalize(cameraPosition - vW);
-    float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb; float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
+    float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb;
+    #ifdef CMAP
+      alb = uTint;
+      #ifdef HASMAP
+        alb *= texture2D(uCMap, vUv).rgb * 1.5;
+      #endif
+      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.75, bt.a * uBloodAmt); }   /* blood soaking the uniform */
+    #endif float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
       vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05;
       #ifdef NOGLOW
@@ -111,7 +137,10 @@ const FS = /* glsl */`
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
     vec3 col = alb * dif * low + spc * specK * low + alb * glow;
-    if (uSmoke > 0.001) { float sd = uInsideF > 0.5 ? min(length(cameraPosition - vW), 2.6) : 0.3; col = mix(col, uSmokeCol, 1.0 - exp(-uSmoke * sd * 1.5)); }   /* from a seat the smoke thickens with distance; in the cutaway it is a light haze over the parts (the viewer is outside it) */
+    {   // smoke: it gathers under the roof and thins toward the floor, drifts slowly, and is thickest where the plate was holed
+      float h = vW.y - uCabY, lay = mix(0.3, 1.75, smoothstep(-0.95, 0.5, h)), drift = 0.72 + 0.38 * sin(vW.x * 2.3 + uSimT * 0.35 + h * 2.0) * sin(vW.z * 1.9 - uSimT * 0.27 + h * 3.1);
+      vec3 dv = vW - uSmokeAt.xyz; float dens = uSmoke * lay * drift + uSmokeAt.w * exp(-dot(dv, dv) * 1.4);
+      if (dens > 0.001) { float sd = uInsideF > 0.5 ? min(length(cameraPosition - vW), 2.6) : 0.3; col = mix(col, uSmokeCol, 1.0 - exp(-dens * sd * 1.6)); } }
     gl_FragColor = vec4(col * uExpo, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -143,11 +172,12 @@ function treadTexture() {
 let _wear = null, _tread = null;
 // The painted-and-worn material every solid part of the interior uses. shell = true for the walls, roof and hull tub (the parts
 // the cutaway view slices away); labels = the label sheet for the mesh that carries the placards.
-export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide, glow = true } = {}) {
+export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide, glow = true, skinned = false, map = null, tint = null, blood = null } = {}) {
   _wear = _wear || wearTexture(); _tread = _tread || treadTexture();
-  const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } };
-  if (labels) u.uAtlas = { value: labels };
-  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: VS, fragmentShader: FS, side, defines: labels ? (glow ? { LABELS: 1 } : { LABELS: 1, NOGLOW: 1 }) : {} });
+  const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } }, defines = {};
+  if (labels) { u.uAtlas = { value: labels }; defines.LABELS = 1; if (!glow) defines.NOGLOW = 1; }
+  if (skinned) { defines.CMAP = 1; if (map) defines.HASMAP = 1; u.uCMap = { value: map }; u.uTint = { value: new THREE.Vector3(...(tint || [1, 1, 1])) }; u.uBloodT = { value: blood }; u.uBloodAmt = { value: 0 }; side = THREE.DoubleSide; }
+  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: skinned ? VS_SKIN : VS, fragmentShader: FS, side, defines });
 }
 
 // Glass of a display. map = what the interior draws on it (legends, reticle, numbers); live = an optional picture of the outside

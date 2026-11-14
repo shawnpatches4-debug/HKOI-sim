@@ -12,7 +12,7 @@ import { CONDITIONS } from './scene3d.js';
 import { SeatUI } from '../app/seats.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { InteriorFx, hitList, fxState } from './interior_fx.js';
-import { CrewFigures, MEN } from './interior_crewfig.js';
+import { CrewFigures } from './interior_crewfig.js';
 
 const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), ease = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
@@ -102,7 +102,7 @@ export class Interior {
       ldr: { g: 'tur', planes: [[-0.66, -0.393, 0.42, -PI / 2, 0, 0, 0.3, 0.28], [-1.196, -0.1, 0.3, 0, PI / 2, 0, 0.5, 0.22], [-0.62, D2.FL + 0.003, 0.14, -PI / 2, 0, 0, 0.5, 0.5]] },
       drv: { g: 'hul', planes: [[0.496, D2.HF + 0.36, D2.DZ + 0.08, 0, -PI / 2, 0, 0.5, 0.4], [-0.496, D2.HF + 0.36, D2.DZ + 0.2, 0, PI / 2, 0, 0.42, 0.36], [0, D2.HF + 0.002, D2.DZ + 0.02, -PI / 2, 0, 0, 0.6, 0.5]] },
     }, g => mergeGeometries(g, false)); meshes += 5;
-    this.crewFig = new CrewFigures(() => cabMaterial(), G, () => new Kit(labels)); meshes += 16;
+    this.crewFig = null;   /* made when the asset folder is known: the crew models of the original simulator */
     this.stats.triangles = Math.round(tris); this.stats.meshes = meshes; this.stats.controls = this.controls.length; this.built = true;
   }
 
@@ -256,6 +256,7 @@ export class Interior {
     if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
     const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
     { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.5, lit.x * k), Math.min(0.48, lit.y * k), Math.min(0.46, lit.z * k)); }
+    SHARED.uCabY.value = _v.set(0, 0, 0).applyMatrix4(this.tur.matrixWorld).y; { const h = FX.last, U = SHARED.uSmokeAt.value; if (h && h.pen) { _v.copy(h.e).addScaledVector(h.d, 0.4).applyMatrix4(this.hul.matrixWorld); U.set(_v.x, _v.y, _v.z, (FX.fire ? 1.4 : 1.3 * Math.exp(-FX.lastAge / 7))); } else U.w = 0; }
     this.fx.update(FX, this.graphic);
     this._crew(s, FX, info, seat, loading);
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
@@ -280,12 +281,13 @@ export class Interior {
   // What each crewman is doing this moment, handed to the figures: where his head and hands are, how he is bearing up (from the battle's
   // crew model), whether he is hurt (the damage reports), whether a hit is about to land.
   _crew(s, FX, info, seat, loading) {
-    if (!this.crewOn) { if (this.crewFig._shown) { this.crewFig.update({}, 0); this.crewFig._shown = false; } return; } this.crewFig._shown = true;
+    if (!this.crewFig) { const base = s.volleys && s.volleys.assetBase; if (!base && !this._noBase) return; this.crewFig = new CrewFigures(o => cabMaterial(o), { tur: this.tur, hul: this.hul }, base); }
+    if (!this.crewOn) { this.crewFig.hide(); return; }
     const cs = this.crewS, P = this.part, T = s.battle.tank, gone = !!(cs && cs.abandoned), men = this._men || (this._men = { gnr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, cdr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, ldr: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] }, drv: { hands: [[0, 0, 0], [0, 0, 0]], head: [0, 0, 0] } });
     const brace = info.some(m => m.range < (m.drone ? 150 : 400)) ? 1 : 0, flinch = clamp(FX.shake, 0, 1), KEY = { gnr: 'in_gnr', cdr: 'in_cdr', ldr: 'in_ldr', drv: 'in_drv' };
     const grip = (part, x, y, z, out) => { part.updateMatrix(); _v.set(x, y, z).applyMatrix4(part.matrix); if (part.parent && part.parent !== this.tur && part.parent !== this.hul) { part.parent.updateMatrix(); _v.applyMatrix4(part.parent.matrix); } out[0] = _v.x; out[1] = _v.y; out[2] = _v.z; };
     for (const r of ['gnr', 'cdr', 'ldr', 'drv']) { const M = men[r], S = SEATS[KEY[r]], w = cs && cs.on ? cs.who[r] : null, bl = FX.blood[r] || null;
-      M.on = !gone; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff; M.noArms = M.bodyOnly && (r === 'cdr' || r === 'ldr');   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
+      M.on = !gone; M.load = r === 'ldr' ? this.loadF : -1; M.bodyOnly = this.mode === KEY[r] && !this.eyeOff;   /* from his own seat the viewer sees his hands on handgrips (gunner, driver) and his legs, not a torso; an arm reaching across to a panel would only block the view */ M.state = w ? w.state : 'steady'; M.frozen = !!(w && /freez|frozen/.test(String(w.busy || '') + String(w.why || '')));
       M.status = (w && w.status !== 'ok' && w.status !== 'wounded') || bl === 'killed' ? 'down' : (w && w.status === 'wounded') || bl === 'wounded' ? 'wounded' : 'ok'; M.blood = this.graphic ? bl : null; M.brace = brace; M.flinch = flinch;
       M.head[0] = S.eye[0]; M.head[1] = S.eye[1]; M.head[2] = S.eye[2]; }
     if (this.cupHatch >= 1 && men.cdr.state === 'steady') men.cdr.head[1] += SEATS.in_cdr.up * 0.75;   /* looking out through the ports when the hatch is up */
@@ -296,7 +298,7 @@ export class Interior {
       else { H[0][0] = -0.74; H[0][1] = -0.3; H[0][2] = 0.2; H[1][0] = -0.37; H[1][1] = DIM.GY + 0.0; H[1][2] = 0.3; } }
     if (s.battle.tank.ai && s.battle.tank.ai.ldr && s.battle.tank.ai.ldr.up && this.st.hatch > 0.6) { const M = men.ldr; M.head[0] = DIM.HAT[0]; M.head[1] = DIM.RF + 0.42; M.head[2] = DIM.HAT[1] - 0.05; M.hands[0] = [DIM.HAT[0] - 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; M.hands[1] = [DIM.HAT[0] + 0.2, DIM.RF + 0.1, DIM.HAT[1] - 0.3]; }
     if (gone) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); }   /* bailed out: hatches open, seats empty */
-    this.crewFig.update(men, s.battle.t); this.stats.crewTriangles = Math.max(this.stats.crewTriangles || 0, this.crewFig.triCount());
+    this.crewFig.update(men, s.battle.t); this.stats.crewTriangles = this.crewFig.triCount(); this.stats.crewReady = this.crewFig.ready; this.stats.crewFailed = this.crewFig.failed;
   }
   // The seat cameras. Called by the camera module in place of its own modes.
   drive(cams, dt) {

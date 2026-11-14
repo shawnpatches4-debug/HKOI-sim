@@ -53,6 +53,13 @@ async def main():
             for i in range(4): await pg.wait_for_timeout(4500); print('drive', await pg.evaluate('JSON.stringify({t: +__beta.battle.t.toFixed(1), v: +(__beta.battle.tank.v || 0).toFixed(1), steer: +__beta.interior.st.steer.toFixed(2), throttle: +__beta.interior.st.thr.toFixed(2), gear: +__beta.interior.st.gear.toFixed(2), hk: __beta.interior.hkState})')); await pg.screenshot(path=os.path.join(out, f'{tag}_third_drv_moving_{i}.png'), timeout=180000)
             await pg.evaluate('void __beta.setPlaying(false)')
             print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
+        if which in ('hits', 'hitsnight', 'crew2'):   # the crew models take a moment to arrive: wait for them before any picture with men in it
+            await pg.evaluate("void lk('in_ldr', 0, 0, 1)")
+            for i in range(80):
+                st = await pg.evaluate('JSON.stringify(__beta.interior.stats)')
+                if '"crewReady": true' in st or '"crewReady":true' in st or '"crewFailed":true' in st: break
+                await pg.wait_for_timeout(1500)
+            print('crew', st)
         if which in ('hits', 'hitsnight'):   # what a hit does inside, and the crew. A real penetrating hit is looked for first; if the battle gives none in time, one is staged (and the file names say so)
             await pg.evaluate("""void (window.stage = (age, kind) => { const b = __beta.battle, T = __beta.THREE; b.interiorHits = [{ T: b.t - age, pen: kind !== 'stop', kill: kind === 'kill', minor: false, s: kind === 'stop' ? 1 : kind === 'kill' ? 2 : 1.6, e: new T.Vector3(1.7, 0.35, -0.3), d: new T.Vector3(-1, -0.03, 0.1).normalize(), comps: kind === 'stop' ? {} : { gps: 'damaged', citv: 'destroyed' }, crew: kind === 'stop' ? {} : { gnr: kind === 'kill' ? 'killed' : 'wounded' }, idx: 7 }]; },
               window.crewAs = o => { const b = __beta.battle; b._cs0 = b._cs0 || b.crewState.bind(b); b.crewState = () => { const s = b._cs0(); s.on = true; s.abandoned = false; for (const r in o) Object.assign(s.who[r], o[r]); return s; }; })""")
