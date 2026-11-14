@@ -196,7 +196,9 @@
       let s = 0, sw = 0, hid = 0, see = 0;
       // nothing located yet: judge the spot against watchers all round at 1,500 m, so he settles where folds in the ground hide the hull from most directions
       const known = threats.length > 0; if (!known) { threats = []; for (let a = 0; a < 6.28; a += 0.5236) threats.push({ e: c.e + Math.sin(a) * 1500, n: c.n + Math.cos(a) * 1500, w: 1 }); }
-      for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : 1) + (tur ? 0.6 : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
+      // with no enemy located the first duty is to watch the ground: a spot the turret can see from counts for more than one that merely hides
+      const wHide = known ? 1 : 0.6, wSee = known ? 0.6 : 1;
+      for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : wHide) + (tur ? wSee : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
       s = sw ? s / sw : 0.6; if (!known) { threats = []; hid = 0; see = 0; }
       // open ground toward the enemy (or the way we are looking when no enemy is known): how much of the first 1,000 m is in view
       const dirs = threats.length ? threats.slice(0, 4).map(o => Math.atan2(o.e - c.e, o.n - c.n)) : look != null ? [look * DEG - 0.5, look * DEG, look * DEG + 0.5] : [0, 1.57, 3.14, 4.71];

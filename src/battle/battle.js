@@ -120,11 +120,11 @@
         const anchors = O && side == null ? [0.5, 0.35, 0.65, 0.2, 0.8, 1].map(f => ({ e: T0.e + (O.e - T0.e) * f, n: T0.n + (O.n - T0.n) * f })) : [{ e: T0.e, n: T0.n }];
         const inSide = s => side == null || Math.abs(angDiff(brgOf(T0.e, T0.n, s.e, s.n), side)) < 75;   /* a later wave comes from one side */
         const apart = (s, d) => taken.every(q => Math.hypot(q.e - s.e, q.n - s.n) > d);
-        const concealed = (spec, A) => { const out = [], lo = Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 80), hi = Math.max(lo + 100, Math.min(spec.rmax * 0.8, 2200)); for (let q = 0; q < 300 && out.length < 8; q++) { const a = r.random() * 6.283, d = lo + r.random() * (hi - lo), e = A.e + Math.sin(a) * d, n = A.n + Math.cos(a) * d; if (!W.inside(e, n) || !W.passable(e, n, false)) continue; if (q < 200 && W.veg(e, n).cls < 2) continue; out.push({ e, n, d, score: 0 }); } return out; };
+        const concealed = (spec, A) => { const out = [], lo = Math.max(spec.rmin * 1.3, spec.indirect ? 900 : 80, raid && spec.key !== 'rpg' ? raid.minR * 0.5 : 0), hi = Math.max(lo + 100, Math.min(spec.rmax * 0.8, 2200)); for (let q = 0; q < 300 && out.length < 8; q++) { const a = r.random() * 6.283, d = lo + r.random() * (hi - lo), e = A.e + Math.sin(a) * d, n = A.n + Math.cos(a) * d; if (!W.inside(e, n) || !W.passable(e, n, false)) continue; if (q < 200 && W.veg(e, n).cls < 2) continue; out.push({ e, n, d, score: 0 }); } return out; };
         for (const f of force) {
           const spec = TEAMS[f.type]; if (!spec) continue;
           let pool = []; if (spec.indirect) pool = this._hiddenSites(spec).filter(inSide);
-          else for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, raid && spec.key !== 'rpg' ? raid.minR : 0), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; }
+          else for (const far of (raid && spec.key !== 'rpg' ? [raid.minR, raid.minR * 0.75, raid.minR * 0.5, 0] : [0])) { if (pool.length >= 4) break; for (const A of anchors) { pool = pool.concat(W.ambushSites(A.e, A.n, { rmin: Math.max(spec.rmin * 1.3, far), rmax: Math.min(spec.rmax * 0.8, 3800), agl: spec.agl, salt: this.seed * 13 + this.units.length + pool.length })); if (pool.length >= 12) break; } }   /* a stand-off group that finds no firing point that far out comes closer in steps rather than giving up its sight line */
           if (side != null) { const p2 = pool.filter(inSide); if (p2.length) pool = p2; }
           for (let k = 0; k < (f.n || 1); k++) {
             let pick = pool.find(s => apart(s, 350)) || pool.find(s => apart(s, 200)) || pool.find(s => apart(s, 120));
