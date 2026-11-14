@@ -1,5 +1,6 @@
 // node tests/battle/vehicles_off.js [--rebase]
-// Enemy vehicles, transport and the enemy commander (src/battle/enemyveh.js, enemycdr.js) are OFF unless a force asks for them.
+// Enemy vehicles, transport and the enemy commander (src/battle/enemyveh.js, enemycdr.js) are OFF unless a force asks for them,
+// and the enemy teams' newer judgement (enemyAI, on by default since 14 Nov) is switched off here with enemyAI: 'classic'.
 // With them off every battle must be exactly the battle from before those modules existed: 24 battles (four kinds of ground, four
 // crew levels, three missions, one or two waves, three forces, crew stress on and off) are compared with
 // tests/battle/vehicles_off_baseline.json, which was written from the code BEFORE any hook went into battle.js or tankai.js.
@@ -18,7 +19,7 @@ const FORCES = [
 const CASES = []; for (let i = 0; i < 24; i++) CASES.push({ biome: BIOMES[i % 4], mapSeed: 3 + (i % 3) * 4, seed: i + 1, skill: SKILLS[(i >> 1) % 4], mission: MISSIONS[i % 3], waves: 1 + (i % 2), force: FORCES[i % 3], crewStress: i % 4 < 2 });
 const sum = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); };
 const digest = b => ({ summary: b.summary(), over: b.over ? b.over.result : null, log: b.log.length, events: (b.events || []).length, logSum: sum(b.log.map(l => l.t + '|' + l.text + '|' + (l.why || '')).join('\n')), evSum: sum(JSON.stringify(b.events || [])), units: sum(JSON.stringify(b.units.map(u => [u.id, u.type, +u.e.toFixed(2), +u.n.toFixed(2), u.state, u.ammo, u.alive]))) });
-const runCase = c => { const b = new Battle.Battle(Object.assign({ cfg, lookup }, c)); b.run(360); return b; };
+const runCase = c => { const b = new Battle.Battle(Object.assign({ cfg, lookup, enemyAI: 'classic' /* the teams' newer judgement off as well: it changes battles on purpose (tests/battle/standard.js measures by how much) */ }, c)); b.run(360); return b; };
 if (REBASE) { fs.writeFileSync(BASE, JSON.stringify(CASES.map(c => digest(runCase(c))), null, 1)); console.log('baseline rewritten:', BASE); process.exit(0); }
 const base = JSON.parse(fs.readFileSync(BASE, 'utf8')); let same = 0, fail = 0;
 CASES.forEach((c, i) => { const d = JSON.stringify(digest(runCase(c))); if (d === JSON.stringify(base[i])) same++; else { fail++; console.log('FAIL battle', i, c.biome, c.skill, c.mission, '\n   now ', d.slice(0, 400), '\n   was ', JSON.stringify(base[i]).slice(0, 400)); } });

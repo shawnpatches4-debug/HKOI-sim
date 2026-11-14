@@ -74,7 +74,7 @@
           st: CAMP.fresh(this.cfg0), known: [],   // known = enemy positions the crew has located: { id, e, n, t }
         };
         this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
-        this.xOpt = { commander: opt.commander || false };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle); off by default */
+        this.xOpt = { commander: opt.commander || false, ai: opt.enemyAI === 'classic' ? 'classic' : 'v2' };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle), off by default; enemyAI 'classic' switches off the teams' newer judgement (kept for the tests that compare with stored battles) */
         this.raid = opt.raid || null;   /* { minR, window }: the old simulator's kind of raid: launchers no closer than minR metres, shots spread over window seconds */
         // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
         if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }
@@ -279,7 +279,7 @@
       // and against the distance to walk. The route prefers vegetation and ground the vehicle cannot see.
       _displace(u, why, text, cand) {
         if (!u.alive || u.gone) return false;
-        if ((u.veh || u.rideVeh) && this._vehDisplaceHook) { const x = this._vehDisplaceHook(u, why, text, cand); if (x != null) return x; }   /* enemyveh.js: a vehicle shifts position its own way; a team with a truck may ride */
+        if ((u.veh || u.rideVeh || u.cdrStay) && this._vehDisplaceHook) { const x = this._vehDisplaceHook(u, why, text, cand); if (x != null) return x; }   /* enemyveh.js: a vehicle shifts position its own way; a team with a truck may ride; enemycdr.js: a team the commander has told to stay for a second salvo does not scoot after its first shot */
         const W = this.world, T = this.tank, sp = u.spec, Bv = this.belief || T; if (u.ammo <= 0) { u.state = 'spent'; return false; }
         if (u.state === 'moving') return true;   /* already packing up or on the way: one decision at a time */
         // other firing points near the team: ground within 450 m of it that looks onto where the vehicle is believed to be, from inside the weapon's reach
