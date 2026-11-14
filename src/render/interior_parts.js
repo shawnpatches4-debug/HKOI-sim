@@ -19,7 +19,7 @@ export const K = { PAINT: 0.0, METAL: 0.25, RUBBER: 0.5, TREAD: 0.75, CLOTH: 1.0
 
 // values every interior material shares (one object, so one update per frame reaches them all)
 export const SHARED = {
-  uInside: { value: 1 },                                   // 1 from a seat (drawn in front of the outside model), 0 in the cutaway
+  uInside: { value: 1 }, uInsideF: { value: 1 },             // the same flag for the fragment stage                                   // 1 from a seat (drawn in front of the outside model), 0 in the cutaway
   uExpo: { value: 1 },                                     // undoes the outside exposure, so the inside looks the same in every weather
   uLampPos: { value: Array.from({ length: NLAMP }, () => new THREE.Vector3()) },
   uLampCol: { value: Array.from({ length: NLAMP }, () => new THREE.Vector3()) },
@@ -30,6 +30,10 @@ export const SHARED = {
   uInd: { value: new Float32Array(NIND) },                 // brightness of each indicator light, 0 to 1
   uBack: { value: 0.35 },                                  // panel legend lighting
   uTime: { value: 0 },
+  uSimT: { value: 0 },                                     // the battle clock (what the hit effects run on)
+  uSmoke: { value: 0 }, uSmokeCol: { value: new THREE.Vector3(0.3, 0.3, 0.3) },   // smoke and dust hanging in the compartment
+  uGlitch: { value: 0 },
+  uCabY: { value: 0 }, uSmokeAt: { value: new THREE.Vector4(0, 0, 0, 0) },   // height of the turret ring in the world; where the latest penetration came in (w = how strongly smoke still pours from it)                                   // displays tearing after a hit
 };
 
 const DEPTH_VS = /* glsl */`
@@ -58,9 +62,27 @@ const VS = /* glsl */`
     cabDepth(viewMatrix * w);
   }`;
 
+// the same for the crew figures: their joints are applied first (three.js does the joint arithmetic), then everything as above
+const VS_SKIN = /* glsl */`
+  #include <skinning_pars_vertex>
+  varying vec3 vW; varying vec3 vN; varying vec3 vO; varying vec3 vON; varying vec4 vC; varying vec2 vUv;
+  ${DEPTH_VS}
+  void main() {
+    vec3 objectNormal = normal; vec3 transformed = position;
+    #include <skinbase_vertex>
+    #include <skinnormal_vertex>
+    #include <skinning_vertex>
+    vO = transformed; vON = objectNormal; vC = vec4(0.0, 0.0, 0.0, 1.0); vUv = uv;
+    vec4 w = modelMatrix * vec4(transformed, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * objectNormal);
+    cabDepth(viewMatrix * w);
+  }`;
+
 const FS = /* glsl */`
   uniform vec3 uLampPos[${NLAMP}]; uniform vec3 uLampCol[${NLAMP}]; uniform float uLampR[${NLAMP}];
-  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell;
+  uniform vec3 uAmb; uniform float uExpo; uniform float uBack; uniform float uShell; uniform float uSmoke; uniform vec3 uSmokeCol; uniform float uInsideF; uniform float uSimT; uniform float uCabY; uniform vec4 uSmokeAt;
+  #ifdef CMAP
+    uniform sampler2D uCMap; uniform vec3 uTint; uniform sampler2D uBloodT; uniform float uBloodAmt; uniform float uNearCut;
+  #endif
   uniform sampler2D uWear; uniform sampler2D uTread;
   #ifdef LABELS
     uniform sampler2D uAtlas;
@@ -75,9 +97,23 @@ const FS = /* glsl */`
     cabClip(vW, uShell);
     vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
     vec3 v = normalize(cameraPosition - vW);
-    float kind = vC.a; vec3 alb = vC.rgb; float specK = 0.10; float shin = 18.0; float glow = 0.0;
+    float kind = vC.a; float flat_ = step(1.5, kind); kind -= 2.0 * flat_; vec3 alb = vC.rgb;
+    #ifdef CMAP
+      if (uNearCut > 0.0 && distance(cameraPosition, vW) < uNearCut) discard;   /* the viewer's own head, collar and chest are left out; his arms and legs stay */
+      alb = uTint;
+      #ifdef HASMAP
+        alb *= texture2D(uCMap, vUv).rgb * 1.5;
+      #endif
+      { vec4 bt = texture2D(uBloodT, vUv * 3.0); alb = mix(alb, bt.rgb * 0.75, bt.a * uBloodAmt); }   /* blood soaking the uniform */
+    #endif
+    float specK = 0.10; float shin = 18.0; float glow = 0.0; float occ = 1.0;
     #ifdef LABELS
-      vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05; glow = uBack * 0.22;
+      vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard; alb = t.rgb; specK = 0.05;
+      #ifdef NOGLOW
+        specK = 0.22; shin = 26.0;
+      #else
+        glow = uBack * 0.22;
+      #endif
     #else
       vec3 w3 = tri(uWear, vO, vON, 1.6);
       if (kind < 0.12) { alb *= 0.62 + 0.5 * w3.r; alb = mix(alb, vec3(0.16, 0.14, 0.12), (1.0 - w3.g) * 0.55); specK = 0.10 + 0.10 * w3.b; shin = 14.0; }
@@ -86,8 +122,15 @@ const FS = /* glsl */`
       else if (kind < 0.87) { vec3 tr = tri(uTread, vO, vON, 5.0); alb *= 0.45 + 0.8 * tr.r; specK = 0.35 * tr.r; shin = 24.0; }
       else { alb *= 0.75 + 0.35 * w3.r; specK = 0.0; }
     #endif
+    #ifndef LABELS
+    if (flat_ > 0.5) {   // distance from the nearest edge of this face, in metres: darker in toward the joint (as if less light reached it), and a thin worn line where paint rubs off the corner
+      vec2 duv = max(fwidth(vUv), vec2(1e-5)); float mpp = max(length(fwidth(vW)), 1e-5) * 0.7; vec2 e = min(vUv, 1.0 - vUv) / duv * mpp; float m = min(e.x, e.y);
+      occ = mix(0.66, 1.0, smoothstep(0.0, 0.022, m));
+      float rub = (1.0 - smoothstep(0.0012, 0.0035, m)) * (0.35 + 0.65 * w3.b); if (kind < 0.12) alb = mix(alb, vec3(0.42, 0.43, 0.41), rub * 0.55); else if (kind < 0.37) alb += rub * 0.10;
+    }
+    #endif
     vec3 dif = uAmb; vec3 spc = vec3(0.0);
-    float low = mix(0.62, 1.0, smoothstep(-1.1, 0.3, vO.y));   /* less light reaches the floor and the corners under the consoles */
+    float low = mix(0.52, 1.0, smoothstep(-1.1, 0.3, vO.y)) * occ;   /* less light reaches the floor and the corners under the consoles */
     for (int i = 0; i < ${NLAMP}; i++) {
       vec3 L = uLampPos[i] - vW; float d = length(L); L /= max(d, 1e-3);
       float r = d / uLampR[i]; float att = 1.0 / (1.0 + 6.0 * r * r) * clamp(1.6 - r * 0.8, 0.0, 1.0);
@@ -96,6 +139,10 @@ const FS = /* glsl */`
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
     vec3 col = alb * dif * low + spc * specK * low + alb * glow;
+    {   // smoke: it gathers under the roof and thins toward the floor, drifts slowly, and is thickest where the plate was holed
+      float h = vW.y - uCabY, lay = mix(0.3, 1.75, smoothstep(-0.95, 0.5, h)), drift = 0.72 + 0.38 * sin(vW.x * 2.3 + uSimT * 0.35 + h * 2.0) * sin(vW.z * 1.9 - uSimT * 0.27 + h * 3.1);
+      vec3 dv = vW - uSmokeAt.xyz; float dens = uSmoke * lay * drift + uSmokeAt.w * exp(-dot(dv, dv) * 1.4);
+      if (dens > 0.001) { float sd = uInsideF > 0.5 ? min(length(cameraPosition - vW), 2.6) : 0.3; col = mix(col, uSmokeCol, 1.0 - exp(-dens * sd * 1.6)); } }
     gl_FragColor = vec4(col * uExpo, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -127,32 +174,34 @@ function treadTexture() {
 let _wear = null, _tread = null;
 // The painted-and-worn material every solid part of the interior uses. shell = true for the walls, roof and hull tub (the parts
 // the cutaway view slices away); labels = the label sheet for the mesh that carries the placards.
-export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide } = {}) {
+export function cabMaterial({ shell = false, labels = null, side = THREE.FrontSide, glow = true, skinned = false, map = null, tint = null, blood = null } = {}) {
   _wear = _wear || wearTexture(); _tread = _tread || treadTexture();
-  const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } };
-  if (labels) u.uAtlas = { value: labels };
-  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: VS, fragmentShader: FS, side, defines: labels ? { LABELS: 1 } : {} });
+  const u = { ...SHARED, uWear: { value: _wear }, uTread: { value: _tread }, uShell: { value: shell ? 1 : 0 } }, defines = {};
+  if (labels) { u.uAtlas = { value: labels }; defines.LABELS = 1; if (!glow) defines.NOGLOW = 1; }
+  if (skinned) { defines.CMAP = 1; if (map) defines.HASMAP = 1; u.uCMap = { value: map }; u.uTint = { value: new THREE.Vector3(...(tint || [1, 1, 1])) }; u.uBloodT = { value: blood }; u.uBloodAmt = { value: 0 }; u.uNearCut = { value: 0 }; side = THREE.DoubleSide; }
+  return new THREE.ShaderMaterial({ uniforms: u, vertexShader: skinned ? VS_SKIN : VS, fragmentShader: FS, side, defines });
 }
 
 // Glass of a display. map = what the interior draws on it (legends, reticle, numbers); live = an optional picture of the outside
 // rendered each frame; mode 0 colour picture, 1 green one-colour picture, -1 the same with light and dark swapped.
 export function screenMaterial(map, live = null) {
   const u = { uInside: SHARED.uInside, uExpo: SHARED.uExpo, uClip: SHARED.uClip, uClipOn: SHARED.uClipOn, uTime: SHARED.uTime,
-    uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
+    uGlitch: SHARED.uGlitch, uSimT: SHARED.uSimT, uWeak: { value: 0 }, uMap: { value: map }, uLive: { value: live }, uHasLive: { value: live ? 1 : 0 }, uBright: { value: 1 }, uMode: { value: 1 }, uGain: { value: 1 }, uTint: { value: new THREE.Vector3(0.55, 1.0, 0.62) } };
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vW; ${DEPTH_VS}
       void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; cabDepth(viewMatrix * w); }`,
-    fragmentShader: /* glsl */`uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint;
+    fragmentShader: /* glsl */`uniform float uGlitch; uniform float uWeak; uniform float uSimT; uniform sampler2D uMap; uniform sampler2D uLive; uniform float uHasLive; uniform float uBright; uniform float uMode; uniform float uGain; uniform float uExpo; uniform float uTime; uniform vec3 uTint;
       varying vec2 vUv; varying vec3 vW; ${CLIP_FS}
       void main() {
         cabClip(vW, 0.0);
+        float gl = clamp(max(uGlitch, uWeak), 0.0, 1.0); vec2 uvg = vUv; if (gl > 0.001) { float row = floor(vUv.y * 22.0) + floor(uSimT * 27.0) * 7.0; uvg.x += (fract(sin(row * 12.9898) * 43758.5453) - 0.5) * 0.22 * gl * step(0.45, fract(sin(row * 78.233) * 43758.5453)); }   /* torn rows */
         vec3 c = vec3(0.004, 0.008, 0.006);
         if (uHasLive > 0.5) {
-          vec3 l = texture2D(uLive, vUv).rgb * uGain; l = l / (l + vec3(0.6));
+          vec3 l = texture2D(uLive, uvg).rgb * uGain; l = l / (l + vec3(0.6));
           if (abs(uMode) > 0.5) { float g = dot(l, vec3(0.3, 0.55, 0.15)); g = smoothstep(0.02, 0.85, g); if (uMode < 0.0) g = 1.0 - g; l = uTint * g; }
           c = l * (0.92 + 0.08 * sin(vUv.y * 420.0));
         }
-        vec4 o = texture2D(uMap, vUv); c = mix(c, o.rgb, o.a);
+        vec4 o = texture2D(uMap, uvg); c = mix(c, o.rgb, o.a); c *= 1.0 - 0.55 * gl * step(0.6, fract(sin(floor(uSimT * 23.0) * 91.7) * 43758.5));
         gl_FragColor = vec4(c * uBright * 1.25 * uExpo, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -177,7 +226,7 @@ export function glassMaterial() {
   const c = canvas(128, 64), x = c.getContext('2d'), R = rnd(11); x.clearRect(0, 0, 128, 64);
   for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(205,215,200,${0.03 + R() * 0.07})`; x.fillRect(R() * 128, 0, 1 + R() * 5, 64); }
   for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(60,55,45,${0.08 + R() * 0.15})`; x.beginPath(); x.arc(R() * 128, R() * 64, 0.5 + R() * 1.6, 0, 7); x.fill(); }
-  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(120,150,140,0.20)'); g.addColorStop(0.3, 'rgba(120,150,140,0.03)'); g.addColorStop(1, 'rgba(120,150,140,0.12)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
+  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(95,140,125,0.34)'); g.addColorStop(0.3, 'rgba(105,145,130,0.10)'); g.addColorStop(1, 'rgba(120,150,140,0.12)'); x.fillStyle = g; x.fillRect(0, 0, 128, 64);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.ShaderMaterial({ uniforms: { uInside: SHARED.uInside, uMap: { value: t }, uExpo: SHARED.uExpo, uDay: { value: new THREE.Vector3(1, 1, 1) } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`varying vec2 vUv; ${DEPTH_VS} void main() { vUv = uv; cabDepth(modelViewMatrix * vec4(position, 1.0)); }`,
@@ -232,12 +281,12 @@ export class Kit {
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
     if (!this.b.has(bucket)) this.b.set(bucket, []); this.b.get(bucket).push(g); this.tris += (g.index ? g.index.count : n) / 3; return this;
   }
-  box(b, w, h, d, col, x, y, z, rx, ry, rz) { this._solid = true; return this.geo(b, new THREE.BoxGeometry(w, h, d), col, x, y, z, rx, ry, rz); }
+  box(b, w, h, d, col, x, y, z, rx, ry, rz) { this._solid = true; return this.geo(b, new THREE.BoxGeometry(w, h, d), [col[0], col[1] + 2],   /* +2 marks a flat-faced piece: the shader shades and wears its edges */ x, y, z, rx, ry, rz); }
   // cylinder along the y axis unless turned; seg sides
   cyl(b, r0, r1, len, col, x, y, z, rx, ry, rz, seg = 12, open = false) { this._solid = !open; return this.geo(b, new THREE.CylinderGeometry(r0, r1, len, seg, 1, open), col, x, y, z, rx, ry, rz); }
   ball(b, r, col, x, y, z, sx = 1, sy = 1, sz = 1) { this._solid = true; return this.geo(b, new THREE.SphereGeometry(r, 10, 7), col, x, y, z, 0, 0, 0, sx, sy, sz); }
   ring(b, R, r, col, x, y, z, rx, ry, rz, seg = 28, arc = Math.PI * 2) { return this.geo(b, new THREE.TorusGeometry(R, r, 6, seg, arc), col, x, y, z, rx, ry, rz); }
-  plane(b, w, h, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.PlaneGeometry(w, h), col, x, y, z, rx, ry, rz); }
+  plane(b, w, h, col, x, y, z, rx, ry, rz) { return this.geo(b, new THREE.PlaneGeometry(w, h), [col[0], col[1] + 2], x, y, z, rx, ry, rz); }
   // a pipe or cable through the given points
   tube(b, pts, r, col, seg = 5) { const c = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2]))); return this.geo(b, new THREE.TubeGeometry(c, Math.max(6, pts.length * 4), r, seg), col); }
   // a placard: text drawn on the label sheet, placed as a small plate facing +z of the current frame at x, y, z (h = plate height in metres)
