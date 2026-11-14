@@ -10,6 +10,29 @@ Beta 0.20 is what Shawn last tested from the hosted page; `main` is ahead of it 
 - Views: orbit, chase, commander, gunner sight, overhead, enemy sight, missile; topographic map with viewshed and vehicle placement.
 - Sound: synthesised effects (30 mm, explosions, Trophy, launches, drones, turbine, weather, machine guns, 120 mm) and recorded crew/enemy voices. NOBODY HAS CONFIRMED BY EAR that any of it sounds right.
 
+## RELEASE BUILD IN PROGRESS (started 14 Nov 2026, after Shawn's verdict on 0.32)
+Shawn: "this sim kinda sucks in the current state ... use as many tokens and spend as much time as you want building a finalized product.
+No more micro patches. You know what I want to see, now deliver." So: ONE release, published when it holds together, not a stream of
+small builds. The requirement list is docs/OVERHAUL_SPEC.md; the old simulator's lessons are docs/LESSONS_FROM_V40.md.
+Do NOT publish intermediate builds. Commit and push at every checkpoint as always.
+
+How it is being built: the lead session integrates and owns the simulation core (src/battle/*); helper sessions each own one part in
+their own git worktree (brief: docs/AGENT_BRIEF.md; `bash tools/link_assets.sh` in a worktree; every browser run behind
+`bash tools/browser.sh ...` so only one headless Chrome runs at a time: two at once crashed the machine twice).
+
+WAVE 1 (running; branches are the worktrees listed by `git worktree list`):
+- Graphics: terrain material, vegetation, ground cover, sky and clouds, buildings, cinematic finish (terrain.js, scenery.js, env.js, scene3d.js). Port 8772.
+- Effects: the HKOI engagement made readable (tracers, blooms, highlighted cloud, guidance line that is cut), missiles and drones (incl. drones flying in), Trophy, explosions, marks (fx.js, volleyview.js). Port 8773.
+- Interior: the old page's turret and hull interior and the four crew seats plus cutaway, ported from src/cab*.js to an ES module, WITHOUT crew figures (parked; proposal pictures only). Port 8774.
+- Lead: battles in waves with lulls (multi-minute), pacing and balance, the "run the numbers" engine (four setups on the same battles).
+WAVE 2 (after wave 1 is merged): film director with captions, slow motion and replays from another angle; title screen over a live
+battle, clean HUD, simple and engineer modes (this helper will own src/app/main.js and index.tpl.html); armour and damage model with
+X-ray of the hit; run-the-numbers page, debrief with score, ladder of ten raids; sound once Shawn's packs arrive (only the crew voice
+pack has arrived so far).
+THEN: merge everything, full check on every mission, force, terrain and condition, performance figures, ONE publish, Notion entry.
+If a helper's branch exists and is not merged, review its report (it is in the session transcript only: if lost, read the branch's
+commits and its sheets under the scratchpad) and merge it by hand.
+
 ## State after the Claude Code session of 13 Nov (beta 0.24, published, not yet confirmed by Shawn)
 Priorities 1 to 5 are all in the code and on the beta page: enemy AI and stride (0.21), enemy sight reticles to true scale + team menu + close-up camera (src/app/enemyviews.js, cameras.js), tank animation (recovered from the live page, see WORKLOG), and a rebuild of enemy weapon handling that Shawn asked for mid-session.
 Waiting on Shawn's eyes: all of the above. Known gaps are listed in the last WORKLOG entry.
