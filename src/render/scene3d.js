@@ -50,6 +50,8 @@ export class Scene3D {
     this.world = world; this.canvas = canvas;
     const R = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });   // smoothing is done in the film pipeline's own target, not here
     this.pr = 1; R.setPixelRatio(1); R.shadowMap.autoUpdate = false; this.frameN = 0; this.emaMs = 16; this.prHold = 0; R.toneMapping = THREE.ACESFilmicToneMapping; R.outputColorSpace = THREE.SRGBColorSpace; R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap; R.info.autoReset = false;
+    /* a shader that fails to build on this machine's graphics card is said on screen, not left as a model that silently is not drawn */
+    R.debug.onShaderError = (gl, prog, vs, fs) => { const log = [gl.getProgramInfoLog(prog), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs)].filter(Boolean).join(' | ').replace(/\s+/g, ' ').slice(0, 400); console.error('shader failed to build:', log); this.shaderErrs = (this.shaderErrs || 0) + 1; const c = typeof document !== 'undefined' && document.getElementById('errbar'); if (c) { c.hidden = false; c.textContent = `A drawing program failed to build on this graphics card (${this.shaderErrs}×). Please send this line to Claude: ${log}`; } };
     const sc = this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 30000);
     this.controls = new OrbitControls(this.camera, canvas); this.controls.enableDamping = true; this.controls.maxPolarAngle = Math.PI * 0.495; this.controls.minDistance = 4; this.controls.maxDistance = 9000;
