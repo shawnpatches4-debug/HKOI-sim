@@ -1,4 +1,4 @@
-# python3 sheet.py <outbase> <kind> [dist] : 4 states x 3 angles pose sheet of one enemy team kind (run with the CSP server up, BASE set)
+# python3 sheet.py <outbase> <kind> [dist] : 4 states x 3 angles pose sheet of one enemy team kind (run with the CSP server up, BASE set) The walk and run rows show the team standing ready to move (the map point does not move here); use seq.py for the movement itself.
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 from PIL import Image
@@ -20,7 +20,7 @@ async def main():
             await pg.wait_for_timeout(1000)
         if os.environ.get('FORCE'): await pg.evaluate('[...document.querySelectorAll("#o-force button")].find(b => b.textContent.includes(%s)).click()' % json.dumps(os.environ['FORCE'])); await pg.wait_for_timeout(500)
         await pg.evaluate('document.getElementById("go").click()'); await pg.wait_for_timeout(1500); await pg.evaluate('__beta.setPlaying(false)')
-        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight{display:none!important}'); await pg.evaluate('void (' + POSE + ')'); 0 and print(await pg.evaluate('JSON.stringify([__beta.state(), __beta.battle.units.map(u => u.spec.key + ":" + u.type), !!__beta.battle.tank])'))
+        await pg.add_style_tag(content='#bar,#status,#log,#units,#marks,#caption,#hud,#esight,#crew,#replay{display:none!important}'); await pg.evaluate('void (' + POSE + ')'); 0 and print(await pg.evaluate('JSON.stringify([__beta.state(), __beta.battle.units.map(u => u.spec.key + ":" + u.type), !!__beta.battle.tank])'))
         ims = []
         for m in modes:
             for a in angs:

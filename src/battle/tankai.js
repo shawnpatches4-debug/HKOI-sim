@@ -71,10 +71,10 @@
       const T = this.tank, M = MG[wKey], u = tg.u, R = tg.R, moving = (T.v || 0) > 1.5, heavy = R <= M.heavy;
       T[wKey] = Math.max(0, (T[wKey] || 0) - M.rounds); this._suppress(u, heavy, BURST);
       const open = this.world.veg(u.e, u.n).cls < 2, caught = u.state === 'moving' || u.state === 'setup';   /* a team caught moving or setting up, or lying in the open, is far easier to hit than one dug in under trees */
-      const p = Math.min(0.8, M.kill * Math.exp(-R / M.fall) * (caught ? 1.6 : 1) * (open ? 1.25 : 0.8)) * (moving ? 0.6 : 1), hit = !(opt && opt.noKill) && this.rng.random() < p;
+      const p = Math.min(0.8, M.kill * Math.exp(-R / M.fall) * (caught ? 1.6 : 1) * (open ? 1.25 : 0.8)) * (moving ? 0.6 : 1) * this._crewMul('aim_' + wKey) /* crew.js: stress widens the aim */, hit = !(opt && opt.noKill) && this.rng.random() < p;
       const rec = { t: this.t, dur: BURST, id: u.id, e: tg.k.e, n: tg.k.n, R, w: wKey, coax: wKey === 'coax', m2: wKey === 'm2', m240: wKey === 'm240', hit }; this._mg = rec; (this.mgs = this.mgs || []).push(rec);
       if (opt && opt.first) this.say(this.t, 'tank', wKey === 'm2' ? 'CDR' : wKey === 'm240' ? 'LDR' : 'GNR', `${M.name} engages ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m.`, opt.why || `located team in view inside ${M.rmax} m; ${heavy ? 'accurate fire: the team is pinned' : 'long range: harassing fire only'}`);
-      if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; tg.k.done = true; this.say(this.t + BURST, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by ${M.name.toLowerCase()} fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst at this range${moving ? ', firing on the move' : ''}`); }
+      if (hit) { u.alive = false; u.state = 'dead'; this.killedByMg = (this.killedByMg || 0) + 1; tg.k.done = true; this.ev(this.t + BURST, 'team_lost', { uid: u.id, by: wKey }); this.say(this.t + BURST, 'tank', 'GNR', `${u.spec.name} #${u.id + 1} knocked out by ${M.name.toLowerCase()} fire at ${Math.round(R / 10) * 10} m.`, `about ${Math.round(p * 100)}% per burst at this range${moving ? ', firing on the move' : ''}`); }
       return rec;
     },
 
@@ -84,9 +84,9 @@
       const see = SEEING[this.cond] == null ? 1 : SEEING[this.cond];
       for (const u of this.units) { if (!u.alive || u.gone || u.known) continue; const R = Math.hypot(u.e - T.e, u.n - T.n); if (R > 4000) continue; if (!W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) continue;
         const veg = W.veg(u.e, u.n).cls, cover = veg >= 4 ? 0.3 : veg >= 2 ? 0.5 : 1, close = R < 400 ? 6 : R < 800 ? 3 : R < 1500 ? 1.5 : 1,   /* men a few hundred metres away fill the thermal sight: far easier to pick out than at two kilometres */ moving = u.state === 'moving' && this.t >= (u.packUntil || 0), busy = u.state === 'setup' || (u.state === 'moving' && !moving);
-        const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30;
-        const p = Math.min(0.6, 0.03 * Math.exp(-R / 1500) * cover * close * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1));   /* chance per second (assumed) */
-        if (this.rng.random() < p) { u.known = true; if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t });
+        const inSector = Math.abs(angDiff(brgOf(T.e, T.n, u.e, u.n), T.tur)) < 30 * this._crewMul('arc');   /* crew.js: tunnel vision narrows the gunner's sector */
+        const p = Math.min(0.6, 0.03 * Math.exp(-R / 1500) * cover * close * (moving ? 6 : busy ? 2 : 1) * (inSector ? 2 : 1) * see * ((T.v || 0) > 1.5 ? 0.5 : 1) * this._crewMul(inSector ? 'scan_gnr' : 'scan_cdr'));   /* chance per second (assumed); crew.js: a stressed man notices less */
+        if (this.rng.random() < p) { u.known = true; this.ev(this.t, 'located', { uid: u.id, how: 'thermal' }); if (!T.known.some(k => k.id === u.id)) T.known.push({ id: u.id, e: u.e, n: u.n, t: this.t });
           this.say(this.t, 'tank', inSector ? 'GNR' : 'CDR', `${inSector ? 'Gunner' : 'Commander'} picks up a heat signature: ${u.spec.name} #${u.id + 1} at ${Math.round(R / 10) * 10} m${veg >= 4 ? ' in the trees' : veg >= 2 ? ' in scrub' : ' in the open'}.`, `thermal scan, about ${(p * 100).toFixed(1)}% a second for this team here`); } }
       // a located team that is still in view stays tracked as it moves
       for (const k of T.known) { if (k.done) continue; const u = this.units.find(q => q.id === k.id); if (u && u.alive && (u.e !== k.e || u.n !== k.n) && W.los(T.e, T.n, 2.6, u.e, u.n, 0.9).clear) { k.e = u.e; k.n = u.n; k.t = this.t; } }
@@ -100,23 +100,23 @@
         const forced = A.cfq.length && this.t >= A.cfq[0].t ? A.cfq[0] : null;   /* fire at a launcher whose missile is in the air (decided when the engagement was worked out) */
         let pick = null; if (forced && forced.u.alive) pick = { k: forced.k, u: forced.u, R: forced.R, los: true, danger: 4, forced: true };
         else pick = tg.find(q => q.los && q.R <= M.rmax && q.R > 15 && !q.moving) || tg.find(q => q.los && q.R <= M.rmax && q.R > 15) || null;
-        if (T.m2 <= 0) pick = null;
+        if (T.m2 <= 0 || this._crewOut('crows')) pick = null;   /* crew.js: commander frozen, down or on the main gun */
         if (!pick) { C.tgt = null; A.w.m2 = T.m2 > 0 ? 'scanning' : 'out of ammunition'; }
         else { const want = brgOf(T.e, T.n, pick.k.e, pick.k.n), d = angDiff(want, C.brg); C.brg = (C.brg + clamp(d, -M.slew * this.dt, M.slew * this.dt) + 360) % 360;
-          if (C.tgt !== pick.u.id) { C.tgt = pick.u.id; C.readyAt = this.t + (pick.forced ? 0 : M.acquire); }
+          if (C.tgt !== pick.u.id) { C.tgt = pick.u.id; C.readyAt = this.t + (pick.forced ? 0 : M.acquire + this._crewAdd('handover', M.acquire) /* crew.js */); }
           A.w.m2 = `${pick.u.spec.name} #${pick.u.id + 1}, ${Math.round(pick.R / 10) * 10} m: ${pick.danger === 4 ? 'its missile is in the air' : pick.danger === 3 ? 'it can fire on us' : pick.danger === 2 ? 'reloading' : 'moving'}`;
           if (Math.abs(d) <= 2 && this.t >= C.readyAt && this.t >= C.busyUntil) { const first = C.said !== pick.u.id; C.said = pick.u.id; this._burst('m2', pick, { first, noKill: pick.forced, why: pick.forced ? 'fires at the launch signature to shake the gunner\'s aim while his missile is in flight' : null }); C.busyUntil = this.t + BURST + PAUSE; } } }
       // the loader and his M240
       { const L = A.ldr, M = MG.m240, inbound = this._volleyActive(), near = tg.filter(q => q.los && q.R <= M.rmax && q.R > 15), close = near.filter(q => q.R <= 600);
         const gunNeedsHim = !T.loaded && T.main > 0 && tg.some(q => q.los && q.R > M.rmax && q.danger >= 3);   /* a round is needed for a target the machine guns cannot reach */
-        const want = L.ok && T.m240 > 0 && (close.length > 0 || (near.length > 0 && !inbound && !gunNeedsHim));
+        const want = L.ok && T.m240 > 0 && !this._crewOut('m240') /* crew.js: buttoned up, frozen or down */ && (close.length > 0 || (near.length > 0 && !inbound && !gunNeedsHim));
         if (this.t >= L.busyUntil) {
           if (want && !L.up) { L.up = true; L.busyUntil = this.t + LDR_UP_S; L.upAt.push([this.t, 1e9]); this.say(this.t, 'tank', 'CDR', `Loader up on the M240: ${close.length ? 'enemy team inside 600 m' : 'located team inside 800 m and nothing inbound'}.`, 'while he is up the main gun cannot be reloaded'); }
           else if (!want && L.up) { L.up = false; L.busyUntil = this.t + LDR_DOWN_S; if (L.upAt.length) L.upAt[L.upAt.length - 1][1] = this.t; this.say(this.t, 'tank', 'CDR', `Loader down${inbound ? ': incoming' : gunNeedsHim ? ': main gun needs loading' : ''}.`); } }
         if (L.up && this.t >= L.busyUntil && this.t >= L.busyGun && T.m240 > 0 && near.length) { const pick = near.find(q => q.u.id !== A.crows.tgt) || near[0], first = L.said !== pick.u.id; L.said = pick.u.id; this._burst('m240', pick, { first }); L.busyGun = this.t + BURST + PAUSE; A.w.m240 = `${pick.u.spec.name} #${pick.u.id + 1}, ${Math.round(pick.R / 10) * 10} m`; }
         else A.w.m240 = !L.ok ? 'loader is a casualty' : L.up ? 'loader up, scanning' : 'loader inside';
         // loading the main gun: only while the loader is inside (or by another crewman, slowly, if he is a casualty)
-        if (!T.loaded && T.main > 0 && !L.up) { T.loadT += this.dt; if (T.loadT >= (L.ok ? LOAD_S : LOAD_S_NO_LOADER)) { T.loaded = true; T.loadT = 0; } }
+        if (!T.loaded && T.main > 0 && !L.up) { T.loadT += this.dt * this._crewMul('load') /* crew.js: stress slows the loader */; if (T.loadT >= (L.ok ? LOAD_S : LOAD_S_NO_LOADER)) { T.loaded = true; T.loadT = 0; } }
         T.mainReady = T.loaded ? 0 : this.t + (L.up ? 99 : Math.max(0, (L.ok ? LOAD_S : LOAD_S_NO_LOADER) - T.loadT)); }
     },
 
@@ -126,13 +126,16 @@
       const hk = this._hkoiTurret();
       if (hk != null) { const d = angDiff(hk, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360; if (this._rf) { this._rf = null; } A.w.main = 'turret given to HKOI'; A.w.hkoi = 'engaging an incoming threat'; return; }
       A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar silent, waiting for a warning';
-      const tg = this._targets(), pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
+      { const out = this._crewOut('gnr'); if (out) { this._rf = null; A.w.main = out; return; } }   /* crew.js: the gunner has frozen, or nobody is on the gun */
+      const tg = this._targets(); let pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
+      // the gunner finishes what he started: he leaves a target he is already laying on only for a more dangerous one
+      if (pick && this._rf) { const cur = tg.find(q => q.k === this._rf.k); if (cur && cur.los && cur.R <= 4200 && !(cur.moving && cur.R > 800) && cur.danger >= pick.danger) pick = cur; }
       if (!pick) { this._rf = null; A.w.main = T.main > 0 ? 'no target in view' : 'no multi-purpose rounds left'; return; }
       const { k, u, R } = pick, want = brgOf(T.e, T.n, k.e, k.n), d = angDiff(want, T.tur); T.tur = (T.tur + clamp(d, -TURRET_RATE * this.dt, TURRET_RATE * this.dt) + 360) % 360;
       const why = pick.danger === 4 ? 'its missile is in the air' : pick.danger === 3 ? 'it can fire on us' : pick.danger === 2 ? 'reloading' : 'moving';
       A.w.main = `${u.spec.name} #${u.id + 1}, ${(R / 1000).toFixed(2)} km: ${why}`;
       if (!this._rf || this._rf.k !== k) {   /* a new target: time to swing on and lay */
-        this._rf = { k, R, at: this.t + Math.abs(d) / TURRET_RATE + 2.5 + R / 1000 * 1.3 };
+        this._rf = { k, R, at: this.t + Math.abs(d) / TURRET_RATE + 2.5 + R / 1000 * 1.3 + this._crewAdd('lay', 2.5 + R / 1000 * 1.3) /* crew.js: stress slows the lay */ };
         this.say(this.t, 'tank', 'GNR', `Gunner lays on ${u.spec.name} #${u.id + 1}, ${(R / 1000).toFixed(2)} km, bearing ${Math.round(want).toString().padStart(3, '0')}: ${why}.`, 'most dangerous located team in view');
         if (u.state === 'hidden' && u.ammo > 0 && this.rng.random() < S.notice) this._displace(u, 'sees the tank\'s gun turning onto it');
         this.shots = this.shots || []; return; }
@@ -143,8 +146,11 @@
       if (!worth || this.t < this._rf.at) return;
       const there = u.alive && (u.state !== 'moving' || this.t < (u.packUntil || 0)) && Math.hypot(u.e - k.e, u.n - k.n) < 25;
       if (!there) { k.done = true; u.known = false; this._rf = null; this.say(this.t, 'tank', 'GNR', `Gunner holds fire on the ${u.spec.name} #${u.id + 1} site: the position is empty.`, 'the team has gone; no round wasted'); return; }
-      const moving = (T.v || 0) > 1.5, tof = R / 1140, p = Math.max(0.4, Math.min(0.88, 0.92 - R / 5000)) * (moving ? 0.6 : 1), roll = this.rng.random();
-      T.main--; T.loaded = false; T.loadT = 0; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, wtxt;
+      // Chance that one multi-purpose round knocks out a team: high close in, low at long range against men under cover whose place is known only to
+      // within tens of metres (assumed: 60% at 500 m, 46% at 1 km, 18% at 2 km, never under 12%; trees cut it, open ground and a team caught moving raise it)
+      const moving = (T.v || 0) > 1.5, tof = R / 1140, vg = this.world.veg(u.e, u.n).cls, caught = u.state === 'moving' || u.state === 'setup';
+      const p = Math.max(0.12, Math.min(0.7, 0.75 - R / 3500)) * (vg >= 4 ? 0.75 : vg >= 2 ? 0.9 : 1.1) * (caught ? 1.25 : 1) * (moving ? 0.6 : 1) * this._crewMul('aim_main') /* crew.js */, roll = this.rng.random();
+      T.main--; T.loaded = false; T.loadT = 0; k.shots = (k.shots || 0) + 1; this._rf = null; let hit = false, text, wtxt; this.ev(this.t, 'gun', { uid: u.id, R: Math.round(R), tof: +tof.toFixed(2), hit: roll < p }); if (roll < p) this.ev(this.t + tof, 'team_lost', { uid: u.id, by: 'main' });
       if (roll < p) { hit = true; u.alive = false; u.state = 'dead'; k.done = true; this.killedByTank = (this.killedByTank || 0) + 1; text = `Main gun round on ${u.spec.name} #${u.id + 1} at ${(R / 1000).toFixed(2)} km: position destroyed.`; wtxt = `aimed fire at a located position (about ${Math.round(p * 100)}% at this range${moving ? ', on the move' : ''})`; }
       else { this._suppress(u, true, 6); if (u.ammo > 0 && this._displace(u, 'a tank round has just landed beside it')) { /* it packs up; the crew will see it go if it stays in view */ } else if (k.shots >= 3) k.done = true; text = `Main gun round lands close to ${u.spec.name} #${u.id + 1}: team pinned${u.state === 'moving' ? ' and pulling out' : ''}.`; wtxt = 'a near miss: a dug-in team is a small target at this range'; }
       this.say(this.t + tof, 'tank', 'GNR', text, wtxt); this.shots.push({ t: this.t, tof, from: { e: T.e, n: T.n }, to: { e: k.e + (hit ? 0 : (this.rng.random() - 0.5) * 14), n: k.n + (hit ? 0 : (this.rng.random() - 0.5) * 14) }, hit, there: true });
@@ -154,12 +160,12 @@
     // Called when an engagement is worked out. For each guided missile whose launcher the crew can place and reach with the .50, decide
     // when the fire starts and what it does to the gunner: either he ducks and the missile is lost (mask), or his aim is shakier (jit_k).
     _counterFire(launches, rec1, plan, at, masks) {
-      const T = this.tank, W = this.world, A = this._crew(), S = SUPP[this.skill] || SUPP.trained, M = MG.m2; if (T.m2 <= 0) return;
+      const T = this.tank, W = this.world, A = this._crew(), S = SUPP[this.skill] || SUPP.trained, M = MG.m2; if (T.m2 <= 0 || this._crewOut('crows')) return;   /* crew.js */
       const order = launches.map((l, i) => ({ l, i, th: rec1.threats.find(q => q.uid === l.u.id && Math.abs(q.t0 - l.t0) < 1e-6) || rec1.threats[i] })).filter(o => o.th && o.l.u.spec.needsLos && o.l.R <= M.rmax).sort((a, b) => a.th.impact - b.th.impact);
       let free = 0;
       for (const o of order) { const { l, i, th } = o, u = l.u, placed = u.known ? l.t0 + 1.0 : th.track != null ? th.track + 0.5 : null; if (placed == null) continue;
         if (!W.los(at.e, at.n, 2.5, u.e, u.n, 0.8).clear) continue;
-        const onIt = A.crows.tgt === u.id, slew = Math.abs(angDiff(l.brg, A.crows.brg)) / M.slew, ts = Math.max(placed + (onIt ? 0.3 : M.acquire) + slew, free);   /* a gun already laid on that team answers almost at once */ if (ts >= th.impact - 0.5) continue;
+        const onIt = A.crows.tgt === u.id, slew = Math.abs(angDiff(l.brg, A.crows.brg)) / M.slew, ts = Math.max(placed + (onIt ? 0.3 : M.acquire + this._crewAdd('handover', M.acquire) /* crew.js */) + slew, free);   /* a gun already laid on that team answers almost at once */ if (ts >= th.impact - 0.5) continue;
         const heavy = l.R <= M.heavy, rate = heavy ? S.duck : S.duck * 0.3; let td = null; for (let t = ts + 1; t < th.impact - 0.2; t += 1) if (this.rng.random() < rate) { td = t; break; }
         const frac = clamp((th.impact - ts) / Math.max(0.5, th.impact - l.t0), 0, 1), v = (root.HK || {}).THREATS ? root.HK.THREATS[l.key].speed : 250;
         if (td != null && masks[i] == null) { masks[i] = Math.max(10, (th.impact - td) * v * 0.55); l.mask_by = 'counter_fire'; this.say(this.t + td, 'enemy', u.id, `${u.spec.name} #${u.id + 1}: gunner ducks under .50 fire and loses his missile.`, `accurate machine-gun fire on a ${this.skill} crew: about ${Math.round(rate * 100)}% a second`); }
@@ -172,7 +178,7 @@
       const A = this._crew(), L = A.ldr, T = this.tank; if (!L.ok) return; const upAt = t => L.upAt.some(iv => t >= iv[0] && t <= iv[1]);
       let p = 0; for (const a of v.rec.aps || []) if (upAt(v.t0 + a.t)) p = 1 - (1 - p) * (1 - 0.08);   /* Trophy firing with a man in the hatch (assumed 8% each) */
       if ((v.rec.hits || 0) > 0 && upAt(v.tEnd - 1)) p = 1 - (1 - p) * (1 - 0.5);                          /* a hit on the vehicle with a man in the hatch (assumed 50%) */
-      if (p > 0 && this.rng.random() < p) { L.ok = false; L.up = false; if (T.st && T.st.crew) T.st.crew.ldr = 'wounded'; this.say(this.t, 'tank', 'CDR', 'Loader hit while up in his hatch. The commander will have to load.', `exposed during the engagement (about ${Math.round(p * 100)}% this time); the main gun now takes ${LOAD_S_NO_LOADER} s to load and the M240 is silent`); }
+      if (p > 0 && this.rng.random() < p) { L.ok = false; L.up = false; this.ev(this.t, 'loader_hit', {}); if (T.st && T.st.crew) T.st.crew.ldr = 'wounded'; this.say(this.t, 'tank', 'CDR', 'Loader hit while up in his hatch. The commander will have to load.', `exposed during the engagement (about ${Math.round(p * 100)}% this time); the main gun now takes ${LOAD_S_NO_LOADER} s to load and the M240 is silent`); }
     },
     // ================= the commander: mission, where to fight from, when to move =================
     // Missions (chosen at setup): 'hold' a battle position with two alternates, 'advance' to an objective in bounds between covered
@@ -189,8 +195,12 @@
     _scorePos(c, threats, look) {
       const W = this.world; if (!W.inside(c.e, c.n) || !W.passable(c.e, c.n, true)) return -9; if (W.slope(c.e, c.n) > 0.3) return -9;
       let s = 0, sw = 0, hid = 0, see = 0;
-      for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : 1) + (tur ? 0.6 : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
-      s = sw ? s / sw : 0.6;
+      // nothing located yet: judge the spot against watchers all round at 1,500 m, so he settles where folds in the ground hide the hull from most directions
+      const known = threats.length > 0; if (!known) { threats = []; for (let a = 0; a < 6.28; a += 0.5236) threats.push({ e: c.e + Math.sin(a) * 1500, n: c.n + Math.cos(a) * 1500, w: 1 }); }
+      // with no enemy located the first duty is to watch the ground: a spot the turret can see from counts for more than one that merely hides
+      const wHide = known ? 1 : 0.6, wSee = known ? 0.6 : 1;
+      for (const o of threats) { const hull = W.los(o.e, o.n, 1.3, c.e, c.n, 1.0).clear, tur = hull || W.los(o.e, o.n, 1.3, c.e, c.n, 2.6).clear; s += o.w * ((hull ? 0 : wHide) + (tur ? wSee : 0)); sw += o.w; if (!hull) hid++; if (tur) see++; }
+      s = sw ? s / sw : 0.6; if (!known) { threats = []; hid = 0; see = 0; }
       // open ground toward the enemy (or the way we are looking when no enemy is known): how much of the first 1,000 m is in view
       const dirs = threats.length ? threats.slice(0, 4).map(o => Math.atan2(o.e - c.e, o.n - c.n)) : look != null ? [look * DEG - 0.5, look * DEG, look * DEG + 0.5] : [0, 1.57, 3.14, 4.71];
       let open = 0, on = 0; for (const a of dirs) for (const r of [250, 500, 750, 1000]) { on++; if (W.los(c.e, c.n, 2.6, c.e + Math.sin(a) * r, c.n + Math.cos(a) * r, 1.0).clear) open++; }
@@ -215,7 +225,7 @@
       const top = th.slice().sort((p, q) => q.w - p.w).slice(0, 3), memo = new Map();
       const cost = (e, n) => { const key = Math.round(e / 50) * 100003 + Math.round(n / 50); let x = memo.get(key); if (x == null) { x = 0; for (const o of top) if (W.los(o.e, o.n, 1.3, e, n, 1.6).clear) x += 1.2 * o.w; memo.set(key, x); } return x; };
       const route = W.path(T.e, T.n, c.e, c.n, { grid: 50, tank: true, cost: top.length ? cost : null });
-      T.route = route && route.length > 1 ? route.slice(1).concat([[c.e, c.n]]) : [[c.e, c.n]]; T.routeI = 0; T.vmax = vmax; T.mode = 'moving'; T.modeSince = this.t; T.goal = { e: c.e, n: c.n };
+      T.route = route && route.length > 1 ? route.slice(1).concat([[c.e, c.n]]) : [[c.e, c.n]]; T.routeI = 0; T.vmax = vmax; T.mode = 'moving'; T.modeSince = this.t; T.goal = { e: c.e, n: c.n }; this.ev(this.t, 'tank_move', { to: [Math.round(c.e), Math.round(c.n)] });
       if (why) this.say(this.t, 'tank', 'CDR', why.text, why.why);
     },
     // which way the hull should face when halted: front to the worst threat, turned a little to show the side that still has Trophy shots
@@ -225,7 +235,7 @@
     },
     _mission() {
       const T = this.tank, A = this._crew(), M = A.m || (A.m = { type: this.mission || 'hold', phase: 'start', since: 0, arrived: 0, rounds0: T.main, home: { e: T.home.e, n: T.home.n }, pos: null, cur: -1, lastVolley: -1, clearSince: null });
-      if (this.over) return; const st = T.st || {}, tg = this._targets(), th = this._threats(), moving = !!T.goal, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
+      if (this.over || this._crewOut('orders') /* crew.js: commander frozen or nobody in command */) return; const st = T.st || {}, tg = this._targets(), th = this._threats(), moving = !!T.goal, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
       const inView = tg.filter(q => q.los), low = st.obs != null && (st.obs <= 0 || (st.apsL || 0) + (st.apsR || 0) <= 1), careful = st.obs != null && (st.obs < 50 || st.apsL === 0 || st.apsR === 0);
       // protection nearly gone: break contact (decision 12)
       if (low && M.phase !== 'withdraw') { M.phase = 'withdraw'; A.search = null; this._goTo(M.home, 9, { text: `Commander breaks contact: ${st.obs <= 0 ? 'HKOI is out of obscurant' : 'Trophy is down to its last shot'}. Pulling back to the start line.`, why: 'he will not fight on without his protection' }); T.intent = 'Withdrawing: protection nearly gone'; return; }
@@ -236,6 +246,16 @@
       if (M.type === 'hold') this._hold(M, tg, th, inView, settled, v);
       else if (M.type === 'advance') this._advance(M, tg, th, inView, settled, v, careful);
       else this._hunt(M, tg, th, inView, settled, v, careful);
+    },
+    // Before the battle (hold mission, and only when the player has not placed the vehicle himself): the commander is already in the best
+    // fighting position within 200 m of where he was put, with two alternates picked. A crew that holds ground does not arrive as the shooting starts.
+    _pickStart() {
+      const T = this.tank, A = this._crew(), cands = [];
+      for (let de = -200; de <= 200; de += 25) for (let dn = -200; dn <= 200; dn += 25) { if (Math.hypot(de, dn) > 200) continue; const c = { e: T.home.e + de, n: T.home.n + dn, d: Math.hypot(de, dn) }; c.s = this._scorePos(c, [], T.h); if (c.s > -9) cands.push(c); }
+      cands.sort((a, b) => b.s - a.s); const pos = []; for (const c of cands) { if (pos.every(p => Math.hypot(p.e - c.e, p.n - c.n) >= 50)) pos.push(c); if (pos.length === 3) break; }
+      if (!pos.length) return; T.e = pos[0].e; T.n = pos[0].n; T.home = { e: T.e, n: T.n };
+      A.m = { type: 'hold', phase: 'start', since: 0, arrived: 0, rounds0: T.main, home: { e: T.e, n: T.n }, pos, cur: 0, lastVolley: -1, clearSince: null };
+      this.say(0, 'tank', 'CDR', `The vehicle is in its primary position with ${pos.length - 1} alternate${pos.length === 2 ? '' : 's'} picked.`, 'long open view, no cover close by for a rocket team; the enemy\'s direction is not known yet');
     },
     // HOLD: a primary position and two alternates; shift after being fired on, after several rounds from one spot, or to see a team
     _hold(M, tg, th, inView, settled, v) {
@@ -282,6 +302,7 @@
       const T = this.tank, v = this.volleys.length ? this.volleys[this.volleys.length - 1] : null;
       if (v && this.t <= v.tEnd) { const p = this.tankAt(this.t); T.e = p.e; T.n = p.n; T.h = p.h; T.v = p.v; T.goal = null; T.route = null; return; }
       this._mission();
+      if (this._crewOut('drv')) { T.v = 0; return; }   /* crew.js: the driver has frozen or is down */
       if (T.goal && T.route) {
         let wp = T.route[T.routeI]; let dx = wp[0] - T.e, dn = wp[1] - T.n, d = Math.hypot(dx, dn); const last = T.routeI >= T.route.length - 1;
         if (d < (last ? 2 : 12)) { if (last) { T.goal = null; T.route = null; T.v = 0; T.mode = 'overwatch'; T.modeSince = this.t; return; } T.routeI++; wp = T.route[T.routeI]; dx = wp[0] - T.e; dn = wp[1] - T.n; d = Math.hypot(dx, dn); }

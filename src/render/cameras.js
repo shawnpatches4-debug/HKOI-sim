@@ -11,6 +11,12 @@ export const CAMERA_MODES = [
   { key: 'hkoi', name: 'HKOI sight', hint: 'Through the HKOI station\'s own sensor: follows what it tracks and fires at', sensor: true },
   { key: 'drv', name: 'Driver', hint: 'Through the driver\'s vision blocks' },
   { key: 'ldr', name: 'Loader', hint: 'Head out on the loader\'s side of the turret roof' },
+  // inside the vehicle (src/render/interior.js draws the interior and places these cameras at each crewman's eyes)
+  { key: 'in_cdr', name: 'Cdr seat', hint: 'Inside, in the commander\'s seat: look up to raise your head to the vision blocks, down to his displays and the HKOI panel. Drag to look, wheel to lean in, click a switch', seat: true },
+  { key: 'in_gnr', name: 'Gnr seat', hint: 'Inside, in the gunner\'s seat at his sight and handles. Drag to look, wheel to lean in, click a switch', seat: true },
+  { key: 'in_ldr', name: 'Ldr seat', hint: 'Inside, at the loader\'s station beside the breech and the ammunition door. Drag to look, wheel to lean in, click a switch', seat: true },
+  { key: 'in_drv', name: 'Drv seat', hint: 'Inside, in the driver\'s seat in the hull front. Drag to look, wheel to lean in, click a switch', seat: true },
+  { key: 'cut', name: 'Cutaway', hint: 'Outside, with the armour nearest to you sliced away to show the crew stations at work: drag to look around, wheel to zoom' },
   { key: 'top', name: 'Overhead', hint: 'Straight down, north up' },
   { key: 'enemy', name: 'Enemy sight', hint: 'Through an enemy launcher\'s optic (spectator)', spectator: true },
   { key: 'troops', name: 'Enemy close-up', hint: 'Beside an enemy team: drag to look around them, wheel to zoom (spectator)', spectator: true },
@@ -33,7 +39,7 @@ export class Cameras {
     const cv = scene3d.canvas; let drag = null; addEventListener('keydown', e => { this.keys[e.code] = true; }); addEventListener('keyup', e => { this.keys[e.code] = false; }); addEventListener('blur', () => { this.keys = {}; });
     cv.addEventListener('pointerdown', e => { if (this.mode === 'fly') { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); } }); cv.addEventListener('pointerup', () => { drag = null; });
     cv.addEventListener('pointermove', e => { if (!drag || this.mode !== 'fly') return; this.flyYaw += (e.clientX - drag[0]) * 0.004; this.flyPitch = Math.max(-1.5, Math.min(1.5, this.flyPitch - (e.clientY - drag[1]) * 0.004)); drag = [e.clientX, e.clientY]; }); this.cdrYaw = null; this.snap = true; }
-  set(mode) { if (mode === 'fly' && this.mode !== 'fly') { const c = this.s.camera, d = c.getWorldDirection(new THREE.Vector3()); this.flyYaw = Math.atan2(d.x, -d.z); this.flyPitch = Math.asin(Math.max(-1, Math.min(1, d.y))); } this.mode = mode; this.snap = true; this.s.controls.enabled = mode === 'orbit' || mode === 'troops'; this.s.controls.minDistance = mode === 'troops' ? 1.5 : 4; if (mode !== 'enemy' && mode !== 'troops') this.unit = null; }
+  set(mode) { if (mode === 'fly' && this.mode !== 'fly') { const c = this.s.camera, d = c.getWorldDirection(new THREE.Vector3()); this.flyYaw = Math.atan2(d.x, -d.z); this.flyPitch = Math.asin(Math.max(-1, Math.min(1, d.y))); } this.mode = mode; this.snap = true; this.s.controls.enabled = mode === 'orbit' || mode === 'troops' || mode === 'cut'; this.s.controls.minDistance = mode === 'troops' ? 1.5 : mode === 'cut' ? 3 : 4; if (mode !== 'enemy' && mode !== 'troops') this.unit = null; }
   // which enemy team the enemy views follow: the chosen one while it lives, otherwise the first team still alive
   pick(units) { let u = units.find(x => x.id === this.enemyId && x.alive && !x.gone); if (!u) { u = units.find(x => x.alive && !x.gone) || null; this.enemyId = u ? u.id : null; } return u; }
   choose(u) { if (u && u.id !== this.enemyId) { this.enemyId = u.id; this.snap = true; } }
@@ -42,6 +48,8 @@ export class Cameras {
   update(dt, ctx) {
     const S = this.s, cam = S.camera, W = S.world, T = ctx.tank, tp = S.at(T.e, T.n, 0, new THREE.Vector3());
     if (this.mode === 'free') return;
+    if (this.interior && this.interior.owns(this.mode)) {   // a crew seat inside the vehicle: the interior module places the camera at that crewman's eyes
+      if (this.interior.drive(this, dt)) { this.snap = false; this.lastTank = null; this.lastUnit = null; return; } }
     if (this.mode === 'fly') {   // fly anywhere: the view turns with the drag, the keys move along it; never below the ground
       const K = this.keys, sp = (K.ShiftLeft || K.ShiftRight ? 120 : 25) * dt, cy = Math.cos(this.flyYaw), sy = Math.sin(this.flyYaw), cp = Math.cos(this.flyPitch), f = (K.KeyW ? 1 : 0) - (K.KeyS ? 1 : 0), r = (K.KeyD ? 1 : 0) - (K.KeyA ? 1 : 0), u = (K.KeyE ? 1 : 0) - (K.KeyQ ? 1 : 0);
       cam.position.x += (sy * cp * f + cy * r) * sp; cam.position.z += (-cy * cp * f + sy * r) * sp; cam.position.y += (Math.sin(this.flyPitch) * f + u) * sp; const g = W.h(cam.position.x, -cam.position.z) + 0.6; if (cam.position.y < g) cam.position.y = g;
@@ -57,8 +65,8 @@ export class Cameras {
       cam.up.set(0, 1, 0); this.snap = false; if (cam.fov !== 50) { cam.fov = 50; cam.updateProjectionMatrix(); } return;
     }
     this.lastUnit = null;
-    if (this.mode === 'orbit') {   // keep the orbit centred on the vehicle as it moves
-      const tgt = tp.clone(); tgt.y += 2; if (this.lastTank) { const d = tgt.clone().sub(this.lastTank); cam.position.add(d); } S.controls.target.copy(tgt); this.lastTank = tgt;
+    if (this.mode === 'orbit' || this.mode === 'cut') {   // keep the orbit centred on the vehicle as it moves (the cutaway is the same view, closer in, with the interior shown)
+      const tgt = tp.clone(); tgt.y += 2; if (this.mode === 'cut' && this.snap) { const hr = T.h * DEG; cam.position.set(tgt.x - Math.cos(hr) * 5.4 + Math.sin(hr) * 2.2, tgt.y + 2.8, tgt.z - Math.sin(hr) * 5.4 - Math.cos(hr) * 2.2); } if (this.lastTank) { const d = tgt.clone().sub(this.lastTank); cam.position.add(d); } S.controls.target.copy(tgt); this.lastTank = tgt;
       const g = W.h(cam.position.x, -cam.position.z) + 1.2; if (cam.position.y < g) cam.position.y = g;
       S.controls.update(); this.snap = false; if (cam.fov !== 50) { cam.fov = 50; cam.updateProjectionMatrix(); } return;
     }

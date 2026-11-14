@@ -10,5 +10,6 @@ node_modules/
 build/beta/
 build/beta_pub/
 .claude/
-.cache/
+.cache
 build/beta_http/
+__pycache__/
