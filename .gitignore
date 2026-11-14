@@ -12,3 +12,6 @@ build/beta_pub/
 .claude/
 build/beta_http/
 .cache/
+
+# source model packs Shawn asked to keep in the repository (14 Nov 2026)
+!models_src/**/*.zip

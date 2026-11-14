@@ -15,7 +15,7 @@ He is not a programmer: explain in plain words, lead with what changed and what 
 - **Honest numbers.** If a realistic change is worse for HKOI, make it realistic and tell him. Never tune to hit a target. State your assumptions.
 - **Updates about every 10 minutes while working, with pictures** (screenshots you took and looked at).
 - **Keep all existing mechanics**; the legacy resolver in `src/engine.js` is the source of truth for missile/HKOI/Trophy outcomes. Do not edit it casually; `node invariants.js`-style checks lived in the old build.
-- **Third-party assets stay out of git** while the repository is public (`assets/` is ignored). Never `git add -f` an asset. Sources of the supplied models are still unconfirmed: see `docs/ASSETS.md`.
+- **Third-party assets stay out of git** while the repository is public (`assets/` is ignored). Never `git add -f` an asset. One exception he ordered himself on 14 Nov 2026: the T-72 and T-90 source packs in `models_src/` (see its README). Sources of the supplied models are still unconfirmed: see `docs/ASSETS.md`.
 - **Log every version to the Notion "R&D Log"** if a Notion connection is available (data source id `01785400-2dc2-43cd-a2ab-0a8b29a01c16`; properties Entry, Type, Module, Version, date:Date:start, Patent-relevant, Notes). If not available, say so and list what needs logging.
 - His email address is private: never send it to an outside service.
 - Crew figures are parked ("skip implementing crew for now"). Do not use the crewman model without showing him a picture first.
