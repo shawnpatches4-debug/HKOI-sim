@@ -71,7 +71,7 @@ export class Hud {
       sh.append(c.title, c.tag); c.card.append(sh, c.line, c.mags, c.fact); this.$(pan === 'def' ? 'defences' : 'crew').append(c.card); n.st[k] = c;
     }
     n.radar = row('defences', 'Radar');
-    n.group = row('enemybox', 'Group'); n.teams = row('enemybox', 'Teams'); n.near = row('enemybox', 'Nearest'); n.fired = row('enemybox', 'Fired at us');
+    n.group = row('enemybox', 'Group'); n.teams = row('enemybox', 'Teams'); n.near = row('enemybox', 'Nearest'); n.fired = row('enemybox', 'Fired');
   }
   // write a text (and a class) into an element only if it changed; a change after the first lights the element up for a moment
   put(node, text, cls, quiet) {
@@ -243,7 +243,7 @@ export class Hud {
     this.put(n.group.mid, sum.waves > 1 ? `${sum.wave} of ${sum.waves}` + (B.waveAt != null ? ', beaten: lull' : '') : 'one group', 'm');
     this.put(n.teams.mid, `${known} located, ${dead} destroyed` + (s.spectator ? `, ${B.units.filter(u => u.alive && !u.gone).length} alive` : ''), 'm');
     this.put(n.near.mid, near ? `${near.spec.name}, ${Math.round(nd / 10) * 10} m, ${brg3(Math.atan2(near.e - T.e, near.n - T.n) * 180 / Math.PI)}°` : 'none located', 'm');
-    this.put(n.fired.mid, `${sum.fired}, ${sum.hits} hit${sum.hits === 1 ? '' : 's'}`, 'm' + (sum.hits ? ' bad' : ''));
+    this.put(n.fired.mid, `${sum.fired} at us, ${sum.hits} hit${sum.hits === 1 ? '' : 's'}`, 'm' + (sum.hits ? ' bad' : ''));
   }
   // inside a seat the engineer display shrinks to one line
   strip(B, sum, s) {

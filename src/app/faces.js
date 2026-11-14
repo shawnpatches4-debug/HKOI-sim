@@ -44,11 +44,11 @@ export const SHIFT = {
 export const TURN = { jaw: 0.3, eyeYaw: 0.42, eyePitch: 0.26, shoulders: 22, thrust: 28 };   // thrust: the head pushed forward (+) or pulled back (-), millimetres
 // How each man is told apart, and what stress does to skin and light (multipliers of the picture's own colours).
 export const LOOK = {
-  cdrSkin: [1.85, 1.5, 1.3],       // the commander's face: the gunner's dark skin lightened by these factors (red, green, blue)
+  cdrSkin: [2.3, 2.15, 2.1],       // the commander's face: the gunner's dark skin lightened by these factors (red, green, blue)
   cdrHelmet: [0.5, 0.62, 0.3],     // his helmet: the camouflage cover multiplied to a plain olive; its goggles and their strap removed
   pallor: [0.62, 0.74, 0.8],       // a face that has lost all its colour (shaken about half way, wounded three quarters, dead fully)
   flush: [1.1, 0.93, 0.9],         // a strained face, before fear takes the colour out again
-  sweat: 0.45,                     // how far the skin's roughness drops at full strain (a wet sheen)
+  sweat: 0.24,                     // how far the skin's roughness drops at full strain (a wet sheen)
 };
 // The limits every channel is held to, so no state can push the face past what the skin stands (found by looking at pictures).
 const LIMIT = { browUp: 1, browDown: 1, lid: 1, wide: 1, squeeze: 1, stretch: 1, frown: 1, snarl: 1, tight: 1, jaw: 1, thrust: 1, flush: 1, sweat: 1, pitch: 0.32, yaw: 0.6, roll: 0.45,   /* a head ducked further than 0.32 hides the face under the helmet */ eyeYaw: 1, eyePitch: 1, shoulders: 1.2, pallor: 1 };
@@ -115,7 +115,7 @@ export class Faces {
       const F = this.men.cdr.F, U = this.men.cdr.U, L = this.men.cdr.L;
       this.hemi = new THREE.HemisphereLight(0xc8d6cc, 0x2a322d, 1.25); this.scene.add(this.hemi);
       const lamp = this.lamp = new THREE.DirectionalLight(0xffe2bd, 3.4); lamp.position.copy(F).multiplyScalar(1).addScaledVector(U, 1.3).addScaledVector(L, 0.7); this.scene.add(lamp);
-      const glow = new THREE.DirectionalLight(0x8fe6c8, 1.1); glow.position.copy(F).multiplyScalar(0.6).addScaledVector(U, -0.8).addScaledVector(L, -1); this.scene.add(glow);
+      const glow = new THREE.DirectionalLight(0xc2dcd0, 0.7); glow.position.copy(F).multiplyScalar(0.6).addScaledVector(U, -0.8).addScaledVector(L, -1); this.scene.add(glow);
       const red = this.red = new THREE.DirectionalLight(0xff2a1c, 0); red.position.copy(F).multiplyScalar(0.8).addScaledVector(U, 0.9).addScaledVector(L, -0.9); this.scene.add(red);   /* the emergency lamp, lit for a while after a hit */
       this.ok = true;
     } catch (e) { this.failed = true; console.warn('crew portraits not available:', e && e.message); }

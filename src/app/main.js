@@ -196,7 +196,7 @@ function drawMarks() {
 // the top strip of the engineer display: time, time rate, frame time. Everything else is in the panels.
 let stripSig = '';
 function drawStatus() {
-  const st = $('status'), t = `T+ ${Math.floor(battle.t / 60)}:${String(Math.floor(battle.t % 60)).padStart(2, '0')}`, r = playing ? (speed === 0.25 ? '¼×' : speed + '×') : 'paused', f = fps ? `${(1000 / fps).toFixed(1)} ms · ${fps} fps` : '-';
+  const st = $('status'), t = `T+ ${Math.floor(battle.t / 60)}:${String(Math.floor(battle.t % 60)).padStart(2, '0')}`, r = playing ? (speed === 0.25 ? '¼×' : speed + '×') : 'paused', f = fps ? `${(1000 / fps).toFixed(1)} ms · ${fps} fps` : `${Math.round(scene.rawMs || 0)} ms · under 1 fps`;
   const sig = t + r + f; if (sig === stripSig && st.childElementCount) return; stripSig = sig;
   if (!st.childElementCount) { const fr = el('span', 'chip'); fr.title = 'Frame time and frames a second. Click for the full figures'; fr.onclick = () => { showPerf = !showPerf; store.set('perf', showPerf); show(); }; st.append(el('span', 'chip'), el('span', 'chip'), fr); }
   const c = st.children; if (c[0].textContent !== t) c[0].textContent = t; if (c[1].textContent !== r) { c[1].textContent = r; c[1].className = 'chip' + (playing ? '' : ' warn'); } if (c[2].textContent !== f) { c[2].textContent = f; c[2].className = 'chip' + (fps && fps < 30 ? ' warn' : ''); }

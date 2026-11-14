@@ -67,9 +67,9 @@ async def main():
             for fps in (30, 60, 144, 240):
                 res[fps] = json.loads(await ev('''(fps => { const B = __beta, F = B.faces, H = B.hudBox, t0 = B.battle.t - 3; F.hold = null; F.note = {}; H.fake = { gnr: { state: 'shaken', stress: 0.72, status: 'ok', busy: null } };
                   const st = now => ({ on: true, playing: true, battle: B.battle, crew: H.crewNow(B.battle), speaking: null, graphic: true, now }); F.tLast = null; F.update(0.1, st(t0));
-                  H.fake = { gnr: { state: 'steady', stress: 0.08, status: 'ok', busy: null } }; const n = Math.round(0.25 * fps); for (let i = 1; i <= n; i++) { F.acc = 1; F.update(1 / fps, st(t0 + i / fps)); }
-                  const x = F.men.gnr.sp.x; return JSON.stringify([x.browUp, x.wide, x.frown, x.pitch, x.pallor].map(v => +v.toFixed(4))); })(%d)''' % fps))
-                print(' ', fps, 'fps: brow, eyes wide, frown, pitch, pallor after 0.25 s', res[fps])
+                  H.fake = { gnr: { state: 'steady', stress: 0.08, status: 'ok', busy: null } }; const n = Math.floor(0.25 * fps + 1e-9), rem = 0.25 - n / fps; for (let i = 1; i <= n; i++) { F.acc = 1; F.update(1 / fps, st(t0 + i / fps)); } if (rem > 1e-6) { F.acc = 1; F.update(rem, st(t0 + 0.25)); }   /* exactly a quarter of a second at every rate */
+                  const x = F.men.gnr.sp.x; return JSON.stringify([x.browUp, x.wide, x.frown, x.thrust, x.pallor].map(v => +v.toFixed(4))); })(%d)''' % fps))
+                print(' ', fps, 'fps: brow, eyes wide, frown, head thrust, pallor after 0.25 s', res[fps])
             for fps, v in res.items():
                 if max(abs(a - c) for a, c in zip(v, res[60])) > 0.02: bad.append('the faces ease differently at %d fps' % fps)
             cost = json.loads(await ev('''(() => { const B = __beta, F = B.faces, H = B.hudBox; H.fake = null; F.hold = null; const t = performance.now(); for (let i = 0; i < 20; i++) { F.acc = 1; F.update(0.1, { on: true, playing: true, battle: B.battle, crew: H.crewNow(B.battle), speaking: null, graphic: true, now: B.battle.t + i * 0.01 }); } return JSON.stringify({ msEach: +((performance.now() - t) / 20).toFixed(2), calls: F.gl.info.render.calls, triangles: F.gl.info.render.triangles }); })()'''))
