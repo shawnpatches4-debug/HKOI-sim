@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Scene3D, CONDITIONS, QUALITY } from '../render/scene3d.js';
 import { TankView, TeamView, PropView } from '../render/units.js';
+import { Vehicles } from '../render/vehicles.js';
 import { VolleyView } from '../render/volleyview.js';
 import { Cameras, CAMERA_MODES } from '../render/cameras.js';
 import { Interior } from '../render/interior.js';
@@ -53,6 +54,7 @@ const ASSETS = q.get('assets') === '0' ? null : 'assets/';
 const tank = new TankView(ASSETS); tank.group.userData.heat = 0.5; scene.units.add(tank.group);
 const interior = new Interior(scene, tank, cams);   // turret and hull interior with the crew seats: in the scene only while an inside or cutaway view is on
 const props = [];
+const vehicles = new Vehicles(scene, ASSETS);   /* enemy vehicles (UAZ, BMP-2, tanks): drawn from battle.vehicles(), nothing if the battle has none */
 let battle = null, teams = [], volleys = null, state = 'title', playing = false, speed = +(q.get('speed') || 1), logShown = 0, capT = -9, capW = 0, ended = false, logOpen = false, logFilter = 'all', showPerf = store.get('perf', q.get('perf') === '1');
 
 // ---------------------------------------------------------------- the display and the title screen's own state
@@ -171,6 +173,7 @@ function place() {
     const p = prevU[i], moving = u.state === 'moving' && (u.spd || 0) > 0.2, tw = p && moving && Math.hypot(u.e - p[0], u.n - p[1]) < 1.5, e = tw ? p[0] + (u.e - p[0]) * fU : u.e, n = tw ? p[1] + (u.n - p[1]) * fU : u.n, pos = scene.at(e, n, 0);
     tv.place(pos, moving && u.hdg != null ? u.hdg : Math.atan2(T.e - u.e, T.n - u.n) * 180 / Math.PI); if (!tv.ground) tv.ground = teamGround; const far = pos.distanceTo(scene.camera.position) * scene.camera.fov / 40;   /* how far away the team looks (a zoomed sight brings it close) */ tv.update(frameDt * simRate(), moving ? (u.gait || 'walk') : u.down ? 'down' : 'still', far < 330, teamInfo(u, far));
     if (tv.fell) { if (tv.fell.blast) scene.fx.fire(pos.x, pos.y + 0.2, pos.z, 6, 0.45); else scene.fx.dust(pos.x, pos.y + 0.2, pos.z, 0.7); tv.fell = null; } });   /* a team has just been knocked out: a small fire for a few seconds where a shell burst (the burst, smoke and scorch mark come with the shell itself), a puff of dust under machine-gun fire */
+  vehicles.update(battle, { t: tNow, all: seeAll(), teams });
 }
 // what the drawing of a team needs to know about its weapon: is a round in the launcher (not between firing and the end of reloading), is a spare ready
 // reload: seconds until it can fire again; pack: seconds of packing up left before it moves off; setup: seconds of setting up left; dead: knocked out; dist: how far away it looks

@@ -63,3 +63,39 @@ Entry: `{ "file": "sfx/name.mp3", "start": seconds, "len": seconds, "gain": 1 }`
 
 Still synthesised with no slot yet: the fire and penetration alarm, a fire burning inside, drone motors, turret traverse whir, track squeal, creaks, birds and insects, the far battle rumble, the warning tones and intercom clicks.
 Measuring sound without ears: `node tests/audio/render.mjs <scratch folder with node-web-audio-api> assets <out>` renders the real sound code to WAV files, `python3 tests/audio/check.py <out>` passes or fails them, `python3 tests/audio/analyse.py <out> --png <name>` draws spectrograms, `python3 -I tests/audio/hear.py <scene.wav> <Whisper model>` lets a speech recogniser listen to an intercom scene. `bash tools/dev.sh sound <out>` runs the crew-line checks and the page test (tests/beta/sound.py).
+
+## Enemy tanks: T-72B3 and T-90M (made 14 Nov 2026 from the line-up packs in models_src/)
+
+| File (all in assets/veh/, not in git) | What |
+|---|---|
+| t72.json (3.3 MB) | T-72B3 with Kontakt-5, variant "1_T_72B3" of models_src/t72_s. About 40,500 triangles close up + 8,900 in the light copy for the middle distance. Pieces: hull, turret, gun, kord, trackL, trackR, wheel_00 to wheel_15, lod1_hull, lod1_turret, lod1_gun, lod1_track, lod1_gear |
+| t72_c.webp (2048), t72_n.webp (1024), t72_rm.webp (1024), t72_track_c.webp (512) | colour ("Standard" scheme), normal map, roughness + metallic packed (green, blue), track colour with its cut-out |
+| t90.json (4.8 MB) | T-90M with the Kord roof gun, variant "4_T_90M_Kord" of models_src/t90_s. About 49,200 triangles close up + 12,800 in the light copy (the turret's many small armour pieces will not reduce further without holes) |
+| t90_c.webp (2048, with cut-out), t90_n.webp, t90_rm.webp, t90_track_c.webp | as for the T-72 |
+| kord_c.webp (512) | the Kord machine gun, used by both |
+
+Author and licence of both packs are unconfirmed (see models_src/README.md): the converted files stay out of git like every other asset.
+The pictures are not inside the .json files: the page attaches them by name (SPEC in src/render/vehmodels.js). The .json carries, in its
+scene "extras", where the turret and the gun turn, the muzzle, and every wheel's axle and radius.
+
+How they were made (S = any scratch folder outside the repository; the converters are in .cache/conv):
+```
+unzip models_src/t72_s/source/T72B3_Lineup.zip -d S/t72;  unzip models_src/t90_s/source/T90_Lineup.zip -d S/t90
+python3 tools/lineup_split.py S/t72/T72B3_Lineup.obj "1_T_72B3__" S/t72/parts 'hull=^(Base|K5_B3)$' 'turret=^(turret|B3)$' 'kord=^Kord' 'trackL=TanktrakL' 'trackR=TanktrakR'
+python3 tools/vehicle_pack.py S/t72/parts S/t72/pack t72 hull=hull,trackL,trackR turret=turret,kord wheels=hull
+python3 tools/vehicle_join.py S/t72/pack t72 assets/veh/t72.json $PWD/.cache/conv/node_modules/.bin/gltf-transform ratio=0.3 err=0.004 far=0.1
+python3 tools/vehicle_tex.py S/t72/textures assets/veh c:RU_T72B3_Standard_BaseColor.png:t72_c:2048 n:RU_T72B3_Normal.png:t72_n:1024 rm:RU_T72B3_Roughness.png,RU_T72B3_Metallic.png:t72_rm:1024 c:RU_T72B_track_BaseColor.png:t72_track_c:512 c:Kord_BaseColor.png:kord_c:512
+
+python3 tools/lineup_split.py S/t90/T90_Lineup.obj "4_T_90M_Kord__" S/t90/parts 'hull=^Chassis$' 'turret=^(turret|BaseArmor)$' 'kord=^Kord' 'trackL=TanktrakL' 'trackR=TanktrakR'
+python3 tools/vehicle_pack.py S/t90/parts S/t90/pack t90 hull=hull,trackL,trackR turret=turret,kord wheels=hull
+python3 tools/vehicle_join.py S/t90/pack t90 assets/veh/t90.json $PWD/.cache/conv/node_modules/.bin/gltf-transform ratio=0.2 err=0.006 far=0.08
+python3 tools/vehicle_tex.py S/t90/textures assets/veh c:RU_T90M_Standard_BaseColor.png:t90_c:2048 n:RU_T90M_Normal.png:t90_n:1024 rm:RU_T90M_Roughness.png,RU_T90M_Metallic.png:t90_rm:1024 c:RU_TrackOld_BaseColor.png:t90_track_c:512
+```
+What the new tools do. `vehicle_join.py`: takes vehicle_pack's hull, turret and wheels, trues the vehicle by its two rows of roadwheels
+(the T-90 was 1.3 degrees out), finds the turret ring (the middle of the turret's lowest rim), cuts the gun out of the turret (the long thin
+piece pointing forward and everything round it) so it can elevate and recoil, reduces the triangles, makes the light copy without the
+small fittings, and writes one .json. `vehicle_tex.py`: resizes pictures to WebP and packs roughness with metallic.
+The other paint schemes in the packs (Alternative, Set_L1, Set_L2, Winter) are not converted; one `vehicle_tex.py` job each would do it.
+Other variants in the packs: T-72B3M, B3M obr. 2016 with side armour, B3A / B3AM with an active protection fit; T-90, T-90A, T-90M with
+bar or bag armour or "Arena", and three "Razvedchik" variants.
+If assets/veh/t72.json or t90.json is missing the page draws a plain tank shape made in code instead (and says so in the console).

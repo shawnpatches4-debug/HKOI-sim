@@ -139,6 +139,9 @@ const FS = /* glsl */`
       dif += uLampCol[i] * att * wrap;
       vec3 h = normalize(L + v); spc += uLampCol[i] * att * pow(max(dot(n, h), 0.0), shin) * step(0.0, ndl);
     }
+    #ifdef CMAP
+      dif = min(dif, vec3(1.05)); spc = min(spc, vec3(0.6));   /* a sleeve a hand's width from a lamp must not burn out to the lamp's colour */
+    #endif
     vec3 col = alb * dif * low + spc * specK * low + alb * glow;
     {   // smoke: it gathers under the roof and thins toward the floor, drifts slowly, and is thickest where the plate was holed
       float h = vW.y - uCabY, lay = mix(0.3, 1.75, smoothstep(-0.95, 0.5, h)), drift = 0.72 + 0.38 * sin(vW.x * 2.3 + uSimT * 0.35 + h * 2.0) * sin(vW.z * 1.9 - uSimT * 0.27 + h * 3.1);
