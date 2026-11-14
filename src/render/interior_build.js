@@ -346,7 +346,7 @@ export function buildInterior(labels) {
     // hatch ring above and behind his head
     H.ring('fit', 0.3, 0.022, C.steel, 0, DRF - 0.005, DZ + 0.42, Math.PI / 2, 0, 0, 24); H.cyl('fit', 0.012, 0.012, 0.2, C.yellow, 0.18, DRF - 0.05, DZ + 0.42, Math.PI / 2, 0, 0, 8); H.label('HATCH', 0.014, 0.18, DRF - 0.004, DZ + 0.6, Math.PI / 2, 0, 0, 'plate', { size: 22 });
     // reclined seat with headrest
-    H.box('fit', 0.44, 0.05, 0.44, C.cloth, 0, HF + 0.085, DZ - 0.15, 0.12); H.box('fit', 0.44, 0.56, 0.06, C.cloth, 0, HF + 0.28, DZ + 0.33, -1.05); H.box('fit', 0.2, 0.12, 0.06, C.cloth, 0, DRF - 0.19, DZ + 0.46, -0.5); H.box('fit', 0.3, 0.05, 0.4, C.creamD, 0, HF + 0.026, DZ - 0.12);
+    H.box('fit', 0.44, 0.05, 0.44, C.cloth, 0, HF + 0.085, DZ - 0.15, 0.12); H.box('fit', 0.44, 0.4, 0.06, C.cloth, 0, HF + 0.32, DZ + 0.42, -1.05); H.box('fit', 0.2, 0.12, 0.06, C.cloth, 0, DRF - 0.19, DZ + 0.46, -0.5); H.box('fit', 0.3, 0.05, 0.4, C.creamD, 0, HF + 0.026, DZ - 0.12);
     // the T-bar: a yoke hanging on a slim stem from a small box tucked up under the vision blocks, with two motorcycle-style handgrips at
     // hand height in front of his chest. It turns to steer; the right grip twists as the throttle; the gear selector sits on its hub.
     H.box('fit', 0.09, 0.03, 0.06, C.blackP, 0, yb - 0.028, zb + 0.05); H.cyl('fit', 0.012, 0.012, 0.15, C.steel, 0, yb - 0.098, zb + 0.108, 0.72, 0, 0, 8);

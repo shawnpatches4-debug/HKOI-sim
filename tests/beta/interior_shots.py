@@ -23,7 +23,7 @@ def full():
     out += [('cupola_port_front_close', "lk('in_cdr', 8, 20, 2.2)"), ('cupola_hatch_open_protected', "(__beta.interior.setCupolaHatch(1, true), lk('in_cdr', 8, 34, 1))"), ('cupola_hatch_open', "(__beta.interior.setCupolaHatch(2, true), lk('in_cdr', 8, 44, 1))"), ('cupola_hatch_closed_again', "(__beta.interior.setCupolaHatch(0, true), lk('in_cdr', 8, 44, 1))")]
     out += [('periscope_loader', "lk('in_ldr', -46, 29, 2.2)"), ('periscope_gunner_aux', "lk('in_gnr', -33, 25, 2.6)"), ('periscope_gunner_main', "lk('in_gnr', 0, 2, 2.3)")]
     out += [('drv_block_left', "lk('in_drv', -32, 22, 1.8)"), ('drv_block_centre', "lk('in_drv', 0, 22, 1.8)"), ('drv_block_right', "lk('in_drv', 32, 22, 1.8)"), ('drv_tbar_and_displays', "lk('in_drv', 0, -8, 1.3)"), ('drv_display_close', "lk('in_drv', 30, -6, 2.6)"), ('drv_master_close', "lk('in_drv', -30, -6, 2.6)")]
-    out += [('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])"), ('cut_left', "cutv(-5.2, 2.4, 3.0)"), ('cut_right', "cutv(5.2, 2.0, 3.0)"), ('cut_above', "cutv(-0.6, -1.5, 8.5)"), ('cut_front_left_low', "cutv(-3.6, 5.2, 2.0)")]
+    out += [('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])"), ('cut_left', "cutv(-5.2, 2.4, 3.0)"), ('cut_right', "cutv(5.2, 2.0, 3.0)"), ('cut_above', "cutv(-0.6, -1.5, 8.5)"), ('cut_front_left_low', "cutv(-3.6, 5.2, 2.0)")]
     return out
 async def main():
     out, tag, params = sys.argv[1], sys.argv[2], sys.argv[3]; which = sys.argv[4] if len(sys.argv) > 4 else 'all'; os.makedirs(out, exist_ok=True)
@@ -43,7 +43,7 @@ async def main():
                 if await pg.evaluate('__beta.scene.frameN') >= n0 + int(os.environ.get('FRAMES', '4')): break
             await pg.screenshot(path=os.path.join(out, f'{tag}_{name}.png'), timeout=180000)
         if which == 'third':   # the short set for the third pass: driver and T-bar, HKOI panel, every port, hatch, finish
-            T3 = [('drv_forward', "lk('in_drv', 0, 0, 1)"), ('drv_tbar_close', "lk('in_drv', 0, -14, 1.9)"), ('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])")]
+            T3 = [('drv_forward', "lk('in_drv', 0, 0, 1)"), ('drv_tbar_close', "lk('in_drv', 0, -14, 1.9)"), ('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])")]
             T3 += [(f'port{i}_{d}', f"(__beta.interior.setCupolaHatch(0, true), lk('in_cdr', {i * 45 + 8 if i < 4 else i * 45 + 8 - 360}, 20, 1))") for i, d in enumerate(['front', 'right_front', 'right', 'right_rear', 'rear', 'left_rear', 'left', 'left_front'])]
             T3 += [('hatch_open_protected', "(__beta.interior.setCupolaHatch(1, true), __beta.interior.cupUser = true, lk('in_cdr', 8, 34, 1))"), ('hatch_open', "(__beta.interior.setCupolaHatch(2, true), lk('in_cdr', 8, 44, 1))"), ('cdr_forward', "(__beta.interior.setCupolaHatch(0, true), lk('in_cdr', 0, 0, 1))"),
                    ('cdr_hkoi_close', "lk('in_cdr', 74, -6, 2.2)"), ('cdr_hkoi_crew_page', "(__beta.interior.hkPage = 2, lk('in_cdr', 74, -6, 2.2))"), ('gnr_forward', "(__beta.interior.hkPage = 0, lk('in_gnr', 0, 0, 1))"), ('gnr_left', "lk('in_gnr', -70, 0, 1)"), ('gnr_aux_sight', "lk('in_gnr', -33, 25, 2.6)"),
@@ -56,7 +56,7 @@ async def main():
         if which in ('hits', 'hitsnight'):   # what a hit does inside, and the crew. A real penetrating hit is looked for first; if the battle gives none in time, one is staged (and the file names say so)
             await pg.evaluate("""void (window.stage = (age, kind) => { const b = __beta.battle, T = __beta.THREE; b.interiorHits = [{ T: b.t - age, pen: kind !== 'stop', kill: kind === 'kill', minor: false, s: kind === 'stop' ? 1 : kind === 'kill' ? 2 : 1.6, e: new T.Vector3(1.7, 0.35, -0.3), d: new T.Vector3(-1, -0.03, 0.1).normalize(), comps: kind === 'stop' ? {} : { gps: 'damaged', citv: 'destroyed' }, crew: kind === 'stop' ? {} : { gnr: kind === 'kill' ? 'killed' : 'wounded' }, idx: 7 }]; },
               window.crewAs = o => { const b = __beta.battle; b._cs0 = b._cs0 || b.crewState.bind(b); b.crewState = () => { const s = b._cs0(); s.on = true; s.abandoned = false; for (const r in o) Object.assign(s.who[r], o[r]); return s; }; })""")
-            for name, js in [('rest_gnr', "lk('in_gnr', 20, -6, 1)"), ('rest_cdr', "lk('in_cdr', -20, -8, 1)"), ('rest_ldr', "lk('in_ldr', 0, 0, 1)"), ('rest_drv', "lk('in_drv', 0, 0, 1)"), ('rest_drv_shoulder', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])"), ('rest_cut_left', "cutv(-5.2, 2.4, 3.0)"), ('rest_cut_above', "cutv(-0.6, -1.5, 8.5)")]: await shot('crew_' + name, js)
+            for name, js in [('rest_gnr', "lk('in_gnr', 20, -6, 1)"), ('rest_cdr', "lk('in_cdr', -20, -8, 1)"), ('rest_ldr', "lk('in_ldr', 0, 0, 1)"), ('rest_drv', "lk('in_drv', 0, 0, 1)"), ('rest_drv_shoulder', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])"), ('rest_cut_left', "cutv(-5.2, 2.4, 3.0)"), ('rest_cut_above', "cutv(-0.6, -1.5, 8.5)")]: await shot('crew_' + name, js)
             if which == 'hits':
                 real = await pg.evaluate("(() => { const b = __beta.battle, I = __beta.interior; let n = 0, h = null; while (!h && b.tank.alive && n++ < 2500) { __beta.runTo(b.t + 0.2); h = I.hitsOf(b).find(x => x.pen && !x.minor); } return h ? { T: h.T, kill: h.kill, zone: h.zone, crew: h.crew, comps: h.comps, t: b.t } : null; })()")
                 print('real penetrating hit', json.dumps(real)); tagk = 'real' if real else 'staged'
@@ -72,7 +72,7 @@ async def main():
             await shot('crew_staged_gunner_wounded', "(stage(6, 'pen'), crewAs({ gnr: { status: 'wounded', state: 'shaken' } }), lk('in_cdr', -10, -30, 1))")
             await shot('crew_staged_gunner_wounded_from_loader', "lk('in_ldr', 20, -6, 1)")
             await shot('crew_staged_loader_down', "(crewAs({ ldr: { status: 'down' }, gnr: { status: 'ok', state: 'steady' } }), lk('in_cdr', -75, -22, 1))")
-            await shot('crew_staged_driver_panicked', "(crewAs({ drv: { state: 'panicked' }, ldr: { status: 'ok' } }), lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34]))")
+            await shot('crew_staged_driver_panicked', "(crewAs({ drv: { state: 'panicked' }, ldr: { status: 'ok' } }), lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1]))")
             await shot('crew_staged_all_shaken_cut', "(crewAs({ drv: { state: 'shaken' }, gnr: { state: 'shaken' }, cdr: { state: 'strained' }, ldr: { state: 'panicked' } }), cutv(5.2, 2.0, 3.0))")
             await shot('hit_staged_killing_cdr_3s', "(stage(3, 'kill'), lk('in_cdr', 30, -10, 1))")
             print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles])'))
@@ -81,7 +81,7 @@ async def main():
             for name, js in CU: await shot('cut_' + name, js)
             print('lay', await pg.evaluate('stepTo(b => !!b._rf)'), await pg.evaluate('__beta.tank.turretYaw')); await pg.wait_for_timeout(6000); print('turret', await pg.evaluate('__beta.tank.turretYaw'))
             for name, js in CU: await shot('cut_turned_' + name, js)
-            await shot('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 62, -4, 1, [-0.4, 0.0, 0.34])"); await shot('drv_forward', "lk('in_drv', 0, 0, 1)")
+            await shot('drv_from_his_left_shoulder_like_the_photo', "lk('in_drv', 52, -6, 1, [-0.4, 0.05, 0.1])"); await shot('drv_forward', "lk('in_drv', 0, 0, 1)")
             await shot('gnr_left_breech', "lk('in_gnr', -70, 0, 1)")
             # the T-bar at work: run the battle on until the vehicle is under way, then stills from the driver's seat with the clock running
             print('moving', await pg.evaluate('stepTo(b => Math.abs(b.tank.v || 0) > 2)')); await pg.evaluate("void (lk('in_drv', 0, 0, 1), __beta.setPlaying(true))")
