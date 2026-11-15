@@ -275,6 +275,7 @@ export class Guide {
     this._title(); this._tips();
     { const t = app.q && app.q.get('tour'); if (t != null && t !== '') { const [c, st] = String(t).split('.').map(Number); setTimeout(() => { this.brief.start(c || 0, st || 0); }, 0); } }   /* tour=3 or tour=3.2 in the address opens the briefing at that chapter and step (counted from 0): for checks and for sending someone a link */
     if (typeof window !== 'undefined' && window.__beta) window.__beta.guide = this;
+    app.director.after = dt => this.update(dt);   /* once a frame, from the director's own update (before the cameras): keeps the frame loop in main.js untouched */
   }
   // the title screen: the briefing first and biggest, then Play, Scenarios, and the two older screens side by side
   _title() {
@@ -301,7 +302,8 @@ export class Guide {
   }
   helpButton() { return this.help.button(); }
   get busy() { return this.brief.on; }
-  // once a frame, after the cameras: the briefing's camera and labels, and the first-run help
+  // once a frame: the briefing's camera and labels, and the first-run help. It runs just before the page's cameras, so in a sight
+  // or a seat (where those place the camera) the labels follow one frame behind while time runs; stopped, they are exact.
   update(dt) {
     if (window.__beta && window.__beta.guide !== this) window.__beta.guide = this;
     this.brief.update(dt); this.help.watch();

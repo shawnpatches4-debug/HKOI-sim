@@ -205,9 +205,9 @@ export class CrewTalk {
         const uid = rf.k && rf.k.id, m = this.miss.get(uid);
         if (!(m != null && t - m < 30)) { const R = rf.R, near = RANGES.reduce((a, r) => Math.abs(r - R) < Math.abs(a - R) ? r : a, RANGES[0]); if (R <= 2050 && Math.abs(near - R) <= 60) this._ask(t, 'GNR', 'range_' + near, { level: 1, pri: 1, ttl: 2 }); else this._silent(t, 'GNR', 'range beyond the recorded calls'); }
       }
-      if (this.loaded === false && T.loaded && ai.ldr && ai.ldr.ok) this._ask(t, 'LDR', 'up', { level: lvl, pri: 1, ttl: 1.2 });
-      if (ai.ldr && this.ldrUp === false && ai.ldr.up) { this._ask(t, 'LDR', 'going_up', { level: lvl, pri: 1, ttl: 2 }); this._ask(t, 'LDR', 'mg_ready', { level: lvl, pri: 1, ttl: 5, delay: 2.5 }); }   /* he climbs to his machine gun */
-      if (ai.ldr && this.ldrUp === true && !ai.ldr.up && ai.ldr.ok) this._ask(t, 'LDR', 'coming_down', { level: lvl, pri: 1, ttl: 2 });
+      if (this.loaded === false && T.loaded && ai.ldr && ai.ldr.ok) { const dl = this.fx.load ? this.fx.load() || 0 : 0; this._ask(t, 'LDR', 'up', { level: lvl, pri: 1, ttl: 1.2, delay: dl }); }   /* the ram and the breech closing are heard first (effects.js load()), then his call */
+      if (ai.ldr && this.ldrUp === false && ai.ldr.up) { if (this.fx.hatch) this.fx.hatch(true); this._ask(t, 'LDR', 'going_up', { level: lvl, pri: 1, ttl: 2 }); this._ask(t, 'LDR', 'mg_ready', { level: lvl, pri: 1, ttl: 5, delay: 2.5 }); }   /* he climbs to his machine gun */
+      if (ai.ldr && this.ldrUp === true && !ai.ldr.up && ai.ldr.ok) { if (this.fx.hatch) this.fx.hatch(false); this._ask(t, 'LDR', 'coming_down', { level: lvl, pri: 1, ttl: 2 }); }
       if (ai.coax && this.coaxSaid != null && ai.coax.said !== this.coaxSaid && ai.coax.said >= 0) this._ask(t, 'GNR', 'mg', { level: lvl, pri: 1, ttl: 1.5 });
       if (this.moving === true && T.mode !== 'moving' && !(V.length && t <= V[V.length - 1].tEnd)) this._ask(t, 'CDR', 'drv_stop', { level: Math.min(1, lvl), pri: 0, ttl: 2 });
     }

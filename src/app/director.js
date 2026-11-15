@@ -69,6 +69,7 @@ export class Director {
   update(dt) {
     const A = this.app, b = A.battle, live = this.on && A.state === 'play' && !!b && !!A.volleys;
     if (window.__beta && window.__beta.director !== this) window.__beta.director = this;
+    if (this.after) this.after(dt);   /* the briefing, the scenarios page and the first-run help ride on this call (src/app/tour.js sets it): no line of their own in the frame loop */
     if (this.hold) return;   /* the briefing has the camera and the words */
     for (const id of ['caption', 'subs']) { const o = document.getElementById(id); if (o) { const v = live ? 'none' : ''; if (o.style.display !== v) o.style.display = v; } }   /* the page's own caption line and the crew subtitles give way to the director's captions */
     if (this.tag.hidden === live) this.tag.hidden = !live;
