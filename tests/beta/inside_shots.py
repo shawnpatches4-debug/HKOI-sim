@@ -26,9 +26,9 @@ def scenes():
         S += [(f'pen_gnr_{age}s_cdr', f"(stage({PEN_GNR % age}), lk('in_cdr', 8, -24, 1))"), (f'pen_gnr_{age}s_ldr', "lk('in_ldr', 78, -8, 1)")]
     S += [('pen_gnr_25s_own_seat', "lk('in_gnr', 80, -25, 1)")]
     for age in ['0.05', '2', '30']:
-        S += [(f'kill_ldr_{age}s_cdr', f"(stage({KILL_LDR % age}), lk('in_cdr', -80, -22, 1))"), (f'kill_ldr_{age}s_gnr', "lk('in_gnr', -100, -4, 1, [-0.3, 0.2, 0.5])")]
+        S += [(f'kill_ldr_{age}s_cdr', f"(stage({KILL_LDR % age}), lk('in_cdr', -62, -40, 1))"), (f'kill_ldr_{age}s_gnr', "lk('in_gnr', -100, -4, 1, [-0.3, 0.2, 0.5])")]
     for age in ['0.4', '3', '12']:
-        S += [(f'hull_fire_{age}s_drv', f"(stage({HULL_FIRE % (age, age)}), lk('in_drv', 55, -8, 1))"), (f'hull_fire_{age}s_gnr', "lk('in_gnr', 40, -42, 1)")]
+        S += [(f'hull_fire_{age}s_drv', f"(stage({HULL_FIRE % (age, age)}), lk('in_drv', 62, -12, 1))"), (f'hull_fire_{age}s_gnr', "lk('in_gnr', 40, -42, 1)")]
     S += [('hull_fire_12s_cut', "cutv(5.2, 2.0, 3.0)")]
     for age in ['0.6', '8']:
         S += [(f'electrical_{age}s_gnr', f"(stage({ELEC % age}), lk('in_gnr', -40, -10, 1))"), (f'electrical_{age}s_ldr', "lk('in_ldr', -100, -4, 1)"), (f'electrical_{age}s_cdr', "lk('in_cdr', -30, -18, 1)")]

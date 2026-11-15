@@ -48,7 +48,7 @@ export function fxState(hits, now) {
 const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _d = new THREE.Vector3(), _a = [0, 0, 0], _b = [0, 0, 0], _n = [0, 0, 0], WHITE = [1, 1, 1], UP = [0, 1, 0];
 const KIT = [   /* loose kit on the basket floor and the hull floor: [x, y (its underside), z, sx, sy, sz, frame] */
   [-0.95, -0.98, -0.3, 0.16, 0.27, 0.3, 'tur'], [-0.5, -0.98, 0.72, 0.28, 0.18, 0.15, 'tur'], [0.2, -0.98, 0.78, 0.3, 0.1, 0.22, 'tur'], [0.95, -1.14, -1.4, 0.3, 0.19, 0.16, 'hul'], [-0.9, -1.14, 0.9, 0.16, 0.27, 0.3, 'hul'], [-0.2, -0.98, 0.5, 0.09, 0.24, 0.09, 'tur'] ];
-const HANG = [[-1.05, 0.5, 0.15, 0.1, 0.2, 0.06, 'tur', 0.26], [1.02, 0.5, 0.62, 0.08, 0.13, 0.05, 'tur', 0.2], [-0.42, -0.47, -2.25, 0.07, 0.11, 0.04, 'hul', 0.12]];   /* things hanging from the roof on a strap: [x, y of the hook, z, sx, sy, sz, frame, strap length] */
+const HANG = [[-1.05, 0.5, 0.15, 0.1, 0.2, 0.06, 'tur', 0.26], [1.02, 0.5, 0.62, 0.08, 0.13, 0.05, 'tur', 0.2]];   /* things hanging from the roof on a strap: [x, y of the hook, z, sx, sy, sz, frame, strap length] */
 
 export class InteriorFx {
   // cab: (opts) => material of the interior; groups: { tur, hul }; pack: the seats' own surfaces ({ role: { g, planes } }); merge: unused now
@@ -230,10 +230,10 @@ export class InteriorFx {
     if (!this.ov) { const el = this.ov = document.createElement('div'); if (!el || !el.style || !el.appendChild) { this.ov = null; this.noOv = true; return; } el.id = 'concuss'; el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1;display:none'; const bl = this.ovB = document.createElement('div'); bl.style.cssText = 'position:absolute;inset:0'; const wh = this.ovW = document.createElement('div'); wh.style.cssText = 'position:absolute;inset:0;background:#fff8ec;opacity:0'; el.appendChild(bl); el.appendChild(wh); document.body.appendChild(el); }
     if (!this.ovOn) { this.ovOn = true; this.ov.style.display = 'block'; }
     const t = Math.round(C.tunnel * 50) / 50, b = Math.round(C.blur * 20) / 20, f = Math.round(C.flash * 25) / 25, key = t + '|' + b;
-    if (key !== this.ovKey) { this.ovKey = key; const inner = Math.round(78 - 58 * t), outer = Math.round(118 - 52 * t), px = (b * 7).toFixed(1), mask = `radial-gradient(ellipse at center, transparent ${Math.round(42 - 22 * b)}%, #000 ${Math.round(88 - 20 * b)}%)`;
-      this.ov.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,0) ${inner}%, rgba(4,2,2,${(0.25 + 0.72 * t).toFixed(2)}) ${outer}%)`;
+    if (key !== this.ovKey) { this.ovKey = key; const inner = Math.round(78 - 58 * t), outer = Math.round(118 - 52 * t), px = (b * 3).toFixed(1), mask = `radial-gradient(ellipse at center, transparent ${Math.round(42 - 22 * b)}%, #000 ${Math.round(88 - 20 * b)}%)`;
+      this.ov.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,0) ${inner}%, rgba(4,2,2,${(0.12 + 0.5 * t).toFixed(2)}) ${outer}%)`;
       const s = this.ovB.style; if (b > 0.04) { s.backdropFilter = s.webkitBackdropFilter = `blur(${px}px)`; s.maskImage = s.webkitMaskImage = mask; } else { s.backdropFilter = s.webkitBackdropFilter = 'none'; } }
-    if (f !== this.ovF) { this.ovF = f; this.ovW.style.opacity = f.toFixed(2); }
+    if (f !== this.ovF) { this.ovF = f; this.ovW.style.opacity = (0.3 * f).toFixed(2); }   /* only a brief brightening: the flash itself is drawn in the compartment, at the hole */
     const cv = document.getElementById('view'); if (cv && cv.style) { const k = C.shake * 9; cv.style.transform = k > 0.15 ? `translate(${(Math.sin(now * 61) * k).toFixed(1)}px, ${(Math.sin(now * 47 + 1) * k).toFixed(1)}px)` : ''; }
   }
 }
