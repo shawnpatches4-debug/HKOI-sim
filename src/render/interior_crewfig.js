@@ -73,7 +73,7 @@ function woundable(mat) {
   mat.fragmentShader = `uniform vec4 uW[${NW}]; uniform vec4 uWk[${NW}]; uniform vec3 uWUp; uniform float uBurn; uniform float uSoot; varying vec3 vBind;\n` + fs.replace(a3, a3 + `
       { float n1 = texture2D(uBloodT, vUv * 4.0).a; float n2 = texture2D(uBloodT, vUv * 9.0 + 0.37).a;
         for (int i = 0; i < ${NW}; i++) { float R = uW[i].w; if (R <= 0.0) continue; vec3 dv = vBind - uW[i].xyz; float hgt = dot(dv, uWUp); if (hgt < 0.0) dv -= uWUp * hgt * 0.5; float d = length(dv); float k = uWk[i].x;
-          if (k > 1.5 && k < 2.5) { float b = smoothstep(R, R * 0.3, d + (n1 - 0.5) * R * 0.8) * uWk[i].z; alb = mix(alb, mix(vec3(0.34, 0.07, 0.05), vec3(0.03, 0.022, 0.018), n2), b); }
+          if (k > 1.5 && k < 2.5) { float b = smoothstep(R, R * 0.3, d + (n1 - 0.5) * R * 0.8) * uWk[i].z; alb = mix(alb, mix(vec3(0.11, 0.05, 0.03), vec3(0.02, 0.016, 0.013), n2), b); }
           else { float soak = smoothstep(R, R * 0.45, d + (n1 - 0.5) * R * 0.5); alb = mix(alb, vec3(0.21, 0.012, 0.012) * (0.55 + 0.45 * n2), soak * 0.95);
             float c = uWk[i].y; float core = smoothstep(c, c * 0.5, d + (n2 - 0.5) * c * 0.6); alb = mix(alb, k > 0.5 ? vec3(0.03, 0.008, 0.008) : vec3(0.075, 0.004, 0.004), core); } }
         alb = mix(alb, vec3(0.022, 0.018, 0.015) + vec3(0.5, 0.09, 0.0) * step(0.93, n2) * step(0.5, uBurn), uBurn * smoothstep(0.1, 0.75, n1 * 0.6 + uBurn * 0.75));
@@ -82,7 +82,7 @@ function woundable(mat) {
   mat.needsUpdate = true; return true;
 }
 // what each kind of wound looks like on the body: [core radius, how far the blood soaks at the end, seconds to soak that far]
-const WOUND = { frag: [0.022, 0.1, 50], trauma: [0.085, 0.3, 14], sever: [0.06, 0.2, 10], burn: [0, 0.2, 1] };
+const WOUND = { frag: [0.022, 0.1, 50], trauma: [0.085, 0.3, 14], sever: [0.06, 0.2, 10], burn: [0, 0.13, 1] };
 const PART_UP = { head: 0.07, chest: 0.06, belly: 0.03 }, PART_R = { head: 0.085, chest: 0.13, belly: 0.12, armL: 0.05, armR: 0.05, foreL: 0.04, foreR: 0.04, thighL: 0.075, thighR: 0.075, shinL: 0.05, shinR: 0.05 };
 const CHILD = { LeftArm: 'LeftForeArm', RightArm: 'RightForeArm', LeftForeArm: 'LeftHand', RightForeArm: 'RightHand', LeftUpLeg: 'LeftLeg', RightUpLeg: 'RightLeg', LeftLeg: 'LeftFoot', RightLeg: 'RightFoot' };
 const SEVER_AT = { foreL: 'LeftForeArm', foreR: 'RightForeArm', shinL: 'LeftLeg', shinR: 'RightLeg' };

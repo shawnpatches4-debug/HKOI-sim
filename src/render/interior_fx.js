@@ -97,7 +97,7 @@ export class InteriorFx {
     let used = -1; for (let i = 0; i < 2; i++) { const l = this.L[i]; if (l.w <= 0.02) continue; let s = -1; for (let k = 3; k < LC.length; k++) if (k !== used && LC[k].x + LC[k].y + LC[k].z < 0.02) { s = k; break; }   /* a lamp that is dark this frame (a closed hatch's daylight, a dead display's glow) is used first; otherwise a dome lamp gives way */
       if (s < 0) s = 2 - i; used = s; LP[s].copy(l.p).applyMatrix4(hw); LC[s].copy(l.c); LR[s] = l.r; }
     if (S.halon) { const k = Math.exp(-S.halon.age / 5), c = SHARED.uSmokeCol.value, a = SHARED.uAmb.value, w = Math.min(0.85, 0.25 + 3 * (a.x + a.y + a.z)); c.set(c.x + (w - c.x) * k, c.y + (w - c.y) * k, c.z + (w * 1.04 - c.z) * k); }
-    if (S.breach) { const k = Math.min(1, S.breach.age / 0.12); SHARED.uAmb.value.x += 2.6 * k; SHARED.uAmb.value.y += 1.5 * k; SHARED.uAmb.value.z += 0.45 * k; }
+    if (S.breach) { const k = Math.min(1, S.breach.age / 0.12); SHARED.uAmb.value.x += 1.0 * k; SHARED.uAmb.value.y += 0.38 * k; SHARED.uAmb.value.z += 0.08 * k; }
     // ---- the viewer in a seat: ringing ears, tunnel vision, blurred edges, shake
     const role = CTX.viewer, C = role ? concussion(hits, now, MAN[role].eye, MAN[role].frame) : null; if (C && S.breach) { C.flash = Math.max(C.flash, Math.min(1, S.breach.age / 0.5)); C.tunnel = Math.max(C.tunnel, Math.min(1, S.breach.age / 0.9)); }
     this.view.deaf = C ? C.deaf : 0; this.view.tunnel = C ? C.tunnel : 0; this.view.shake = C ? C.shake : 0; this.view.blur = C ? C.blur : 0; this.view.flash = C ? C.flash : 0; this._overlay(C, now);
@@ -147,7 +147,7 @@ export class InteriorFx {
   _systems(S, MT, now) {
     const P = this.lit, Q = this.glow, B = this.bits, D = this.decals;
     for (const a of S.arcs) { const M = a.at[3] === 'tur' ? MT : null, k = 1 - a.age / a.life, slot = Math.floor(now * 26), on = hsh(slot, a.seed) < 0.1 + 0.4 * k, x = a.at[0], y = a.at[1], z = a.at[2];
-      if (on) { const j = hsh(slot, a.seed + 1) - 0.5; Q.add(M, x + j * 0.08, y + (hsh(slot, a.seed + 2) - 0.5) * 0.08, z, 0.1 + 0.12 * hsh(slot, 3), 1.4, 2.0, 3.6, 1, slot, 1, slot * 0.1, 0.3); this._light(M, x, y, z, 1.2, 1.8, 3.4, 1.0); }
+      if (on) { const j = hsh(slot, a.seed + 1) - 0.5; Q.add(M, x + j * 0.08, y + (hsh(slot, a.seed + 2) - 0.5) * 0.08, z, 0.035 + 0.05 * hsh(slot, 3), 2.4, 2.8, 3.8, 1, slot, 1, slot * 0.1, 0.6); this._light(M, x, y, z, 1.2, 1.8, 3.4, 1.0); }
       const bi = Math.floor(now * 2.5), bt = now - bi / 2.5; if (hsh(bi, a.seed + 5) < 0.25 + 0.5 * k) for (let i = 0; i < 9; i++) { const vx = (hsh(bi * 9 + i, 1) - 0.5) * 3, vy = 0.5 + 2.2 * hsh(bi * 9 + i, 2), vz = (hsh(bi * 9 + i, 3) - 0.5) * 3, life = 0.25 + 0.3 * hsh(i, bi); if (bt > life) continue;
         _v.set(x + vx * bt, y + vy * bt - 4.9 * bt * bt, z + vz * bt); _d.set(vx, vy - 9.8 * bt, vz).normalize(); B.add(M, _v, _d, 0.003, 0.03, 2.6, 2.4, 1.6, 1 - bt / life); } }
     const hy = S.hyd; if (hy) { const x = hy.at[0], y = hy.at[1], z = hy.at[2], a = hy.age, pr = Math.exp(-a / 3), dx = hsh(hy.seed, 1) - 0.5, dz = hsh(hy.seed, 2) - 0.2;
@@ -187,8 +187,8 @@ export class InteriorFx {
     // the doors breached: the fire comes through into the fighting compartment
     const br = S.breach; if (br) { const a = br.age, front = 1.0 - 16 * a, k = sat(a / 0.08);
       for (let i = 0; i < 64; i++) { const sd = i * 3 + Math.floor(now * 14 + i * 0.37) * 7, z = Math.max(BOX.tur.z0 + 0.1, Math.max(front, BOX.tur.z0) + hsh(sd, 1) * (1.0 - Math.max(front, BOX.tur.z0))), u = sat((1.0 - z) / 2.3);
-        Q.add(MT, (hsh(sd, 2) - 0.5) * 2.2, BOX.tur.y0 + 0.2 + hsh(sd, 3) * 1.35, z, 0.5 + 0.7 * hsh(sd, 4), 3.4, 2.5 - 1.3 * u * (a < 0.5 ? 1 : 0.6), 1.2 - 0.9 * u, 0.85 * k, hsh(sd, 5) * 6, 1.2, sd * 0.07, 0); }
-      this._light(MT, 0, 0.2, Math.max(front, -0.6), 9 * k, 6 * k, 2.6 * k, 3.5); this._light(null, 0, -0.7, -0.4, 6 * k, 3.4 * k, 1.2 * k, 3.0);
+        Q.add(MT, (hsh(sd, 2) - 0.5) * 2.2, BOX.tur.y0 + 0.2 + hsh(sd, 3) * 1.35, z, 0.35 + 0.6 * hsh(sd, 4), 2.9, 1.25 - 0.7 * u, 0.3 - 0.25 * u, 0.4 * k, hsh(sd, 5) * 6, 1.2, sd * 0.07, 0); }
+      this._light(MT, 0, 0.2, Math.max(front, -0.6), 8 * k, 3.2 * k, 0.8 * k, 3.5); this._light(null, 0, -0.7, -0.4, 5 * k, 2.0 * k, 0.5 * k, 3.0);
       for (const sx of [-0.575, 0.575]) D.add(MT, [sx, 0.24, 0.975], [0, 0, -1], 1.12, CELL.day, 1, 6, 1, [1, 0.8, 0.5], 0, sx, 0.46); }
   }
 
