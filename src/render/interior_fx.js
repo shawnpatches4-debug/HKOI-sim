@@ -1,86 +1,232 @@
-// What a hit does to the inside of the vehicle: shake, flickering and failing lamps, glitching and dead displays, sparks and spall
-// at the true entry point, smoke, fire, and blood where a crewman is wounded or killed.
+// What a hit does to the inside of the vehicle, DRAWN: the jet across the compartment on the damage model's own line, the spall
+// fan and its glowing fragments, the hole with daylight in it, scorch, the scar on the far wall, dust and paint flakes off every surface
+// when the armour holds, loose kit thrown and hanging things swinging, hydraulic spray and its mist, arcing and tripped breakers,
+// fire where the damage model put it (hull fuel cell, engine bulkhead, bustle ammunition behind its doors, the doors breached),
+// the Halon blast, light shafts under thrown-open hatches, cracked displays, blood, and the ringing-ears view of the man in the seat.
 //
-// Everything here is worked out from the battle's own records and the battle clock, never from frame time, so a replay or a rewind shows
-// the same damage at the same moments and the result is the same at any frame rate. The damage of each hit (plate struck, holed or not,
-// where it came in and along which line, what it broke, who it hurt) is the legacy damage report, DMG.report(volley.rec, volley.cfg).
+// WHAT happens is decided in interior_events.js (from the damage report and the crew model) and interior_gore.js (wounds); this file
+// only draws it. Everything is a plain function of the battle clock: no particle or mark keeps a state of its own, so a replay or a
+// rewind shows the same thing at the same moment and the result is the same at any frame rate.
+// Cost: four instanced meshes (marks, lit particles, glowing particles, fragments) and one for loose kit: 5 draw calls, at most
+// 96 + 360 + 220 + 160 + 12 instances (about 1,700 triangles), nothing while no inside view is active.
 import * as THREE from 'three';
 import { SHARED } from './interior_parts.js';
+import { CTX, BOX, AT, HYD, HALON, PIVOT_Y, detail, insideState, noState, fateOf, concussion, hsh } from './interior_events.js';
+import { Decals, Puffs, Bits, CELL } from './interior_draw.js';
+import { woundsOf, lookOf, drawBlood, partAt, MAN, ROLES } from './interior_gore.js';
+export { PIVOT_Y };
 
-const hsh = (a, b) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); };
-// which display each broken component takes with it
-const SCREEN_OF = { gps: ['gps', 'gas', 'comp'], citv: ['citv'], hkoi: ['hkoi'], radar: ['hkoi'], tdrive: ['comp'], stab: ['comp'], engine: ['drv'], trans: ['drv'] };
-export const PIVOT_Y = 1.617;   // height of the turret's turning point above the ground in the damage report's frame
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), sat = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 // Every hit, Trophy shot and near miss of the battle so far, in time order. Rebuilt only when a new volley has been resolved.
-// Each: { T (battle time), pen, kill, minor, s (strength), e (where it came in, hull frame of the interior), d (direction), comps, crew, idx }
+// Each: { T (battle time), pen, kill, minor, s (strength), e (where it came in, hull frame of the interior), d (direction), comps, crew, idx,
+//         zone (plate name), zoneKey, turA (the damage report's turret angle), reach (m, from the plate), key (weapon), top (top attack) }
 export function hitList(battle) {
-  if (battle.interiorHits) return battle.interiorHits;   /* the node test supplies its own */
+  CTX.battle = battle;
+  if (battle.interiorHits) return battle.interiorHits;   /* the node test and the picture staging supply their own */
   const V = battle.volleys || [], n = V.length, last = n ? V[n - 1] : null, key = n + ':' + (last && last.rec ? 1 : 0); if (battle._intHitKey === key && battle._intHits) return battle._intHits;
   const out = [], D = typeof DMG !== 'undefined' ? DMG : null;
   for (const v of V) { if (!v.rec) continue;
     if (D && v.cfg) { let rep = []; try { rep = D.report(v.rec, v.cfg); } catch (e) { rep = []; }
       for (const h of rep) { const comps = {}; for (const c of h.comps || []) comps[c.id] = c.state;
-        out.push({ T: v.t0 + h.t, pen: !!h.penetrated, kill: !!h.killing, minor: false, s: h.killing ? 2 : h.penetrated ? 1.6 : 1, e: new THREE.Vector3(h.entry[0], h.entry[1] - PIVOT_Y, h.entry[2]), d: new THREE.Vector3(h.dir[0], h.dir[1], h.dir[2]).normalize(), comps, crew: h.crew || {}, idx: v.i * 100 + h.idx, zone: h.zoneName }); } }
+        out.push({ T: v.t0 + h.t, pen: !!h.penetrated, kill: !!h.killing, minor: false, s: h.killing ? 2 : h.penetrated ? 1.6 : 1, e: new THREE.Vector3(h.entry[0], h.entry[1] - PIVOT_Y, h.entry[2]), d: new THREE.Vector3(h.dir[0], h.dir[1], h.dir[2]).normalize(), comps, crew: h.crew || {}, idx: v.i * 100 + h.idx,
+          zone: h.zoneName, zoneKey: h.zone, turA: h.turA || 0, reach: h.reach, key: h.key, top: !!h.top }); } }
     for (const a of v.rec.aps || []) out.push({ T: v.t0 + a.t, pen: false, kill: false, minor: true, s: 0.3, comps: {}, crew: {}, idx: v.i * 100 + 90 });   /* Trophy firing beside the hatch */
     for (const th of v.rec.threats || []) { const e = th.viz && th.viz.end; if (e && (e.type === 'miss' || e.type === 'ground')) out.push({ T: v.t0 + e.t, pen: false, kill: false, minor: true, s: 0.22, comps: {}, crew: {}, idx: v.i * 100 + 50 + th.idx }); } }
   out.sort((a, b) => a.T - b.T); battle._intHitKey = key; battle._intHits = out; return out;
 }
 
-// The state of the inside at battle time `now`, from the list of hits. A plain function: same inputs, same answer.
-const ST = { shake: 0, flick: 0, glitch: 0, smoke: 0, dust: 0, flash: 0, fire: false, lightsOut: false, emergency: false, alarm: false, dark: {}, weak: {}, last: null, lastAge: 1e9, blood: {}, pulse: null };
+// The state of the inside at battle time `now`, from the list of hits (interior_events.js insideState; the crew model's fire and
+// bail-out and the tank's fate are read from the battle the list came from). An empty list at time 0 is the interior's way of
+// asking for "nothing to show" (seen from outside).
 export function fxState(hits, now) {
-  const S = ST; S.shake = S.flick = S.glitch = S.smoke = S.dust = S.flash = 0; S.fire = S.lightsOut = S.emergency = S.alarm = false; S.dark = {}; S.weak = {}; S.last = null; S.lastAge = 1e9; S.blood = {}; S.pulse = null;
-  for (const h of hits) { const age = now - h.T; if (age < 0) break;
-    if (age < 5) S.shake += h.s * Math.exp(-2.2 * age);
-    S.flick = Math.max(S.flick, (h.pen ? 2.2 : 0.55 * h.s) - age); S.glitch = Math.max(S.glitch, (h.pen ? 1.4 : 0.45 * h.s) - age);
-    if (h.minor) { if (!S.pulse || h.T > S.pulse.t) S.pulse = { t: h.T, strength: h.s, penetrated: false }; continue; }
-    S.pulse = { t: h.T, strength: h.s, penetrated: h.pen }; S.last = h; S.lastAge = age;
-    if (h.pen) { S.smoke = Math.max(S.smoke, h.kill ? Math.min(1, 0.55 + age * 0.06) : 0.8 * Math.exp(-age / 14)); if (age < 0.14) S.flash = Math.max(S.flash, 1 - age / 0.14);
-      if (h.kill) { S.fire = true; S.lightsOut = true; } else if (hsh(h.idx, 5) < 0.5) S.emergency = true; if (age < 25 || h.kill) S.alarm = true;
-      for (const r in h.crew) if (h.crew[r] !== 'ok') S.blood[r] = S.blood[r] === 'killed' ? 'killed' : h.crew[r]; }
-    else S.dust = Math.max(S.dust, 0.32 * Math.exp(-age / 1.6));
-    for (const id in h.comps) for (const scr of SCREEN_OF[id] || []) { if (h.comps[id] === 'destroyed') S.dark[scr] = true; else S.weak[scr] = true; } }
-  return S;
+  if (!hits.length && now === 0) return noState();
+  const b = CTX.battle; let crew = null; try { crew = b && b.crewState ? b.crewState() : null; } catch (e) { crew = null; }
+  CTX.crew = crew; CTX.fate = fateOf(b); const S = insideState(hits, now, crew, CTX.fate); CTX.S = S; return S;
 }
 
-function bloodTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); let s = 91; const R = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  x.clearRect(0, 0, 256, 256);
-  for (let q = 0; q < 4; q++) { const ox = (q % 2) * 128, oy = (q >> 1) * 128;   /* four different stains on one sheet */
-    for (let i = 0; i < 26; i++) { const a = R() * 6.283, d = Math.pow(R(), 1.7) * 46, r = 3 + R() * (i < 5 ? 20 : 8); x.fillStyle = `rgba(${96 + R() * 44 | 0},${3 + R() * 9 | 0},${3 + R() * 7 | 0},1)`; x.beginPath(); x.ellipse(ox + 64 + Math.cos(a) * d, oy + 56 + Math.sin(a) * d * 0.8, r, r * (0.6 + R() * 0.5), a, 0, 7); x.fill(); }
-    for (let i = 0; i < 5; i++) { const px = ox + 40 + R() * 48; x.fillStyle = 'rgba(104,5,5,1)'; x.fillRect(px, oy + 58, 2 + R() * 4, 24 + R() * 44); }   /* runs */
-    for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(112,6,6,1)'; x.beginPath(); x.arc(ox + 8 + R() * 112, oy + 8 + R() * 112, 0.8 + R() * 2.4, 0, 7); x.fill(); } }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
+const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _d = new THREE.Vector3(), _a = [0, 0, 0], _b = [0, 0, 0], _n = [0, 0, 0], WHITE = [1, 1, 1], UP = [0, 1, 0];
+const KIT = [   /* loose kit on the basket floor and the hull floor: [x, y (its underside), z, sx, sy, sz, frame] */
+  [-0.95, -0.98, -0.3, 0.16, 0.27, 0.3, 'tur'], [-0.5, -0.98, 0.72, 0.28, 0.18, 0.15, 'tur'], [0.2, -0.98, 0.78, 0.3, 0.1, 0.22, 'tur'], [0.95, -1.14, -1.4, 0.3, 0.19, 0.16, 'hul'], [-0.9, -1.14, 0.9, 0.16, 0.27, 0.3, 'hul'], [-0.2, -0.98, 0.5, 0.09, 0.24, 0.09, 'tur'] ];
+const HANG = [[-1.05, 0.5, 0.15, 0.1, 0.2, 0.06, 'tur', 0.26], [1.02, 0.5, 0.62, 0.08, 0.13, 0.05, 'tur', 0.2], [-0.42, -0.47, -2.25, 0.07, 0.11, 0.04, 'hul', 0.12]];   /* things hanging from the roof on a strap: [x, y of the hook, z, sx, sy, sz, frame, strap length] */
 
-// The drawn part: sparks and spall of the latest penetration, and the blood stains by each seat (made once, shown when earned).
 export class InteriorFx {
-  // cab: (opts) => material of the interior; groups: { tur, hul }; seats: where each man sits, as [x, y, z, group]
-  constructor(cab, groups, pack, merge) {
-    this.G = groups; this.N = 56;
-    const glow = this.glow = new THREE.ShaderMaterial({ uniforms: { uInside: SHARED.uInside, uExpo: SHARED.uExpo, uHeat: { value: 1 } },
-      vertexShader: `uniform float uInside; void main() { vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; if (uInside > 0.5) { float zv = -mv.z; gl_Position.z = -zv + 2.0 * 0.02 * (zv - 0.03) * 40.0 / (40.0 - 0.03); } }`,
-      fragmentShader: `uniform float uExpo; uniform float uHeat; void main() { gl_FragColor = vec4(vec3(3.2, 1.9 * uHeat, 0.5 * uHeat * uHeat) * uExpo, 1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}` });
-    const sp = this.sparks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.004, 0.004, 0.05), glow, this.N); sp.frustumCulled = false; sp.visible = false; groups.hul.add(sp);
-    // blood: three stains by each seat (on the seat, on the wall or floor beyond it), all one mesh a seat
-    const mat = this.bloodMat = cab({ labels: bloodTexture() }); this.stains = {};
-    for (const [r, def] of Object.entries(pack)) { const geo = [], P = def.planes; P.forEach((p, i) => { const g = new THREE.PlaneGeometry(p[6] * 1.45, p[7] * 1.45), uv = g.attributes.uv, q = (i + r.length) % 4; for (let k = 0; k < uv.count; k++) uv.setXY(k, ((q % 2) + uv.getX(k)) / 2, ((q >> 1) + uv.getY(k)) / 2);
-        g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(p[0], p[1], p[2]), new THREE.Quaternion().setFromEuler(new THREE.Euler(p[3], p[4], p[5], 'YXZ')), new THREE.Vector3(1, 1, 1))); const n = g.attributes.position.count, col = new Float32Array(n * 4).fill(1); for (let k = 0; k < n; k++) col[k * 4 + 3] = 0; g.setAttribute('color', new THREE.BufferAttribute(col, 4)); geo.push(g.toNonIndexed()); });
-      const m = new THREE.Mesh(merge(geo), mat); m.frustumCulled = false; m.visible = false; m.renderOrder = 5; groups[def.g].add(m); this.stains[r] = m; }
-    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._d = new THREE.Vector3(); this._z = new THREE.Vector3(0, 0, 1); this._s = new THREE.Vector3(1, 1, 1);
+  // cab: (opts) => material of the interior; groups: { tur, hul }; pack: the seats' own surfaces ({ role: { g, planes } }); merge: unused now
+  constructor(cab, groups, pack) {
+    this.G = groups; this.planes = {}; this.stains = {}; for (const r in pack) { this.planes[r] = pack[r].planes; this.stains[r] = { visible: false }; }
+    this.decals = new Decals(groups.hul, 96); this.lit = new Puffs(groups.hul, 360, false); this.glow = new Puffs(groups.hul, 220, true); this.bits = new Bits(groups.hul, 160);
+    // loose kit and hanging things: plain painted boxes in the interior's own material
+    { const g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed(), n = g.attributes.position.count, col = new Float32Array(n * 4); for (let i = 0; i < n; i++) { col[i * 4] = 0.2; col[i * 4 + 1] = 0.23; col[i * 4 + 2] = 0.15; col[i * 4 + 3] = 2.0; } g.setAttribute('color', new THREE.BufferAttribute(col, 4));
+      let mat = null; try { mat = cab({}); } catch (e) { mat = null; } const k = this.kit = new THREE.InstancedMesh(g, mat || new THREE.MeshBasicMaterial({ color: 0x33381f }), KIT.length + HANG.length * 2); k.frustumCulled = false; k.userData.cabFx = true; groups.hul.add(k); }
+    this.MT = new THREE.Matrix4(); this.look = {}; this.W = null; this.view = { deaf: 0, tunnel: 0, shake: 0, blur: 0, flash: 0 }; this.L = [{ p: new THREE.Vector3(), c: new THREE.Vector3(), r: 1, w: 0 }, { p: new THREE.Vector3(), c: new THREE.Vector3(), r: 1, w: 0 }];
+    this.day = null; this.screens = null; this.ov = null; this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion(); this._s = new THREE.Vector3(); this._e = new THREE.Euler();
   }
+  cost() { return { marks: this.decals.mesh.count, smoke: this.lit.mesh.count, glow: this.glow.mesh.count, bits: this.bits.mesh.count, kit: this.kit.count, calls: 5 }; }
+
+  // a light that an effect throws (the two strongest take the place of two of the dome lamps for this frame). p in frame coordinates
+  _light(M, x, y, z, r, g, b, rad) { const w = r + g + b, L = this.L, s = w > L[0].w ? 0 : w > L[1].w ? 1 : -1; if (s < 0) return; if (s === 0) { const t = L[0]; L[0] = L[1]; L[1] = t; } const t = L[s === 0 ? 0 : 1]; t.p.set(x, y, z); if (M) t.p.applyMatrix4(M); t.c.set(r, g, b); t.r = rad; t.w = w; }
+
   // S: fxState(...); graphic: blood allowed
   update(S, graphic) {
-    for (const r in this.stains) { const on = !!(graphic && S.blood[r]); if (this.stains[r].visible !== on) this.stains[r].visible = on; }
-    const h = S.last, age = S.lastAge, sp = this.sparks, show = !!(h && h.pen && age < 1.1); if (sp.visible !== show) sp.visible = show; if (!show) return;
-    // sparks and spall: thrown from the point where the plate was holed, in a cone along the line the jet came in on; they fall and die
-    this.glow.uniforms.uHeat.value = Math.max(0.15, 1 - age / 1.1);
-    for (let i = 0; i < this.N; i++) { const a = hsh(h.idx + i, 1) * 6.283, c = hsh(h.idx + i, 2) * 0.62, v = 2.5 + hsh(h.idx + i, 3) * 6, life = 0.35 + hsh(h.idx + i, 4) * 0.75, d = this._d;
-      d.set(Math.cos(a) * c, Math.sin(a) * c, 0); const dir = h.d, ux = Math.abs(dir.y) < 0.9 ? this._p.set(0, 1, 0) : this._p.set(1, 0, 0); const ax = new THREE.Vector3().crossVectors(dir, ux).normalize(), ay = new THREE.Vector3().crossVectors(dir, ax);
-      const vel = new THREE.Vector3().copy(dir).addScaledVector(ax, d.x).addScaledVector(ay, d.y).normalize().multiplyScalar(v), t = Math.min(age, life * 1.2), drag = (1 - Math.exp(-3 * t)) / 3;
-      const p = this._p.copy(h.e).addScaledVector(dir, 0.35).addScaledVector(vel, drag); p.y -= 2.2 * t * t; if (p.y < -1.1) p.y = -1.1;
-      this._q.setFromUnitVectors(this._z, vel.normalize()); const k = age < life ? 1 : 0; this._s.set(k, k, k * (0.5 + v * 0.12)); this._m.compose(p, this._q, this._s); sp.setMatrixAt(i, this._m); }
-    sp.instanceMatrix.needsUpdate = true;
+    const D = this.decals, P = this.lit, Q = this.glow, B = this.bits;
+    if (S.outside || !S.hits) { D.begin(); P.begin(); Q.begin(); B.begin(); D.end(false); P.end(false); Q.end(false); B.end(false); this.kit.visible = false; for (const r in this.stains) this.stains[r].visible = false; this._overlay(null); return; }
+    try { this._draw(S, graphic); } catch (e) { if (!this._err) { this._err = 1; console.warn('interior effects fault:', e && e.message); } }
+  }
+  _draw(S, graphic) {
+    const D = this.decals, P = this.lit, Q = this.glow, B = this.bits, now = S.now, hits = S.hits, G = this.G;
+    D.begin(); P.begin(); Q.begin(); B.begin(); this.L[0].w = this.L[1].w = 0;
+    const MT = this.MT.copy(G.hul.matrixWorld).invert().multiply(G.tur.matrixWorld);   /* turret coordinates into the hull group's, where every effect mesh hangs */
+    if (!this.day) G.tur.traverse(o => { const u = o.material && o.material.uniforms; if (u && u.uDay && !this.day) this.day = u.uDay; });
+    const dc = this.day ? this.day.value : null, dayR = dc ? dc.x * 2.2 : 0.8, dayG = dc ? dc.y * 2.2 : 0.8, dayB = dc ? dc.z * 2.2 : 0.8, smoke = Math.max(S.smoke, S.dust);
+    // ---- each hit: the newest eight leave their marks; the moving parts only while they last
+    let n0 = 0; for (let i = hits.length - 1, k = 0; i >= 0; i--) { if (hits[i].minor || hits[i].T > now) continue; if (++k >= 8) { n0 = i; break; } }
+    for (let i = n0; i < hits.length; i++) { const h = hits[i], age = now - h.T; if (age < 0) break; if (h.minor) continue; this._hit(h, detail(h), age, MT, dayR, dayG, dayB, smoke); }
+    this._systems(S, MT, now); this._fires(S, MT, now); this._kit(S, MT, now);
+    // hatches thrown open by a crew that is leaving: shafts of daylight standing in the smoke
+    if (S.abandoned) for (const [hx, hz] of [[-0.77, 0.62], [0.52, 0.36]]) for (let i = 0; i < 6; i++) Q.add(MT, hx + 0.05 * Math.sin(i * 2.1), 0.5 - i * 0.22, hz + 0.05 * Math.cos(i * 1.7), 0.5 + i * 0.03, dayR, dayG, dayB, (0.035 + 0.16 * smoke) * (1 - i / 8), 0, 1.3, i * 0.37, 0);
+    // ---- wounds: blood soaking, pooling, thrown along the line of the hit; a man who burns
+    const W = this.W = woundsOf(hits, CTX.battle), who = CTX.crew && CTX.crew.on ? CTX.crew.who : null;
+    for (const r of ROLES) { const L = this.look[r] = lookOf(r, W, who ? who[r] : null, now, S); if (this.stains[r]) this.stains[r].visible = !!graphic && (L.n > 0 || L.down || L.hurt);
+      if (L.onFire && !S.abandoned) { const M = MAN[r].frame === 'tur' ? MT : null; for (let i = 0; i < 9; i++) { const L2 = 0.45, a = ((now * (1 + 0.13 * i) + i * 0.37) % L2) / L2, part = i % 3 === 0 ? 'head' : i % 3 === 1 ? 'chest' : 'belly'; partAt(r, part, _a); Q.add(M, _a[0] + 0.1 * (hsh(i, 3) - 0.5), _a[1] + a * 0.4, _a[2] + 0.1 * (hsh(i, 5) - 0.5), 0.24 * (1 - a * 0.6), 2.6, 1.15 - 0.6 * a, 0.25, 0.7 * (1 - a), hsh(i, 9) * 6, 1.5, i * 0.3 + Math.floor(now * 9) * 0.1, 0); } this._light(M, _a[0], _a[1] + 0.2, _a[2], 2.2, 0.9, 0.2, 1.1); } }
+    if (graphic) drawBlood(D, this.planes, W, this.look, now, MT);
+    this._screens(S, MT);
+    D.end(true); P.end(true); Q.end(true); B.end(true);
+    // ---- light: the two strongest effect lights take lamps 1 and 2; breakers tripping; running on batteries; Halon whitens the haze
+    const LP = SHARED.uLampPos.value, LC = SHARED.uLampCol.value, LR = SHARED.uLampR.value, hw = G.hul.matrixWorld;
+    if (S.tripAge < 0.4) for (let i = 0; i < 3; i++) LC[i].multiplyScalar(0.04); else if (S.powerOut && !S.emergency) for (let i = 0; i < 3; i++) LC[i].multiplyScalar(0.55);
+    for (let i = 0; i < 2; i++) { const l = this.L[i]; if (l.w <= 0.02) continue; const s = 2 - i; LP[s].copy(l.p).applyMatrix4(hw); LC[s].copy(l.c); LR[s] = l.r; }
+    if (S.halon) { const k = Math.exp(-S.halon.age / 5), c = SHARED.uSmokeCol.value, a = SHARED.uAmb.value, w = Math.min(0.85, 0.25 + 3 * (a.x + a.y + a.z)); c.set(c.x + (w - c.x) * k, c.y + (w - c.y) * k, c.z + (w * 1.04 - c.z) * k); }
+    if (S.breach) { const k = Math.min(1, S.breach.age / 0.12); SHARED.uAmb.value.x += 2.6 * k; SHARED.uAmb.value.y += 1.5 * k; SHARED.uAmb.value.z += 0.45 * k; }
+    // ---- the viewer in a seat: ringing ears, tunnel vision, blurred edges, shake
+    const role = CTX.viewer, C = role ? concussion(hits, now, MAN[role].eye, MAN[role].frame) : null; if (C && S.breach) { C.flash = Math.max(C.flash, Math.min(1, S.breach.age / 0.5)); C.tunnel = Math.max(C.tunnel, Math.min(1, S.breach.age / 0.9)); }
+    this.view.deaf = C ? C.deaf : 0; this.view.tunnel = C ? C.tunnel : 0; this.view.shake = C ? C.shake : 0; this.view.blur = C ? C.blur : 0; this.view.flash = C ? C.flash : 0; this._overlay(C, now);
+  }
+
+  _hit(h, x, age, MT, dayR, dayG, dayB, smoke) {
+    const D = this.decals, P = this.lit, Q = this.glow, B = this.bits, M = x.frame === 'tur' ? MT : null, p = x.pIn, n = x.nIn, d = x.d, Bx = BOX[x.frame]; if (!p) return;
+    if (x.hidden) {   /* behind a bulkhead: the blow is felt, dust jumps off the bulkhead or the doors */
+      if (age < 2.5) { const z = x.seen === 'doors' || h.zoneKey === 'turret_rear' ? 0.96 : 1.26, MM = x.frame === 'tur' ? MT : null, y0 = x.frame === 'tur' ? 0.2 : -0.6; for (let i = 0; i < 10; i++) { const u = age / 2.5, a = hsh(h.idx + i, 1) - 0.5; P.add(MM, a * 1.8, y0 + (hsh(h.idx + i, 2) - 0.5) * 0.5 - 0.15 * u, z - 0.25 * (1 - Math.exp(-2.5 * age)) * (0.5 + hsh(h.idx + i, 3)), 0.12 + 0.4 * u, 0.6, 0.57, 0.5, 0.3 * (1 - u), hsh(i, 4) * 6, 1, i * 0.21, 0); } }
+      return; }
+    if (!h.pen) {   /* the armour held: paint is knocked off the inside of the plate, dust and flakes come off every surface */
+      D.add(M, p, n, 0.5, CELL.chips, 1, 0, 0.9, WHITE, 0, hsh(h.idx, 2) * 6.28);
+      if (age < 3) { for (let i = 0; i < 14; i++) { const u = age / (1.6 + hsh(h.idx + i, 7)), k = (1 - Math.exp(-3 * age)) / 3, sp = 0.5 + 2.2 * hsh(h.idx + i, 1), ox = (hsh(h.idx + i, 2) - 0.5) * 0.5, oy = (hsh(h.idx + i, 3) - 0.5) * 0.5; if (u >= 1) continue;
+          const t1x = Math.abs(n[0]) > 0.5 ? 0 : 1, t1z = Math.abs(n[0]) > 0.5 ? 1 : 0; P.add(M, p[0] + n[0] * (0.05 + sp * k) + t1x * ox, p[1] + n[1] * (0.05 + sp * k) + (Math.abs(n[1]) > 0.5 ? 0 : oy) - 0.1 * age, p[2] + n[2] * (0.05 + sp * k) + t1z * ox + (Math.abs(n[1]) > 0.5 ? oy : 0), 0.1 + 0.45 * u, 0.62, 0.6, 0.53, 0.42 * (1 - u) * h.s, hsh(i, 4) * 6, 1, i * 0.17, 0); }
+        for (let i = 0; i < 46; i++) { const life = 0.5 + 2.4 * hsh(h.idx + i, 11), t = age - 0.25 * hsh(h.idx + i, 12); if (t < 0 || t > life) continue; const near = i < 18, fx = near ? p[0] + (hsh(h.idx + i, 13) - 0.5) * 0.9 * (1 - Math.abs(n[0])) + n[0] * 0.03 : Bx.x0 + hsh(h.idx + i, 13) * (Bx.x1 - Bx.x0), fz = near ? p[2] + (hsh(h.idx + i, 14) - 0.5) * 0.9 * (1 - Math.abs(n[2])) + n[2] * 0.03 : Bx.z0 + hsh(h.idx + i, 14) * (Bx.z1 - Bx.z0), fy0 = near ? p[1] + (hsh(h.idx + i, 15) - 0.3) * 0.5 : Bx.y1 - 0.02;
+            const fall = 1.1 * (t - (1 - Math.exp(-2.2 * t)) / 2.2) + 0.2 * t, y = Math.max(Bx.y0 + 0.01, fy0 - fall); P.add(M, fx + 0.04 * Math.sin(t * 9 + i) + n[0] * 0.25 * (1 - Math.exp(-3 * t)) * (near ? 1 : 0), y, fz + 0.04 * Math.cos(t * 7 + i * 2) + n[2] * 0.25 * (1 - Math.exp(-3 * t)) * (near ? 1 : 0), 0.008 + 0.014 * hsh(i, 16), 0.86, 0.84, 0.74, 0.95 * sat((life - t) * 4), t * 6 + i, 0.5 + 0.5 * Math.abs(Math.sin(t * 11 + i)), i * 0.3, 1); } }
+      return; }
+    // ---- a penetration
+    // the marks it leaves: scorch round the hole, the hole with torn metal, daylight in it, its lip glowing for a few seconds
+    const turn = hsh(h.idx, 2) * 6.28, hot = 2.4 * Math.exp(-age / 1.4);
+    D.add(M, p, n, 0.85, CELL.scorch, 1, 0, 0.95, WHITE, 0, turn); D.add(M, p, n, 0.42, CELL.hole, 1, 0, 1, WHITE, 0, turn, 1, 0.006); D.add(M, p, n, 0.42, CELL.day, 1, 1, 1, [dayR, dayG, dayB], 0, turn, 1, 0.008);
+    if (hot > 0.02) D.add(M, p, n, 0.36, CELL.crater, 1, hot, sat(hot), WHITE, 0, turn, 1, 0.01);
+    this._light(M, p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2] + n[2] * 0.12, dayR * 0.5 + hot * 0.5, dayG * 0.5 + hot * 0.2, dayB * 0.5, 0.55);
+    for (let i = 0; i < 5; i++) Q.add(M, p[0] + d[0] * (0.1 + i * 0.22), p[1] + d[1] * (0.1 + i * 0.22), p[2] + d[2] * (0.1 + i * 0.22), 0.1 + i * 0.05, dayR, dayG, dayB, 0.22 * smoke * (1 - i / 6), 0, 1, i * 0.2, 0);   /* the daylight from the hole, seen in the smoke */
+    if (x.far) { const f = x.pFar, fn = x.nFar, hot2 = 3 * Math.exp(-age / 2.2); D.add(M, f, fn, 0.6, CELL.scorch, 1, 0, 0.9, WHITE, 0, turn + 1); D.add(M, f, fn, 0.3, CELL.crater, 1, hot2, 1, WHITE, 0, turn + 2, 1, 0.006); if (hot2 > 0.05) this._light(M, f[0] + fn[0] * 0.1, f[1] + fn[1] * 0.1, f[2] + fn[2] * 0.1, hot2, hot2 * 0.4, hot2 * 0.08, 0.6); }
+    // the jet itself: a white-hot line across the compartment for less than a tenth of a second, then a thin glowing trail
+    if (age < 0.5) { const k = age < 0.09 ? 1 - age / 0.09 : 0, tr = age < 0.09 ? 1 : 1 - (age - 0.09) / 0.41; _v.set(p[0] + d[0] * x.run / 2, p[1] + d[1] * x.run / 2, p[2] + d[2] * x.run / 2); _d.set(d[0], d[1], d[2]);
+      B.add(M, _v, _d, 0.006 + 0.03 * k, x.run, 3.6, 3.0 * (0.4 + 0.6 * k) + 0.6 * tr, 2.2 * k + 0.25 * tr, 0.25 * tr + k);
+      if (age < 0.2) { const u = age / 0.2; Q.add(M, p[0] + n[0] * 0.1, p[1] + n[1] * 0.1, p[2] + n[2] * 0.1, 0.5 + 1.1 * u, 3.4, 2.8, 1.9, 1 - u, 0, 1, h.idx, 0); for (let i = 1; i < 4; i++) Q.add(M, p[0] + d[0] * x.run * i / 4, p[1] + d[1] * x.run * i / 4, p[2] + d[2] * x.run * i / 4, 0.25 + 0.5 * u, 3.2, 2.2, 1.0, 0.8 * (1 - u), i, 1, i, 0); this._light(M, p[0] + d[0] * 0.4, p[1] + d[1] * 0.4, p[2] + d[2] * 0.4, 6 * (1 - u), 4.4 * (1 - u), 2.4 * (1 - u), 2.2); } }
+    // spall: fragments thrown from the hole in a cone round the jet's line; they glow, slow, fall, bounce on the floor and lie cooling
+    if (age < 3.2) { const ux = Math.abs(d[1]) < 0.9 ? 0 : 1, uy = Math.abs(d[1]) < 0.9 ? 1 : 0; let ax = d[1] * 0 - d[2] * uy, ay = d[2] * ux - d[0] * 0, az = d[0] * uy - d[1] * ux; const al = Math.hypot(ax, ay, az) || 1; ax /= al; ay /= al; az /= al; const bx = d[1] * az - d[2] * ay, by = d[2] * ax - d[0] * az, bz = d[0] * ay - d[1] * ax;
+      for (let i = 0; i < 72; i++) { const life = 0.45 + 2.6 * hsh(h.idx + i, 4) * hsh(h.idx + i, 8); if (age > life) continue; const a = hsh(h.idx + i, 1) * 6.283, c = Math.tan(0.61) * Math.sqrt(hsh(h.idx + i, 2)), v = 3 + 15 * hsh(h.idx + i, 3) * hsh(h.idx + i, 6), ca = Math.cos(a) * c, sa = Math.sin(a) * c;
+        let vx = d[0] + ax * ca + bx * sa, vy = d[1] + ay * ca + by * sa, vz = d[2] + az * ca + bz * sa; const vl = Math.hypot(vx, vy, vz); vx *= v / vl; vy *= v / vl; vz *= v / vl;
+        const drag = (1 - Math.exp(-2.4 * age)) / 2.4; let px = clamp(p[0] + n[0] * 0.03 + vx * drag, Bx.x0 + 0.02, Bx.x1 - 0.02), pz = clamp(p[2] + n[2] * 0.03 + vz * drag, Bx.z0 + 0.02, Bx.z1 - 0.02);
+        // up and down: free fall with bounces off the floor (each keeps a third of the speed)
+        let y = p[1] + n[1] * 0.03, w = vy * 0.5, t = age, rest = false; for (let b = 0; b < 4; b++) { const disc = w * w + 2 * 9.8 * (y - Bx.y0 - 0.01), th = (w + Math.sqrt(Math.max(0, disc))) / 9.8; if (t < th) { y += w * t - 4.9 * t * t; w -= 9.8 * t; t = 0; break; } t -= th; y = Bx.y0 + 0.01; w = (9.8 * th - w) * 0.33; if (w < 0.4) { rest = true; break; } } if (rest || t > 0) { y = Bx.y0 + 0.01; w = 0; } if (y > Bx.y1 - 0.02) y = Bx.y1 - 0.02;
+        const heat = Math.max(0, 1 - age / life), ve = Math.exp(-2.4 * age); _v.set(px, y, pz); _d.set(vx * ve, w, vz * ve); const sp = _d.length(); if (sp > 1e-3) _d.multiplyScalar(1 / sp); else _d.set(1, 0, 0);
+        B.add(M, _v, _d, 0.004 + 0.006 * hsh(i, 9), 0.012 + Math.min(0.14, sp * 0.012), 3.2, 1.9 * heat, 0.5 * heat * heat, 0.25 + 0.75 * heat); }
+      // the dust and smoke driven in with it
+      for (let i = 0; i < 12; i++) { const u = age / (1.2 + 2 * hsh(h.idx + i, 21)); if (u >= 1) continue; const k = (1 - Math.exp(-2 * age)) / 2 * (2 + 5 * hsh(h.idx + i, 22)), c = 0.5 * (hsh(h.idx + i, 23) - 0.5), e = 0.5 * (hsh(h.idx + i, 24) - 0.5); P.add(M, clamp(p[0] + d[0] * k + ax * c * k + bx * e * k, Bx.x0, Bx.x1), clamp(p[1] + d[1] * k + ay * c * k + by * e * k + 0.15 * age, Bx.y0, Bx.y1), clamp(p[2] + d[2] * k + az * c * k + bz * e * k, Bx.z0, Bx.z1), 0.15 + 0.7 * u, 0.2, 0.19, 0.18, 0.5 * (1 - u), hsh(i, 25) * 6, 1, i * 0.23, 0); } }
+    // smoke coming in through the hole and off the burnt lining: it rises to the roof and spreads under it
+    { const str = h.kill ? 1 : Math.exp(-age / 7); if (str > 0.03) for (let i = 0; i < 14; i++) { const L = 2.6, t = age - i * L / 14; if (t < 0) continue; const a = (t % L), cyc = Math.floor(t / L), u = a / L, sd = h.idx + i * 3 + cyc * 7, rise = Math.min(Bx.y1 - 0.08 - p[1], 0.55 * a), out = Math.max(0, 0.55 * a - rise);
+        P.add(M, clamp(p[0] + n[0] * (0.08 + 0.25 * (1 - Math.exp(-2 * a))) + (hsh(sd, 1) - 0.5) * (0.1 + out), Bx.x0 + 0.05, Bx.x1 - 0.05), p[1] + rise, clamp(p[2] + n[2] * (0.08 + 0.25 * (1 - Math.exp(-2 * a))) + (hsh(sd, 2) - 0.5) * (0.1 + out), Bx.z0 + 0.05, Bx.z1 - 0.05), 0.12 + 0.5 * u, 0.13, 0.125, 0.12, 0.55 * str * Math.sin(Math.PI * Math.min(1, u * 1.1)), hsh(sd, 3) * 6 + a * 0.4, 1, sd * 0.1, 0); } }
+  }
+
+  // electrical arcing, hydraulic fluid, a hit gun
+  _systems(S, MT, now) {
+    const P = this.lit, Q = this.glow, B = this.bits, D = this.decals;
+    for (const a of S.arcs) { const M = a.at[3] === 'tur' ? MT : null, k = 1 - a.age / a.life, slot = Math.floor(now * 26), on = hsh(slot, a.seed) < 0.1 + 0.4 * k, x = a.at[0], y = a.at[1], z = a.at[2];
+      if (on) { const j = hsh(slot, a.seed + 1) - 0.5; Q.add(M, x + j * 0.08, y + (hsh(slot, a.seed + 2) - 0.5) * 0.08, z, 0.1 + 0.12 * hsh(slot, 3), 1.4, 2.0, 3.6, 1, slot, 1, slot * 0.1, 0.3); this._light(M, x, y, z, 1.2, 1.8, 3.4, 1.0); }
+      const bi = Math.floor(now * 2.5), bt = now - bi / 2.5; if (hsh(bi, a.seed + 5) < 0.25 + 0.5 * k) for (let i = 0; i < 9; i++) { const vx = (hsh(bi * 9 + i, 1) - 0.5) * 3, vy = 0.5 + 2.2 * hsh(bi * 9 + i, 2), vz = (hsh(bi * 9 + i, 3) - 0.5) * 3, life = 0.25 + 0.3 * hsh(i, bi); if (bt > life) continue;
+        _v.set(x + vx * bt, y + vy * bt - 4.9 * bt * bt, z + vz * bt); _d.set(vx, vy - 9.8 * bt, vz).normalize(); B.add(M, _v, _d, 0.003, 0.03, 2.6, 2.4, 1.6, 1 - bt / life); } }
+    const hy = S.hyd; if (hy) { const x = hy.at[0], y = hy.at[1], z = hy.at[2], a = hy.age, pr = Math.exp(-a / 3), dx = hsh(hy.seed, 1) - 0.5, dz = hsh(hy.seed, 2) - 0.2;
+      if (a < HYD.sprayS) for (let i = 0; i < 22; i++) { const L = 0.55, t = ((a + i * L / 22) % L), u = t / L, sp = (3 + 4 * hsh(i, 7)) * pr + 0.6, k = (1 - Math.exp(-3 * t)) / 3, fx = dx + 0.5 * (hsh(i, 8) - 0.5), fz = dz + 0.5 * (hsh(i, 9) - 0.5); P.add(MT, x + fx * sp * k, y + sp * k * 0.9 - 2.5 * t * t, z + fz * sp * k, 0.03 + 0.16 * u, 0.5, 0.11, 0.07, 0.75 * (1 - u) * (0.3 + 0.7 * pr), i, 1, i * 0.4, 0.2); }
+      const mist = sat(a / 1.5) * (1 - a / HYD.mistS); for (let i = 0; i < 9; i++) P.add(MT, x + (hsh(i, 31) - 0.5) * 1.3 + 0.05 * Math.sin(now * 0.3 + i), y + 0.25 + hsh(i, 32) * 0.75, z + (hsh(i, 33) - 0.5) * 1.2, 0.55, 0.55, 0.33, 0.26, 0.085 * mist, i, 1, i * 0.5, 0);
+      D.add(MT, [x + dx * 0.3, BOX.tur.y0, z + dz * 0.3], UP, 0.9, CELL.fluid, sat(0.1 + a / 12), 0, 0.85, [0.3, 0.05, 0.035], 1, hsh(hy.seed, 4) * 6);
+      if (hy.destroyed && a > HYD.flashAt && a < HYD.flashAt + HYD.flashS) { const u = (a - HYD.flashAt) / HYD.flashS, k = Math.sin(Math.PI * u); for (let i = 0; i < 12; i++) Q.add(MT, x + (hsh(i, 41) - 0.5) * (0.4 + 1.2 * u), y + 0.2 + hsh(i, 42) * 0.7 + 0.5 * u, z + (hsh(i, 43) - 0.5) * (0.4 + 1.2 * u), 0.35 + 0.5 * u, 2.8, 1.3 - 0.5 * u, 0.3, 0.75 * k, i + u * 3, 1, i * 0.3 + u, 0); this._light(MT, x, y + 0.5, z, 5 * k, 2.6 * k, 0.7 * k, 2.0); } }
+    const g = S.gunHit; if (g) { const x = AT.gun[0], y = AT.gun[1], z = AT.gun[2] + 0.35;   /* recoil oil from the hit recuperator, then smoke off the breech */
+      if (g.gun && g.age < 5) for (let i = 0; i < 10; i++) { const L = 0.5, t = ((g.age + i * L / 10) % L), u = t / L, pr = Math.exp(-g.age / 1.6); P.add(MT, x + (hsh(i, 51) - 0.5) * 0.5 * t * 3, y + 0.05 + (1.2 * pr) * t - 3 * t * t, z + (0.4 + hsh(i, 52)) * t * 2 * pr, 0.03 + 0.1 * u, 0.42, 0.2, 0.1, 0.7 * (1 - u) * pr, i, 1, i * 0.3, 0.2); }
+      if (g.age < 40) for (let i = 0; i < 5; i++) { const L = 3, t = ((g.age + i * L / 5) % L), u = t / L; P.add(MT, x + 0.05 * Math.sin(t * 2 + i), y + 0.1 + 0.25 * t, z - 0.1 + 0.04 * i, 0.08 + 0.3 * u, 0.3, 0.29, 0.28, 0.3 * (1 - u) * (1 - g.age / 40), i + t, 1, i * 0.6, 0); } }
+  }
+
+  // fire by place, the Halon blast, burning ammunition behind its doors, the doors breached
+  _fires(S, MT, now) {
+    const P = this.lit, Q = this.glow, D = this.decals;
+    for (const f of S.fires) { const hal = S.halon && S.halon.age > 0.4 ? 0.3 + 0.7 * sat((S.halon.age - 5) / 4) : 1, k = f.on ? sat(f.age / 1.2) * hal : 0, fl = 0.75 + 0.25 * Math.sin(now * 23 + f.since) * Math.sin(now * 7.1);
+      if (f.where === 'hull') { const at = f.side < 0 ? AT.fuel_l : f.side > 0 ? AT.fuel_r : AT.hull_ammo, x = at[0], y = at[1], z = at[2], zin = at === AT.hull_ammo ? -0.12 : 0.1;
+        D.add(null, [x, y + 0.2, z + (zin > 0 ? 0.03 : -0.03)], [0, 0, zin > 0 ? 1 : -1], 1.0, CELL.char, sat(f.age / 4), f.on ? 1.2 * k * fl : 0, 0.95, WHITE, 0, 1.3); D.add(null, [x, y + 0.6, z + (zin > 0 ? 0.03 : -0.03)], [0, 0, zin > 0 ? 1 : -1], 0.9, CELL.soot, sat(f.age / 6), 0, 0.9, WHITE, 0, 0, 1.4);
+        if (k > 0.02) { for (let i = 0; i < 20; i++) { const L = 0.42 + 0.2 * hsh(i, 1), t = ((now * (1 + 0.07 * i) + i * 0.31) % L), u = t / L; Q.add(null, x + (hsh(i, 2) - 0.5) * 0.5 + 0.06 * Math.sin(now * 5 + i), y - 0.1 + u * (0.5 + 0.5 * k), z + zin + (hsh(i, 3) - 0.3) * 0.35, (0.34 - 0.2 * u) * (0.5 + 0.5 * k), 2.8, 1.25 - 0.7 * u, 0.28 - 0.2 * u, 0.8 * k * (1 - u * u), hsh(i, 4) * 6 + t, 1.6, i * 0.37 + Math.floor(now * 12) * 0.13, 0); }
+          this._light(null, x * 0.9, y + 0.3, z + zin * 2, 4.2 * k * fl, 1.9 * k * fl, 0.45 * k * fl, 1.9); }
+        if (f.on || f.out < 12) { const sk = f.on ? 0.3 + 0.7 * k : Math.exp(-f.out / 4); for (let i = 0; i < 14; i++) { const L = 2.2, t = ((now + i * L / 14) % L), u = t / L; P.add(null, x * (1 - 0.3 * u) + (hsh(i, 6) - 0.5) * (0.3 + u), Math.min(BOX.hul.y1 - 0.05, y + 0.2 + 0.9 * t), z + zin + (hsh(i, 7) - 0.3) * (0.3 + 1.2 * u), 0.2 + 0.6 * u, 0.09, 0.085, 0.08, 0.6 * sk * Math.sin(Math.PI * u), hsh(i, 8) * 6 + t * 0.5, 1, i * 0.29, 0); } } }
+      else if (f.where === 'engine') { const k2 = f.on ? sat(f.age / 3) : Math.exp(-f.out / 6);   /* behind the bulkhead: its seams glow, smoke comes round its edges */
+        D.add(null, [0, -0.62, 1.285], [0, 0, -1], 1.9, CELL.seam, 1, 1.6 * k2 * fl, sat(k2 * 1.5), [1, 0.6, 0.3], 0, 0, 0.42);
+        if (k2 > 0.03) { this._light(null, 0, -0.6, 1.05, 2.6 * k2 * fl, 0.9 * k2 * fl, 0.2 * k2 * fl, 1.5); for (let i = 0; i < 10; i++) { const L = 2.8, t = ((now + i * L / 10) % L), u = t / L; P.add(null, (hsh(i, 61) - 0.5) * 2.0, -0.3 - 0.05 * u, 1.24 - 0.5 * t * 0.6, 0.15 + 0.5 * u, 0.1, 0.095, 0.09, 0.5 * k2 * Math.sin(Math.PI * u), i + t * 0.4, 1, i * 0.33, 0); } } } }
+    // Halon: a white blast from the nozzles, then a cold fog
+    const ha = S.halon; if (ha && ha.age < HALON.blastS + 0.5) { const k = ha.age < HALON.blastS ? 1 : 1 - (ha.age - HALON.blastS) / 0.5;
+      for (const [nx, ny, nz, dx, dy, dz, M] of [[0.95, -0.34, -0.5, -1, -0.5, -0.4, null], [-0.95, -0.34, -0.5, 1, -0.5, -0.4, null], [0.36, -0.52, -1.9, -0.4, -0.3, -1, null], [0, 0.48, 0.55, 0, -1, -0.3, MT]]) for (let i = 0; i < 12; i++) { const L = 0.4, t = ((ha.age + i * L / 12) % L), u = t / L, kk = (1 - Math.exp(-5 * t)) / 5 * 9;
+        P.add(M, nx + dx * kk + (hsh(i, 71) - 0.5) * kk * 0.5, ny + dy * kk + (hsh(i, 72) - 0.5) * kk * 0.4, nz + dz * kk + (hsh(i, 73) - 0.5) * kk * 0.5, 0.06 + 0.6 * u, 1.5, 1.55, 1.6, 0.8 * k * (1 - u), i, 1, i * 0.21, 0); } }
+    // ammunition burning behind the doors: light and smoke at every seam, the whole bulkhead lit from behind
+    const bl = S.blow; if (bl && !S.breach) { const k = bl.on ? sat(bl.age / 0.4) : Math.exp(-(bl.age - 15) / 5), st = 0.55 + 0.45 * hsh(Math.floor(now * 38), 3);
+      if (k > 0.02) { for (const sx of [-0.575, 0.575]) D.add(MT, [sx, 0.24, 0.975], [0, 0, -1], 1.12, CELL.seam, 1, 5 * k * st, 1, [1, 0.85, 0.6], 0, 0, 0.46);
+        this._light(MT, 0, 0.3, 0.8, 5.5 * k * st, 3.6 * k * st, 1.6 * k * st, 2.0);
+        for (let i = 0; i < 10; i++) { const L = 1.6, t = ((now + i * L / 10) % L), u = t / L; P.add(MT, (hsh(i, 81) - 0.5) * 2.2, 0.48 - 0.1 * hsh(i, 82) + 0.1 * u, 0.95 - 0.5 * t, 0.1 + 0.45 * u, 0.2, 0.19, 0.18, 0.5 * k * Math.sin(Math.PI * u), i + t, 1, i * 0.4, 0); }
+        for (let i = 0; i < 24; i++) { const L = 1.4, t = ((now * 1.0 + i * L / 24) % L), cyc = Math.floor((now + i * L / 24) / L), sd = i * 5 + cyc * 13; P.add(MT, BOX.tur.x0 + hsh(sd, 1) * 2.4, Math.max(BOX.tur.y0, BOX.tur.y1 - 0.02 - 0.9 * t * t - 0.2 * t), BOX.tur.z0 + hsh(sd, 2) * 2.3, 0.008 + 0.012 * hsh(sd, 3), 0.86, 0.84, 0.74, 0.9 * k, t * 7 + i, 0.6, sd * 0.1, 1); } } }   /* and the roar shakes the paint off the roof */
+    // the doors breached: the fire comes through into the fighting compartment
+    const br = S.breach; if (br) { const a = br.age, front = 1.0 - 16 * a, k = sat(a / 0.08);
+      for (let i = 0; i < 64; i++) { const sd = i * 3 + Math.floor(now * 14 + i * 0.37) * 7, z = Math.max(BOX.tur.z0 + 0.1, Math.max(front, BOX.tur.z0) + hsh(sd, 1) * (1.0 - Math.max(front, BOX.tur.z0))), u = sat((1.0 - z) / 2.3);
+        Q.add(MT, (hsh(sd, 2) - 0.5) * 2.2, BOX.tur.y0 + 0.2 + hsh(sd, 3) * 1.35, z, 0.5 + 0.7 * hsh(sd, 4), 3.4, 2.5 - 1.3 * u * (a < 0.5 ? 1 : 0.6), 1.2 - 0.9 * u, 0.85 * k, hsh(sd, 5) * 6, 1.2, sd * 0.07, 0); }
+      this._light(MT, 0, 0.2, Math.max(front, -0.6), 9 * k, 6 * k, 2.6 * k, 3.5); this._light(null, 0, -0.7, -0.4, 6 * k, 3.4 * k, 1.2 * k, 3.0);
+      for (const sx of [-0.575, 0.575]) D.add(MT, [sx, 0.24, 0.975], [0, 0, -1], 1.12, CELL.day, 1, 6, 1, [1, 0.8, 0.5], 0, sx, 0.46); }
+  }
+
+  // loose kit thrown by every blow, and the things that hang from the roof swinging with the hull
+  _kit(S, MT, now) {
+    const K = this.kit, hits = S.hits, q = this._q, e = this._e; K.visible = true; let n = 0;
+    for (let i = 0; i < KIT.length; i++) { const it = KIT[i], Bx = BOX[it[6]]; let x = it[0], z = it[2], y = 0, yaw = hsh(i, 1) * 6.28, tip = 0, roll = 0;
+      for (const h of hits) { const a = now - h.T; if (a < 0) break; const s = h.minor ? h.s * 0.25 : h.s * (h.pen ? 1 : 0.8), u = sat(a / 0.5), sd = h.idx + i * 17, dx = (hsh(sd, 1) - 0.5) * 0.3 * s, dz = (hsh(sd, 2) - 0.5) * 0.3 * s; if (s < 0.06) continue;
+        x = clamp(x + dx * u, Bx.x0 + 0.25, Bx.x1 - 0.25); z = clamp(z + dz * u, Bx.z0 + 0.25, Bx.z1 - 0.25); yaw += (hsh(sd, 3) - 0.5) * 1.6 * s * u; if (u < 1) y += 4 * u * (1 - u) * 0.16 * s * hsh(sd, 4); if (hsh(sd, 5) < 0.3 * s) tip += (u < 1 ? u : 1) * Math.PI / 2 * (hsh(sd, 6) < 0.5 ? 1 : -1); else if (u < 1) roll += Math.sin(u * Math.PI) * 0.5 * s; }
+      const lying = Math.abs(Math.sin(tip)) > 0.5, hh = lying ? it[5] : it[4]; _v.set(x, it[1] + hh / 2 + y, z); q.setFromEuler(e.set(tip, yaw, roll, 'YXZ')); this._s.set(it[3], it[4], it[5]); _m.compose(_v, q, this._s); if (it[6] === 'tur') _m.premultiply(MT); K.setMatrixAt(n++, _m); }
+    for (let i = 0; i < HANG.length; i++) { const it = HANG[i], L = it[7]; let ang = 0, ang2 = 0;
+      for (const h of hits) { const a = now - h.T; if (a < 0) break; if (a > 14) continue; const w = Math.sqrt(9.8 / L), amp = Math.min(0.9, 0.5 * h.s) * Math.exp(-a / 4); ang += amp * Math.sin(w * a) * (hsh(h.idx + i, 1) < 0.5 ? 1 : -1); ang2 += amp * 0.5 * Math.sin(w * a * 0.93 + 1) * (hsh(h.idx + i, 2) < 0.5 ? 1 : -1); }
+      const M = it[6] === 'tur' ? MT : null; q.setFromEuler(e.set(ang, 0, ang2, 'XYZ'));
+      _v.set(0, -L / 2, 0).applyQuaternion(q).add(_d.set(it[0], it[1], it[2])); this._s.set(0.012, L, 0.004); _m.compose(_v, q, this._s); if (M) _m.premultiply(M); K.setMatrixAt(n++, _m);
+      _v.set(0, -L - it[4] / 2, 0).applyQuaternion(q).add(_d); this._s.set(it[3], it[4], it[5]); _m.compose(_v, q, this._s); if (M) _m.premultiply(M); K.setMatrixAt(n++, _m); }
+    K.count = n; K.instanceMatrix.needsUpdate = true;
+  }
+
+  // cracked glass on the displays a hit has killed or damaged; sights whited out for a moment by a burst close by
+  _screens(S, MT) {
+    if (!this.screens) { this.screens = []; for (const g of [this.G.tur, this.G.hul]) for (const o of g.children) { const u = o.isMesh && o.material && o.material.uniforms; if (u && u.uBright && o.geometry && o.geometry.parameters && o.geometry.parameters.width) this.screens.push({ o, u, tur: g === this.G.tur, w: o.geometry.parameters.width, h: o.geometry.parameters.height, i: this.screens.length }); } }
+    let any = false, weak = false; for (const k in S.cracked) { any = true; if (!S.dark[k]) weak = true; } const D = this.decals;
+    for (const s of this.screens) { const u = s.u; if (S.optics > 0.02 && u.uHasLive && u.uHasLive.value > 0.5 && u.uBright.value > 0) u.uBright.value *= 1 + 5 * S.optics;
+      if (!any) continue; const dark = u.uBright.value === 0, wk = u.uWeak && u.uWeak.value > 0; if (!dark && !(wk && weak)) continue;
+      _v.set(0, 0, 1).applyQuaternion(s.o.quaternion); _n[0] = _v.x; _n[1] = _v.y; _n[2] = _v.z; _a[0] = s.o.position.x + s.w * (hsh(s.i, 1) - 0.5) * 0.3; _a[1] = s.o.position.y + s.h * (hsh(s.i, 2) - 0.5) * 0.3; _a[2] = s.o.position.z;
+      D.add(s.tur ? MT : null, _a, _n, Math.max(s.w, s.h) * (dark ? 1.25 : 0.8), CELL.crack, 1, dark ? 0.05 : 0.25, dark ? 0.95 : 0.7, WHITE, 1, hsh(s.i, 3) * 6.28, 1, 0.003); }
+  }
+
+  // The viewer's own head after a blow: vision closing in from the edges, the edges blurred, the picture shaking, a white-out at
+  // the instant of a penetration. One fixed layer over the 3D picture (under the displays' text), touched only while it shows.
+  _overlay(C, now) {
+    if (typeof document === 'undefined' || !document.body || !document.body.appendChild || !document.createElement) return;
+    const on = !!C && (C.tunnel > 0.015 || C.flash > 0.01 || C.shake > 0.01 || C.blur > 0.02);
+    if (!on) { if (this.ov && this.ovOn) { this.ovOn = false; this.ov.style.display = 'none'; const cv = document.getElementById('view'); if (cv && cv.style) cv.style.transform = ''; } return; }
+    if (!this.ov) { const el = this.ov = document.createElement('div'); if (!el.style) { this.ov = null; return; } el.id = 'concuss'; el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1;display:none'; const bl = this.ovB = document.createElement('div'); bl.style.cssText = 'position:absolute;inset:0'; const wh = this.ovW = document.createElement('div'); wh.style.cssText = 'position:absolute;inset:0;background:#fff8ec;opacity:0'; el.appendChild(bl); el.appendChild(wh); document.body.appendChild(el); }
+    if (!this.ovOn) { this.ovOn = true; this.ov.style.display = 'block'; }
+    const t = Math.round(C.tunnel * 50) / 50, b = Math.round(C.blur * 20) / 20, f = Math.round(C.flash * 25) / 25, key = t + '|' + b;
+    if (key !== this.ovKey) { this.ovKey = key; const inner = Math.round(78 - 58 * t), outer = Math.round(118 - 52 * t), px = (b * 7).toFixed(1), mask = `radial-gradient(ellipse at center, transparent ${Math.round(42 - 22 * b)}%, #000 ${Math.round(88 - 20 * b)}%)`;
+      this.ov.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,0) ${inner}%, rgba(4,2,2,${(0.25 + 0.72 * t).toFixed(2)}) ${outer}%)`;
+      const s = this.ovB.style; if (b > 0.04) { s.backdropFilter = s.webkitBackdropFilter = `blur(${px}px)`; s.maskImage = s.webkitMaskImage = mask; } else { s.backdropFilter = s.webkitBackdropFilter = 'none'; } }
+    if (f !== this.ovF) { this.ovF = f; this.ovW.style.opacity = f.toFixed(2); }
+    const cv = document.getElementById('view'); if (cv && cv.style) { const k = C.shake * 9; cv.style.transform = k > 0.15 ? `translate(${(Math.sin(now * 61) * k).toFixed(1)}px, ${(Math.sin(now * 47 + 1) * k).toFixed(1)}px)` : ''; }
   }
 }
