@@ -227,7 +227,7 @@ export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map ==
 const CSS = `
   body.tour-on #status, body.tour-on #sline, body.tour-on #gauges, body.tour-on #warn, body.tour-on #facerow, body.tour-on #threats, body.tour-on #engleft, body.tour-on #engright,
   body.tour-on #logov, body.tour-on #strip, body.tour-on #dock, body.tour-on #hud, body.tour-on #marks, body.tour-on #units, body.tour-on #xr, body.tour-on #dir-tag, body.tour-on #title, body.tour-on #result { display: none !important; }
-  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; --k: clamp(.82, calc(100vw / 1500), 1.5); font-size: calc(14px * var(--k)); }
+  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(14px, .95vw, 21px); }   /* everything in the briefing is sized in em from this: 14 px on a small window, about 18 px at 1920 wide */
   #tour svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   #tour .tl { position: absolute; left: 0; top: 0; padding: .28em .6em .32em; border-radius: 5px; background: rgba(5, 9, 8, .86); border: 1px solid rgba(255, 255, 255, .5); color: #fff; font-weight: 650; font-size: 1em; line-height: 1.2; white-space: nowrap; will-change: transform; text-shadow: 0 1px 2px #000; }
   #tour .tl.good { border-color: var(--accent); color: #c9ffe4; } #tour .tl.bad { border-color: #ff6b5e; color: #ffd9d4; } #tour .tl.warn { border-color: var(--warn); color: #ffe6c2; }
@@ -249,12 +249,12 @@ const CSS = `
   @media (max-height: 760px) { #t-main { gap: 7px; } #t-main .mbtn { padding: 7px 14px; } #t-main .mbtn b { font-size: 16px; } #t-main .mbtn small { font-size: 12px; } #t-main .mbtn.big { padding: 9px 14px; } #t-main .mbtn.big b { font-size: 18px; } #t-main .sub { margin-bottom: 4px; } }
   @media (max-height: 600px) { #t-main { padding-top: 10px; padding-bottom: 10px; gap: 6px; } #t-main { justify-content: flex-start; overflow-y: auto; } #t-main h1 { font-size: 30px; } #t-main .mbtn small { font-size: 11.5px; } #t-setup { padding-top: 6px; padding-bottom: 6px; } }
   #help { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(4, 8, 7, .72); }
-  #help .card { width: min(980px, 100%); max-height: calc(100vh - 24px); overflow-y: auto; padding: 18px 22px; box-sizing: border-box; }
-  #help h2 { margin: 0 0 2px; font-size: clamp(19px, 2.4vw, 28px); letter-spacing: .06em; } #help .sub { color: var(--dim); margin: 0 0 12px; font-size: 13.5px; }
+  #help .card { width: min(980px, 100%); max-height: calc(100vh - 24px); overflow-y: auto; padding: 13px 20px 12px; box-sizing: border-box; }
+  #help h2 { margin: 0 0 2px; font-size: clamp(19px, 2.4vw, 28px); letter-spacing: .06em; } #help .sub { color: var(--dim); margin: 0 0 8px; font-size: 13.5px; }
   #help .hg { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
-  #help .hi { border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px; padding: 9px 12px; background: rgba(255, 255, 255, .03); } #help .hi > b { display: block; font-size: 14.5px; margin-bottom: 3px; color: var(--accent); } #help .hi p b { color: #fff; font-weight: 700; }
-  #help .hi p { margin: 0; font-size: 13px; line-height: 1.4; color: #dfe8e2; } #help kbd { font: 11px var(--mono); border: 1px solid rgba(255, 255, 255, .3); border-radius: 4px; padding: 0 5px; margin: 0 1px; background: rgba(255, 255, 255, .07); white-space: nowrap; }
-  #help .hf { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; } #help .hf span { color: var(--dim); font-size: 12.5px; flex: 1; min-width: 200px; }
+  #help .hi { border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px; padding: 7px 11px 8px; background: rgba(255, 255, 255, .03); } #help .hi > b { display: block; font-size: 14.5px; margin-bottom: 3px; color: var(--accent); } #help .hi p b { color: #fff; font-weight: 700; }
+  #help .hi p { margin: 0; font-size: 13px; line-height: 1.36; color: #dfe8e2; } #help kbd { font: 11px var(--mono); border: 1px solid rgba(255, 255, 255, .3); border-radius: 4px; padding: 0 5px; margin: 0 1px; background: rgba(255, 255, 255, .07); white-space: nowrap; }
+  #help .hf { display: flex; gap: 12px; align-items: center; margin-top: 9px; flex-wrap: wrap; } #help .hf .btn.primary { padding: 8px 20px; } #help .hf span { color: var(--dim); font-size: 12.5px; flex: 1; min-width: 200px; }
   #bartip { position: fixed; z-index: 7; left: 0; top: 0; max-width: 300px; padding: 6px 10px; border-radius: 6px; background: rgba(5, 9, 8, .96); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.35; color: var(--fg); pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
 `;
 const TONES = { good: '#39d98a', bad: '#ff6b5e', warn: '#ffb347' };
