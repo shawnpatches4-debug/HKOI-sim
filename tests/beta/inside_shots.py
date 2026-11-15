@@ -24,7 +24,7 @@ def scenes():
     S += [('nonpen_0.12s_gnr', f"(stage({NONPEN % 0.12}), lk('in_gnr', 60, 4, 1))"), ('nonpen_0.12s_cdr', "lk('in_cdr', 30, -12, 1)"), ('nonpen_1.2s_ldr', f"(stage({NONPEN % 1.2}), lk('in_ldr', 75, -6, 1))")]
     for age in ['0.05', '1.5', '25']:
         S += [(f'pen_gnr_{age}s_cdr', f"(stage({PEN_GNR % age}), lk('in_cdr', 8, -24, 1))"), (f'pen_gnr_{age}s_ldr', "lk('in_ldr', 78, -8, 1)")]
-    S += [('pen_gnr_25s_own_seat', "lk('in_gnr', 80, -25, 1)")]
+    S += [('pen_gnr_1.5s_cdr_down', f"(stage({PEN_GNR % 1.5}), lk('in_cdr', 15, -48, 1))"), ('pen_gnr_25s_own_seat', "lk('in_gnr', 80, -25, 1)")]
     for age in ['0.05', '2', '30']:
         S += [(f'kill_ldr_{age}s_cdr', f"(stage({KILL_LDR % age}), lk('in_cdr', -80, -22, 1))"), (f'kill_ldr_{age}s_gnr', "lk('in_gnr', -100, -4, 1, [-0.3, 0.2, 0.5])")]
     for age in ['0.4', '3', '12']:
