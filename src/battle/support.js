@@ -71,7 +71,7 @@
 // | ... its effect | a team in the strip knocked out 45%, the rest pinned 30 s; light truck destroyed 70%; BMP-2 destroyed 40%; tank mobility kill 10% | 30 mm and rockets against men lying down and thin roofs; judgement |
 // | Guided bomb (250 kg class) | weapons on target 90 to 120 s after the call; lands within 5 m (1 sigma) of the aim point; dropped from 1,200 m up at 200 m/s, 10 s to fall | judgement |
 // | ... its effect | vehicle within 6 m destroyed 85%, within 15 m mobility kill 40%; team within 25 m knocked out 90%, within 50 m 40%, pinned within 100 m | judgement |
-// | Where the aircraft aims | at the located team or vehicle it was called on, where that is NOW, if at weapons release the tank or the scout drone can see it, or (gun run) it lies in the open within 150 m of the called point; otherwise at the called point. A target that has moved more than 400 m is not followed | the pilot or the bomb's seeker needs someone's eyes on the target; this is what artillery lacks |
+// | Where the aircraft aims | at the located team or vehicle it was called on, where that is NOW, if at weapons release the tank or the scout drone can see it, or (gun run) it lies in the open within 150 m of the called point, or it is a vehicle outside trees and buildings (the aircraft's own targeting pod holds a vehicle it has been handed); otherwise at the called point. A bomb is steered onto a target still held this way while it falls. A target that has moved more than 400 m is not followed | the pilot or the bomb's seeker needs someone's eyes on the target; this is what artillery lacks |
 // | Danger close for air | 300 m for a gun run, 500 m for a bomb, from any friendly tank, at the call and again at release (waved off if broken) | judgement |
 // | Wave-off | 10% of strikes for any reason (target not identified, another task); +15% (gun run) or +5% (bomb) for every enemy BMP-2 able to fire within 3 km of the target. A waved-off sortie is used up | the 30 mm cannon is the only anti-aircraft-capable weapon among the modelled enemy units; shoulder-fired missiles are not modelled as units, the 10% stands in for everything else |
 // | Aircraft lost | 4% for every such BMP-2, gun run only; after a loss no more strikes are flown | judgement |
@@ -345,6 +345,12 @@
         const o = { e: q.k.e, n: q.k.n, uid: q.u.id, kind: 'gun', what: `${q.u.spec.name} #${q.u.id + 1}`, why }; if (!this._airCheck(o)) { this._airCall(o, 'ai'); return; } }
     },
     _airKillTeam(u, k, d, p) { const S = this.sup; u.alive = false; u.state = 'dead'; k.kills++; S.stat.airTeamKills++; const kn = (S.player.known || []).find(q => q.id === u.id); if (kn) kn.done = true; this.ev(this.t, 'team_lost', { uid: u.id, by: 'air' }); this.say(this.t, 'tank', 'CDR', `${u.spec.name} #${u.id + 1} is knocked out by the air strike.`, `${k.kind === 'gun' ? 'in the strip the aircraft strafed' : `a bomb ${Math.round(d)} m away`}: about ${Math.round(p * 100)}%`); },
+    // does anyone have eyes on the target the strike was called on (the tank, the scout drone, the pilot, the aircraft's pod)?
+    _airEyes(k, tg) {
+      const S = this.sup, W = this.world, T = S.player, D = S.scout; if (!tg || !tg.alive || tg.gone || Math.hypot(tg.e - k.e, tg.n - k.n) >= AIR.follow) return false;
+      return W.los(T.e, T.n, 2.6, tg.e, tg.n, 1).clear || !!(D && D.alive && Math.hypot(Math.hypot(D.e - tg.e, D.n - tg.n), D.alt) < SCOUT.see && W.los(D.e, D.n, D.alt, tg.e, tg.n, 1).clear) || (k.kind === 'gun' && W.veg(tg.e, tg.n).cls < 2 && Math.hypot(tg.e - k.e, tg.n - k.n) < AIR.reacq)
+        || (k.vid != null && W.veg(tg.e, tg.n).cls < 3 && !(W.buildingAt && W.buildingAt(tg.e, tg.n)));   /* a vehicle outside trees and buildings: the aircraft's own targeting pod holds it */
+    },
     _airStep() {
       const S = this.sup, W = this.world, r = S.rng, T = S.player;
       for (const k of S.strikes) { const K = AIR[k.kind];
@@ -353,14 +359,15 @@
           const n = (this.vehs || []).filter(v => v.alive && !v.gone && v.canFire && /bmp/.test(v.kind) && Math.hypot(v.e - k.e, v.n - k.n) < AIR.threatR).length, pLoss = 1 - Math.pow(1 - K.lossVeh, n), pWave = 1 - (1 - AIR.abort) * Math.pow(1 - K.waveVeh, n);
           // where to aim: the target itself if someone has eyes on it
           let aim = [k.e, k.n]; const tg = k.uid != null ? this.units.find(u => u.id === k.uid) : k.vid != null ? (this.vehs || []).find(v => v.id === k.vid) : null;
-          if (tg && tg.alive && !tg.gone && Math.hypot(tg.e - k.e, tg.n - k.n) < AIR.follow) { const D = S.scout, eyes = W.los(T.e, T.n, 2.6, tg.e, tg.n, 1).clear || (D && D.alive && Math.hypot(Math.hypot(D.e - tg.e, D.n - tg.n), D.alt) < SCOUT.see && W.los(D.e, D.n, D.alt, tg.e, tg.n, 1).clear) || (k.kind === 'gun' && W.veg(tg.e, tg.n).cls < 2 && Math.hypot(tg.e - k.e, tg.n - k.n) < AIR.reacq);
-            if (eyes) { if (Math.hypot(tg.e - k.e, tg.n - k.n) > 15) S.stat.airFollowed++; aim = [tg.e, tg.n]; } }
+          if (this._airEyes(k, tg)) { if (Math.hypot(tg.e - k.e, tg.n - k.n) > 15) S.stat.airFollowed++; aim = [tg.e, tg.n]; k.held = tg; }
           const close = this._friends().some(F => Math.hypot(F.e - aim[0], F.n - aim[1]) < K.danger);
           if (k.dice[0] < pLoss) { k.state = 'lost'; S.air.lost = true; S.stat.airLost++; this.ev(this.t + 2, 'air_off', { id: k.id, why: 'lost', e: Math.round(k.e), n: Math.round(k.n) }); this.say(this.t + 2, 'tank', 'CDR', 'The aircraft is hit on its run-in and goes down. No more air strikes.', `${n} enemy vehicle${n === 1 ? '' : 's'} with cannon within 3 km of the target: about ${Math.round(pLoss * 100)}% (assumed)`); }
           else if (close || k.dice[1] < pWave) { k.state = 'waved_off'; S.stat.airWaved++; this.ev(this.t, 'air_off', { id: k.id, why: 'waved_off', e: Math.round(k.e), n: Math.round(k.n) }); this.say(this.t, 'tank', 'CDR', `The air strike is waved off${close ? ': a friendly tank is too close to the target' : n ? ': cannon fire from the enemy vehicles, or the target not made out' : ': the pilot cannot make out the target'}. ${S.air.left} left.`, close ? 'danger close' : `about ${Math.round(pWave * 100)}% this time (assumed)`); }
           else { k.state = 'attacking'; k.aim = k.kind === 'bomb' ? [aim[0] + k.dice[2] * K.cep, aim[1] + k.dice[3] * K.cep] : aim; this.ev(Math.max(this.t, k.release), 'air_release', { id: k.id, kind: k.kind }); }
         }
-        if (k.state === 'attacking' && this.t >= k.tot) { k.state = 'done'; S.stat.airDone++; const ae = k.aim[0], an = k.aim[1], a = k.hdg * DEG, se = Math.sin(a), sn = Math.cos(a);
+        if (k.state === 'attacking' && this.t >= k.tot) { k.state = 'done'; S.stat.airDone++;
+          if (k.kind === 'bomb' && k.held && this._airEyes(k, k.held)) k.aim = [k.held.e + k.dice[2] * K.cep, k.held.n + k.dice[3] * K.cep];   /* a guided bomb is steered onto a target that is still held while it falls */
+          const ae = k.aim[0], an = k.aim[1], a = k.hdg * DEG, se = Math.sin(a), sn = Math.cos(a);
           this.ev(this.t, 'air_impact', { id: k.id, kind: k.kind, e: Math.round(ae), n: Math.round(an) });
           if (k.kind === 'gun') { for (let i = 0; i < 14; i++) { const f = (i / 13 - 0.5) * K.len, x = (r.random() - 0.5) * K.wid; k.impacts.push({ t: +(k.tot + i * 0.11).toFixed(2), e: ae + se * f + sn * x, n: an + sn * f - se * x }); } }
           else k.impacts.push({ t: k.tot, e: ae, n: an });
