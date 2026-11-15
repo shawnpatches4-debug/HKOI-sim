@@ -5,11 +5,14 @@
 #   seed 22: a bomber drone over the wingman, its bombs falling and striking
 # then the real frame loop through the opening engagement. Takes pictures at those moments and checks that what should be drawn is
 # drawn (the view's own count), that nothing reaches the page's red error bar and that no error is logged.
-# Run it through tools/run_test.sh (one headless browser at a time). Env: W, H (default 960x540), WAITMS per picture (default 2600).
+# Run it through tools/run_test.sh (one headless browser at a time). Env: W, H (default 960x540), WAITMS per picture (default 2600),
+# BOMBS=1 (only the bomb pictures, with seed 22 as the page's first battle: the free camera holds there).
 import asyncio, os, sys, json, time
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=low&spectator=1&play=1&biome=farmland&map=3&force=section_attack&seed=18&speed=1&waves=1&arty=on&skill=trained&mission=hold&cond=day&hud=none'
 WAIT = int(os.environ.get('WAITMS', '2600')); T0 = time.time()
+BOMBS = os.environ.get('BOMBS') == '1'   # BOMBS=1: only the bomb pictures, with seed 22 as the page's first battle
+if BOMBS: PARAMS = PARAMS.replace('seed=18', 'seed=22')
 SETUP = """void (() => {
   const b = window.__beta; b.setPlaying(false);
   window.__ev = type => b.battle.events.filter(e => e.type === type).sort((p, q) => p.t - q.t);
@@ -42,27 +45,28 @@ async def main():
         has = await ev('JSON.stringify({ wing: !!__beta.battle.wing, scout: !!__beta.battle.scout(), art: !!(__beta.battle.sup && __beta.battle.sup.art), force: __beta.set.force })'); print('battle 1', has)
         if not json.loads(has)['wing']: fails.append('no wingman in the battle')
         # ---- seed 18
-        await ev('void (() => { const B = __beta.battle, T = B.tank, G = B.wing; __to(1); __look((T.e + G.e) / 2, (T.n + G.n) / 2, (__brg(T.e, T.n, G.e, G.n) + 90) % 360, 105, 13, 0); })()'); i = await shot('1_station', 'both tanks on station (player and wingman)')
-        if not i['drawn']['wing'] or not i['drawn']['scout']: fails.append('wingman or scout not drawn')
-        await ev('void (() => { const B = __beta.battle, G = B.wing; __look(G.e, G.n, (G.h + 150) % 360, 16, 4.5, 0); })()'); await shot('2_wing_close', 'the wingman close up, before the fight')
-        t = await ev('(() => { __until("wing_launch", 60); const a = __ev("wing_trophy")[0] || __ev("wing_end")[0]; return a ? a.t : null; })()')
-        if t is None: fails.append('the wingman was never engaged in this battle')
-        else:
-            await ev('void (() => { __to(%f); const B = __beta.battle, G = B.wing, l = __ev("wing_launch")[0]; __look(G.e, G.n, ((l ? l.brg : 0) + 200) %% 360, 45, 7, 3); })()' % (t + 0.12)); await shot('3_wing_fire', 'the wingman under fire: Trophy or HKOI answering (t=%.1f)' % t)
-        t = await ev('(() => { const a = __until("wing_gun", 90); return a ? a.t : null; })()')
-        if t is not None:
-            await ev('void (() => { __to(%f); const B = __beta.battle, G = B.wing; __look(G.e, G.n, (G.tur + 110) %% 360, 30, 4, 1); })()' % (t + 0.15)); await shot('4_wing_gun', "the wingman's main gun firing (t=%.1f)" % t)
-        t = await ev('(() => { const a = __until("bomber_hkoi", 200); return a ? a.t + a.tof : null; })()')
-        if t is not None:
-            await ev('void (() => { __to(%f); const B = __beta.battle, fl = B.sup.flights[0], sh = fl.shots[0], F = sh.from === "wing" ? B.wing : B.tank; const br = __brg(F.e, F.n, fl.e, fl.n), a = (br + 60) * Math.PI / 180; __beta.view(fl.e + Math.sin(a) * 55, fl.n + Math.cos(a) * 55, 0, fl.alt - 6, fl.e, fl.n); __beta.scene.camera.lookAt(fl.e, __beta.world.h(fl.e, fl.n) + fl.alt, -fl.n); })()' % (t + 0.2)); i = await shot('5_bomber_hkoi', 'HKOI airbursts at a bomber drone, seen from 55 m beside it (t=%.1f)' % t)
-            await ev('void (() => { const B = __beta.battle, fl = B.sup.flights[0]; const F = B.tank, br = __brg(fl.e, fl.n, F.e, F.n); const a = br * Math.PI / 180; __beta.view(fl.e + Math.sin(a) * 9, fl.n + Math.cos(a) * 9, 0, fl.alt + 3, fl.e, fl.n); __beta.scene.camera.lookAt(fl.e, __beta.world.h(fl.e, fl.n) + fl.alt, -fl.n); })()'); await shot('5b_bomber_near', 'the same moment from 9 m')
-        t = await ev('(() => { const a = __until("fire_splash", 320); return a ? a.t : null; })()')
-        if t is None: fails.append('no artillery mission landed in this battle')
-        else:
-            await ev('void (() => { __to(%f); const B = __beta.battle, F = B.sup.fires.find(f => f.state !== "cancelled" && f.rounds.some(r => r.done)), T = B.tank; __look(F.e, F.n, __brg(F.e, F.n, T.e, T.n), 170, 14, 4); })()' % (t + 1.6)); await shot('6_artillery', 'first volley of the fire mission landing (t=%.1f)' % t)
-            await ev('__to(%f)' % (t + 11.8)); await shot('6b_artillery2', 'second volley')
+        if not BOMBS:
+            await ev('void (() => { const B = __beta.battle, T = B.tank, G = B.wing; __to(1); __look((T.e + G.e) / 2, (T.n + G.n) / 2, (__brg(T.e, T.n, G.e, G.n) + 90) % 360, 105, 13, 0); })()'); i = await shot('1_station', 'both tanks on station (player and wingman)')
+            if not i['drawn']['wing'] or not i['drawn']['scout']: fails.append('wingman or scout not drawn')
+            await ev('void (() => { const B = __beta.battle, G = B.wing; __look(G.e, G.n, (G.h + 150) % 360, 16, 4.5, 0); })()'); await shot('2_wing_close', 'the wingman close up, before the fight')
+            t = await ev('(() => { __until("wing_launch", 60); const a = __ev("wing_trophy")[0] || __ev("wing_end")[0]; return a ? a.t : null; })()')
+            if t is None: fails.append('the wingman was never engaged in this battle')
+            else:
+                await ev('void (() => { __to(%f); const B = __beta.battle, G = B.wing, l = __ev("wing_launch")[0]; __look(G.e, G.n, ((l ? l.brg : 0) + 200) %% 360, 45, 7, 3); })()' % (t + 0.12)); await shot('3_wing_fire', 'the wingman under fire: Trophy or HKOI answering (t=%.1f)' % t)
+            t = await ev('(() => { const a = __until("wing_gun", 90); return a ? a.t : null; })()')
+            if t is not None:
+                await ev('void (() => { __to(%f); const B = __beta.battle, G = B.wing; __look(G.e, G.n, (G.tur + 110) %% 360, 30, 4, 1); })()' % (t + 0.15)); await shot('4_wing_gun', "the wingman's main gun firing (t=%.1f)" % t)
+            t = await ev('(() => { const a = __until("bomber_hkoi", 200); return a ? a.t + a.tof : null; })()')
+            if t is not None:
+                await ev('void (() => { __to(%f); const B = __beta.battle, fl = B.sup.flights[0], sh = fl.shots[0], F = sh.from === "wing" ? B.wing : B.tank; const br = __brg(F.e, F.n, fl.e, fl.n), a = (br + 60) * Math.PI / 180; __beta.view(fl.e + Math.sin(a) * 55, fl.n + Math.cos(a) * 55, 0, fl.alt - 6, fl.e, fl.n); __beta.scene.camera.lookAt(fl.e, __beta.world.h(fl.e, fl.n) + fl.alt, -fl.n); })()' % (t + 0.2)); i = await shot('5_bomber_hkoi', 'HKOI airbursts at a bomber drone, seen from 55 m beside it (t=%.1f)' % t)
+                await ev('void (() => { const B = __beta.battle, fl = B.sup.flights[0]; const F = B.tank, br = __brg(fl.e, fl.n, F.e, F.n); const a = br * Math.PI / 180; __beta.view(fl.e + Math.sin(a) * 9, fl.n + Math.cos(a) * 9, 0, fl.alt + 3, fl.e, fl.n); __beta.scene.camera.lookAt(fl.e, __beta.world.h(fl.e, fl.n) + fl.alt, -fl.n); })()'); await shot('5b_bomber_near', 'the same moment from 9 m')
+            t = await ev('(() => { const a = __until("fire_splash", 320); return a ? a.t : null; })()')
+            if t is None: fails.append('no artillery mission landed in this battle')
+            else:
+                await ev('void (() => { __to(%f); const B = __beta.battle, F = B.sup.fires.find(f => f.state !== "cancelled" && f.rounds.some(r => r.done)), T = B.tank; __look(F.e, F.n, __brg(F.e, F.n, T.e, T.n), 170, 14, 4); })()' % (t + 1.6)); await shot('6_artillery', 'first volley of the fire mission landing (t=%.1f)' % t)
+                await ev('__to(%f)' % (t + 11.8)); await shot('6b_artillery2', 'second volley')
         # ---- seed 22: bombs
-        await ev('void (() => { __beta.set.seed = 22; __beta.start(); __beta.setPlaying(false); })()'); await pg.wait_for_timeout(1500)
+        if not BOMBS: await ev('void (() => { __beta.set.seed = 22; __beta.start(); __beta.setPlaying(false); })()'); await pg.wait_for_timeout(1500)
         t = await ev('(() => { let n = 0; const B = __beta.battle; while (B.t < 400 && B.tank.alive && !B.over && !__ev("bomb_drop").length && n++ < 6000) __beta.runTo(B.t + 0.05); const a = __ev("bomb_drop")[0]; return a ? JSON.stringify([a.t, a.land, a.target]) : null; })()')
         if t is None: print('no bomb was dropped in the second battle (the drone was shot down): no bomb picture')
         else:
@@ -71,6 +75,7 @@ async def main():
             if not i['drawn']['bombers'] or not i['drawn']['bombs']: fails.append('bomber or bomb not drawn')
             await ev('void (() => { __to(%f); const B = __beta.battle, F = "%s" === "wing" ? B.wing : B.tank; __look(F.e, F.n, (F.h + 140) %% 360, 28, 5, 1); })()' % (t1 + 0.25, who)); await shot('8_bomb_land', 'the bomb lands (t=%.1f)' % t1)
             await ev('__to(%f)' % (t1 + 7.5)); await shot('9_bomb_after', 'a few seconds later')
+        if BOMBS: print('errors', json.dumps(errs[:8], indent=1)); await b.close(); print('FAILED: ' + '; '.join(fails) if fails or errs else 'BOMB PICTURES TAKEN'); return
         # ---- the real frame loop through the opening engagement on both tanks
         await ev('void (() => { __beta.set.seed = 18; __beta.start(); __beta.setPlaying(false); __beta.runTo(3.6); __beta.setPlaying(true); })()'); t_a = await ev('__beta.battle.t'); t_b = t_a
         for k in range(18):   # up to 90 s of real time: software drawing on a busy machine is slow
