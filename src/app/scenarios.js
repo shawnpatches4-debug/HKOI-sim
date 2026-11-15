@@ -116,6 +116,7 @@ export class ScenarioPage {
     this.app = app; const el = app.el;
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
     this.s = el('div', 'screen'); this.s.id = 'scen'; this.s.hidden = true; this.c = el('div', 'card panel'); this.s.append(this.c); document.body.append(this.s);
+    window.addEventListener('keydown', e => { if (e.code === 'Escape' && !this.s.hidden) { this.close(); this.app.back(); } });
   }
   get isOpen() { return !this.s.hidden; }
   open() {

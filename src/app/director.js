@@ -35,7 +35,7 @@ export class Director {
     this.btn = app.el('button', 'btn', 'Director'); this.btn.title = 'The simulator films its own battle: automatic camera, captions, slow motion at the decisive moment (F)'; this.btn.onclick = () => this.toggle(); this._paint();
     window.addEventListener('keydown', e => { if (e.code === KEY && app.state === 'play' && !(e.target && e.target.tagName === 'INPUT') && !e.ctrlKey && !e.metaKey) this.toggle(); });
     // a click or the wheel on the picture: the viewer wants the camera
-    const cv = app.scene.canvas, take = () => { if (this.ctrl) { this.yielded = true; this._release(true); } };
+    const cv = app.scene.canvas, take = () => { if (this.ctrl && !this.hold) { this.yielded = true; this._release(true); } };
     cv.addEventListener('pointerdown', take, true); cv.addEventListener('wheel', take, { capture: true, passive: true });
   }
   // the button for the page's control bar (one element, kept up to date here)

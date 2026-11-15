@@ -27,6 +27,12 @@ async def main():
             await pg.evaluate("void document.querySelector('#help .btn.primary').click()"); await pg.wait_for_timeout(3000)
             o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, seen: localStorage.getItem('hkoi.help1'), q: !!document.querySelector('#bar .btn[title^=\"How to watch\"], #bar .btn[data-tip^=\"How to watch\"]') })")); print('after Got it', o)
             if o['open'] or not o['playing'] or o['seen'] != 'true' or not o['q']: bad += 1; print('FAIL help did not close, resume, remember or leave its ? button on the bar')
+            try:
+                await pg.hover('#bar .btn', timeout=20000); await pg.wait_for_timeout(1500); o = json.loads(await pg.evaluate("JSON.stringify({ tip: !document.getElementById('bartip').hidden, text: document.getElementById('bartip').textContent })")); print('bar hint', o); await shot('bar_hint')
+                if not o['tip'] or not o['text']: bad += 1; print('FAIL no hint over the bar button')
+            except Exception as e: bad += 1; print('FAIL hover', str(e)[:200])
+            await pg.keyboard.press('?'); await pg.wait_for_timeout(2500); o = await pg.evaluate("!document.getElementById('help').hidden"); print('? key reopens', o); await pg.keyboard.press('Escape'); await pg.wait_for_timeout(1000)
+            if not o: bad += 1; print('FAIL the ? key did not reopen the help')
         if 'title' in PARTS or 'scen' in PARTS or 'keys' in PARTS:
             await ready('gfx=%s&demo=0' % GFX); await pg.wait_for_timeout(3000)
             if 'title' in PARTS:
@@ -54,7 +60,10 @@ async def main():
                 await pg.wait_for_timeout(700); st = json.loads(await pg.evaluate(STATE))
                 if st['err'] or st['fault']: break
                 if st['ci'] == ci and st['si'] == si and not st['sched'] and not st['want'] and st['phase'] == 'hold': break
-                if st['phase'] == 'run' and st['playing'] and st['t'] is not None: await pg.evaluate("void (__beta.guide.app.speed = %s)" % ('4' if st['to'] - st['t'] > 1.2 else str(st['rate'])))
+                if st['phase'] == 'run' and st['playing'] and st['t'] is not None:
+                    rem = st['to'] - st['t']
+                    if rem > 1.6 and os.environ.get('JUMP', '1') == '1': await pg.evaluate("void __beta.guide.app.seek(%f)" % (st['to'] - 1.0))   # the page's own jump in time (as the replay bar does), so the slow renderer only has to play the last second
+                    else: await pg.evaluate("void (__beta.guide.app.speed = %s)" % ('2' if rem > 0.45 else str(st['rate'])))
             print('step %s after %.0f s: %s' % (s, time.time() - t1, st), flush=True)
             if not st or st['err'] or st['fault'] or st['phase'] != 'hold': bad += 1; print('FAIL step', s, 'did not reach its moment')
             await pg.wait_for_timeout(2500); lab = json.loads(await pg.evaluate(LABELS)); print('  ', lab['tag'], '|', lab['head'], '|', lab['rate'], '| lines', lab['lines']); print('  ', lab['text']); print('   labels', lab['labels'], 'card', lab['card'])

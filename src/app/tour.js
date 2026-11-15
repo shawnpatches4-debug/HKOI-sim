@@ -34,7 +34,7 @@ const ident = (v, th) => ({ v: v.i, idx: th.idx, uid: th.uid, brg: th.brg, R: th
 // the engine settings the text quotes, read from the battle's own configuration (never typed in here)
 function settings(B) {
   const c = (B.volleys[0] && B.volleys[0].cfg) || B.cfg0 || {}, g = c.gun || {}, r = c.rnd || {}, a = c.aps || {}, o = c.obs || {};
-  return { payload: r.payload_g, obs0: g.obscurant_rounds, he0: g.he_rounds, gap: g.rof_rpm ? 60 / g.rof_rpm : null, hePk: r.he_pk_drone, saclos: o.saclos_effect, aps0: a.mag_per_side, apsR: a.radar_range_m };
+  return { payload: r.payload_g, form: o.form_s, obs0: g.obscurant_rounds, he0: g.he_rounds, gap: g.rof_rpm ? 60 / g.rof_rpm : null, hePk: r.he_pk_drone, saclos: o.saclos_effect, aps0: a.mag_per_side, apsR: a.radar_range_m };
 }
 // what ended the threats of a whole battle, in four heaps
 function tally(B) {
@@ -50,10 +50,13 @@ function findCut(B) {
     if (strict && cb.rounds[0].t_fire - th.t0 < 2.5) return null;   /* leave time to show the flight before the gun answers */
     let x0 = 1e9, x1 = -1e9, xs = 0; for (const p of cb.puffs) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); xs += p.x; }
     const end = th.viz.end, r0 = cb.rounds[0], tPass = r0.t_pass != null ? r0.t_pass : cb.t_ref;
+    /* the bursts that had bloomed on the line when the beam was cut, nearest the vehicle first (those are the latest) */
+    const out = cb.rounds.filter(r => r.fate === 'bloom' && r.bx != null && r.t_pass != null && r.t_pass <= cb.res.t_cut).map(r => r.bx).sort((a, b) => a - b), near = out.length ? out.slice(0, 2) : [xs / cb.puffs.length];
     return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tE: v.t0 + end.t, flight: th.impact - th.t0, R: th.R, speed: th.v,
       tAcq: th.acq != null ? v.t0 + th.acq : null, tTrack: th.track != null ? v.t0 + th.track : null, dTrack: th.track != null ? distAt(th, th.track) : null, cueSrc: th.cue_src || null,
       tF: v.t0 + r0.t_fire, dFire: distAt(th, r0.t_fire), rounds: cb.rounds.length, tPass: v.t0 + tPass, xPass: distAt(th, tPass),
       tB: v.t0 + (cb.t_ref != null ? cb.t_ref : tPass), tCut: v.t0 + cb.res.t_cut, x: xs / cb.puffs.length, span: x1 - x0, severD: th.viz.sever.d,
+      xFirst: r0.bx != null ? r0.bx : distAt(th, tPass), nOut: out.length, xNear: near.reduce((a, b) => a + b, 0) / near.length, spanNear: Math.max(36, near[near.length - 1] - near[0] + 26), form: settings(B).form,
       end: { type: end.type, d: end.d != null ? end.d : null, miss: end.miss != null ? end.miss : null }, inAir: v.rec.threats.length,
       spread: Math.max(...v.rec.threats.map(o => o.t0)) - Math.min(...v.rec.threats.map(o => o.t0)), cfg: settings(B), all: tally(B) };
   });
@@ -109,7 +112,8 @@ const crewLine = c => Object.keys(CREW).filter(r => c[r]).map(r => `${CREW[r]} $
 // A step: { head, text(X), from, to, rate, shot, marks, lines, panel }.
 //   from, to   battle time in seconds: the replay jumps to `from`, plays at `rate` and stops at `to` (from === to: a still moment)
 //   shot       what the film director's rigs are handed (director.film): { rig } or { cam }, completed here with the threat's identity
-//   marks      labels with leader lines: { at: 'missile' | 'launcher' | 'tank' | 'station' | 'trophy' | 'cloud' | 'point', id, text, tone, d }
+//   marks      labels with leader lines: { at: 'missile' | 'launcher' | 'tank' | 'station' | 'trophy' | 'cloud' | 'point', id, text, tone }
+//              (cloud: x metres out along the threat's bearing, r how far from there a puff may be; point: d metres out, shown once battle time passes `after`)
 //   lines      'beam' (launcher to missile), 'track' (station to this missile), 'tracks' (station to every missile in the air)
 //   X          { b: the battle as it stands, inAir: missiles and drones in the air now }
 const mk = (at, text, id, more) => Object.assign({ at, text, id }, more || {});
@@ -142,20 +146,20 @@ export const CHAPTERS = [
     { head: 'HKOI answers', from: Math.max(0, M.tF - 1.8), to: M.tF + 1.3, rate: 0.5, shot: shotOf({ rig: 'gun' }, M.id), lines: ['track'],
       marks: [mk('station', 'HKOI: 30 mm weapon station', null, { tone: 'good' }), mk('missile', `Kornet, ${km(M.dFire)}`, M.id, { tone: 'bad' })],
       text: () => `${s1(M.tF - M.tL)} s after launch the fire control has picked a point on the missile's line back to its launcher, and the gun opens fire: ${word(M.rounds)} obscurant rounds${M.cfg.gap ? `, one every ${s1(M.cfg.gap)} s` : ''}. It is not trying to hit the missile.` },
-    { head: 'Overtake', from: M.tPass - 1.3, to: M.tPass + 0.25, rate: 0.25, shot: shotOf({ rig: 'follow' }, M.id), lines: ['beam'],
-      marks: [mk('missile', 'Kornet, still guided', M.id, { tone: 'bad' }), mk('beam', 'Guidance beam from the launcher', M.id, { tone: 'bad' })],
-      text: () => `The first round meets the incoming missile ${km(M.xPass)} from the vehicle, passes it nose to nose and carries on. That is the overtake: the round is now on the far side of the missile, between it and its launcher, which is exactly where the cloud has to be.` },
-    { head: 'Bloom', from: M.tB - 0.5, to: M.tCut + 0.25, rate: 0.5, shot: shotOf({ rig: 'cloud', x: M.x, span: M.span }, M.id), lines: ['beam'],
-      marks: [mk('cloud', 'Obscurant cloud', M.id, { tone: 'good', x: M.x }), mk('missile', () => 'Kornet', M.id, { tone: 'bad' }), mk('beam', 'Guidance beam', M.id, { tone: 'bad' })],
-      text: () => `Each round bursts and lets go ${M.cfg.payload} g of obscurant (assumed: no such round has been built or tested). The puffs join into a cloud lying across the beam, about ${km(M.x)} from the vehicle. ${s1(Math.max(0, M.tCut - M.tB))} s after the first burst the missile's tail receiver has lost the laser, with the missile ${km(M.severD)} out. The line turns grey: the beam is cut.` },
+    { head: 'Overtake', from: M.tPass - 1.2, to: M.tB + 0.15, rate: 0.25, shot: shotOf({ rig: 'cloud', x: (M.xFirst + distAt({ R: M.R, v: M.speed, t0: M.tL - M.t0 }, M.tB - M.t0)) / 2, span: 70 }, M.id), lines: ['beam'],
+      marks: [mk('missile', 'Kornet, still guided', M.id, { tone: 'bad' }), mk('cloud', 'First burst', M.id, { tone: 'good', x: M.xFirst, r: 60 }), mk('beam', 'Guidance beam from the launcher', M.id, { tone: 'bad' })],
+      text: () => `The first round meets the incoming missile ${km(M.xPass)} from the vehicle and bursts beside it. The missile flies on at ${Math.round(M.speed)} m/s, so by the time the puff has opened${M.form ? `, ${s1(M.form)} s later,` : ''} it lies behind the missile, on the line back to the launcher. That is the overtake: the cloud is put exactly where the beam has to pass.` },
+    { head: 'Bloom', from: M.tB - 0.2, to: M.tCut + 0.25, rate: 0.5, shot: shotOf({ rig: 'cloud', x: M.xNear, span: M.spanNear }, M.id), lines: ['beam'],
+      marks: [mk('cloud', 'Obscurant puff', M.id, { tone: 'good', x: M.xNear, r: 60 }), mk('missile', () => 'Kornet', M.id, { tone: 'bad' }), mk('beam', 'Guidance beam', M.id, { tone: 'bad' })],
+      text: () => `Each round lets go ${M.cfg.payload} g of obscurant (assumed: no such round has been built or tested). From the side the bursts are a row of small puffs along the beam${M.nOut > 1 ? `, ${word(M.nOut)} of them by now` : ''}; the beam has to pass through every one. ${s1(Math.max(0, M.tCut - M.tB))} s after the first puff opened, the missile's tail receiver has lost the laser, with the missile ${km(M.severD)} out. The line turns grey: the beam is cut.` },
     { head: 'The same seconds from the gunner\'s side', from: M.tB - 1.2, to: M.tCut + 1, rate: 0.5, shot: shotOf({ cam: 'enemy' }, M.id),
-      marks: [mk('cloud', 'Cloud between launcher and missile', M.id, { tone: 'good', x: M.x }), mk('missile', 'His own missile', M.id, { tone: 'bad' })],
-      text: () => `Through the enemy gunner's sight. He is still aiming at the vehicle, but the cloud has gone up on the line between his launcher and his own missile. A beam-rider that cannot see its beam gets no more steering, however well he aims.` },
+      marks: [mk('cloud', 'Cloud between launcher and missile', M.id, { tone: 'good', x: M.xNear, r: 400 }), mk('missile', 'His own missile', M.id, { tone: 'bad' })],
+      text: () => `Through the enemy gunner's sight. Seen end-on, the row of puffs stacks up into one cloud, right on the line between his launcher and his own missile. He is still aiming at the vehicle, but a beam-rider that cannot see its beam gets no more steering, however well he aims.` },
     { head: 'And from HKOI\'s own sight', from: Math.max(0, M.tF - 1.2), to: M.tB + 1.2, rate: 1, shot: shotOf({ cam: 'hkoi' }, M.id),
       marks: [mk('missile', 'Kornet', M.id, { tone: 'bad' })],
       text: () => `The weapon station's own sensor through the engagement. It holds the track, lays the gun on the meeting point and fires; the crew does nothing but watch. From launch to cut this engagement took ${s1(M.tCut - M.tL)} s.` },
-    { head: 'Blind', from: M.tCut - 0.4, to: M.tE + 1.2, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.id), lines: ['beam'],
-      marks: [mk('missile', 'Kornet: no guidance', M.id, { tone: 'warn' })],
+    { head: 'Blind', from: M.tCut - 0.4, to: M.tE + 0.4, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.id), lines: ['beam'],
+      marks: [mk('missile', 'Kornet: no guidance', M.id, { tone: 'warn' })].concat(M.end.type === 'ground' && M.end.d != null ? [mk('point', `Hits the ground ${Math.round(M.end.d)} m short`, M.id, { tone: 'good', d: M.end.d, after: M.tE })] : []),
       text: () => `With no beam the missile holds whatever course it had. ${M.end.type === 'ground' && M.end.d != null ? `This one flew into the ground ${Math.round(M.end.d)} m short of the vehicle` : M.end.miss != null ? `This one passed ${Math.round(Math.abs(M.end.miss))} m wide of the vehicle` : 'This one missed the vehicle'}, ${s1(Math.max(0, M.tE - M.tCut))} s after the cut.` },
     { head: 'Not every time', from: M.tE + 1.5, to: M.tE + 1.5, rate: 1, shot: shotOf({ rig: 'tank' }, M.id),
       marks: [mk('station', 'HKOI weapon station', null, { tone: 'good' })],
@@ -254,6 +258,7 @@ const CSS = `
   #bartip { position: fixed; z-index: 7; left: 0; top: 0; max-width: 300px; padding: 6px 10px; border-radius: 6px; background: rgba(5, 9, 8, .96); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.35; color: var(--fg); pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
 `;
 const TONES = { good: '#39d98a', bad: '#ff6b5e', warn: '#ffb347' };
+const STATION = { at: 'station' };
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 
@@ -336,7 +341,7 @@ class Briefing {
   // ---- moving about -----------------------------------------------------------------------------------------------------------
   start(ci, si) { if (this.on) return; this.snap = this.app.snapshot(); this.on = true; this.seen.clear(); this.setup = null; this.fault = null; document.body.classList.add('tour-on'); this.root.hidden = false; this.app.director.setHold(true); this.go(ci || 0, si || 0); }
   stop(then) {
-    if (!this.on) return; this.on = false; this.phase = 'idle'; this.want = null; this._quickStop(); document.body.classList.remove('tour-on'); this.root.hidden = true; this.veil.hidden = true; this._hideMarks();
+    if (!this.on) return; this.on = false; this.phase = 'idle'; this.want = null; this._quickStop(); document.body.classList.remove('tour-on'); this.root.hidden = true; this.veil.hidden = true; this._hideMarks(); try { this._lift(0); } catch (e) { console.error(e); }
     try { this.app.director.setHold(false); } catch (e) { console.error(e); }
     try { this.app.speed = 1; this.app.exit(this.snap); } catch (e) { console.error(e); try { this.app.toTitle(); } catch (e2) { console.error(e2); } }
     this.snap = null; this.setup = null; if (then) then();
@@ -354,14 +359,14 @@ class Briefing {
     const run = () => { this.sched = false; try { this._enter(); } catch (e) { this._fail(e); } };
     if (heavy) requestAnimationFrame(() => requestAnimationFrame(run)); else requestAnimationFrame(run);
   }
-  _fail(e) { console.error(e); this.fault = String(e && e.message || e); this.phase = 'hold'; this.veil.hidden = true; this._hideMarks(); try { this.app.playing = false; } catch (x) { /* nothing more to do */ } this._paint(); }
+  _fail(e) { console.error(e); this.fault = String(e && e.message || e); this.phase = 'hold'; this.veil.hidden = true; this._hideMarks(); try { this._lift(0); } catch (x) { /* no camera to put back */ } try { this.app.playing = false; } catch (x) { /* nothing more to do */ } this._paint(); }
   _enter() {
     const A = this.app, w = this.want; if (!this.on || !w) return; this.want = null; this.fault = null;
     const ch = CHAPTERS[w.ci];
     if (!sameSetup(ch.setup, this.setup) || !A.replay) { A.load(ch.setup, 'replay'); this.setup = ch.setup; this.full = A.replay && A.replay.full; }
     if (w.ci !== this.ci || !this.M || this.Mfor !== ch) { this.M = this.full ? ch.find(this.full, A.HK) : null; this.Mfor = ch; this.steps = this.M ? ch.steps(this.M) : []; }
     this.ci = w.ci; this.si = w.si < 0 ? Math.max(0, this.steps.length - 1) : Math.min(w.si, Math.max(0, this.steps.length - 1));
-    A.director.filmEnd(); this._hideMarks(); this.veil.hidden = true;
+    A.director.filmEnd(); this._hideMarks(); this.veil.hidden = true; this._lift(0);
     const st = this.step;
     if (!st) { this.fault = 'This chapter\'s battle no longer contains the moment the chapter was built on.'; this.phase = 'hold'; A.playing = false; this._paint(); return; }
     const T = A.replay ? A.replay.T : 1e9, from = Math.max(0, Math.min(T - 0.2, st.from)), to = Math.max(from, Math.min(T - 0.1, st.to));
@@ -399,10 +404,19 @@ class Briefing {
       else if (this.phase === 'run' && !A.playing && this.frames > 2 && this.rateTag.textContent !== 'PAUSED') { /* the page stopped the clock itself (end of the replay) */ this.phase = 'hold'; this._rate(); }
       this.frames++;
       A.director.film(this.shot, t);
+      this._lift(A.cams.mode === 'free' ? Math.round((this.cardH || 150) * 0.42) : 0);
       this._draw(st, t);
     } catch (e) { this._fail(e); }
   }
 
+  // The card covers the bottom of the picture, so for the director's own rigs the whole picture is moved up by a little under half
+  // the card's height (the camera's view offset: what was aimed at the middle of the window now sits in the middle of what is left).
+  // Sights and seats (the enemy's reticle, the HKOI sight) keep their true centre.
+  _lift(px) {
+    const cam = this.app.scene.camera, cv = this.app.scene.canvas, W = cv.clientWidth || innerWidth, H = cv.clientHeight || innerHeight;
+    if (px === this.lift && W === this.liftW && H === this.liftH) return; this.lift = px; this.liftW = W; this.liftH = H;
+    if (px) cam.setViewOffset(W, H, 0, px, W, H); else if (cam.view) cam.clearViewOffset();
+  }
   // ---- labels and lines over the picture ----------------------------------------------------------------------------------------
   _hideMarks() { for (const m of this.marks) { m.el.style.display = 'none'; m.ln.style.display = 'none'; m.dot.style.display = 'none'; m.slot = -1; } for (const l of this.lines) l.style.display = 'none'; }
   _mark(i) { let m = this.marks[i]; if (!m) { const e = this.app.el('div', 'tl'); e.style.display = 'none'; this.root.insertBefore(e, this.top); m = this.marks[i] = { el: e, ln: svg('line', { 'stroke-width': 1.5 }), dot: svg('circle', { r: 6, fill: 'none', 'stroke-width': 2 }), text: null, tone: null, w: 0, h: 0, slot: -1, x: 0, y: 0 }; this.gm.append(m.ln, m.dot); } return m; }
@@ -416,11 +430,12 @@ class Briefing {
     if (mk.at === 'station') { const p = A.tank.hkoiMuzzle ? A.tank.hkoiMuzzle(out) : null; if (!p) S.at(T.e, T.n, 3.3, out); return true; }
     if (mk.at === 'trophy') { const V = A.volleys; if (V && V._apsPort && V.tankView) V._apsPort(mk.side || 'R', T, out); else S.at(T.e, T.n, 2.7, out); return true; }
     if (mk.at === 'missile') { const m = this._missile(id); if (!m) return false; out.copy(m.p); return true; }
-    if (mk.at === 'launcher') { const u = this._unit(id.uid); if (!u || !u.alive || u.gone) return false; out.copy(A.unitPos(u)); out.y += 1.4; return true; }
-    if (mk.at === 'cloud') {   /* the middle of the puffs that are out now, near where this burst was laid */
-      const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let n = 0, x = 0, y = 0, z = 0;
-      if (C && C.puffs) for (const p of C.puffs) { if (!p.on || t < p.tb) continue; const age = Math.max(0, t - p.t0), px = p.x + (p.vx || 0) * age, pz = p.z + (p.vz || 0) * age; if (Math.hypot(px - ce, -pz - cn) > 220) continue; x += px; y += p.y; z += pz; n++; }
-      if (!n) return false; out.set(x / n, y / n, z / n); return true; }
+    if (mk.at === 'launcher') { const u = this._unit(id.uid); if (!u || !u.alive || u.gone) return false; out.copy(A.unitPos(u)); out.y += 0.9; return true; }
+    if (mk.at === 'cloud') {   /* the puff that is out now nearest to where this burst was laid: a real puff, never the empty air between two */
+      const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let best = (mk.r || 80), hit = false;
+      if (C && C.puffs) for (const p of C.puffs) { if (!p.on || t < p.tb) continue; const age = Math.max(0, t - p.t0), px = p.x + (p.vx || 0) * age, pz = p.z + (p.vz || 0) * age, d = Math.hypot(px - ce, -pz - cn); if (d >= best) continue; best = d; out.set(px, p.y, pz); hit = true; }
+      return hit; }
+    if (mk.at === 'point') { if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false; const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
     return false;
   }
   // a point in the world to a point on the page; false when it is behind the camera
@@ -444,13 +459,13 @@ class Briefing {
     let nl = 0; const beamMid = this.bm || (this.bm = { on: false, x: 0, y: 0 }); beamMid.on = false;
     for (const kind of st.lines || []) {
       if (kind === 'beam' || kind === 'track') { const id = st.marks.find(m => m.at === 'missile' || m.at === 'beam'), m = id ? this._missile(id.id) : null; if (!m) continue;
-        if (kind === 'beam') { const u = this._unit(id.id.uid); if (!u) continue; P.copy(A.unitPos(u)); P.y += 1.2; const l = this._line(nl), v = A.battle.volleys[id.id.v], blind = this._blind(m.th, t - v.t0);
+        if (kind === 'beam') { const v = A.battle.volleys[id.id.v], la = v.launches.find(q => q.u && q.u.id === id.id.uid), u0 = la && la.u0, u = this._unit(id.id.uid); if (u0) A.scene.at(u0.e, u0.n, 1.3, P); else if (u) { P.copy(A.unitPos(u)); P.y += 1.3; } else continue;   /* the same end point as the page's own guidance line (volleyview._launcher) */ const l = this._line(nl), blind = this._blind(m.th, t - v.t0);
           if (!this._segment(P, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', blind ? 'rgba(200,205,202,.75)' : 'rgba(255,70,55,.8)'); l.setAttribute('stroke-width', (1.6 * k).toFixed(2)); l.setAttribute('stroke-dasharray', blind ? '3 7' : '');
           { /* the label for the beam points at the middle of the part of it that is on the page */ let x1 = this.sx1, y1 = this.sy1, x2 = this.sx2, y2 = this.sy2; const cl = (x, y) => x >= 0 && x <= this.W && y >= 40 && y <= floor;
             for (let i = 0; i < 12 && !cl(x1, y1); i++) { x1 += (x2 - x1) * 0.12; y1 += (y2 - y1) * 0.12; } for (let i = 0; i < 12 && !cl(x2, y2); i++) { x2 += (x1 - x2) * 0.12; y2 += (y1 - y2) * 0.12; }
             if (cl(x1, y1) && cl(x2, y2)) { beamMid.on = true; beamMid.x = x1 + (x2 - x1) * 0.45; beamMid.y = y1 + (y2 - y1) * 0.45; } } }
-        else { this._where({ at: 'station' }, P); const l = this._line(nl); if (!this._segment(P, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
-      else if (kind === 'tracks' && A.volleys) { this._where({ at: 'station' }, P); for (const m of A.volleys.info) { if (m.tracked === false && !m.drone) continue; Q.copy(P); const l = this._line(nl); if (!this._segment(Q, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
+        else { this._where(STATION, P); const l = this._line(nl); if (!this._segment(P, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
+      else if (kind === 'tracks' && A.volleys) { this._where(STATION, P); for (const m of A.volleys.info) { if (m.tracked === false && !m.drone) continue; Q.copy(P); const l = this._line(nl); if (!this._segment(Q, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
     }
     for (let i = nl; i < this.lines.length; i++) this.lines[i].style.display = 'none';
     // labels: each keeps the side of its object it was first given unless that side stops fitting

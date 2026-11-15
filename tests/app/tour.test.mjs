@@ -14,7 +14,7 @@ const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVe
 const cfg = HK.defaultConfig(), lookup = HK.meetLookup(cfg);
 let bad = 0, nSteps = 0; const fail = (...a) => { bad++; console.log('FAIL', ...a); };
 const RIGS = ['tank', 'wide', 'hold', 'low', 'gun', 'cloud', 'replay', 'ride', 'follow', 'site', 'downrange', 'shoulder'], CAMS = ['enemy', 'hkoi', 'in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'troops', 'cut'];
-const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'cloud', 'beam'], LINES = ['beam', 'track', 'tracks'];
+const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'cloud', 'beam', 'point'], LINES = ['beam', 'track', 'tracks'];
 let last = null, B = null;
 for (const ch of CHAPTERS) {
   const u = ch.setup, F = FORCES[u.force];
@@ -31,7 +31,7 @@ for (const ch of CHAPTERS) {
     if ((st.to - st.from) / st.rate > 24) fail(tag, 'takes more than 24 s to watch', ((st.to - st.from) / st.rate).toFixed(1));
     if (!st.shot || !(RIGS.includes(st.shot.rig) || CAMS.includes(st.shot.cam))) fail(tag, 'camera', JSON.stringify(st.shot));
     for (const l of st.lines || []) if (!LINES.includes(l)) fail(tag, 'unknown line', l);
-    for (const m of st.marks) { if (!AT.includes(m.at)) fail(tag, 'unknown mark', m.at); if (['missile', 'launcher', 'cloud', 'beam', 'trophy'].includes(m.at) && !m.id) fail(tag, 'mark without its threat', m.at); const t = typeof m.text === 'function' ? m.text({ b: B, inAir: 2 }) : m.text; if (!t || /undefined|NaN|null|—/.test(t) || t.length > 44) fail(tag, 'label', t); }
+    for (const m of st.marks) { if (!AT.includes(m.at)) fail(tag, 'unknown mark', m.at); if (['missile', 'launcher', 'cloud', 'beam', 'trophy', 'point'].includes(m.at) && !m.id) fail(tag, 'mark without its threat', m.at); const t = typeof m.text === 'function' ? m.text({ b: B, inAir: 2 }) : m.text; if (!t || /undefined|NaN|null|—/.test(t) || t.length > 44) fail(tag, 'label', t); }
     if ((st.lines || []).some(l => l === 'beam' || l === 'track') && !st.marks.some(m => m.at === 'missile' || m.at === 'beam')) fail(tag, 'a beam or track line needs a missile to follow');
     let text = ''; try { text = st.text({ b: B, inAir: 3 }); } catch (e) { fail(tag, 'text threw', e.message); }
     if (!text || /undefined|NaN|null|—|Infinity/.test(text)) fail(tag, 'text has a hole in it:', text);
