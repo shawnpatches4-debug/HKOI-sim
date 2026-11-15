@@ -421,7 +421,7 @@ function drawSensors() {
   if (cams.mode === 'citv') { const q = battle._targets ? battle._targets().find(x => x.los) : null; top = `CITV   ${thName(th)}   ${scene.camera.fov < 6 ? '10×' : '3×'}   BRG ${String(Math.round(cams.citvYaw || 0) % 360).padStart(3, '0')}`;
     bot = q ? `${q.u.spec.name.toUpperCase()} #${q.u.id + 1}   RNG ${String(Math.round(q.R / 10) * 10).padStart(4, '0')} m\n${q.danger === 4 ? 'ITS MISSILE IS IN THE AIR' : q.danger === 3 ? 'CAN FIRE ON US' : q.danger === 2 ? 'RELOADING' : 'MOVING'}` : 'SWEEPING\nNOTHING LOCATED IN VIEW'; }
   else { const m = volleys.info.filter(x => x.cued).sort((a, b) => a.range - b.range)[0], s = T.st || {}; top = `HKOI SIGHT   ${thName(th)}   ${scene.camera.fov < 8 ? 'NARROW' : 'WIDE'}   OBSCURANT ${s.obs == null ? '-' : s.obs}   HE ${s.he == null ? '-' : s.he}`;
-    bot = (m ? `TRACK ${m.tt.short.toUpperCase()}   RNG ${String(Math.round(m.range / 10) * 10).padStart(4, '0')} m\n` : '') + (st ? st[1][1].toUpperCase() : ''); if (m) bx = m.p; }
+    bot = (m ? `TRACK ${m.tt.short.toUpperCase()}   RNG ${String(Math.round(m.range / 10) * 10).padStart(4, '0')} m\n` : '') + (st && st[1] && st[1][1] ? String(st[1][1]).toUpperCase() : ''); if (m) bx = m.p; }
   if (bx) { v3.copy(bx).project(scene.camera); const on = v3.z < 1 && Math.abs(v3.x) < 1 && Math.abs(v3.y) < 1; box.hidden = !on; if (on) box.style.transform = `translate(${((v3.x + 1) / 2 * innerWidth).toFixed(1)}px, ${((1 - v3.y) / 2 * innerHeight).toFixed(1)}px)`; } else if (!box.hidden) box.hidden = true;
   const sig = top + '|' + bot; if (sig !== tsSig) { tsSig = sig; $('ts-top').textContent = top; $('ts-bot').textContent = bot; }
 }
