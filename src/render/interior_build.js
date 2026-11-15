@@ -166,8 +166,12 @@ export function buildInterior(labels) {
     for (const s of [-1, 1]) { k.cyl('p', 0.024, 0.028, 0.13, C.rubber, s * 0.135, 0.05, 0.0, 0, 0, s * -0.3, 10); k.box('p', 0.018, 0.02, 0.028, C.red, s * 0.158, 0.12, -0.012); k.box('p', 0.011, 0.045, 0.011, C.steel, s * 0.12, 0.055, -0.03); } }, pos: [0.6, -0.048, -0.67] };
   // auxiliary sight: a plain 8-power telescope that looks out beside the gun; its eyepiece shows its own small view of the outside
   T.tag = 'aux-sight';
-  T.cyl('fit', 0.036, 0.036, 0.46, C.black, 0.41, GY + 0.16, -1.07, Math.PI / 2, 0, 0, 10); T.ring('fit', 0.04, 0.012, C.rubber, 0.41, GY + 0.16, -0.826, 0, 0, 0, 12);
-  T.push(0.41, GY + 0.16, -0.838); screens.push({ g: 'tur', key: 'gas', w: 0.062, h: 0.062, pos: T.at(0, 0, 0.002), quat: T.quat() }); ctl(T, 'tur', 'spot', 0, 0, 'Auxiliary sight: an 8-power telescope fixed beside the gun, the gunner\'s back-up if the main sight fails', { r: 0.05, optic: { kind: 'gas' } }); T.pop();
+  T.cyl('fit', 0.036, 0.036, 0.46, C.black, 0.41, GY + 0.16, -1.07, Math.PI / 2, 0, 0, 32); T.ring('fit', 0.04, 0.012, C.rubber, 0.41, GY + 0.16, -0.826, 0, 0, 0, 40);   /* round, not ten-sided */
+  T.push(0.41, GY + 0.16, -0.838); screens.push({ g: 'tur', key: 'gas', w: 0.062, h: 0.062, pos: T.at(0, 0, 0.002), quat: T.quat() }); ctl(T, 'tur', 'spot', 0, 0, 'Auxiliary sight: an 8-power telescope fixed beside the gun, the gunner\'s back-up if the main sight fails', { r: 0.05, optic: { kind: 'gas' } });
+  // its aiming mark, etched on the glass: cross hairs with a centre gap and three range bars below (a fixed telescope: the mark does not move)
+  for (const sx of [-1, 1]) { T.box('fit', 0.016, 0.0007, 0.0004, C.black, sx * 0.014, 0, 0.0034); T.box('fit', 0.0007, sx > 0 ? 0.01 : 0.02, 0.0004, C.black, 0, sx > 0 ? 0.011 : -0.016, 0.0034); }
+  for (const [y, w] of [[-0.008, 0.008], [-0.014, 0.006], [-0.02, 0.004]]) T.box('fit', w, 0.0006, 0.0004, C.black, 0, y, 0.0034);
+  T.pop();
   T.label('AUX SIGHT 8X', 0.013, 0.41, GY + 0.215, -0.84, 0, 0, 0, 'plate', { size: 22 });
   // ballistic computer panel on the right wall, turned toward the gunner
   console_(T, 1.07, 0.06, -0.72, -0.1, -1.05, 0.3, 0.26, 0.09, C.olive, () => {
@@ -265,7 +269,7 @@ export function buildInterior(labels) {
   T.tag = 'loader';
   T.ring('fit', D.HATR, 0.028, C.steel, HX, RF, HZ, Math.PI / 2, 0, 0, 28); T.cyl('shell', D.HATR, D.HATR, 0.05, C.cream, HX, RF + 0.025, HZ, 0, 0, 0, 24, true);
   // The loader's hatch: hinged at the back, with a spring arm that helps him lift it and holds it open.
-  T.box('fit', 0.05, 0.04, 0.3, C.steel, HX - D.HATR - 0.035, RF + 0.05, HZ); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX - D.HATR - 0.01, RF + 0.065, HZ, Math.PI / 2, 0, 0, 8);   /* hinge block and pin on the roof, on the outboard side: the HKOI station's pedestal stands over the hatch's rear rim, so the lid opens outward and lies back over the turret side */
+  T.box('fit', 0.05, 0.04, 0.3, C.steel, HX - D.HATR - 0.035, RF + 0.05, HZ); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX - D.HATR - 0.01, RF + 0.065, HZ, Math.PI / 2, 0, 0, 8);   /* hinge block and pin on the roof, on the outboard side: the lid opens outward and lies back over the turret side (the HKOI station now stands 0.9 m behind, clear of it: tests/interior/station_clear.mjs) */
   moving.hatch = { g: 'tur', out: true, build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.olive, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', D.HATR - 0.03, D.HATR - 0.03, 0.012, C.creamD, 0, -0.02, -D.HATR, 0, 0, 0, 20);
     for (const sx of [-1, 1]) k.box('p', 0.035, 0.035, 0.1, C.steel, sx * 0.1, 0.0, -0.04);                                                                                   /* hinge lugs */
     k.box('p', 0.03, 0.02, 0.3, C.gunm, 0.22, -0.02, -0.17, 0.0, 0.0, 0); k.cyl('p', 0.018, 0.018, 0.16, C.steel, 0.22, -0.035, -0.06, Math.PI / 2, 0, 0, 8);          /* spring arm and its cylinder */
