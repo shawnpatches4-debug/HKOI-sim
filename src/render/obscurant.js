@@ -15,7 +15,7 @@ const MAXP = 96, LOBES_MAX = 5, STRIDE = 12, TAU = Math.PI * 2;
 // the engine's figures for one round, read from its own settings: payload in grams x square metres blocked per gram. Looking straight through the middle of one puff of width s
 // the optical depth is that product / (2 pi s2): with 75 g at 0.85 it is 2.5 when the puff forms (about 8% of the light gets through) and falls as it spreads.
 // That is what is drawn: one puff alone is NOT a wall. It takes several on the same line to blind a missile, as the engine says.
-const _hk = typeof window !== 'undefined' && window.HK && window.HK.defaultConfig ? window.HK.defaultConfig() : null, TAU_PUFF = (_hk ? _hk.obs.alpha_m2_per_g * _hk.rnd.payload_g : 0.85 * 75) / (2 * Math.PI * 4);
+const _hk = typeof window !== 'undefined' && window.HK && window.HK.defaultConfig ? window.HK.defaultConfig() : null, ALPHA = _hk ? _hk.obs.alpha_m2_per_g : 0.85, PAYLOAD = _hk ? _hk.rnd.payload_g : 75, TAU_PUFF = ALPHA * PAYLOAD / (2 * Math.PI * 4);   /* per puff the record's own payload and starting width are used when given (a changed round setting draws as the engine ran it) */
 const LOBES = { min: 2, low: 3, medium: 4, high: 5, ultra: 5, auto: 4 };
 const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
@@ -100,7 +100,7 @@ export class ObscurantCloud {
     if (s.fx) { u.fogColor.value.copy(s.fx.mat.uniforms.fogColor.value); u.fogDensity.value = s.fx.mat.uniforms.fogDensity.value; u.sunColor.value.copy(s.fx.mat.uniforms.sunColor.value); u.skyColor.value.copy(s.fx.mat.uniforms.skyColor.value); u.gain.value = s.fx.mat.uniforms.gain.value; }
     for (let i = 0; i < this.puffs.length; i++) {
       const p = this.puffs[i]; if (!p.on || t < p.tb) continue;
-      ObscurantCloud.state(p, t, st); const op = 1 - Math.exp(-TAU_PUFF * st.dens), hl = Math.min(1, Math.sqrt(st.dens * 3)) * st.f;
+      ObscurantCloud.state(p, t, st); const tau0 = p.m ? ALPHA * p.m / (2 * Math.PI * p.s0 * p.s0) : TAU_PUFF, op = 1 - Math.exp(-tau0 * st.dens), hl = Math.min(1, Math.sqrt(st.dens * 3)) * st.f;
       if (st.dens < 0.035 || st.age > 90) { p.on = false; continue; }
       const age = Math.max(0, t - p.t0), cx = p.x + p.vx * age, cz = p.z + p.vz * age, L = this.lobes, each = 1 - Math.pow(1 - op * st.f, 1 / Math.sqrt(L));
       for (let k = 0; k < L; k++) {

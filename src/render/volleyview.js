@@ -137,7 +137,7 @@ export class VolleyView {
     if (!quiet) { this.fx.seed(v.i * 97 + b.idx * 13 + r.t_fire); this.fx.cloudPop(pt.x, pt.y, pt.z); }
     if (!p) return;   /* a fuze that went off with no puff in the engine's list: the pop only */
     const wa = p.wa || 0, wc = b.wind_cross || 0, ve = this._ae * wa + this._an * wc, vn = this._an * wa - this._ae * wc;
-    this.cloud.add({ id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });
+    this.cloud.add({ id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, m: p.m, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });   /* m: the round's payload as the engine used it (g) */
   }
   // the engine's own measure of how much of the line the cloud is blocking for threat th at volley time tv: 0 clear, 1 = lock lost
   _block(rec, th, tv) {

@@ -24,6 +24,7 @@ import { AirPass, depthWorks } from './post.js';
 // guidance lines) are drawn so they show as before under the lower exposure. Assumed, by eye against photographs: all of these.
 // Under full cloud (overcast, rain) there is no sunlit ground to expose for: the camera opens up for ground in diffuse light, as an
 // automatic camera does, so a rainy picture reads grey and wet rather than near black (rain exposure 1.35, overcast 0.88, by eye, 15 Nov).
+// Night is exposed like a sight or a dark-adapted eye at full moon (1.6, was 1.3): fields and tree lines read, the sky stays deep blue.
 // shaft = colour and strength of the light shafts round a sun that is in the picture (High and Ultra; none under full cloud or at night).
 export const CONDITIONS = {
   day: { name: 'Day', shaft: ['#ffe6c0', 0.3], el: 36, az: 150, sun: '#fff0d8', sunI: 12, sky: '#b4cbe8', ground: '#6b644a', hemiI: 0.5, fog: '#bccbdb', fogI: 1.25, fogD: 0.00015, glow: ['#ffe9c4', 0.35], cloudShade: 0.3, exposure: 0.36, tint: '#fff8ee', shadow: '#eef3ff', sat: 1.06, contrast: 1.1, envI: 1, amb: 0.6, gain: 1.67,
@@ -40,7 +41,7 @@ export const CONDITIONS = {
     sky: { zenith: ['#b4b8b7', 1.0], horizon: ['#b4b8b7', 0.95], disc: ['#fff4e0', 1.2], discSize: 0.0006, halo: ['#fff2d8', 0.3], cloudLit: ['#c2c6c5', 1.0], cloudDark: ['#a4a8a7', 0.95], cover: 1.0, soft: 0.7, hazeTop: 0.9 } },
   snow: { name: 'Snow', el: 22, az: 165, sun: '#eef2f8', sunI: 2.4, sky: '#c6d0dc', ground: '#aab2bd', hemiI: 0.9, fog: '#cdd4dc', fogI: 1.0, fogD: 0.0009, glow: ['#eef2f8', 0.1], exposure: 0.6, tint: '#f2f7ff', shadow: '#dbe6ff', sat: 0.82, contrast: 1.06, snow: 1, precip: 'snow', envI: 1.3, amb: 0.78, gain: 1,
     sky: { zenith: ['#b3bcc7', 1.05], horizon: ['#cdd4dc', 1.0], disc: ['#ffffff', 0], halo: ['#eef2f8', 0.2], cloudLit: ['#d8dee6', 1.2], cloudDark: ['#a9b1bc', 1.05], cover: 1.0, soft: 0.6, hazeTop: 3 } },
-  night: { name: 'Night', el: 42, az: 215, sun: '#9db4e6', sunI: 1.5, sky: '#7088bd', ground: '#1a202c', hemiI: 0.6, fog: '#101828', fogI: 1.0, fogD: 0.0003, glow: ['#5a70a8', 0.03], exposure: 1.3, tint: '#e2eaff', shadow: '#c2d0ff', sat: 0.5, contrast: 1.02, grain: 0.07, night: true, envI: 1.5, amb: 0.05, gain: 1,
+  night: { name: 'Night', el: 42, az: 215, sun: '#9db4e6', sunI: 1.5, sky: '#7088bd', ground: '#1a202c', hemiI: 0.6, fog: '#101828', fogI: 1.0, fogD: 0.0003, glow: ['#5a70a8', 0.03], exposure: 1.6, tint: '#e2eaff', shadow: '#c2d0ff', sat: 0.5, contrast: 1.02, grain: 0.07, night: true, envI: 1.5, amb: 0.05, gain: 1,
     sky: { zenith: ['#16264a', 1.3], horizon: ['#22355c', 1.2], disc: ['#eaf0ff', 4.0], discSize: 0.00035, halo: ['#7f98d0', 0.12], cloudLit: ['#4a5c84', 0.8], cloudDark: ['#141c30', 0.8], cover: 0.3, soft: 0.25, stars: 7, hazeTop: 8 } },
 };
 
