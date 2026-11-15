@@ -44,7 +44,8 @@ if all(e.values()):
 # ---- inside / outside
 a, b = M('fx_gun30_burst_out_10m'), M('fx_gun30_burst_in')
 if a and b:
-    need(a['cen'] > 5 * b['cen'], '30 mm outside centre %.0f Hz, inside %.0f Hz (inside is a thud)' % (a['cen'], b['cen']))
+    # version 1.0: inside, the round keeps its weight between 150 and 1000 Hz (so small loudspeakers can play it) but stays far duller than outside
+    need(a['cen'] > 3 * b['cen'] and b['cen'] < 500, '30 mm outside centre %.0f Hz, inside %.0f Hz (inside is a thud)' % (a['cen'], b['cen']))
     need(a['bands'][2] > 12 and a['bands'][3] > 12 and a['bands'][1] < 60, '30 mm outside energy: low %.0f%% mid %.0f%% high %.0f%% air %.0f%% (a hard report, not only a boom)' % tuple(a['bands'][1:]))
 a, b = M('fx_explosion_30m_size1.5'), M('fx_explosion_30m_size1.5_inside')
 if a and b: need(b['cen'] < 0.6 * a['cen'], 'blast at 30 m: centre %.0f Hz outside, %.0f Hz inside the hull' % (a['cen'], b['cen']))
