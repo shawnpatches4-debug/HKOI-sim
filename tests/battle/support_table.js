@@ -1,13 +1,14 @@
-// node tests/battle/support_table.js [battles per cell, default 200] [support | bombers | platoon] [skills, e.g. trained,veteran] [only=ambush,heavy]
+// node tests/battle/support_table.js [battles per cell, default 200] [support | bombers | platoon | air] [skills, e.g. trained,veteran] [only=ambush,heavy]
 // Honest numbers for the friendly support and the bomber drone, on paired seeds (every cell of a row fights the same 200 battles:
 // same ground, same enemy placement seed). As in the page: enemy commander 'auto', fate on, one wave, up to 600 s; ground and mission
 // mixed (hold, hold, advance, hunt). 200 battles a cell: a margin of about +-7 points on a loss rate.
 //   support : the five standard forces of the setup screen, M1 with HKOI + Trophy (and with neither), with no support, a wingman,
 //             artillery, a scout drone, and all three. M1 lost = destroyed or abandoned.
 //   bombers : the "Bomber drones" force and a force of two bomber crews alone, under the four defence setups.
+//   air     : the armoured counter-attack, the mechanised ambush and the prepared defence with and without two air strikes.
 //   platoon : the three new forces as the setup screen plays them, against the same enemy without the support.
-const { HK, Battle, Support } = require('./load.js');
-const args = process.argv.slice(2), N = +(args.find(a => /^\d+$/.test(a)) || 200), WHAT = args.find(a => /^(support|bombers|platoon)$/.test(a)) || 'support', SKILLS = (args.find(a => /^(green|trained|expert|veteran)(,|$)/.test(a)) || 'trained').split(',');
+const { HK, Battle, Support, EnemyVeh } = require('./load.js');
+const args = process.argv.slice(2), N = +(args.find(a => /^\d+$/.test(a)) || 200), WHAT = args.find(a => /^(support|bombers|platoon|air)$/.test(a)) || 'support', SKILLS = (args.find(a => /^(green|trained|expert|veteran)(,|$)/.test(a)) || 'trained').split(',');
 const ONLY = (args.find(a => /^only=/.test(a)) || '').slice(5).split(',').filter(Boolean);
 const cfg = HK.defaultConfig();
 const FORCES = {
@@ -49,6 +50,16 @@ if (WHAT === 'support') {
       row[su] = lost; st[su] = S; }
     const B = st.both, Z = st.neither, f = v => (v / N).toFixed(2);
     console.log(`${name.padEnd(39)} ${skill.padEnd(8)} ${pc(row.both, N)}   ${pc(row.trophy, N)}  ${pc(row.hkoi, N)}    ${pc(row.neither, N)}  |  ${f(B.so)}, ${f(B.bu)}, ${f(B.dn)}, ${f(B.dr)}, ${f(B.hi)}; ${pc(B.kb, N)}  |  ${f(Z.dr)}, ${f(Z.hi)}; ${pc(Z.kb, N)}   (Trophy only: bombs ${f(st.trophy.dr)}, hits ${f(st.trophy.hi)}, lost to a bomb ${pc(st.trophy.kb, N)}; HKOI only: shot down ${f(st.hkoi.dn)}, bombs ${f(st.hkoi.dr)}, lost to a bomb ${pc(st.hkoi.kb, N)})`); }
+} else if (WHAT === 'air') {
+  const FA = { 'armoured counter-attack': EnemyVeh.FORCES.armoured_counter, 'mechanised ambush': EnemyVeh.FORCES.mech_ambush, 'prepared defence': FORCES.heavy };
+  console.log(`Air strikes (two a battle), ${N} battles a cell, same seeds with and without. M1 lost:`);
+  console.log('force                     crews    defences  without  with air |  called  weapons released  waved off  aircraft lost (battles)  enemy vehicles destroyed by air  teams knocked out by air (a battle)  followed a moved target | enemy vehicles lost in all: without / with');
+  for (const [name, F] of Object.entries(FA)) for (const skill of SKILLS) for (const su of ['both', 'neither']) { let a = 0, z = 0, vz = 0, va = 0; const S = { c: 0, d: 0, w: 0, l: 0, v: 0, t: 0, f: 0 };
+    for (let i = 0; i < N; i++) { const b0 = fight(i, skill, F, su, undefined), b = fight(i, skill, F, su, { air: 2 }), r = b.supReport().stat; if (lostP(b0)) z++; if (lostP(b)) a++;
+      S.c += r.airCalled; S.d += r.airDone; S.w += r.airWaved; S.l += r.airLost; S.v += r.airVehKills; S.t += r.airTeamKills; S.f += r.airFollowed;
+      vz += b0.vehicles ? b0.vehicles().filter(v => !v.alive && v.kind !== 'uaz').length : 0; va += b.vehicles ? b.vehicles().filter(v => !v.alive && v.kind !== 'uaz').length : 0; }
+    const f = v => (v / N).toFixed(2);
+    console.log(`${name.padEnd(25)} ${skill.padEnd(8)} ${su.padEnd(8)}  ${pc(z, N)}     ${pc(a, N)}   |  ${f(S.c)}  ${f(S.d)}  ${f(S.w)}  ${pc(S.l, N)}  ${f(S.v)}  ${f(S.t)}  ${f(S.f)}  |  ${f(vz)} / ${f(va)}`); }
 } else {
   console.log(`The three new forces, ${N} battles a cell, HKOI + Trophy, same seeds with and without their support. M1 lost:`);
   console.log('force             crews     with support  without  |  wingman lost  hits saved by the other HKOI  artillery kills  scout finds  bomb hits (a battle)');

@@ -267,11 +267,11 @@ fight", the bomber drone first among new enemy weapons, and "full catastrophic k
 artillery, scout drone, bomber drone), `src/battle/fate.js` (endings), drawing in `src/render/support.js`. Every figure is Claude's
 assumption (A) unless it is copied from the engine; nothing was tuned to a result. Measured tables: docs/WORKLOG.md, 15 Nov.
 
-**Off by default.** A battle gets support only with `support: { wingman, artillery, scout }` in its options (the setup screen's
+**Off by default.** A battle gets support only with `support: { wingman, artillery, scout, air }` in its options (the setup screen's
 three switches, or one of the forces "Platoon in the defence", "Section attack", "With fire support"); bomber drones only with a
 `bomber` crew in the enemy force; a crippled crew acts on its losses only with `fate: true` (the page sets it). Without these every
 stored battle is unchanged: `node tests/battle/support_off.js` (32 battles against a file written from the code before this work).
-Air support was NOT built.
+Air strikes (`support: { air: 2 }`, the setup switch "Air strikes") are off by default too.
 
 ### The wingman
 - A second M1 with its own magazines, Trophy, HKOI (setup choice: both, Trophy only, HKOI only, neither), damage state and ending.
@@ -285,7 +285,7 @@ Air support was NOT built.
   carried between two separate engagements.
 - The battle still ends when the player's tank is lost.
 
-### Artillery, scout drone, bomber drone: figures
+### Wingman, artillery, air strikes, scout drone, bomber drone: figures
 | What | Figure | Why |
 | --- | --- | --- |
 | Wingman station | 150 m from the player, right rear first, on ground a tank can stand on | a tank section's usual spacing in the defence is 100 to 200 m |
@@ -300,6 +300,17 @@ Air support was NOT built.
 | Check fire | a mission the commander called himself is stopped, and not used up, if before the guns fire (25 s before the first round lands) his crew sees that the target has moved more than 60 m, gone or been knocked out | time of flight of a 155 mm round at mid range; judgement |
 | Danger close | no mission within 600 m of a friendly tank; a mission is stopped (and not used up) if a friendly tank comes within 600 m of its target before the guns fire | the usual danger-close distance for artillery |
 | The AI's call | a located team that is not moving, located at least 3 s, at least 600 m from both tanks, and that the tank cannot deal with itself (no line of sight; or no multi-purpose rounds left; or beyond 1,500 m while the gunner is laying on another target); most dangerous first; not twice on the same place within 2 minutes | judgement |
+| Air strikes | 2 sorties a battle, one at a time; none in fog | Shawn: "attack helicopter/aircraft (rare, long battles)" |
+| Gun and rocket run (attack helicopter or A-10 class) | weapons on target 75 to 105 s after the call; strikes a strip 200 m long and 30 m wide through the target, flown across the front (at right angles to the line from the player to the target) at 120 m/s, 120 m up | judgement |
+| ... its effect | a team in the strip knocked out 45%, the rest pinned 30 s; light truck destroyed 70%; BMP-2 destroyed 40%; tank mobility kill 10% | 30 mm and rockets against men lying down and thin roofs; judgement |
+| Guided bomb (250 kg class) | weapons on target 90 to 120 s after the call; lands within 5 m (1 sigma) of the aim point; dropped from 1,200 m up at 200 m/s, 10 s to fall | judgement |
+| ... its effect | vehicle within 6 m destroyed 85%, within 15 m mobility kill 40%; team within 25 m knocked out 90%, within 50 m 40%, pinned within 100 m | judgement |
+| Where the aircraft aims | at the located team or vehicle it was called on, where that is NOW, if at weapons release the tank or the scout drone can see it, or (gun run) it lies in the open within 150 m of the called point; otherwise at the called point. A target that has moved more than 400 m is not followed | the pilot or the bomb's seeker needs someone's eyes on the target; this is what artillery lacks |
+| Danger close for air | 300 m for a gun run, 500 m for a bomb, from any friendly tank, at the call and again at release (waved off if broken) | judgement |
+| Wave-off | 10% of strikes for any reason (target not identified, another task); +15% (gun run) or +5% (bomb) for every enemy BMP-2 able to fire within 3 km of the target. A waved-off sortie is used up | the 30 mm cannon is the only anti-aircraft-capable weapon among the modelled enemy units; shoulder-fired missiles are not modelled as units, the 10% stands in for everything else |
+| Aircraft lost | 4% for every such BMP-2, gun run only; after a loss no more strikes are flown | judgement |
+| The AI's call for air | a bomb on a located enemy tank or BMP-2 that is halted; otherwise a gun run on a located team under the same rule as the artillery call | judgement |
+| A player's fire mission or air strike order | takes 8 s to pass on the radio after the usual time to give an order | judgement |
 | Scout drone | flies circles round the player at 20 m/s and 150 m up, 800 m out widening to 2,400 m and back; sees 800 m (slant) | a small quadcopter or fixed-wing scout |
 | Scout finds a team | 6% a second in the open, x0.5 in scrub or crops, x0.25 under trees, x3 if moving, x2 if setting up, x the weather factor of the tank's thermal scan; vehicles 20% a second | judgement |
 | Scout lost | 0.08% a second to jamming, link loss or a crash (about one in three over a 7 minute battle); +0.2% a second while within 600 m of an enemy team that is not pinned (small arms) | judgement |
@@ -311,7 +322,7 @@ Air support was NOT built.
 | Trophy against bombs | nothing: a bomb falling from straight above at about 40 m/s is taken to be outside what Trophy engages | honest unknown; said plainly |
 | Machine guns against the bomber | not modelled | |
 
-`battle.callFire({ e, n, kind: 'he' })` is the hook for an order system; it obeys the same rules as the commander's own calls.
+`battle.callFire({ e, n, kind: 'he' })` and `battle.callAir({ e, n, kind: 'gun' | 'bomb' })` are the hooks; they obey the same rules as the commander's own calls. When the player commands (src/battle/orders.js), the orders `{ k: 'fire', e, n }` and `{ k: 'air', e, n, kind }` pass through them after the radio call (8 s, assumed) and are kept in the order list, so a replay flies them again. They are offered in the menu at a point on the ground or the map, and the More pop-up shows what is left.
 
 **The bomber drone is resolved in the battle layer, outside the referee.** The engine has no threat that hovers and drops. HKOI's
 fire at it uses the engine's own airburst formula and parameters; a bomb that hits is given the engine's FPV kill chance and the

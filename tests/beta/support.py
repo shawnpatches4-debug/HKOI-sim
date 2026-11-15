@@ -6,13 +6,15 @@
 # then the real frame loop through the opening engagement. Takes pictures at those moments and checks that what should be drawn is
 # drawn (the view's own count), that nothing reaches the page's red error bar and that no error is logged.
 # Run it through tools/run_test.sh (one headless browser at a time). Env: W, H (default 960x540), WAITMS per picture (default 2600),
-# BOMBS=1 (only the bomb pictures, with seed 22 as the page's first battle: the free camera holds there).
+# BOMBS=1 (only the bomb pictures, with seed 22 as the page's first battle: the free camera holds there), AIR=1 (only the air strikes).
 import asyncio, os, sys, json, time
 from playwright.async_api import async_playwright
 OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=low&spectator=1&play=1&biome=farmland&map=3&force=section_attack&seed=18&speed=1&waves=1&arty=on&skill=trained&mission=hold&cond=day&hud=none'
 WAIT = int(os.environ.get('WAITMS', '2600')); T0 = time.time()
 BOMBS = os.environ.get('BOMBS') == '1'   # BOMBS=1: only the bomb pictures, with seed 22 as the page's first battle
 if BOMBS: PARAMS = PARAMS.replace('seed=18', 'seed=22')
+AIR = os.environ.get('AIR') == '1'   # AIR=1: only the air strike pictures (a gun run and a guided bomb called by the test on open ground)
+if AIR: PARAMS += '&air=on'
 SETUP = """void (() => {
   const b = window.__beta; b.setPlaying(false);
   window.__ev = type => b.battle.events.filter(e => e.type === type).sort((p, q) => p.t - q.t);
@@ -44,6 +46,18 @@ async def main():
             return info
         has = await ev('JSON.stringify({ wing: !!__beta.battle.wing, scout: !!__beta.battle.scout(), art: !!(__beta.battle.sup && __beta.battle.sup.art), force: __beta.set.force })'); print('battle 1', has)
         if not json.loads(has)['wing']: fails.append('no wingman in the battle')
+        if AIR:
+            await ev('void (() => { const B = __beta.battle; __to(2); B.sup.air.at = 1e9; B.sup.art.at = 1e9; })()')
+            for kind, name in (('gun', 'gun run'), ('bomb', 'guided bomb')):
+                r = await ev('(() => { const B = __beta.battle, T = B.tank; for (const a of [40, 130, 220, 310, 85, 175, 265, 355]) { const e = T.e + Math.sin(a * Math.PI / 180) * 800, n = T.n + Math.cos(a * Math.PI / 180) * 800; if (!B.world.inside(e, n) || B.world.veg(e, n).cls >= 3) continue; const r = B.callAir({ e, n, kind: "%s" }); if (r.ok) return JSON.stringify(r); } return null; })()' % kind)
+                if r is None: fails.append('no %s could be called' % name); continue
+                tot = json.loads(r)['tot']; pre = 1.0 if kind == 'gun' else 4.0
+                await ev('void (() => { __to(%f); const B = __beta.battle, k = B.sup.strikes[B.sup.strikes.length - 1]; __look(k.e, k.n, (k.hdg + 90) %% 360, %d, 25, %d); })()' % (tot - pre, 330 if kind == 'gun' else 420, 45 if kind == 'gun' else 150)); i = await shot('a_%s_in' % kind, 'the aircraft on its run: %s (%.1f s before the weapons strike)' % (name, pre))
+                st = await ev('__beta.battle.sup.strikes[__beta.battle.sup.strikes.length - 1].state'); print('   strike state:', st)
+                if st in ('attacking', 'done') and not i['drawn']['aircraft']: fails.append('aircraft not drawn')
+                await ev('void (() => { __to(%f); const B = __beta.battle, k = B.sup.strikes[B.sup.strikes.length - 1]; __look(k.e, k.n, (k.hdg + 90) %% 360, 240, 16, 12); })()' % (tot + (1.3 if kind == 'gun' else 0.7))); await shot('a_%s_hit' % kind, 'the %s strikes' % name)
+                await ev('__to(%f)' % (tot + 9))
+            print('errors', json.dumps(errs[:8], indent=1)); await b.close(); print('FAILED: ' + '; '.join(fails) if fails or errs else 'AIR PICTURES TAKEN'); return
         # ---- seed 18
         if not BOMBS:
             await ev('void (() => { const B = __beta.battle, T = B.tank, G = B.wing; __to(1); __look((T.e + G.e) / 2, (T.n + G.n) / 2, (__brg(T.e, T.n, G.e, G.n) + 90) % 360, 105, 13, 0); })()'); i = await shot('1_station', 'both tanks on station (player and wingman)')

@@ -3,6 +3,7 @@
 //   the wingman       a second TankView, with a VolleyView of its own for the engagements fought on it (missiles, HKOI, Trophy, hits)
 //   artillery         a shell burst, a crater mark and a flash for every round as it lands
 //   the scout drone   the supplied drone model, larger, circling 150 m up
+//   air strikes       an aircraft shape made in code flying its run, its tracers and strikes or its bomb and the burst
 //   bomber drones     the supplied drone model, larger still, with its bombs falling and bursting; HKOI's airbursts at it
 // Everything is a function of battle time: nothing here keeps a clock of its own, so it is the same at any frame rate, and a jump in
 // time (replay) marks what is already past as seen instead of setting it all off at once.
@@ -30,14 +31,22 @@ export class SupportView {
     this.scoutMesh = null; this.drones = new Map(); this.bombMeshes = new Map();
     this.v1 = new THREE.Vector3(); this.v2 = new THREE.Vector3(); this.v3 = new THREE.Vector3();
     this.bombGeo = new THREE.SphereGeometry(0.11, 8, 6); this.bombMat = new THREE.MeshStandardMaterial({ color: '#2b2d26', roughness: 0.7, metalness: 0.3 });
-    this.info = { wing: false, scout: false, bombers: 0, bombs: 0 };   /* what is being drawn, for tests */
+    this.planes = new Map(); this.info = { wing: false, scout: false, bombers: 0, bombs: 0, aircraft: 0 };   /* what is being drawn, for tests */
+  }
+  // an aircraft, made in code: fuselage, straight wing, tailplane, fin, two engine pods (an A-10 sort of shape, about 16 m long)
+  _plane() {
+    const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: '#5d6468', roughness: 0.7, metalness: 0.2 }), add = (geo, x, y, z, rx, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rx) o.rotation.x = rx; if (rz) o.rotation.z = rz; g.add(o); return o; };
+    add(new THREE.CylinderGeometry(0.75, 0.55, 13, 10), 0, 0, 0, Math.PI / 2); add(new THREE.ConeGeometry(0.75, 3, 10), 0, 0, -8, -Math.PI / 2);   /* the nose points along -z, the way a heading of 0 looks north */
+    add(new THREE.BoxGeometry(17, 0.22, 2.6), 0, -0.2, -0.5); add(new THREE.BoxGeometry(6, 0.16, 1.6), 0, 0.2, 6.2); add(new THREE.BoxGeometry(0.16, 2.4, 1.8), 2.8, 1.2, 6.2); add(new THREE.BoxGeometry(0.16, 2.4, 1.8), -2.8, 1.2, 6.2);
+    add(new THREE.CylinderGeometry(0.7, 0.7, 3, 10), 1.5, 1.1, 3.4, Math.PI / 2); add(new THREE.CylinderGeometry(0.7, 0.7, 3, 10), -1.5, 1.1, 3.4, Math.PI / 2);
+    g.userData.heat = 0.8; this.group.add(g); return g;
   }
   _drone(scale) { const g = new THREE.Group(), m = missileMesh(true, this.assets); m.scale.multiplyScalar(scale); g.add(m); g.userData.heat = 0.6; this.group.add(g); return g; }
   // a new battle (or the same one started over for a replay)
   reset(battle) {
     this.battle = battle; this.t = battle ? battle.t : 0; const W = this.wing; W.set = false; W.shotI = 0; W.mgI = 0; W.dead = false; W.landing.length = 0;
     if (this.wingVolleys) { this.wingVolleys.dispose(); this.wingVolleys = null; }
-    for (const m of this.drones.values()) this.group.remove(m); this.drones.clear(); for (const m of this.bombMeshes.values()) this.group.remove(m); this.bombMeshes.clear();
+    for (const m of this.drones.values()) this.group.remove(m); this.drones.clear(); for (const m of this.planes.values()) { this.group.remove(m.g); if (m.bomb) this.group.remove(m.bomb); } this.planes.clear(); for (const m of this.bombMeshes.values()) this.group.remove(m); this.bombMeshes.clear();
     if (this.scoutMesh) this.scoutMesh.visible = false; if (this.wingTank) this.wingTank.group.visible = false;
     if (battle && battle.wing) {
       if (!this.wingTank) { this.wingTank = new TankView(this.assets); this.wingTank.group.userData.heat = 0.5; this.wingTank.group.name = 'wingman'; this.s.units.add(this.wingTank.group); }
@@ -50,6 +59,7 @@ export class SupportView {
     if (G) { this.wing.shotI = G.shots.filter(s => s.t <= t).length; this.wing.mgI = G.mgs.filter(m => m.t + m.dur <= t).length; this.wing.landing.length = 0; this.wing.set = false; if (this.wingVolleys) this.wingVolleys.skipTo(t); }
     if (S) { for (const F of S.fires) for (const r of F.rounds) if (r.done && r.t <= t) r._dr = true; for (const fl of S.flights) for (const sh of fl.shots || []) { if (sh.t <= t) sh._d0 = true; if (sh.t + sh.tof <= t) sh._d1 = true; } }
     for (const B of b.bombs || []) if (B.t1 <= t) B._dr = true;
+    if (S) for (const k of S.strikes) { if (k.release <= t) k._d0 = true; for (const im of k.impacts) if (im.t <= t) im._dr = true; if (k.state === 'lost' || k.state === 'waved_off') k._dOff = true; }
   }
   dispose() { this.reset(null); this.s.scene.remove(this.group); if (this.wingTank) this.s.units.remove(this.wingTank.group); }
   // o: { t (the moment being drawn), dt (simulated seconds since the last frame; 0 when paused), all (spectator: show everything),
@@ -58,7 +68,7 @@ export class SupportView {
     if (battle !== this.battle) this.reset(battle); if (!battle) return;
     const t = o.t, dt = Math.max(0, o.dt || 0), s = this.s, fx = s.fx, W = battle.world, hf = (x, z) => W.h(x, -z);
     if (t < this.t - 0.05 || t > this.t + 6) this.skipTo(t); this.t = t;
-    const S = battle.sup, G = battle.wing, I = this.info; I.wing = false; I.scout = false; I.bombers = 0; I.bombs = 0;
+    const S = battle.sup, G = battle.wing, I = this.info; I.wing = false; I.scout = false; I.bombers = 0; I.bombs = 0; I.aircraft = 0;
     // ---- the wingman
     if (G && this.wingTank) {
       const tv = this.wingTank, w = this.wing, P = battle.wingAt(Math.min(t, battle.t)); I.wing = true;
@@ -85,6 +95,23 @@ export class SupportView {
     // ---- artillery: each round as it lands
     for (const F of S.fires) for (const r of F.rounds) { if (!r.done || r._dr) continue; r._dr = true; if (t - r.t > 2.5) continue; const p = s.at(r.e, r.n, 0.3, this.v1), v = W.veg(r.e, r.n).cls;
       fx.seed(r.t * 3.1 + r.e); fx.explosion(p.x, p.y, p.z, 2.6, { surface: W.buildingAt && W.buildingAt(r.e, r.n, 2) ? 'wall' : v === 4 || v === 5 ? 'trees' : null }); fx.dustRing(p.x, p.y, p.z, 2.2, 16); s.blast(p, 2.2); s.marks.add(p.x, p.z, 4.2, hf, { kind: 1 }); fx.column(p.x, p.y, p.z, 14, 1.4); this.emit('explosion', p, { size: 2.6 }); }
+    // ---- air strikes: the aircraft is over its aim point at k.tot, flying along k.hdg; seen from 22 s before to 16 s after
+    for (const k of S.strikes) {
+      let P = this.planes.get(k.id); const dtk = t - k.tot, on = dtk > -22 && dtk < 16 && !(k.state === 'lost' && t > k.release - 2);
+      if (!on) { if (P) { P.g.visible = false; if (P.bomb) P.bomb.visible = false; } if (k.state === 'lost' && !k._dOff && t >= k.release - 2) { k._dOff = true; if (P && t - (k.release - 2) < 2) { const q = P.g.position; fx.seed(k.tot); fx.explosion(q.x, q.y, q.z, 2.2, {}); if (fx.breakup) fx.breakup(q.x, q.y, q.z, 0, -10, 0, 2); s.blast(q, 1.6, false); this.emit('air_off', q, { why: 'lost' }); } } continue; }
+      if (!P) { P = { g: this._plane(), bomb: null, said: false }; this.planes.set(k.id, P); }
+      const a = k.hdg * DEG, se = Math.sin(a), sn = Math.cos(a), ce = k.aim ? k.aim[0] : k.e, cn = k.aim ? k.aim[1] : k.n, lead = k.kind === 'gun' ? 260 : 0   /* a gun run fires from short of the target and pulls up over it */, d = dtk * k.v - lead;
+      const pull = k.kind === 'gun' ? Math.max(0, dtk) * Math.max(0, dtk) * 6 : 0, wav = k.state === 'waved_off' ? Math.max(0, dtk + 6) * 14 : 0, pe = ce + se * d, pn = cn + sn * d, py = W.h(ce, cn) + k.alt + pull + wav;
+      P.g.visible = true; I.aircraft++; P.g.position.set(pe, py, -pn); P.g.rotation.set(k.kind === 'gun' && dtk > 0 ? Math.min(0.5, dtk * 0.25) : k.kind === 'gun' ? -0.12 : 0, Math.PI - a + Math.PI, 0, 'YXZ');
+      if (!P.said && dtk > -8) { P.said = true; this.emit('air_inbound', P.g.position, { kind: k.kind }); }
+      if (k.state === 'waved_off' && !k._dOff && dtk > -2) { k._dOff = true; this.emit('air_off', P.g.position, { why: 'waved_off' }); }
+      if (k.kind === 'bomb' && (k.state === 'attacking' || k.state === 'done') && t >= k.release && t < k.tot) { if (!P.bomb) { P.bomb = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.4, 8), this.bombMat); this.group.add(P.bomb); } const u = (t - k.release) / (k.tot - k.release), r0 = (k.release - k.tot) * k.v, be = ce + se * r0 * (1 - u), bn = cn + sn * r0 * (1 - u); P.bomb.visible = true; P.bomb.position.set(be, W.h(ce, cn) + k.alt * (1 - u * u) + 1, -bn); P.bomb.rotation.set(Math.PI / 2 - u * 1.2, Math.PI - a, 0, 'YXZ'); if (!k._d0) { k._d0 = true; this.emit('air_release', P.g.position, { kind: 'bomb' }); } }
+      else if (P.bomb) P.bomb.visible = false;
+      if (k.kind === 'gun' && k.state !== 'inbound' && !k._d0 && t >= k.release) { k._d0 = true; if (t - k.release < 2) this.emit('air_release', P.g.position, { kind: 'gun' }); }
+      for (const im of k.impacts) { if (im._dr || t < im.t) continue; im._dr = true; if (t - im.t > 2.5) continue; const p = s.at(im.e, im.n, 0.3, this.v1); fx.seed(im.t * 7.3 + im.e);
+        if (k.kind === 'gun') { const q = P.g.position; fx.tracer(q.x, q.y - 1, q.z, p.x, p.y, p.z, 0.25, 1, 0.8, 0.4, 0.3, 26, 8); fx.explosion(p.x, p.y, p.z, 0.8, {}); fx.dustRing(p.x, p.y, p.z, 0.9, 8); s.marks.add(p.x, p.z, 1.4, hf, { kind: 1 }); if (im === k.impacts[0] || im === k.impacts[7]) this.emit('air_impact', p, { kind: 'gun', size: 0.8 }); }
+        else { fx.explosion(p.x, p.y, p.z, 3.4, {}); fx.dustRing(p.x, p.y, p.z, 3, 22); fx.column(p.x, p.y, p.z, 25, 2); s.blast(p, 3); s.marks.add(p.x, p.z, 6, hf, { kind: 1 }); this.emit('air_impact', p, { kind: 'bomb', size: 2.6 }); } }
+    }
     // ---- the scout drone
     const D = S.scout;
     if (D) { if (!this.scoutMesh) this.scoutMesh = this._drone(1.6); const m = this.scoutMesh; if (D.alive) { m.visible = true; I.scout = true; s.at(D.e, D.n, D.alt, m.position); m.rotation.set(0, Math.PI - D.hdg * DEG, -0.18, 'YXZ'); m.userData.lost = false; }

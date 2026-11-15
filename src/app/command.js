@@ -39,7 +39,7 @@ body.in-seat #cmd .c-say { display: none; } body.hud-none #cmd, body.hud-none #c
 const KEYS = { KeyG: 'move', KeyX: 'halt', KeyB: 'reverse', KeyR: 'face', KeyP: 'smoke', KeyC: 'main', KeyN: 'mg', KeyK: 'hkoi', KeyO: 'more' }   /* U is the sound on/off key (main.js); hatches are in the More pop-up */;
 const SHORT = { hkoi: { auto: 'HKOI: auto', obs: 'HKOI: obscurant', he: 'HKOI: airburst', hold: 'HKOI: HOLD' }, main: { free: 'Gun: free', hold: 'Gun: HOLD' }, mg: { free: 'MGs: free', hold: 'MGs: HOLD' } };
 const ROW_MIN = 700;   // px the one-row bar needs; in a narrower gap it collapses to a single "Orders" button
-const KNAME = { move: 'move', halt: 'halt', reverse: 'back to cover', withdraw: 'break contact', face: 'face the hull', smoke: 'smoke', engage: 'target' };
+const KNAME = { move: 'move', halt: 'halt', reverse: 'back to cover', withdraw: 'break contact', face: 'face the hull', smoke: 'smoke', engage: 'target', fire: 'fire mission', air: 'air strike' };
 const MAXP = 384;   // points along the ghost path
 
 export class Command {
@@ -89,6 +89,7 @@ export class Command {
     if (u) add(`Engage ${u.spec.name} #${u.id + 1}`, () => this.give({ k: 'engage', uid: u.id }));
     if (rt.ok) add(`Move here · ${Math.round(rt.d / 10) * 10} m by the driver's route`, () => this.give({ k: 'move', e, n })); else m.append(el('small', null, rt.text));
     add(`Face the hull this way · ${String(Math.round(brg)).padStart(3, '0')}`, () => this.give({ k: 'face', brg }));
+    for (const q of (b.supportMenu ? b.supportMenu(e, n) : [])) add(q.text, () => this.give(q.order));   /* support.js: fire mission, air strike (only when the battle has them) */
     add('Cancel', () => {}, 'bad');
     m.hidden = false; const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(8, Math.min(innerWidth - w - 8, x + 10)) + 'px'; m.style.top = Math.max(8, Math.min(innerHeight - h - 8, y - h / 2)) + 'px'; this.tGhost = 0;
   }
@@ -209,6 +210,7 @@ export class Command {
     for (const k of ['warn', 'hkoi', 'smokepol', 'prio', 'main', 'round', 'mg', 'hatch']) { const lab = el('label', null, O.LABEL[k]); lab.title = TIP[k]; const sg = el('div', 'seg'), p = pend.find(q => q.k === k); for (const [v, name] of O.OPTIONS[k]) { const bt = el('button', 'btn' + (S[k] === v ? ' on' : ''), name); bt.title = TIP[k]; bt.onclick = e => { e.stopPropagation(); if (S[k] !== v) this.give({ k, v }); }; sg.append(bt); } if (p) sg.append(el('small', null, 'changing...')); m.append(lab, sg); }
     { const lab = el('label', null, 'Target'), sg = el('div', 'seg'), b = this.ctx.battle, u = S.target != null ? b.units.find(q => q.id === S.target) : null; sg.append(el('span', null, u ? `${u.spec.name} #${u.id + 1} first` : 'Gunner\'s own choice. Right-click a located team to point it out.')); if (u) { const bt = el('button', 'btn', 'Gunner\'s own choice'); bt.onclick = e => { e.stopPropagation(); this.give({ k: 'engage', uid: null }); }; sg.append(bt); } m.append(lab, sg); }
     { const lab = el('label', null, 'Hull'), sg = el('div', 'seg'), a = el('button', 'btn' + (S.face == null ? ' on' : ''), 'Front to the main threat'); a.onclick = e => { e.stopPropagation(); if (S.face != null) this.act('threat'); }; const w = el('button', 'btn bad', 'Break contact'); w.title = 'Driver, back to the start line. The mission ends as withdrawn when the vehicle gets there'; w.onclick = e => { e.stopPropagation(); this.act('withdraw'); }; sg.append(a, w); m.append(lab, sg); }
+    { const ss = this.ctx.battle.supportState ? this.ctx.battle.supportState() : null; if (ss && (ss.art != null || ss.air != null)) { const lab = el('label', null, 'Fire support'), sg = el('div', 'seg'); sg.append(el('span', null, `${ss.art != null ? `Fire missions: ${ss.art} left${ss.firing ? ' (one on its way)' : ''}. ` : ''}${ss.air != null ? `Air strikes: ${ss.airLost ? 'aircraft lost' : ss.air + ' left'}${ss.inbound ? ' (one inbound)' : ''}. ` : ''}Right-click the target on the ground or the map.`)); m.append(lab, sg); } }   /* support.js */
     m.append(el('small', null, 'Orders take effect after the time to say them and the crewman\'s reaction; a shaken crew is slower. While missiles are in the air the driver follows the engagement drill and orders to him wait.'));
   }
   // the crew answers: the recorded line where the pack has one, and the smoke where the grenades burst
