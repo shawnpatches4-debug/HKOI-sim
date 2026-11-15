@@ -99,7 +99,8 @@ export class InteriorFx {
     if (S.halon) { const k = Math.exp(-S.halon.age / 5), c = SHARED.uSmokeCol.value, a = SHARED.uAmb.value, w = Math.min(0.85, 0.25 + 3 * (a.x + a.y + a.z)); c.set(c.x + (w - c.x) * k, c.y + (w - c.y) * k, c.z + (w * 1.04 - c.z) * k); }
     if (S.breach) { const k = Math.min(1, S.breach.age / 0.12); SHARED.uAmb.value.x += 1.0 * k; SHARED.uAmb.value.y += 0.38 * k; SHARED.uAmb.value.z += 0.08 * k; }
     // ---- the viewer in a seat: ringing ears, tunnel vision, blurred edges, shake
-    const role = CTX.viewer, C = role ? concussion(hits, now, MAN[role].eye, MAN[role].frame) : null; if (C && S.breach) { C.tunnel = Math.max(C.tunnel, Math.min(1, S.breach.age / 0.9)); }
+    const role = CTX.viewer, C = role ? concussion(hits, now, MAN[role].eye, MAN[role].frame) : null; this.endA = C && S.breach && MAN[role].frame === 'tur' ? S.breach.age : null;   /* a man in the turret when the doors go: his last instant (see _overlay) */
+    if (C && S.breach) { C.deaf = 1; C.tunnel = Math.max(C.tunnel, Math.min(1, S.breach.age / 0.9)); }
     this.view.deaf = C ? C.deaf : 0; this.view.tunnel = C ? C.tunnel : 0; this.view.shake = C ? C.shake : 0; this.view.blur = C ? C.blur : 0; this.view.flash = C ? C.flash : 0; this._overlay(C, now);
   }
 
@@ -165,14 +166,14 @@ export class InteriorFx {
     const P = this.lit, Q = this.glow, D = this.decals;
     for (const f of S.fires) { const hal = S.halon && S.halon.age > 0.4 ? 0.3 + 0.7 * sat((S.halon.age - 5) / 4) : 1, k = f.on ? sat(f.age / 1.2) * hal : 0, fl = 0.75 + 0.25 * Math.sin(now * 23 + f.since) * Math.sin(now * 7.1);
       if (f.where === 'hull') {   /* a fuel cell burns through the driver's side wall (the cells flank him, behind the panels marked FUEL TANK); the hull rack burns at its doors */
-        const sd = f.side, cell = sd !== 0, nx = cell ? -sd : 0, nz = cell ? 0 : -1, x = cell ? sd * 0.49 : AT.hull_ammo[0], y = cell ? -0.72 : AT.hull_ammo[1], z = cell ? -2.38 : AT.hull_ammo[2] - 0.06, N3 = [nx, 0, nz];
+        const sd = f.side, cell = sd !== 0, nx = cell ? -sd : 0, nz = cell ? 0 : -1, x = cell ? sd * 0.49 : AT.hull_ammo[0], y = cell ? -0.72 : AT.hull_ammo[1], z = cell ? -2.75 : AT.hull_ammo[2] - 0.06, N3 = [nx, 0, nz];
         const W1 = (ox, oz) => [x + nx * ox + (cell ? 0 : 0), 0, z + nz * ox + oz];   /* a point ox in from the wall, oz along it */
         D.add(null, [x, y + 0.15, z], N3, 1.0, CELL.char, sat(f.age / 4), f.on ? 1.2 * k * fl : 0, 0.95, WHITE, 0, 1.3); D.add(null, [x, y + 0.55, z + (cell ? 0.1 : 0)], N3, 0.9, CELL.soot, sat(f.age / 6), 0, 0.9, WHITE, 0, 0, 1.4);
         if (k > 0.02) {   /* flames licking out of the burnt-through panel: tongues that leave the wall, rise, lean in and burn out; a hot core at the hole; embers */
           const Bb = this.bits; for (let i = 0; i < 30; i++) { const L = 0.38 + 0.3 * hsh(i, 1), t = ((now * (1 + 0.07 * i) + i * 0.31) % L), u = t / L, cyc = Math.floor((now * (1 + 0.07 * i) + i * 0.31) / L), sd = i * 7 + cyc * 13, a = W1(0.04 + 0.12 * hsh(sd, 3) + (0.25 + 0.35 * hsh(sd, 5)) * u, (hsh(sd, 2) - 0.5) * 0.6 + 0.06 * Math.sin(now * 6 + i)); Q.add(null, a[0], y - 0.15 + u * (0.55 + 0.45 * k), a[2], (0.26 - 0.1 * u) * (0.6 + 0.4 * k), 3.0, 1.35 - 0.85 * u, 0.3 - 0.25 * u, 0.9 * k * (1 - u * u), (hsh(sd, 4) - 0.5) * 0.6, 2.2 + 0.8 * hsh(sd, 6), sd * 0.13, 0); }
           for (let i = 0; i < 6; i++) { const a = W1(0.03, (hsh(i, 11) - 0.5) * 0.35); Q.add(null, a[0], y + (hsh(i, 12) - 0.3) * 0.3, a[2], 0.22, 3.4, 2.4, 0.9, 0.7 * k * fl, now * 2 + i, 1.2, i + Math.floor(now * 9), 0); }
           for (let i = 0; i < 14; i++) { const L = 1.1 + 0.6 * hsh(i, 21), t = ((now + i * 0.37) % L), cyc = Math.floor((now + i * 0.37) / L), sd = i * 5 + cyc * 11, vo = 0.4 + 0.8 * hsh(sd, 22), vs = (hsh(sd, 23) - 0.5) * 0.8, a = W1(vo * t, vs * t); _v.set(a[0], y + 0.1 + 1.1 * t - 0.6 * t * t, a[2]); _d.set(nx * vo + (cell ? 0 : vs), 1.1 - 1.2 * t, nz * vo + (cell ? vs : 0)).normalize(); Bb.add(null, _v, _d, 0.006, 0.02, 3.2, 1.4, 0.3, k * (1 - t / L)); }
-          this._light(null, x + nx * 0.3, y + 0.25, z + nz * 0.3, 4.2 * k * fl, 1.9 * k * fl, 0.45 * k * fl, 1.9); }
+          this._light(null, x + nx * 0.3, y + 0.25, z + nz * 0.3, 2.6 * k * fl, 1.0 * k * fl, 0.22 * k * fl, 1.6); }
         if (f.on || f.out < 12) { const sk = f.on ? 0.35 + 0.65 * k : Math.exp(-f.out / 4), top = cell ? BOX.drv.y1 : BOX.hul.y1; for (let i = 0; i < 24; i++) { const Lp = 2.4, t = ((now + i * Lp / 24) % Lp), u = t / Lp, rise = Math.min(top - 0.08 - y - 0.1, 0.9 * t), spread = Math.max(0, 0.9 * t - rise), a = W1(0.12 + 0.25 * u + spread * 0.8 * hsh(i, 9), (hsh(i, 7) - 0.4) * (0.25 + 0.7 * u) + (cell ? spread * (hsh(i, 10) - 0.5) : 0)); P.add(null, a[0] + (hsh(i, 6) - 0.5) * 0.15, y + 0.1 + rise, a[2], 0.18 + 0.55 * u, 0.05, 0.045, 0.04, 0.78 * sk * Math.sin(Math.PI * Math.min(1, u * 1.3)), hsh(i, 8) * 6 + t * 0.5, 1, i * 0.29, 0); } } }   /* dark smoke pouring off it, rising, then rolling along under the roof */
       else if (f.where === 'engine') { const k2 = f.on ? sat(f.age / 3) : Math.exp(-f.out / 6);   /* behind the bulkhead: its seams glow, smoke comes round its edges */
         D.add(null, [0, -0.62, 1.285], [0, 0, -1], 1.9, CELL.seam, 1, 1.6 * k2 * fl, sat(k2 * 1.5), [1, 0.6, 0.3], 0, 0, 0.42);
@@ -234,7 +235,7 @@ export class InteriorFx {
   // the instant of a penetration. One fixed layer over the 3D picture (under the displays' text), touched only while it shows.
   _overlay(C, now) {
     if (this.noOv || typeof document === 'undefined' || !document.body || !document.body.appendChild || !document.createElement) return;
-    const on = !!C && (C.tunnel > 0.015 || C.flash > 0.01 || C.shake > 0.01 || C.blur > 0.02);
+    const endA = C ? this.endA : null, on = !!C && (endA != null || C.tunnel > 0.015 || C.flash > 0.01 || C.shake > 0.01 || C.blur > 0.02);
     if (!on) { if (this.ov && this.ovOn) { this.ovOn = false; this.ov.style.display = 'none'; const cv = document.getElementById('view'); if (cv && cv.style) cv.style.transform = ''; } return; }
     if (!this.ov) { const el = this.ov = document.createElement('div'); if (!el || !el.style || !el.appendChild) { this.ov = null; this.noOv = true; return; } el.id = 'concuss'; el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1;display:none'; const bl = this.ovB = document.createElement('div'); bl.style.cssText = 'position:absolute;inset:0'; const wh = this.ovW = document.createElement('div'); wh.style.cssText = 'position:absolute;inset:0;background:#fff8ec;opacity:0'; el.appendChild(bl); el.appendChild(wh); document.body.appendChild(el); }
     if (!this.ovOn) { this.ovOn = true; this.ov.style.display = 'block'; }
@@ -242,7 +243,11 @@ export class InteriorFx {
     if (key !== this.ovKey) { this.ovKey = key; const inner = Math.round(78 - 58 * t), outer = Math.round(118 - 52 * t), px = (b * 3).toFixed(1), mask = `radial-gradient(ellipse at center, transparent ${Math.round(42 - 22 * b)}%, #000 ${Math.round(88 - 20 * b)}%)`;
       this.ov.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,0) ${inner}%, rgba(4,2,2,${(0.12 + 0.5 * t).toFixed(2)}) ${outer}%)`;
       const s = this.ovB.style; if (b > 0.04) { s.backdropFilter = s.webkitBackdropFilter = `blur(${px}px)`; s.maskImage = s.webkitMaskImage = mask; } else { s.backdropFilter = s.webkitBackdropFilter = 'none'; } }
-    if (f !== this.ovF) { this.ovF = f; this.ovW.style.opacity = (0.3 * f).toFixed(2); }   /* only a brief brightening: the flash itself is drawn in the compartment, at the hole */
+    // The commander's (or gunner's, loader's) last instant when the ammunition doors are breached: the turret fills with an orange-white
+    // flash for about a fifth of a second, then the picture cuts to black (and stays black: he is dead or senseless). What a catastrophic
+    // fire looks like is shown from outside, where it can be seen; from inside there is nothing a man would see after that instant.
+    const end = endA == null ? 0 : endA < 0.03 ? 1 : endA < 0.22 ? 2 : 3, fk = end + '|' + f;
+    if (fk !== this.ovF) { this.ovF = fk; const w = this.ovW.style; if (end === 0) { w.background = '#fff8ec'; w.opacity = (0.3 * f).toFixed(2); } else if (end < 3) { w.background = end === 1 ? '#fffbe8' : 'radial-gradient(ellipse at center, #fff3c8 0%, #ffb04a 45%, #c24a0c 100%)'; w.opacity = '1'; } else { w.background = '#000'; w.opacity = '1'; } }   /* only a brief brightening: the flash itself is drawn in the compartment, at the hole */
     const cv = document.getElementById('view'); if (cv && cv.style) { const k = C.shake * 9; cv.style.transform = k > 0.15 ? `translate(${(Math.sin(now * 61) * k).toFixed(1)}px, ${(Math.sin(now * 47 + 1) * k).toFixed(1)}px)` : ''; }
   }
 }

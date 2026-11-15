@@ -74,6 +74,8 @@ async def main():
                 await pg.wait_for_timeout(400)
                 if await pg.evaluate('__beta.scene.frameN') >= n0 + frames: break
             await pg.screenshot(path=os.path.join(out, f'{tag}_{name}.png'), timeout=180000)
+            if os.environ.get('PICK') and 'drv' in name:   # what lies under given points of the picture (NDC x,y pairs)
+                print('PICK', name, await pg.evaluate("JSON.stringify((" + os.environ['PICK'] + ").map(([x, y]) => { const V = __beta.THREE, s = __beta.scene, r = new V.Raycaster(); r.setFromCamera(new V.Vector2(x, y), s.camera); return r.intersectObjects(s.scene.children, true).filter(h => h.object.visible).slice(0, 3).map(h => { const n = []; let o = h.object; while (o && n.length < 6) { n.push((o.name || o.type) + (o.visible ? '' : '(hid)')); o = o.parent; } return [+h.distance.toFixed(2), n.join(' < ')]; }); }))"))
         try: print('stats', await pg.evaluate('JSON.stringify([__beta.interior.stats, __beta.scene.stats().calls, __beta.scene.stats().triangles, __beta.interior.fx && __beta.interior.fx.cost ? __beta.interior.fx.cost() : null])'))
         except Exception as e: print('stats failed', str(e)[:200])
         print('errors', len(errs), errs[:6]); await b.close()
