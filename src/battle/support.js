@@ -157,7 +157,7 @@
       finally { this._sw = false; this.tank = P; for (const k of SWAP) { C[k] = this[k]; this[k] = save[k]; } if (X) for (const k of XSWAP) { G.x[k] = X[k]; X[k] = xs[k]; } }
     },
     wingAt(t) { const G = this.wing; if (!G) return null; return this.tankAt.call(G.atCtx || (G.atCtx = { volleys: G.volleys, tank: G }), t); },   /* the battle's own tankAt, looking at the wingman's engagements */
-    wingView() { const b = this; return this.wing ? (this.wing.view || (this.wing.view = { volleys: this.wing.volleys, world: this.world, transit: [], tankAt: t => b.wingAt(t) })) : null; },
+    wingView() { const b = this; return this.wing ? (this.wing.view || (this.wing.view = { volleys: this.wing.volleys, world: this.world, transit: [], tankAt: t => b.wingAt(t), tank: this.wing })) : null; },
     // can this team hit the wingman from where it lies? (looked at twice a second)
     _wingSeen(u, seen) {
       const G = this.wing; if (!G.alive || u.spec.indirect || u.veh) return false;

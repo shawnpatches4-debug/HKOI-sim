@@ -43,7 +43,7 @@ async def main():
             print('title:', await ev('__beta.state()'), v, 'clickable', top, '| version', await ev('document.getElementById("ver").textContent'), '|', await ev('document.getElementById("t-sum").textContent'))
             need(await ev('__beta.state()') == 'title' and v['title'] and v['go'] and v['o-ladder'] and v['o-numbers'] and v['o-setup'] and all(top), 'title screen does not show Play, Ladder, Run the numbers and Change setup')
             need(not v['setup'] and not v['bar'] and not v['status'] and not v['sline'], 'the setup panel or battle boxes are showing on the title screen')
-            need(await ev('document.querySelectorAll("#title button").length') <= 5, 'the title screen has more than five buttons')
+            need(await ev('document.querySelectorAll("#title button").length') <= 7, 'the title screen has more than seven buttons (briefing, play, scenarios, ladder, numbers, setup, one spare)')
 
         if 'title' in PARTS: await part(part_1)
         async def part_2():
@@ -121,7 +121,7 @@ async def main():
             need('No threats' in e['head'] and e['cls'] == 'quiet', 'the headline is not quiet with nothing in the air')
             need(len(e['strip']) == 3 and e['strip'][0].startswith('T+') and 'fps' in e['strip'][2], 'the top strip is not time, rate and frame time only')
             need(e['panels'] == ['Crew', 'Defences', 'Weapons', 'Enemy'] and e['men'] == 4 and len(e['stations']) == 5 and all('[' in x and '[]' not in x for x in e['stations']), 'the four panels, four crew rows or five station cards are not all there')
-            need(len(e['bar']) <= 11 and e['ticks'] <= 3 and await ev('!document.querySelector("#bar .pick")'), 'the bar is more than its one row of eleven buttons, the view list is open without being asked for, or the ticker has more than three lines')
+            need(len(e['bar']) <= 13 and e['ticks'] <= 3 and await ev('!document.querySelector("#bar .pick")'), 'the bar is more than its one row of thirteen buttons (eleven plus Mix and ?), the view list is open without being asked for, or the ticker has more than three lines')
             need(e['faces'] is None or e['faces']['ok'], 'the crew portraits did not load')
             ov = await js(OVER); print('  overlaps', ov); need(not ov, 'engineer boxes overlap in a quiet moment: ' + ', '.join(ov))
             await shot('eng_quiet' + TAG, 3000)

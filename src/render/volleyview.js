@@ -264,7 +264,7 @@ export class VolleyView {
 
   // the vehicle is destroyed: fire that stays, a black column, and ammunition going up over the next few seconds
   _kill(T, t) {
-    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); if (!this.b.tank.fate) fx.fire(p.x, p.y, p.z, 1e9, 1.2);   /* with a fate, src/render/tankfate.js draws what burns and how */
+    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); if (!(this.b.tank && this.b.tank.fate)) fx.fire(p.x, p.y, p.z, 1e9, 1.2);   /* with a fate, src/render/tankfate.js draws what burns and how */
     [0.9, 2.2, 3.9].forEach((d, i) => { const dd = d + hash(T.e + i) * 0.6; this.later.push({ t: t + dd, fn: () => { fx.seed(T.e + i * 3); fx.secondary(p.x, p.y + 0.6, p.z, 1 - i * 0.15); s.blast(p, 1.4 - i * 0.2, false); this.emit('explosion', p, { size: 1.2 }); } }); });
   }
   // missiles that missed: they carry on along their last heading, sink, and burst where they meet the ground
