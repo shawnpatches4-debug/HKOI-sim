@@ -113,7 +113,8 @@ const crewLine = c => Object.keys(CREW).filter(r => c[r]).map(r => `${CREW[r]} $
 //   from, to   battle time in seconds: the replay jumps to `from`, plays at `rate` and stops at `to` (from === to: a still moment)
 //   shot       what the film director's rigs are handed (director.film): { rig } or { cam }, completed here with the threat's identity
 //   marks      labels with leader lines: { at: 'missile' | 'launcher' | 'tank' | 'station' | 'trophy' | 'cloud' | 'point', id, text, tone }
-//              (cloud: x metres out along the threat's bearing, r how far from there a puff may be; point: d metres out, shown once battle time passes `after`)
+//              (cloud: x metres out along the threat's bearing, r how far from there a puff may be; point: d metres out along it;
+//               after: shown only once battle time has passed it; gone: what a missile's label says, where it was last seen, once it has ended)
 //   lines      'beam' (launcher to missile), 'track' (station to this missile), 'tracks' (station to every missile in the air)
 //   X          { b: the battle as it stands, inAir: missiles and drones in the air now }
 const mk = (at, text, id, more) => Object.assign({ at, text, id }, more || {});
@@ -196,10 +197,10 @@ export const CHAPTERS = [
       marks: [mk('station', 'One gun, one cloud at a time', null, { tone: 'warn' })],
       text: () => `A prepared defence does not fire one missile at a time. In this volley ${word(M.big.n)} threats were launched within ${s1(M.big.spread)} s from ${word(M.big.dirs)} ${pl(M.big.dirs, 'direction')}: ${list(M.big.kinds)}. HKOI has one gun, and Trophy a few shots a side.` },
     { head: 'The first one through', from: Math.max(0, M.hit.tH - 3), to: M.hit.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.hit.id),
-      marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad', gone: `${cap(M.hit.name)}: hit` })],
+      marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.hit.name}`, null, { tone: 'bad', after: M.hit.tH })],
       text: () => `${clock(M.hit.tH)} into the battle a ${M.hit.name} fired from ${km(M.hit.R)} hits the vehicle: ${M.hit.hk}, and ${M.hit.aps}. ${M.hit.killing ? 'The vehicle is lost.' : `The vehicle survives it${M.hit.pk != null ? `: in the model a hit from this weapon knocks the vehicle out ${Math.round(100 * M.hit.pk)}% of the time (assumed)` : ''}.`}` },
     !M.empty ? null : { head: 'Handed to an empty launcher', from: Math.max(0, M.empty.tH - 3), to: M.empty.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.empty.id),
-      marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad', gone: `${cap(M.empty.name)}: hit` }), mk('trophy', 'Trophy: empty on this side', M.empty.id, { tone: 'warn', side: 'empty' })],
+      marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.empty.name}`, null, { tone: 'bad', after: M.empty.tH }), mk('trophy', 'Trophy: empty on this side', M.empty.id, { tone: 'warn', side: 'empty' })],
       text: X => { const m = mags(X.b); return `${clock(M.empty.tH)} into the battle, a ${M.empty.name} from ${km(M.empty.R)}: ${M.empty.hk}, and ${M.empty.aps}. It hits.${m.obs != null ? ` Magazines at this point: obscurant ${m.obs}, airburst ${m.he}, Trophy ${m.L} left and ${m.R} right.` : ''}`; } },
     { head: 'Where it runs out', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id),
       marks: [mk('station', `Obscurant rounds left: ${M.all.obs}`, null, { tone: 'warn' }), mk('trophy', `Trophy shots left: ${M.all.apsL + M.all.apsR}`, M.hit.id, { tone: 'warn', side: 'L' })],
@@ -429,6 +430,7 @@ class Briefing {
   // where a thing is in the world this frame (false: it is not there to point at)
   _where(mk, out) {
     const A = this.app, S = A.scene, T = A.shown, id = mk.id;
+    if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false;   /* a label for something that has not happened yet */
     if (mk.at === 'tank') { S.at(T.e, T.n, 2.3, out); return true; }
     if (mk.at === 'station') { const p = A.tank.hkoiMuzzle ? A.tank.hkoiMuzzle(out) : null; if (!p) S.at(T.e, T.n, 3.3, out); return true; }
     if (mk.at === 'trophy') { const V = A.volleys; let side = mk.side || 'R'; if (side === 'empty') { const st = A.battle.tank.st || {}; side = st.apsR === 0 ? 'R' : 'L'; }   /* 'empty': the side with no shot left */
@@ -442,7 +444,7 @@ class Briefing {
       const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let best = (mk.r || 80), hit = false;
       if (C && C.puffs) for (const p of C.puffs) { if (!p.on || t < p.tb) continue; const age = Math.max(0, t - p.t0), px = p.x + (p.vx || 0) * age, pz = p.z + (p.vz || 0) * age, d = Math.hypot(px - ce, -pz - cn); if (d >= best) continue; best = d; out.set(px, p.y, pz); hit = true; }
       return hit; }
-    if (mk.at === 'point') { if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false; const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, mk.h || 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
+    if (mk.at === 'point') { const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, mk.h || 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
     return false;
   }
   // a point in the world to a point on the page; false when it is behind the camera
