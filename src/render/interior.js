@@ -318,7 +318,7 @@ export class Interior {
     // flash of the penetration, glow of a fire, and the smoke
     if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
     const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
-    { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.5, lit.x * k), Math.min(0.48, lit.y * k), Math.min(0.46, lit.z * k)); }
+    { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.3, lit.x * k * 0.62), Math.min(0.28, lit.y * k * 0.6), Math.min(0.26, lit.z * k * 0.56)); }   /* smoke of burnt lining, paint and propellant: a dark brownish grey lit by the lamps (it read as a white mist) */
     SHARED.uCabY.value = _v.set(0, 0, 0).applyMatrix4(this.tur.matrixWorld).y; { const h = FX.last, U = SHARED.uSmokeAt.value; if (h && h.pen) { _v.copy(h.e).addScaledVector(h.d, 0.4).applyMatrix4(this.hul.matrixWorld); U.set(_v.x, _v.y, _v.z, (FX.fire ? 1.4 : 1.3 * Math.exp(-FX.lastAge / 7))); } else U.w = 0; if (this._fateSrc) { _v.copy(this._fateSrc).applyMatrix4(this.tur.matrixWorld); U.set(_v.x, _v.y, _v.z, 1.5); } }   /* the smoke and the glow come from where the vehicle's end says the fire is */
     this.fx.update(mode === 'outside' ? fxState([], 0) : FX, this.graphic);
     this._crew(s, FX, info, seat, loading, sdt);
