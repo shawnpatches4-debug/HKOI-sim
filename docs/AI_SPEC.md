@@ -259,3 +259,91 @@ What is honest about it, and what is a limit of the model:
   hull front, 6 for the share of main gun rounds at teams that knocked their target out. It judges by results, so luck is in it.
 - Replays: every order is kept as { t, k, ... }; the same seed and the same list give the same battle (node test), and replay codes
   carry the list as "cmd" (codes without it load as before).
+
+## Friendly support, the bomber drone and what kills an Abrams (15 Nov 2026)
+
+Shawn's plan (docs/OVERHAUL_SPEC.md): "Artillery, wingman tank, friendly drone, rare air support", "call for support", "platoon
+fight", the bomber drone first among new enemy weapons, and "full catastrophic kills". Code: `src/battle/support.js` (wingman,
+artillery, scout drone, bomber drone), `src/battle/fate.js` (endings), drawing in `src/render/support.js`. Every figure is Claude's
+assumption (A) unless it is copied from the engine; nothing was tuned to a result. Measured tables: docs/WORKLOG.md, 15 Nov.
+
+**Off by default.** A battle gets support only with `support: { wingman, artillery, scout, air }` in its options (the setup screen's
+three switches, or one of the forces "Platoon in the defence", "Section attack", "With fire support"); bomber drones only with a
+`bomber` crew in the enemy force; a crippled crew acts on its losses only with `fate: true` (the page sets it). Without these every
+stored battle is unchanged: `node tests/battle/support_off.js` (32 battles against a file written from the code before this work).
+Air strikes (`support: { air: 2 }`, the setup switch "Air strikes") are off by default too.
+
+### The wingman
+- A second M1 with its own magazines, Trophy, HKOI (setup choice: both, Trophy only, HKOI only, neither), damage state and ending.
+  Its crew uses the same drills as the player's (tankai.js is run with the battle looking at the wingman; the file is not edited).
+  It has no stress model and picks no hull-down positions of its own: it keeps station 150 m off the player's right rear.
+- The enemy's volleys at it are resolved by the engine like the player's: one raid on one vehicle with the wingman's own state.
+- A team chooses its tank when it fires: the only one it has a shot at; if both, the one showing more of itself; if equal, the
+  nearer one 60% of the time. Enemy vehicles' guns and missiles and FPV drones still go for the player's tank only.
+- Mutual cover is the engine's own `HK.platoonShare` ('neighbour_obs', 'neighbour_he'): when an engagement would end in a hit, the
+  other tank's HKOI, within 600 m, with rounds and not busy, may take that threat. The smoke of one tank blinding the other is not
+  carried between two separate engagements.
+- The battle still ends when the player's tank is lost.
+
+### Wingman, artillery, air strikes, scout drone, bomber drone: figures
+| What | Figure | Why |
+| --- | --- | --- |
+| Wingman station | 150 m from the player, right rear first, on ground a tank can stand on | a tank section's usual spacing in the defence is 100 to 200 m |
+| Wingman moves | when it is more than 80 m off station, by the map's route finder, at up to 8 m/s | judgement |
+| TARGET: which tank a team fires at | the only one it has a shot at; if both, the one showing more of itself (not hull-down beats hull-down); if equal, the nearer one 60% of the time | judgement: gunners take the better target |
+| Mutual cover reach | 600 m, the engine's default | HK.platoonShare |
+| Artillery | 3 missions a battle; one at a time; 90 s from the call to the first round (45 s for a repeat within 200 m of the last mission); 12 rounds of 155 mm HE in two volleys 10 s apart | a direct-support battery answering a priority call; Shawn: "artillery (minutes)" |
+| Where the rounds land | aim point off by 15 m (1 sigma) from the reported place; each round a further 30 m (1 sigma) | laser-ranged target location; 155 mm dispersion at mid range |
+| Scout drone correcting | with the scout alive and able to see the target, the second volley's aim point error is 5 m | Shawn: "friendly drone overhead (finds sites, corrects fire)" |
+| Effect on a team (men lying in position) | knocked out 80% within 10 m of a round, 35% within 25 m, 10% within 40 m; pinned for 30 s within 100 m; survivors within 100 m move when the mission ends | 155 mm HE against prone troops: judgement |
+| Effect on vehicles | light truck: destroyed 70% within 15 m, 25% within 30 m. BMP-2: mobility kill 40% within 6 m. Tanks: mobility kill 25% within 3 m | fragments do not harm armour; a near-direct hit breaks tracks |
+| Check fire | a mission the commander called himself is stopped, and not used up, if before the guns fire (25 s before the first round lands) his crew sees that the target has moved more than 60 m, gone or been knocked out | time of flight of a 155 mm round at mid range; judgement |
+| Danger close | no mission within 600 m of a friendly tank; a mission is stopped (and not used up) if a friendly tank comes within 600 m of its target before the guns fire | the usual danger-close distance for artillery |
+| The AI's call | a located team that is not moving, located at least 3 s, at least 600 m from both tanks, and that the tank cannot deal with itself (no line of sight; or no multi-purpose rounds left; or beyond 1,500 m while the gunner is laying on another target); most dangerous first; not twice on the same place within 2 minutes | judgement |
+| Air strikes | 2 sorties a battle, one at a time; none in fog | Shawn: "attack helicopter/aircraft (rare, long battles)" |
+| Gun and rocket run (attack helicopter or A-10 class) | weapons on target 75 to 105 s after the call; strikes a strip 200 m long and 30 m wide through the target, flown across the front (at right angles to the line from the player to the target) at 120 m/s, 120 m up | judgement |
+| ... its effect | a team in the strip knocked out 45%, the rest pinned 30 s; light truck destroyed 70%; BMP-2 destroyed 40%; tank mobility kill 10% | 30 mm and rockets against men lying down and thin roofs; judgement |
+| Guided bomb (250 kg class) | weapons on target 90 to 120 s after the call; lands within 5 m (1 sigma) of the aim point; dropped from 1,200 m up at 200 m/s, 10 s to fall | judgement |
+| ... its effect | vehicle within 6 m destroyed 85%, within 15 m mobility kill 40%; team within 25 m knocked out 90%, within 50 m 40%, pinned within 100 m | judgement |
+| Where the aircraft aims | at the located team or vehicle it was called on, where that is NOW, if at weapons release the tank or the scout drone can see it, or (gun run) it lies in the open within 150 m of the called point, or it is a vehicle outside trees and buildings (the aircraft's own targeting pod holds a vehicle it has been handed); otherwise at the called point. A bomb is steered onto a target still held this way while it falls. A target that has moved more than 400 m is not followed | the pilot or the bomb's seeker needs someone's eyes on the target; this is what artillery lacks |
+| Danger close for air | 300 m for a gun run, 500 m for a bomb, from any friendly tank, at the call and again at release (waved off if broken) | judgement |
+| Wave-off | 10% of strikes for any reason (target not identified, another task); +15% (gun run) or +5% (bomb) for every enemy BMP-2 able to fire within 3 km of the target. A waved-off sortie is used up | the 30 mm cannon is the only anti-aircraft-capable weapon among the modelled enemy units; shoulder-fired missiles are not modelled as units, the 10% stands in for everything else |
+| Aircraft lost | 4% for every such BMP-2, gun run only; after a loss no more strikes are flown | judgement |
+| The AI's call for air | a bomb on a located enemy tank or BMP-2 that is halted; otherwise a gun run on a located team under the same rule as the artillery call | judgement |
+| A player's fire mission or air strike order | takes 8 s to pass on the radio after the usual time to give an order | judgement |
+| Scout drone | flies circles round the player at 20 m/s and 150 m up, 800 m out widening to 2,400 m and back; sees 800 m (slant) | a small quadcopter or fixed-wing scout |
+| Scout finds a team | 6% a second in the open, x0.5 in scrub or crops, x0.25 under trees, x3 if moving, x2 if setting up, x the weather factor of the tank's thermal scan; vehicles 20% a second | judgement |
+| Scout lost | 0.08% a second to jamming, link loss or a crash (about one in three over a 7 minute battle); +0.2% a second while within 600 m of an enemy team that is not pinned (small arms) | judgement |
+| Bomber drone | heavy multirotor: 16 m/s, 90 m up, radio-linked, 2 shaped-charge bombs a sortie, 3 sorties and 2 drones a crew, 75 s to rearm, settles 4 s over the target, drops one bomb every 3 s | open-source descriptions of heavy "bomber" multirotors |
+| Bomb hits the tank | green 20%, trained 35%, expert 50%, veteran 55% on a halted tank; x0.3 on a moving one | judgement; reports vary widely |
+| What a bomb hit does | the engine's FPV figures: 15% knocks the tank out (HK.THREATS.fpv.kill); the plate, penetration and parts come from DMG.report as a top attack of the FPV class (400 mm) | the bombs are the same class of warhead |
+| HKOI against the bomber | the engine's own drone rules (docs/HKOI_SPEC.md 3.11), copied: first burst to meet at 800 m, the next after it has closed 120 m, at most 4 bursts, never under 100 m or above 60 degrees, not in the rear blind arc, 2% jam; kill = 0.70 x 144 / (144 + dj^2) with dj from the pilot's jink (novice x0.4, trained x1, expert x1.7 and a 25% feint), x1.6 on follow-up bursts | src/engine.js resolveHE. A heavy multirotor probably jinks less than an FPV: this may understate HKOI |
+| HKOI busy | it does not fire at a bomber while an engagement with missiles is running | the engine cannot interleave them; missiles come first |
+| Trophy against bombs | nothing: a bomb falling from straight above at about 40 m/s is taken to be outside what Trophy engages | honest unknown; said plainly |
+| Machine guns against the bomber | not modelled | |
+
+`battle.callFire({ e, n, kind: 'he' })` and `battle.callAir({ e, n, kind: 'gun' | 'bomb' })` are the hooks; they obey the same rules as the commander's own calls. When the player commands (src/battle/orders.js), the orders `{ k: 'fire', e, n }` and `{ k: 'air', e, n, kind }` pass through them after the radio call (8 s, assumed) and are kept in the order list, so a replay flies them again. They are offered in the menu at a point on the ground or the map, and the More pop-up shows what is left.
+
+**The bomber drone is resolved in the battle layer, outside the referee.** The engine has no threat that hovers and drops. HKOI's
+fire at it uses the engine's own airburst formula and parameters; a bomb that hits is given the engine's FPV kill chance and the
+damage model's top-attack report. Trophy is taken to do nothing against a falling bomb. Each of these is listed above.
+
+### What kills an Abrams (`battle.tank.fate`)
+Read from the damage model's report of each hit (src/dmg.js), never from a new die where the report already decides:
+- knocked out (the crew bails out), ammunition fire vented through the blow-out panels (bustle ammunition in the jet, blast door
+  shut), catastrophic (hull rack in the jet, or the bustle hit while the loader has the door open: no survivors);
+- alive but crippled: mobility kill (engine or transmission in the jet: it fights from where it stands), firepower kill (main gun
+  breech in the jet, or the bustle ammunition burned out on a hit the engine says it survives: it breaks contact and withdraws);
+  both together: the crew leaves the vehicle.
+
+| What | Figure | Why |
+| --- | --- | --- |
+| Blast door open | only while the loader is drawing a round: from 1 s to 3 s into a 6 s (14 s without a loader) load, and never when the gun is loaded, the loader is up on his M240 or down | the door of the bustle rack is knee-switch operated and shut except while a round is pulled; taken from the loader's state in tankai.js, not from a die |
+| Hull rack struck on a surviving hit | recorded as damaged, no explosion | the engine has said the vehicle survives; the model does not overrule it |
+| Bustle ammunition burning through the panels | 12 s | judgement |
+| Fire on a knocked-out vehicle | engine fire 90 s, fuel fire 60 s, otherwise 20 s of smoke | judgement; drawing only |
+| Catastrophic fire | 120 s | judgement; drawing only |
+| Bailing out | the first man starts 3 s after the hit, the next every 1.5 s (commander, loader, gunner, driver), each takes 4 s, a wounded man 8 s | judgement |
+| A tank that can neither move nor fire | the crew leaves it 20 s after the second loss, if no engagement is running | judgement |
+| A firepower-killed tank that can still move | breaks contact at once and withdraws to its start line at 9 m/s (the same drill tankai.js uses when its protection runs out) | task statement |
+| Turret drive, sights, stabiliser destroyed | NOT a firepower kill here (the crew fights on in degraded mode) | judgement |
