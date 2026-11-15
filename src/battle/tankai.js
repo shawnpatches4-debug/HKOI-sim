@@ -132,9 +132,9 @@
       A.w.hkoi = this._volleyActive() ? 'tracking' : (this.transit || []).some(d => d.R0 < 3500) ? 'drone control link picked up: waiting for it to come within reach' : 'radar scanning, nothing in the air';   /* the radar scans all the time (Shawn, 14 Nov) */
       if (cmd && cmd.hkoi !== 'auto') A.w.hkoi = cmd.hkoi === 'hold' ? 'held on your order: it will not fire' : `${cmd.hkoi === 'obs' ? 'obscurant only' : 'airburst only'} on your order; ${A.w.hkoi}`;
       { const out = this._crewOut('gnr'); if (out) { this._rf = null; A.w.main = out; return; } }   /* crew.js: the gunner has frozen, or nobody is on the gun */
+      if (!cmd && this._gunVeh && this._gunVeh(A)) return;   /* enemyveh.js: a located enemy vehicle more dangerous than any team in view gets the gun (aim point, round, result) */
       const tg = this._targets();
-      if (!cmd) { if (this._gunVeh && this._gunVeh(A)) return; }   /* enemyveh.js: a located enemy vehicle more dangerous than any team in view gets the gun (aim point, round, result) */
-      else if (this._ordGunVeh(A, tg, hold)) return;   /* orders.js: the same, under the player's fire orders (hold fire, vehicles first, the team he pointed out, round choice) */
+      if (cmd && this._ordGunVeh(A, tg, hold)) return;   /* orders.js: the same, under the player's fire orders (hold fire, vehicles first, the team he pointed out, round choice) */
  let pick = tg.find(q => q.los && q.R <= 4200 && q.R >= 60 && !(q.moving && q.R > 800)) || null;
       // the gunner finishes what he started: he leaves a target he is already laying on only for a more dangerous one
       if (pick && this._rf) { const cur = tg.find(q => q.k === this._rf.k); if (cur && cur.los && cur.R <= 4200 && !(cur.moving && cur.R > 800) && cur.danger >= pick.danger) pick = cur; }

@@ -307,7 +307,7 @@ function buildTitle() {
   const w = $('t-warn'); w.hidden = !scene.software; if (scene.software) w.textContent = 'Warning: this browser is drawing without your graphics card ("' + scene.gpu() + '"), so it will be very slow. Turn on hardware acceleration in the browser settings, or open the link in Chrome or Edge directly.';
 }
 // the battle behind the title screen (also what the map screen reads the start position from)
-function titleBattle(next) { ensureWorld(); if (!demo.seed) demo.seed = set.seed + 100; if (next) demo.seed++; newBattle(demo.seed); demo.endT = 0; demo.chk = 0; demo.done = false; titleShow.reset(); stillT = 0; }
+function titleBattle(next) { cmdUI.off();   /* command.js: the battle behind the title is always the crew's own */ ensureWorld(); if (!demo.seed) demo.seed = set.seed + 100; if (next) demo.seed++; newBattle(demo.seed); demo.endT = 0; demo.chk = 0; demo.done = false; titleShow.reset(); stillT = 0; }
 function toTitle() { replayStop(); state = 'title'; playing = false; setupOpen = false; pagesOpen = false; cams.set('orbit'); titleBattle(); buildTitle(); show(); }
 // one step of the battle behind the title: fought at normal speed, started again on a new seed a few seconds after it is decided
 function demoTick(dt, live) {

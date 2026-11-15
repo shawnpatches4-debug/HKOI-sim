@@ -233,6 +233,7 @@
       if (!C.told.low && st.obs != null && (st.obs <= 0 || (st.apsL || 0) + (st.apsR || 0) <= 1)) { C.told.low = true; this.say(this.t, 'tank', 'GNR', `Gunner: ${st.obs <= 0 ? 'HKOI is out of obscurant' : 'Trophy is down to its last shot'}. Whether we break contact is your call.`, 'on its own the crew would pull back now'); }
       const wait = C.q.find(it => DRIVE[it.o.k] || it.o.k === 'face'), stand = [];
       if (C.main === 'hold') stand.push('main gun holding fire'); if (C.mg === 'hold') stand.push('machine guns held'); if (C.hkoi !== 'auto') stand.push('HKOI ' + nameOf('hkoi', C.hkoi).toLowerCase());
+      if (M.type === 'advance' && this.objective) stand.unshift(`objective ${m10(Math.hypot(this.objective.e - T.e, this.objective.n - T.n))} m, bearing ${b3(brgOf(T.e, T.n, this.objective.e, this.objective.n))}`);
       const tail = stand.length ? ' (' + stand.join(', ') + ')' : '';
       if (T.goal && C.move) T.intent = `Your order: ${C.move.rev ? 'reversing' : 'moving'} to the marked point, ${m10(Math.hypot(C.move.e - T.e, C.move.n - T.n))} m to go${tail}`;
       else if (wait) T.intent = `Your order is on its way to the driver (${Math.max(0, wait.at - this.t).toFixed(1)} s)${tail}`;
