@@ -27,7 +27,7 @@ export const SEATS = { cdr: 'hatch', ldr: 'hatch', gnr: 'in', citv: 'in', hkoi: 
 export const BED_SLOTS = ['turbine_in_loop', 'turbine_out_loop', 'tracks_loop', 'wind_loop', 'rain_loop', 'rain_roof_loop'];
 export { SLOTS, GROUPS };
 // the settings the sound menu keeps (panel.js): volumes 0 to 1, night mode, the tension layer
-export const DEFAULTS = { master: 0.8, voices: 1, effects: 1, ambience: 1, night: false, tension: false };
+export const DEFAULTS = { master: 1, voices: 1, effects: 1, ambience: 1, night: false, tension: false };
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const p_set = (p, v, t) => p.setTargetAtTime(v, t, 0.08);
@@ -287,7 +287,7 @@ export class Sound {
     // --- the tension layer: follows the number of threats in the air (missiles, drones) and the warning receivers
     const threat = this.levels.tension && st.talking && st.alive !== false ? clamp(((st.threat != null ? st.threat : (st.drones || []).length) + (this.warnL || this.warnR ? 1 : 0)) / 4, 0, 1) : 0;
     this.tension += (threat - this.tension) * clamp(dt * (threat > this.tension ? 0.8 : 0.25), 0, 1);
-    const tn = this.tension; set(B.tenOut.gain, this.levels.tension ? 0.02 + 0.1 * tn : 0, 0.3); set(B.tenLfo.o.frequency, 0.8 + 0.9 * tn, 0.5); set(B.tenLfo.g.gain, 0.9 * tn, 0.3); set(B.tenC.g.gain, 0.05 + 0.25 * tn, 0.5);
+    const tn = this.tension; set(B.tenOut.gain, this.levels.tension ? 0.012 + 0.05 * tn : 0, 0.3); set(B.tenLfo.o.frequency, 0.8 + 0.9 * tn, 0.5); set(B.tenLfo.g.gain, 0.9 * tn, 0.3); set(B.tenC.g.gain, 0.05 + 0.25 * tn, 0.5);
   }
   _world(t, cond, biome, rainy) {
     const M = this.mix, N = this.next, calm = t - this.lastShot > 14, outside = this.seat !== 'in';

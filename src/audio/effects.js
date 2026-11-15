@@ -110,7 +110,7 @@ export const Effects = {
       return;
     }
     const a = M.far(d, 2.2), v = M.voice('weapons', { far: a, space: 0.8 }); if (M.sample('gun120_out', v)) return;
-    this._report(v, a, { crack: 1.6, crackHz: 600, crackDur: 0.08, bark: 2.3, barkHz: 620, barkDur: 0.32, body: 1.6, bodyHz: 320, bodyDur: 0.4, thump: 0.9, thumpHz: 82, thumpDur: 0.7, sub: 0.5, subHz: 42, subDur: 0.8, tail: 0.5, tailDur: 2.6, tailHz: 450, slap: 1 });
+    this._report(v, a, { crack: 1.6, crackHz: 600, crackDur: 0.08, bark: 2.8, barkHz: 620, barkDur: 0.32, body: 2.4, bodyHz: 340, bodyDur: 0.4, thump: 0.75, thumpHz: 82, thumpDur: 0.7, sub: 0.5, subHz: 42, subDur: 0.8, tail: 0.5, tailDur: 2.6, tailHz: 450, slap: 1 });
     if (!this.lite && a.d < 200) M.noise(v.in, v.t + 0.08, { dur: 0.9, attack: 0.12, color: 'pink', f0: 1500, f1: 300, gain: 0.14 });   /* dust and blast wash */
     if (this.seat === 'hatch' && a.d < 12) { const w = M.voice('weapons', { direct: true, cabin: 0.5 }); M.tone(w.in, w.t, { f0: 60, f1: 20, dur: 0.7, gain: 0.8 }); this._rattle(w.t + 0.05, 1); }
   },
@@ -119,10 +119,10 @@ export const Effects = {
   // the rack (the base rim scrapes, a grunt of effort is left to the voice pack). ASSUMED times for a trained loader.
   _loadStart(t) {
     if (this.lite || this.seat !== 'in') return; const M = this.mix, v = M.voice('vehicle', { direct: true, cabin: 0.35 }), t0 = Math.max(t, v.t);
-    M.noise(v.in, t0 + 1.05, { dur: 0.3, attack: 0.02, type: 'highpass', f0: 3400, gain: 0.07 });                                              /* door: air */
-    M.tone(v.in, t0 + 1.3, { f0: 150, f1: 70, dur: 0.09, gain: 0.35 }); M.noise(v.in, t0 + 1.3, { dur: 0.03, type: 'bandpass', f0: 950, q: 1.5, gain: 0.4 });   /* door: open against its stop */
-    M.noise(v.in, t0 + 1.75, { dur: 0.4, attack: 0.08, color: 'pink', type: 'bandpass', f0: 1300, f1: 2200, q: 1.5, gain: 0.12 });              /* the round sliding out of its tube */
-    M.ring(v.in, t0 + 2.12, { freqs: [1450, 2380, 3900], dur: 0.12, gain: 0.05 });                                                             /* its rim clears the rack */
+    M.noise(v.in, t0 + 1.05, { dur: 0.3, attack: 0.02, type: 'highpass', f0: 3400, gain: 0.16 });                                              /* door: air */
+    M.tone(v.in, t0 + 1.3, { f0: 150, f1: 70, dur: 0.09, gain: 0.45 }); M.noise(v.in, t0 + 1.3, { dur: 0.03, type: 'bandpass', f0: 950, q: 1.5, gain: 0.6 });   /* door: open against its stop */
+    M.noise(v.in, t0 + 1.75, { dur: 0.4, attack: 0.08, color: 'pink', type: 'bandpass', f0: 1300, f1: 2200, q: 1.5, gain: 0.34 });              /* the round sliding out of its tube */
+    M.ring(v.in, t0 + 2.12, { freqs: [1450, 2380, 3900], dur: 0.12, gain: 0.14 }); M.noise(v.in, t0 + 2.12, { dur: 0.02, type: 'bandpass', f0: 1900, q: 3, gain: 0.3 });                                                             /* its rim clears the rack */
   },
   // The end of the drill, called when the loader is about to report (crewtalk.js): he rams the round home with his fist, the
   // breech block rises and slams shut by itself, the ammunition door closes, he flips the safety to FIRE. Heard inside only.
@@ -231,9 +231,10 @@ export const Effects = {
       M.noise(v.in, v.t, { dur: 0.012, attack: 0.0004, type: 'bandpass', f0: rnd(2600, 4200), q: 3, gain: 0.5 }); M.ring(v.in, v.t, { freqs: [rnd(1900, 2600), rnd(3300, 4400)], dur: 0.12, gain: 0.08 }); return;
     }
     if (!M.sample('hit_in', v, { gain: k })) {
-      M.tone(v.in, v.t, { f0: ke ? 150 : 108, f1: 21, dur: ke ? 0.7 : 1.0, gain: 1.4 * k });
+      M.tone(v.in, v.t, { f0: ke ? 150 : 108, f1: 21, dur: ke ? 0.5 : 0.7, gain: 1.4 * k });
       M.tone(v.in, v.t, { f0: 44, f1: 20, dur: 0.8, gain: 0.7 * k, attack: 0.008 });
       M.noise(v.in, v.t, { dur: ke ? 0.12 : 0.22, attack: 0.0008, f0: ke ? 7500 : 5200, f1: 260, gain: 1.2 * k });
+      M.noise(v.in, v.t, { dur: 0.16, attack: 0.001, color: 'pink', type: 'bandpass', f0: 420, f1: 200, q: 0.7, gain: 2.2 * k });   /* the body of the slam, in the range small loudspeakers play */
       if (ke) M.noise(v.in, v.t, { dur: 0.008, attack: 0.0003, type: 'highpass', f0: 3000, gain: 1.4 });
       M.ring(v.in, v.t + 0.004, { freqs: [410, 667, 1030, 1570, 2250, 3120], dur: (ke ? 1.5 : 0.95) * (0.6 + 0.4 * k), gain: 0.32 * k });
       this._rattle(v.t + 0.05, 2 * k);
@@ -283,12 +284,12 @@ export const Effects = {
   // bulkhead. seconds: how long it burns.
   blowout(d, seconds = 5) {
     if (!this._live()) return; const M = this.mix, inside = this.seat === 'in'; this._shot();
-    const a = M.far(d, 2), v = inside ? M.voice('explosions', { direct: true, cabin: 0.5, cut: 500 }) : M.voice('explosions', { far: a, space: 0.6 });
+    const a = M.far(d, 2), v = inside ? M.voice('explosions', { direct: true, cabin: 0.5, cut: 500 }) : M.voice('explosions', { far: a, space: 0.1 });   /* little into the echo: a steady roar builds up in it far more than a bang does */
     if (M.sample('blowout', v)) return;
     this._report(v, a, { crack: 1.2, crackHz: 900, crackDur: 0.04, bark: 1.6, barkHz: 700, barkDur: 0.2, body: 1.4, bodyHz: 350, bodyDur: 0.3, thump: 1.0, thumpHz: 90, thumpDur: 0.5, sub: 0.6, subHz: 45, subDur: 0.6, tail: 0.3, tailDur: 1.5, slap: inside ? 0 : 1 });
-    M.noise(v.in, v.t + 0.05, { dur: seconds * 0.5, attack: 0.25, hold: seconds * 0.5, color: 'pink', type: 'bandpass', f0: 420, f1: 900, q: 0.5, gain: 0.9 });   /* the jet */
+    M.noise(v.in, v.t + 0.05, { dur: seconds * 0.5, attack: 0.25, hold: seconds * 0.5, color: 'pink', type: 'bandpass', f0: 420, f1: 900, q: 0.5, gain: 2.0 });   /* the jet */
     M.noise(v.in, v.t + 0.05, { dur: seconds * 0.5, attack: 0.4, hold: seconds * 0.5, color: 'brown', f0: 260, gain: 0.8 });
-    if (!this.lite) for (let i = 0; i < Math.round(seconds * 3); i++) { const t = v.t + rnd(0.3, seconds); M.noise(v.in, t, { dur: rnd(0.03, 0.09), attack: 0.0006, type: 'bandpass', f0: rnd(700, 2400), q: 0.8, gain: rnd(0.4, 1.1) }); M.tone(v.in, t, { f0: rnd(120, 200), f1: 60, dur: 0.07, gain: rnd(0.2, 0.5) }); }   /* rounds cooking off */
+    if (!this.lite) for (let i = 0; i < Math.round(seconds * 3); i++) { const t = v.t + rnd(0.3, seconds); M.noise(v.in, t, { dur: rnd(0.03, 0.09), attack: 0.0006, type: 'bandpass', f0: rnd(700, 2400), q: 0.8, gain: rnd(0.3, 0.9) }); M.tone(v.in, t, { f0: rnd(120, 200), f1: 60, dur: 0.07, gain: rnd(0.15, 0.4) }); }   /* rounds cooking off */
     if (inside) this._rattle(v.t + 0.05, 2);
   },
 
@@ -316,8 +317,8 @@ export const Effects = {
   whoosh(dur = 0.6, gain = 0.5, opt = {}) {
     if (!this._live()) return; const M = this.mix, v = M.voice('weapons', { gain, space: 0.25 }); if (M.sample('flyby', v)) return;
     const speed = opt.speed || 250, miss = opt.miss || 8, span = Math.max(0.35, dur * 1.1);
-    M.pass(v.in, v.t, { speed, miss, span, hz: 1500, tone: 0, gain: 1.8, q: 1.1 });                       /* the motor's roar and the air torn open */
-    M.pass(v.in, v.t, { speed, miss, span, hz: 420, tone: 310, gain: 1.2, color: 'brown', q: 0.8 });      /* its body, and a pitched part that makes the drop in pitch plain */
+    M.pass(v.in, v.t, { speed, miss, span, hz: 1500, tone: 0, gain: 3.4, q: 1.1 });                       /* the motor's roar and the air torn open */
+    M.pass(v.in, v.t, { speed, miss, span, hz: 420, tone: 310, gain: 1.6, color: 'brown', q: 0.8 });      /* its body, and a pitched part that makes the drop in pitch plain */
     if (!this.lite) M.noise(v.in, v.t + span, { dur: 0.25, attack: 0.03, type: 'highpass', f0: 3500, gain: 0.25 });   /* the hiss as it goes by */
   },
   // a supersonic round passing close: the crack of its shock wave first, the thump of the gun that fired it after

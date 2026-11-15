@@ -74,6 +74,49 @@ def hear_lines(wav, said, model):
         n += 1; ok += hit; rows.append(('ok  ' if hit else 'MISS') + ' %6.2f %-4s played: %-44s heard: %s' % (s['t'], s['who'], s['text'][:44], got[:50]))
     return ok, n, rows
 
+def band(x, sr, lo, hi):
+    X = np.fft.rfft(x); f = np.fft.rfftfreq(len(x), 1 / sr); return np.fft.irfft(np.where((f >= lo) & (f < hi), X, 0), len(x))
+def rms(x): return float(np.sqrt(np.mean(x ** 2)) + 1e-12)
+def cut(x, sr, a, b): return x[max(0, int(a * sr)):max(0, int(b * sr))]
+def centroid(x, sr, lo=80, hi=8000):
+    X = np.abs(np.fft.rfft(x * np.hanning(len(x)))) ** 2; f = np.fft.rfftfreq(len(x), 1 / sr); k = (f >= lo) & (f < hi); return float((f[k] * X[k]).sum() / (X[k].sum() + 1e-20))
+def pitch(x, sr, lo=60, hi=700):
+    X = np.abs(np.fft.rfft(x * np.hanning(len(x)))); f = np.fft.rfftfreq(len(x), 1 / sr); k = (f >= lo) & (f < hi); return float(f[k][np.argmax(X[k])])
+def spread(x, sr):   # how far apart loud and quiet are: 95th minus 10th percentile of the level over 0.4 s blocks, dB
+    n = int(0.4 * sr); L = [20 * np.log10(rms(x[i:i + n])) for i in range(0, len(x) - n, n // 2)]; return float(np.percentile(L, 95) - np.percentile(L, 10))
+
+# The checks that belong to one moment only. Each returns (text for the table, True / False / None).
+def special(J, m, sr, folder):
+    out = []
+    if J.get('double'):   # two bangs: the sharp part (above 1.5 kHz), a peak near t and a second 40 to 70 ms later, a dip between
+        d = J['double']; hp = np.abs(band(cut(m, sr, d['t'] - 0.05, d['t'] + 0.2), sr, 1500, 20000)); n = int(0.003 * sr); env = np.convolve(hp, np.ones(n) / n, 'same'); t0 = d['t'] - 0.05
+        i1 = int(0.04 * sr) + int(np.argmax(env[int(0.04 * sr):int(0.075 * sr)])); a = i1 + int(0.03 * sr); i2 = a + int(np.argmax(env[a:i1 + int(0.09 * sr)])); gap = (i2 - i1) / sr; dip = env[i1:i2].min() / min(env[i1], env[i2])
+        out.append(('two bangs %.0f ms apart (dip between: %.0f%%)' % (gap * 1000, dip * 100), d['lo'] <= gap <= d['hi'] and dip < 0.6))
+    if J.get('doppler'):
+        d = J['doppler']; a = centroid(cut(m, sr, d['t'] - d['span'], d['t'] - 0.08), sr); b = centroid(cut(m, sr, d['t'] + 0.08, d['t'] + d['span']), sr)
+        out.append(('pitch centre %.0f Hz coming, %.0f Hz going' % (a, b), a > 1.5 * b))
+    if J.get('echo'):
+        t = J['echo']['t']; r = 20 * np.log10(rms(cut(m, sr, t + 0.06, t + 0.45)) / rms(cut(m, sr, t, t + 0.05)))
+        out.append(('what comes back after the last round: %.1f dB against the round' % r, None)); J['_echo'] = r
+    if J.get('duck') and J.get('said'):
+        sp = J['said'][0]; pk = lambda t: float(np.abs(cut(m, sr, t, t + 0.04)).max()); R = J['rounds']
+        loud = [pk(t) for t in R if t + 0.05 < sp['t'] - 0.1]; held = [pk(t) for t in R if sp['t'] + 0.15 < t < sp['end'] - 0.05]
+        if loud and held:
+            r = 20 * np.log10(np.mean(held) / np.mean(loud)); out.append(('rounds while he speaks: %.1f dB against rounds before (%d and %d rounds)' % (r, len(held), len(loud)), -8 < r < -2.5))
+    if J.get('drone'):
+        d = J['drone']; pr = pitch(cut(m, sr, *d['radio']), sr); pf = pitch(cut(m, sr, *d['fibre']), sr)
+        c1 = pitch(cut(m, sr, d['pass'][0] - 4, d['pass'][0] - 1), sr); c2 = pitch(cut(m, sr, d['pass'][0] + 1, d['pass'][0] + 4), sr)
+        out.append(('radio drone %.0f Hz, fibre drone %.0f Hz; radio drone %.0f Hz coming, %.0f Hz going' % (pr, pf, c1, c2), pf < 0.8 * pr and c1 > c2 * 1.1))
+    if J.get('after'):
+        a = J['after']; L = [x for x in J.get('said', []) if x['ev'] == a['ev']]
+        out.append(('"%s" spoken %.2f s after the breech closes' % (L[0]['text'] if L else '?', L[0]['t'] - a['t'] if L else -1), bool(L) and 0.1 < L[0]['t'] - a['t'] < 1.0))
+    if J.get('nightOf'):
+        o = os.path.join(folder, J['nightOf'] + '.wav')
+        if os.path.exists(o):
+            y, _ = sf.read(o, dtype='float64'); y = y.mean(1); w = J['window']; a = spread(cut(y, sr, *w), sr); b = spread(cut(m, sr, *w), sr)
+            out.append(('loud to quiet spread %.1f dB normally, %.1f dB in night mode' % (a, b), b < a - 3))
+    return out
+
 def measure(folder, name, hear=None):
     wav = os.path.join(folder, name + '.wav')
     if not os.path.exists(wav): return None
@@ -89,17 +132,19 @@ def measure(folder, name, hear=None):
         if J.get('rof') and len(errs) == len(ex) and len(ex) > 1: r['rof'] = float(np.mean(np.diff(got)))
     # from outside the crew is not heard at all (by design), so lines are counted from a seat only
     if hear and J.get('said') and 'busy' in name and J.get('view') != 'orbit': r['lines'] = hear_lines(wav, J['said'], hear)
+    r['special'] = special(J, m, sr, folder); r['echo'] = J.get('_echo'); r['biome'] = J.get('biome')
     return r
 
 def fmt(r):
-    if r is None: return ['-'] * 8
+    if r is None: return ['-'] * 7
     on = '-' if r['n'] is None else '%d of %d, worst %s' % (r['found'], r['n'], '%.0f ms' % r['err'] if r['err'] is not None else 'n/a')
     if r['rof']: on += ', %.3f s apart' % r['rof']
     ln = '-' if not r['lines'] else '%d of %d' % (r['lines'][0], r['lines'][1])
-    return ['%.1f' % r['lufs'], '%.1f' % r['peak'], '%.0f' % r['centroid'], '%.0f / %.0f / %.0f' % (100 * r['low'], 100 * r['body'], 100 * r['high']), on, ln]
+    return ['%.1f' % r['lufs'], '%.1f' % r['peak'], '%.0f' % r['centroid'], '%.0f / %.0f / %.0f' % (100 * r['low'], 100 * r['body'], 100 * r['high']), on, ln, '; '.join(t for t, ok in r.get('special', [])) or '-']
 
-head = ['moment', 'version', 'loudness LUFS', 'true peak dBTP', 'centroid Hz', 'energy % low / body / high', 'onsets found, worst error', 'crew lines understood']
-rows = []; bad = []
+head = ['moment', 'version', 'loudness LUFS', 'true peak dBTP', 'centroid Hz', 'energy % low / body / high', 'onsets found, worst error', 'crew lines understood', 'checked for this moment']
+rows = []; bad = []; echoes = {}
+ORDER += sorted(os.path.basename(f)[:-4] for f in glob.glob(os.path.join(D, '*.wav')) if os.path.basename(f)[:-4] not in ORDER)
 for name in ORDER:
     a = measure(D, name, HEAR); b = measure(BEFORE, name, HEAR) if BEFORE else None
     if b: rows.append([name, 'before'] + fmt(b))
@@ -107,16 +152,21 @@ for name in ORDER:
         rows.append([name, 'after' if BEFORE else 'now'] + fmt(a))
         if a['peak'] > -1.0: bad.append('%s: true peak %.1f dBTP is above -1' % (name, a['peak']))
         if a['n'] and name != 'missile_launch_3km' and (a['found'] < a['n'] or a['err'] > 50): bad.append('%s: onsets %s' % (name, fmt(a)[4]))
+        for t, ok in a.get('special', []):
+            if ok is False: bad.append('%s: %s' % (name, t))
+        if a.get('echo') is not None: echoes[a['biome']] = a['echo']
         if a['rof'] and abs(a['rof'] - 0.3) > 0.01: bad.append('%s: rounds %.3f s apart, the gun fires every 0.300 s' % (name, a['rof']))
-        if name == 'busy_town_heavy_gunner_seat' and abs(a['lufs'] + 16) > 2:   # the target is set for the crew's seats; from outside there is no speech and the same 20 s measure about 3 LU lower bad.append('%s: %.1f LUFS, the target is -16 +-2' % (name, a['lufs']))
+        # the loudness target is set for the crew's seats; from outside there is no speech and the same 20 s measure about 3 LU lower
+        if name == 'busy_town_heavy_gunner_seat' and abs(a['lufs'] + 16) > 2: bad.append('%s: %.1f LUFS, the target is -16 +-2' % (name, a['lufs']))
     for tag, r in (('before', b), ('after', a)):
         if r and r['detail']: print('\n'.join('  [%s %s] %s' % (name, tag, d) for d in r['detail']))
         if r and r['lines']: print('\n'.join('  [%s %s] %s' % (name, tag, d) for d in r['lines'][2]))
+if len(echoes) == 4 and not (echoes['town'] > echoes['farmland'] + 3 and echoes['farmland'] > echoes['desert'] and echoes['forest'] < echoes['town'] - 3): bad.append('surroundings: the town must answer loudest, the desert least: ' + json.dumps(echoes))
 W = [max(len(str(r[i])) for r in rows + [head]) for i in range(len(head))]
 line = lambda r: '| ' + ' | '.join(str(c).ljust(W[i]) for i, c in enumerate(r)) + ' |'
 table = '\n'.join([line(head), '|' + '|'.join('-' * (w + 2) for w in W) + '|'] + [line(r) for r in rows])
 print(); print(table)
 if MD: open(MD, 'w').write(table + '\n')
 if bad: print('\nTARGETS MISSED:\n  ' + '\n  '.join(bad))
-else: print('\nall targets met (true peak under -1 dBTP, onsets within 50 ms, burst at the rate of fire, busy battle from the gunner's seat at -16 +-2 LUFS)')
+else: print('\nall targets met (true peak under -1 dBTP, onsets within 50 ms, burst at the rate of fire, busy battle from the gunner seat at -16 +-2 LUFS, the checks of each moment)')
 if CHECK and bad: sys.exit(1)

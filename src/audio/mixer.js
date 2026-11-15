@@ -16,11 +16,11 @@
 //   environment  setEnv(biome, cond): what the country does to a loud sound. Open farmland: a thin long tail and one weak slap
 //                off the ground. Desert: almost nothing comes back. Town: hard, bright echoes off the walls within a third
 //                of a second. Forest: no clear echo, a short dull scatter, and the trees soak up highs with range.
-//   ducking      duck(t0, t1): while somebody talks on the intercom, weapons, blasts, engine and weather are held back about
-//                5 dB so the words stay clear.
+//   ducking      duck(t0, t1): while somebody talks on the intercom, weapons, blasts, engine and weather are held back
+//                (7 dB before the limiter) so the words stay clear.
 //   master       limiter + ceiling: the output never goes above -3.3 dB of full scale (true peak under -1 dB). Night mode squeezes loud and quiet
 //                together (for playing late). Volume groups: master, voices, effects, ambience.
-// LOUDNESS TARGET at the default volume (80%): the busiest 20 s of a heavy battle about -16 LUFS (+-2), true peak under -1 dBTP;
+// LOUDNESS TARGET at the default volume (the master slider at 100%): the busiest 20 s of a heavy battle about -16 LUFS (+-2), true peak under -1 dBTP;
 // measured by tests/audio/measure.py.
 //
 // Recordings: assets/sfx_index.json can name a recording for any sound "slot". When a slot has one, it is played in place
@@ -33,7 +33,10 @@ export const GROUPS = { voices: ['voices', 'ui'], effects: ['weapons', 'explosio
 const DUCKED = { weapons: 1, explosions: 1, vehicle: 1, world: 1 };
 // Fixed balance between the buses. Measured on the busy battle from the gunner's seat: the intercom alone was -16.6 LUFS and the
 // guns 5 dB under it; the voices come down 1.5 dB so that the guns have more room (voices stay first: they also duck everything).
-const TRIM = { voices: 0.84 };
+// Weapons and blasts are trimmed so that ONE gun or blast close by arrives at about full scale before the limiter (measured:
+// 30 mm at 30 m -1.5 dB, 120 mm at 40 m +3 dB, Trophy at 15 m +2 dB): the limiter then only works when several things coincide.
+// Driven 9 dB harder, as a first pass was, every shot was flattened and the voices pumped with it.
+const TRIM = { voices: 0.84, weapons: 0.6, explosions: 0.6 };
 
 // how the hull changes what arrives through the air, by where the listener's head is
 const SEAT = {
@@ -60,7 +63,7 @@ export class Mixer {
     this.group = { voices: 1, effects: 1, ambience: 1 }; this.envName = ''; this.env = ENV.farmland; this.irs = {};
     // master: sum -> night-mode squeeze -> limiter -> soft clip (a hard guarantee that the output stays inside full scale) -> volume
     // Quiet and middling sounds pass through untouched; only what would go over full scale is held back.
-    this.sum = c.createGain(); this.sum.gain.value = 0.92;
+    this.sum = c.createGain(); this.sum.gain.value = 0.8;
     const nc = this.nightComp = c.createDynamicsCompressor();   /* does nothing until night mode: threshold at full scale, ratio 1 */
     nc.threshold.value = 0; nc.knee.value = 0; nc.ratio.value = 1; nc.attack.value = 0.008; nc.release.value = 0.3;
     this.nightGain = c.createGain(); this.nightGain.gain.value = 1;
@@ -154,12 +157,12 @@ export class Mixer {
   setBus(name, level) { const b = this.bus[name]; if (!b) return; b.level = level; this._level(name); }
   // a volume slider: group = 'voices' | 'effects' | 'ambience', v = 0 to 1 (1 = as mixed)
   setGroup(group, v) { const L = GROUPS[group]; if (!L) return; v = clamp(+v || 0, 0, 1.5); this.group[group] = v; for (const n of L) { this.bus[n].group = v; this._level(n); } }
-  // Night mode: loud things come down, quiet things come up (a 4:1 squeeze above -34 dB with make-up gain), and the sub-bass
+  // Night mode: loud things come down, quiet things come up (a 3:1 squeeze above -30 dB with make-up gain), and the sub-bass
   // that carries through walls stays as it is mixed (the squeeze works on it hardest, because it is the loudest part).
   setNight(on) {
     on = !!on; if (on === this.night) return; this.night = on; const t = this.ctx.currentTime, n = this.nightComp;
-    n.threshold.setTargetAtTime(on ? -34 : 0, t, 0.05); n.ratio.setTargetAtTime(on ? 4 : 1, t, 0.05); n.knee.setTargetAtTime(on ? 12 : 0, t, 0.05);
-    this.nightGain.gain.setTargetAtTime(on ? 2.4 : 1, t, 0.05);
+    n.threshold.setTargetAtTime(on ? -30 : 0, t, 0.05); n.ratio.setTargetAtTime(on ? 3 : 1, t, 0.05); n.knee.setTargetAtTime(on ? 10 : 0, t, 0.05);
+    this.nightGain.gain.setTargetAtTime(on ? 0.62 : 1, t, 0.05);   /* the compressor adds make-up gain of its own; this brings a busy battle out about 4 LU quieter than normal (measured) */
   }
   // where the listener's head is: 'out' | 'hatch' | 'in'
   setSeat(seat) {
@@ -181,9 +184,10 @@ export class Mixer {
     g.cancelScheduledValues(t); g.setValueAtTime(depth, t); g.linearRampToValueAtTime(1, t + seconds);
     e.cancelScheduledValues(t); e.setValueAtTime(0.0001, t); e.exponentialRampToValueAtTime(0.05, t + 0.06); e.exponentialRampToValueAtTime(0.0001, t + seconds * 1.15); e.setValueAtTime(0, t + seconds * 1.15 + 0.01);
   }
-  // Hold everything but the voices back from t0 to t1 (somebody is talking in the headset). depth 0.56 = 5 dB down.
+  // Hold everything but the voices back from t0 to t1 (somebody is talking in the headset). depth 0.45 = 7 dB down before the
+  // limiter; measured after it, a 30 mm round under speech peaks about 4 dB lower than one in the clear.
   // Explicit ramps only: down in 60 ms, back up over 300 ms. A second line before the first has ended just extends the hold.
-  duck(t0, t1, depth = 0.56) {
+  duck(t0, t1, depth = 0.45) {
     const now = this.ctx.currentTime; t0 = Math.max(t0, now); if (t1 <= t0) return;
     for (const g of [this.duckAir.gain, this.duckDirect.gain]) {
       g.cancelScheduledValues(t0);
@@ -197,13 +201,13 @@ export class Mixer {
   // What `d` metres of air do to a sound: it arrives late (speed of sound), quieter, and with its highs gone
   // (air soaks up high frequencies; past a kilometre or two only the low thump is left). `size` scales loudness.
   // occl: 0 (clear line) to 1 (solid ground or buildings in between).
-  // The level law is deliberately gentler than nature's (a real gun is 40 dB quieter at 3 km than at 30 m; here it is 24 dB):
+  // The level law is deliberately gentler than nature's (a real gun is 40 dB quieter at 3 km than at 30 m; here it is 21 dB):
   // otherwise a distant battle would be inaudible on loudspeakers. ASSUMED, the usual practice in game sound.
   far(d, size = 1, occl = 0) {
     d = Math.max(0, d || 0); occl = clamp(occl || 0, 0, 1); const E = this.env;
     return {
       d, delay: d / C_SOUND,
-      gain: size * Math.pow(25 / (25 + d), 0.7) * (1 - 0.6 * occl),
+      gain: size * Math.pow(25 / (25 + d), 0.6) * (1 - 0.6 * occl),
       cut: clamp(17000 / (1 + Math.pow(d / (170 * E.cutK), 1.25)) * (1 - 0.8 * occl), 170, 17000),
       roll: clamp((d - 150) / 1200, 0, 1),   // how much of what is heard is the low rolling tail
       near: clamp(1 - (d - 150) / 1200, 0, 1) * (1 - occl),
@@ -232,6 +236,7 @@ export class Mixer {
     fl.frequency.setValueAtTime(clamp(f0, 20, 20000), when);
     if (f1) fl.frequency.exponentialRampToValueAtTime(clamp(f1, 20, 20000), when + attack + hold + dur);
     g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(gain, when + attack);
+    if (hold > 0) g.gain.linearRampToValueAtTime(gain, when + attack + hold);   /* an explicit flat stretch: the offline engine used for the measurements kept climbing through a gap (measured: +19 dB over 2.5 s) */
     g.gain.setTargetAtTime(0, when + attack + hold, dur / 4.6);   /* down 40 dB after `dur` */
     s.connect(fl); fl.connect(g); g.connect(dest);
     s.start(when, Math.random() * (buf.duration - 0.1)); s.stop(when + attack + hold + dur * 1.5 + 0.02);

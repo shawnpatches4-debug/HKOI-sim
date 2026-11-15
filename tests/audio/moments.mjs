@@ -101,7 +101,7 @@ const moments = {
     const T = grid(1), inG = still('in_gnr', 2), out = (d, more) => still('orbit', d, more);
     // the main gun from the gunner's seat, the loader's drill, his call: breech closes 0.3 s after load(), "Up!" 0.55 s after
     await render('main_gun_inside_with_loading_drill', 9, { voices: true, seed: 21, state: inG, acts: [[T, x => x.gun120(2)], [grid(5.5), x => { const dl = x.load(); x.cue('LDR', 'up', 1, { delay: dl, ttl: 2 }); }]],
-      meta: { view: 'in_gnr', expect: [{ t: T + LAT, what: '120 mm fires' }, { t: grid(5.5) + 0.3 + LAT, what: 'breech closes' }], after: { ev: 'up', t: grid(5.5) + 0.3 } } });
+      meta: { view: 'in_gnr', expect: [{ t: T + LAT, what: '120 mm fires' }, { t: grid(5.5) + 0.17 + LAT, what: 'the round is rammed home (the breech closes 0.13 s later)' }], after: { ev: 'up', t: grid(5.5) + 0.3 } } });
     await render('main_gun_outside_40m', 8, { seed: 21, state: out(40), acts: [[T, x => x.gun120(40)]], meta: { view: 'orbit', expect: [{ t: T + LAT + 40 / C_SOUND, what: '120 mm fires' }] } });
     // Trophy: two bangs 45 to 65 ms apart
     await render('trophy_outside_15m', 4, { seed: 22, state: out(15), acts: [[T, x => x.aps(15)]], meta: { view: 'orbit', expect: [{ t: T + LAT + 15 / C_SOUND, what: 'Trophy launcher' }], double: { t: T + LAT + 15 / C_SOUND, lo: 0.04, hi: 0.07 } } });
