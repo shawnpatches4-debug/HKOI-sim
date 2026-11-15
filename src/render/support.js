@@ -62,11 +62,13 @@ export class SupportView {
     // ---- the wingman
     if (G && this.wingTank) {
       const tv = this.wingTank, w = this.wing, P = battle.wingAt(Math.min(t, battle.t)); I.wing = true;
-      if (!w.set || Math.hypot(P.e - w.e, P.n - w.n) > 6) { w.e = P.e; w.n = P.n; w.h = P.h; w.set = true; }
+      if (!w.set || !(dt > 0) || Math.hypot(P.e - w.e, P.n - w.n) > 6) { w.e = P.e; w.n = P.n; w.h = P.h; w.set = true; }   /* no time has passed (paused, or stepped by hand): exactly where the battle has it */
       else { const k = dt > 0 ? 1 - Math.exp(-dt * 14) : 0; w.e += (P.e - w.e) * k; w.n += (P.n - w.n) * k; w.h = (w.h + ((((P.h - w.h) % 360) + 540) % 360 - 180) * k + 360) % 360; }   /* the battle moves in steps of 0.1 s: drawn eased between them */
       const hh = w.h * DEG, fe = Math.sin(hh), fn = Math.cos(hh), d = 2.5, pitch = Math.atan2(W.h(w.e + fe * d, w.n + fn * d) - W.h(w.e - fe * d, w.n - fn * d), 2 * d), roll = Math.atan2(W.h(w.e + fn * 1.6, w.n - fe * 1.6) - W.h(w.e - fn * 1.6, w.n + fe * 1.6), 3.2);
       tv.place(s.at(w.e, w.n, 0, this.v1), w.h, -pitch, roll); tv.animate(dt, G.alive ? (G.v || 0) : 0);
-      if (G.alive) { tv.aim(G.tur == null ? w.h : G.tur, w.h, dt); if (this.wingVolleys) tv.aimStation(this.wingVolleys.aimAt, dt); }
+      if (G.alive && tv.turret) { /* the turret follows the battle's own turret bearing (which already turns at the turret's real rate), eased between steps */
+        const want = (((G.tur == null ? w.h : G.tur) - w.h + 540) % 360) - 180, d = ((want - tv.turretYaw + 540) % 360) - 180; tv.turretYaw += d * (dt > 0 ? 1 - Math.exp(-dt * 18) : 1); tv.turret.rotation.y = -tv.turretYaw * DEG;
+        if (this.wingVolleys) tv.aimStation(this.wingVolleys.aimAt, dt); }
       if (this.wingVolleys) this.wingVolleys.update(Math.min(t, battle.t), dt);
       // its main gun
       while (w.shotI < G.shots.length && G.shots[w.shotI].t <= t) { const sh = G.shots[w.shotI++]; if (t - sh.t > 2) continue; const a = Math.atan2(sh.to.e - sh.from.e, sh.to.n - sh.from.n), m = s.at(w.e + Math.sin(a) * 6.5, w.n + Math.cos(a) * 6.5, 2.3, this.v2);
