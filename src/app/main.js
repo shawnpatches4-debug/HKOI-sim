@@ -16,6 +16,8 @@ import { Command } from './command.js';   // the player commands the tank: order
 import { TitleShow } from './title.js';
 import { Guide } from './tour.js';
 import { Faces } from './faces.js';
+import { Sights } from './sights.js';
+import { TankFate } from '../render/tankfate.js';
 import { Sound } from '../audio/sound.js';
 import { soundPanel } from '../audio/panel.js';
 import { FINISH, setFinish } from '../render/env.js';
@@ -421,7 +423,7 @@ function drawSensors() {
   if (cams.mode === 'citv') { const q = battle._targets ? battle._targets().find(x => x.los) : null; top = `CITV   ${thName(th)}   ${scene.camera.fov < 6 ? '10×' : '3×'}   BRG ${String(Math.round(cams.citvYaw || 0) % 360).padStart(3, '0')}`;
     bot = q ? `${q.u.spec.name.toUpperCase()} #${q.u.id + 1}   RNG ${String(Math.round(q.R / 10) * 10).padStart(4, '0')} m\n${q.danger === 4 ? 'ITS MISSILE IS IN THE AIR' : q.danger === 3 ? 'CAN FIRE ON US' : q.danger === 2 ? 'RELOADING' : 'MOVING'}` : 'SWEEPING\nNOTHING LOCATED IN VIEW'; }
   else { const m = volleys.info.filter(x => x.cued).sort((a, b) => a.range - b.range)[0], s = T.st || {}; top = `HKOI SIGHT   ${thName(th)}   ${scene.camera.fov < 8 ? 'NARROW' : 'WIDE'}   OBSCURANT ${s.obs == null ? '-' : s.obs}   HE ${s.he == null ? '-' : s.he}`;
-    bot = (m ? `TRACK ${m.tt.short.toUpperCase()}   RNG ${String(Math.round(m.range / 10) * 10).padStart(4, '0')} m\n` : '') + (st ? st[1][1].toUpperCase() : ''); if (m) bx = m.p; }
+    bot = (m ? `TRACK ${m.tt.short.toUpperCase()}   RNG ${String(Math.round(m.range / 10) * 10).padStart(4, '0')} m\n` : '') + (st && st[1] && st[1][1] ? String(st[1][1]).toUpperCase() : ''); if (m) bx = m.p; }
   if (bx) { v3.copy(bx).project(scene.camera); const on = v3.z < 1 && Math.abs(v3.x) < 1 && Math.abs(v3.y) < 1; box.hidden = !on; if (on) box.style.transform = `translate(${((v3.x + 1) / 2 * innerWidth).toFixed(1)}px, ${((1 - v3.y) / 2 * innerHeight).toFixed(1)}px)`; } else if (!box.hidden) box.hidden = true;
   const sig = top + '|' + bot; if (sig !== tsSig) { tsSig = sig; $('ts-top').textContent = top; $('ts-bot').textContent = bot; }
 }
@@ -451,7 +453,7 @@ let simMs = 0, cpuMs = 0, last = performance.now(), frames = 0, fps = 0, fpsT = 
 const titleShow = new TitleShow(scene, cams);
 function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length) { const c = m.filter(x => x.cued); if (c.length) brg = c.sort((a, b) => a.range - b.range)[0].brg; } const rf = battle._rf, fl = landing[landing.length - 1], mg = battle._mg && battle.t < battle._mg.t + battle._mg.dur + 1.5 ? battle._mg : null, aim = rf ? rf.k : fl ? fl.to : mg ? mg : null; let cdrLook = null, hkoiAt = null; if (cams.mode === 'citv' && battle._targets) { const q = battle._targets().find(x => x.los); if (q) cdrLook = q.k; } if (cams.mode === 'hkoi') hkoiAt = tank.hkoiMuzzle(hkV);
   return { tank: T, units: battle.units, missiles: m, threatBrg: brg, aim, unitPos, turret: battle.tank.tur, hkoiAim: volleys.aimAt, hkoiAt, cdrLook, cropH: u => { const v = world && world.veg ? world.veg(u.e, u.n) : null; return v && (v.cls === 1 || v.cls === 2) ? v.h : 0; } }; }   /* cropH: a team in a crop holds its sight above the stalks */
-const hkV = new THREE.Vector3();
+const hkV = new THREE.Vector3(); const sights = new Sights(), tankFate = new TankFate(scene, tank);   /* the gunner's, commander's and HKOI sight pictures (app/sights.js) */
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
@@ -484,7 +486,7 @@ function frameBody(now) {
   hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], enemy: !!ENEMYV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   cmdUI.update(dt);   /* command.js: order bar, ghost path, the crew's answers */
   if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
-  drawReplay(dt); drawSensors();
+  drawReplay(dt); drawSensors(); tankFate.update(battle, Math.min(tNow, battle.t), dt * simRate()); sights.update({ on: state === 'play' && !mapOpen, battle, cams, scene, tank, volleys, now: Math.min(tNow, battle.t), hull: shown.h });
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   director.update(dt); xray.update();
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
