@@ -101,7 +101,7 @@
         delay = K.smokeBtn + this._crewAdd('handover', K.smokeBtn); cue = ['CDR', 'smoke']; text = 'You fire the smoke grenades.';
       } else if (k === 'engage') {
         const uid = o.uid == null ? null : +o.uid;
-        if (uid != null) { const kk = T.known.find(q => q.id === uid && !q.done), u = this.units.find(q => q.id === uid); if (!kk || !u || !u.alive) return no('That team has not been located, or is already out of the fight.'); text = `You order: gunner, engage ${u.spec.name} #${u.id + 1}.`; cue = ['GNR', 'identified']; }
+        if (uid != null) { const kk = T.known.find(q => q.id === uid && !q.done), u = this.units.find(q => q.id === uid); if (!kk || !u || !u.alive) return no('That team has not been located, or is already out of the fight.'); text = `You order: gunner, engage ${u.spec.name} #${u.id + 1}.`; }
         else text = 'You order: gunner, your own choice of target again.';
         rec.uid = uid; who = 'GNR'; delay = K.issue + K.gnr + this._crewAdd('lay', K.gnr);
       } else if (OPTIONS[k]) {
@@ -179,7 +179,7 @@
         ack('CDR', `Smoke grenades fired: the screen stands in ${K.smokeForm} s and lasts about ${K.smokeLast} s. ${C.smokes} salvo${C.smokes === 1 ? '' : 's'} left.`, null, this._volleyActive() ? 'missiles already in the air were aimed before the smoke: it counts for shots fired from now on' : 'enemy gunners lose the vehicle while it stands, and so does the crew: the guns cannot see out of it');
       } else if (k === 'engage') {
         C.target = o.uid; const u = o.uid == null ? null : this.units.find(q => q.id === o.uid);
-        ack('GNR', u ? `Gunner: ${u.spec.name} #${u.id + 1}, identified.` : 'Gunner: my own targets.', null, u ? 'he takes it before anything else while it is in view; out of view he fights what he can see' : null);
+        ack('GNR', u ? `Gunner: ${u.spec.name} #${u.id + 1}, identified.` : 'Gunner: my own targets.', u ? 'identified' : null, u ? 'he takes it before anything else while it is in view; out of view he fights what he can see' : null);
       } else {
         const v = o.v, was = C[k]; C[k] = v;
         if (k === 'hatch' && v === 'shut') { const cr = this._crewInit ? this._crewInit() : null; if (cr && cr.on && this._crewButton) this._crewButton(cr, 'your order'); }

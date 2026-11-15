@@ -19,14 +19,14 @@ const CSS = `
 #cmd[hidden] { display: none; }
 #cmd .c-say { pointer-events: none; padding: 3px 10px; border-radius: 6px; background: rgba(9, 13, 12, .72); color: #cfe9dc; text-shadow: 0 1px 2px #000; max-width: min(760px, calc(100vw - 32px)); text-align: center; }
 #cmd .c-say b { color: var(--accent); font-weight: 600; letter-spacing: .08em; margin-right: 6px; } #cmd .c-say.bad { color: #ffb4a8; } #cmd .c-say.arm { color: #ffe08a; } #cmd .c-say i { color: var(--dim); font-style: normal; margin-left: 6px; }
-#cmd .c-row { pointer-events: auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 5px 6px; background: rgba(9, 13, 12, .82); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; }
+#cmd .c-row { pointer-events: auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 5px 6px; max-width: min(100%, 1000px); box-sizing: border-box; background: rgba(9, 13, 12, .82); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; }
 #cmd .c-grp { display: flex; gap: 4px; align-items: center; padding-right: 7px; margin-right: 3px; border-right: 1px solid rgba(255, 255, 255, .14); } #cmd .c-grp:last-child { border-right: 0; padding-right: 0; margin-right: 0; }
 #cmd .c-tag { font: 10px var(--mono); letter-spacing: .12em; color: var(--accent); margin: 0 2px; }
 #cmd .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; font-size: 12.5px; color: #c6d2cb; white-space: nowrap; } #cmd .btn:hover { color: var(--fg); } #cmd .btn.on { color: var(--accent); } #cmd .btn.warn { color: #ffcf6b; } #cmd .btn.bad { color: #ff9d8f; } #cmd .btn[disabled] { opacity: .45; cursor: default; }
 #cmd kbd { font: 10px var(--mono); color: var(--dim); border: 1px solid rgba(255, 255, 255, .16); border-radius: 3px; padding: 0 3px; }
 #cmd .c-more { pointer-events: auto; width: min(1180px, 100%); box-sizing: border-box; padding: 8px 10px; background: rgba(9, 13, 12, .95); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 5px 10px; align-items: center; max-height: calc(100vh - 250px); overflow: auto; }
 @media (max-width: 1150px) { #cmd .c-more { grid-template-columns: max-content 1fr; width: min(720px, 100%); } }
-#cmd.onmap .c-row, #cmd.onmap .c-more { display: none; } #cmd.onmap { bottom: 62px !important; }
+#cmd.onmap .c-row, #cmd.onmap .c-more { display: none; }
 #cmd .c-more[hidden] { display: none; } #cmd .c-more label { color: var(--dim); font-size: 12px; } #cmd .c-more .seg { display: flex; flex-wrap: wrap; gap: 4px; } #cmd .c-more small { grid-column: 1 / -1; color: var(--dim); font-size: 11.5px; line-height: 1.35; }
 #cmdmenu { position: fixed; z-index: 30; min-width: 190px; padding: 4px; background: rgba(9, 13, 12, .96); border: 1px solid rgba(57, 217, 138, .4); border-radius: 8px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 #cmdmenu[hidden] { display: none; } #cmdmenu .btn { text-align: left; padding: 6px 9px; } #cmdmenu small { color: var(--dim); padding: 2px 9px 4px; font-size: 11.5px; } #cmdmenu .btn.bad { color: #ff9d8f; }
