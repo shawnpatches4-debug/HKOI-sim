@@ -43,7 +43,7 @@ export class VolleyView {
     return { line, geo, pos: geo.attributes.instanceStart.data, col: geo.attributes.instanceColorStart.data, dist: dashed ? geo.attributes.instanceDistanceStart.data : null, n: 0 };
   }
   _seg(L, a, b, c0, c1, k0, k1) {
-    if (L.n >= MAXBEAM * 2) return; const o = L.n * 6, P = L.pos.array, C = L.col.array;
+    if (L.n >= MAXBEAM * 2) return; const o = L.n * 6, P = L.pos.array, C = L.col.array, g = this.s.gain || 1; k0 *= g; k1 *= g;   /* the lines keep their strength under the day's lower exposure */
     P[o] = a.x; P[o + 1] = a.y; P[o + 2] = a.z; P[o + 3] = b.x; P[o + 4] = b.y; P[o + 5] = b.z;
     C[o] = c0[0] * k0; C[o + 1] = c0[1] * k0; C[o + 2] = c0[2] * k0; C[o + 3] = c1[0] * k1; C[o + 4] = c1[1] * k1; C[o + 5] = c1[2] * k1;
     if (L.dist) { L.dist.array[L.n * 2] = 0; L.dist.array[L.n * 2 + 1] = a.distanceTo(b); }
@@ -117,7 +117,7 @@ export class VolleyView {
     for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear();
     this.fx.clear(); this.cloud.clear(); this.lastT = t; if (!v) return;
     const tv = t - v.t0, rec = v.rec; this._first(v);
-    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
+    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); if (!B.tank.fate) this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
     for (const b of rec.bursts) { if (b.idx < 0) continue; const th = rec.threats[b.idx], l = this._l(v, th, b.idx); if (!l) continue;
       for (const r of b.rounds || []) { const tb = r.t_burst != null ? r.t_burst : r.t_pass, rk = v.i + ':' + b.idx + ':' + r.t_fire; if (tv >= r.t_fire) this.seen.add(rk + 'm'); if (tv >= tb) { this.seen.add(rk); if (b.kind === 'obs') this._bloom(v, b, th, l, r, true); } } }
     for (const a of rec.aps || []) if (tv >= a.t) this.seen.add(v.i + ':aps:' + a.t);
@@ -137,7 +137,7 @@ export class VolleyView {
     if (!quiet) { this.fx.seed(v.i * 97 + b.idx * 13 + r.t_fire); this.fx.cloudPop(pt.x, pt.y, pt.z); }
     if (!p) return;   /* a fuze that went off with no puff in the engine's list: the pop only */
     const wa = p.wa || 0, wc = b.wind_cross || 0, ve = this._ae * wa + this._an * wc, vn = this._an * wa - this._ae * wc;
-    this.cloud.add({ id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });
+    this.cloud.add({ id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, m: p.m, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });   /* m: the round's payload as the engine used it (g) */
   }
   // the engine's own measure of how much of the line the cloud is blocking for threat th at volley time tv: 0 clear, 1 = lock lost
   _block(rec, th, tv) {
@@ -170,7 +170,7 @@ export class VolleyView {
           if (!drone && tv - th.t0 < 1.5) {   /* the launch: flame and smoke out of the back, dust, a flash that marks the position */
             const p = this._launcher(v, th, l, this.tmp), T0 = B.tankAt(v.t0 + th.t0), dx = T0.e - l.u0.e, dn = T0.n - l.u0.n, dd = Math.hypot(dx, dn) || 1;
             fx.seed(v.i * 53 + th.idx * 7 + 1); fx.backblast(p.x, p.y, p.z, dx / dd, -dn / dd, rpg ? 0.75 : 1.4); fx.dustRing(p.x, p.y - 1.2, p.z, rpg ? 0.4 : 0.8, 5);
-            this.emit('launch', p, { big: !rpg }); s.blast(p, 0.3, false);
+            this.emit('launch', p, { big: !rpg, key: th.key }); s.blast(p, 0.3, false);
           }
         }
         const p = this.pos(v, th, l, tv, this.tmp), p2 = this.pos(v, th, l, tv + 0.05, this.tmp2), m = st.mesh; m.position.copy(p); m.lookAt(p2);
@@ -180,7 +180,7 @@ export class VolleyView {
         if (U.glow) { U.glow.visible = burning; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
-          const spacing = (drone ? 7 : rpg ? 1.8 : th.v > 320 ? 3 : 2.3) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
+          const spacing = (drone ? 7 : rpg ? 1.4 : th.v > 320 ? 2.1 : 1.6) / Math.max(0.35, fx.q)   /* close enough that the puffs join into one trail instead of a string of beads */, step = spacing / Math.max(10, th.v); let guard = 0;
           if (st.next < tv - 1.2) st.next = tv - 1.2;
           while (st.next <= tv && guard++ < 160) { const q = this.pos(v, th, l, st.next, this.tmp3);
             if (drone) fx.puff(q.x, q.y, q.z, 0, 0, 0, 1.6, 0.25, 0.9, 0.5, 0.52, 0.55, 0.1, 1, 0);
@@ -208,7 +208,7 @@ export class VolleyView {
         else if (end.type === 'hit') {
           const hp = s.at(T.e + this._ae * 2.4, T.n + this._an * 2.4, 1.7, this.tmp2), k = end.killing ? 1.6 : 1;
           fx.vehicleHit(hp.x, hp.y, hp.z, -this._ae, this._an, k); fx.dustRing(hp.x, hp.y - 1.6, hp.z, 1.2, 12);
-          this.emit('hit', hp, { killing: !!end.killing }); s.blast(hp, end.killing ? 2 : 1.2, false);
+          this.emit('hit', hp, { killing: !!end.killing, key: th.key }); s.blast(hp, end.killing ? 2 : 1.2, false);
           if (end.killing) this._kill(T, t);
         } else if (end.type === 'ground') {
           p.y = W.h(p.x, -p.z) + 0.3; fx.explosion(p.x, p.y, p.z, 0.9, { surface: this._surf(p.x, p.z) }); this.emit('explosion', p, { size: 0.9 }); s.blast(p, 0.9); s.marks.add(p.x, p.z, 1.5, (x, z) => W.h(x, -z), { kind: MARK.CRATER });
@@ -264,7 +264,7 @@ export class VolleyView {
 
   // the vehicle is destroyed: fire that stays, a black column, and ammunition going up over the next few seconds
   _kill(T, t) {
-    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); fx.fire(p.x, p.y, p.z, 1e9, 1.2);
+    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); if (!this.b.tank.fate) fx.fire(p.x, p.y, p.z, 1e9, 1.2);   /* with a fate, src/render/tankfate.js draws what burns and how */
     [0.9, 2.2, 3.9].forEach((d, i) => { const dd = d + hash(T.e + i) * 0.6; this.later.push({ t: t + dd, fn: () => { fx.seed(T.e + i * 3); fx.secondary(p.x, p.y + 0.6, p.z, 1 - i * 0.15); s.blast(p, 1.4 - i * 0.2, false); this.emit('explosion', p, { size: 1.2 }); } }); });
   }
   // missiles that missed: they carry on along their last heading, sink, and burst where they meet the ground

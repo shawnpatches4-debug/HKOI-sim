@@ -69,14 +69,48 @@ export const FINISHES = {
 };
 export function setFinish(biome, cond) { const f = FINISHES[cond === 'snow' ? 'winter' : cond === 'rain' ? 'mud' : biome === 'desert' ? 'desert' : 'temperate']; FINISH.tint.value.set(f.tint); FINISH.amt.value = f.amt; FINISH.dirt.value.set(f.dirt); FINISH.dirtAmt.value = f.dirtAmt; }
 // Apply to a vehicle material (after weatherise, which supplies the world position and the noise it uses).
+// The surface of a vehicle in service, worked out in the shader from where each point is on the hull (so it stays put when the
+// vehicle moves) and which way it faces. No picture files. On top of the repaint and the mud that climbs from the tracks:
+//   grime      the paint is mottled, never one even tone
+//   run-off    dark and dusty streaks down upright plates
+//   dust       gathered on flat tops (roof, engine deck, fenders), which also go matt
+//   chips      paint knocked off along sharp edges, showing dull primer and a little bare metal that catches the light
+//   shade      the running gear and the underside sit in the hull's own shade
+//   sheen      the paint is given a real, uneven gloss and a fine cast-steel relief, so the roof and sloped plates pick up the sky
+// All strengths are assumed, by eye against photographs of vehicles in the field.
 export function vehicleFinish(mat) {
   weatherise(mat, 0.7); const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => { prev(sh, r); sh.uniforms.uFTint = FINISH.tint; sh.uniforms.uFAmt = FINISH.amt; sh.uniforms.uFDirt = FINISH.dirt; sh.uniforms.uFDirtAmt = FINISH.dirtAmt; sh.uniforms.uFGround = FINISH.ground;
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uFTint; uniform float uFAmt; uniform vec3 uFDirt; uniform float uFDirtAmt; uniform float uFGround;').replace('#include <map_fragment>', `#include <map_fragment>
-      { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * smoothstep(0.02, 0.09, l));   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
-        float low = 1.0 - smoothstep(0.15, 1.9, vWp.y - uFGround), n = hkw_n(vWp.xz * 2.7) * 0.6 + hkw_n(vWp.xz * 9.0) * 0.4;
-        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93)); }`); };
-  mat.customProgramCacheKey = () => 'hkfinish'; return mat;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvOp = transformed * length(modelMatrix[0].xyz);');   /* the point on the part itself, in metres */
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vOp; uniform vec3 uFTint; uniform float uFAmt; uniform vec3 uFDirt; uniform float uFDirtAmt; uniform float uFGround; float hkvDust = 0.0, hkvChip = 0.0, hkvBump = 0.5, hkvWet = 0.0;').replace('#include <map_fragment>', `#include <map_fragment>
+      { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), paintable = smoothstep(0.02, 0.09, l); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * paintable);   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
+        vec3 gn = normalize(cross(dFdx(vWp), dFdy(vWp))), pm = vOp;
+        float nA = hkw_n(pm.xz * 3.1 + pm.y * vec2(2.2, 1.6)), nB = hkw_n(pm.xz * 11.0 + pm.y * vec2(7.8, 5.9) + 4.0), nC = hkw_n(pm.xz * 37.0 + pm.y * vec2(26.0, 19.0) + 9.0);
+        float nL = hkw_n(pm.xz * 0.85 + pm.y * vec2(0.6, 0.45) + 2.0);   /* broad patches, a metre and more across: what still shows from 30 m */
+        diffuseColor.rgb *= mix(1.0, (0.7 + 0.55 * (nA * 0.5 + nB * 0.32 + nC * 0.18)) * (0.74 + 0.52 * nL), paintable);                      /* grime */
+        float upright = 1.0 - smoothstep(0.25, 0.7, abs(gn.y));
+        float run = upright * smoothstep(0.52, 0.82, hkw_n(vec2((pm.x + pm.z * 0.8) * 13.0, pm.y * 0.9))) * (0.45 + 0.55 * nA);
+        run = max(run, upright * smoothstep(0.5, 0.8, hkw_n(vec2((pm.x + pm.z * 0.8) * 3.6 + 7.0, pm.y * 0.5))) * 0.8);                       /* and broad stains, for the same reason */
+        diffuseColor.rgb *= 1.0 - 0.5 * run * paintable;                                                                                       /* dark run-off */
+        float pale = upright * smoothstep(0.58, 0.9, hkw_n(vec2((pm.x * 0.8 - pm.z) * 9.0 + 31.0, pm.y * 0.6)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.9 + 0.3 * nB), pale * 0.32);                                                      /* dusty streaks */
+        hkvDust = smoothstep(0.6, 0.92, gn.y) * smoothstep(0.28, 0.72, nA * 0.6 + nB * 0.4) * (0.3 + 0.55 * uFDirtAmt);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.85 + 0.3 * nC), hkvDust);                                                         /* dust on flat tops */
+        float low = 1.0 - smoothstep(0.15, 1.9, vWp.y - uFGround), n = nA * 0.6 + nB * 0.4;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93));  /* mud and dust thrown up by the tracks */
+        #ifndef FLAT_SHADED
+          { float curv = length(fwidth(normalize(vNormal))) / max(length(fwidth(vWp)), 1e-5);
+            hkvChip = smoothstep(16.0, 45.0, curv) * smoothstep(0.4, 0.62, nC * 0.6 + nB * 0.4) * paintable;   /* only real corners (a bend tighter than about 5 cm), not round barrels and wheels */
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.285, 0.25) * (0.7 + 0.6 * nB), hkvChip * 0.8); }                              /* chipped edges */
+        #endif
+        diffuseColor.rgb *= 1.0 - 0.5 * (1.0 - smoothstep(0.1, 1.25, vWp.y - uFGround)) * (1.0 - smoothstep(-0.2, 0.6, gn.y));                 /* the running gear in the hull's shade */
+        hkvBump = nB * 0.55 + nC * 0.45; hkvWet = paintable; }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = clamp(mix(roughnessFactor, 0.56, 0.5 * hkvWet) * (0.8 + 0.4 * hkvBump) + hkvDust * 0.35 - hkvChip * 0.22, 0.06, 1.0);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      { vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition), r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
+        vec3 g = sign(det) * (dFdx(hkvBump) * r1 + dFdy(hkvBump) * r2); normal = normalize(abs(det) * normal - g * 0.0035); }`); };
+  mat.customProgramCacheKey = () => 'hkfinish2'; return mat;
 }
 
 // Falling rain or snow: short streaks in a box that travels with the camera, wrapped in the shader so nothing is updated on the CPU.
@@ -100,16 +134,18 @@ export class Precipitation {
 
 // The last pass: contrast, colour balance, vignette and film grain for a filmed look. All mild; set per condition.
 export const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 }, px: { value: new THREE.Vector2(1 / 1280, 1 / 720) }, sharp: { value: 0 }, fringe: { value: 0 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
+  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 }, px: { value: new THREE.Vector2(1 / 1280, 1 / 720) }, sharp: { value: 0 }, fringe: { value: 0 }, olive: { value: 0.3 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; uniform vec2 px; uniform float sharp; uniform float fringe; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; uniform vec2 px; uniform float sharp; uniform float fringe; uniform float olive; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
       /* a lens, not a perfect window: a touch of crispness on fine detail, and the faintest colour fringe towards the corners */
       if (sharp > 0.0) { vec3 around = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb; c = max(c + (c - around * 0.25) * sharp, 0.0); }
       if (fringe > 0.0 && thermal == 0.0) { vec2 off = (vUv - 0.5) * dot(vUv - 0.5, vUv - 0.5) * fringe; c.r = mix(c.r, texture2D(tDiffuse, vUv - off).r, 0.7); c.b = mix(c.b, texture2D(tDiffuse, vUv + off).b, 0.7); }
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      c = mix(vec3(l), c, sat); c = (c - 0.5) * contrast + 0.5; c *= mix(shadowTint, tint, smoothstep(0.0, 0.6, l));
+      /* film stock holds greens back: leaves and grass go towards olive instead of the bright yellow-green of a screen */
+      { float gn = clamp((c.g - max(c.r, c.b)) * 5.0, 0.0, 1.0); c = mix(c, vec3(l) * vec3(1.03, 1.0, 0.84), gn * olive); }
+      c = mix(vec3(l), c, mix(sat, max(sat, 1.0), smoothstep(0.55, 0.95, max(c.r, max(c.g, c.b)))));   /* a muted grade (night, rain) must not bleach what glows: flame stays orange, tracers keep their colour */ c = (c - 0.5) * contrast + 0.5; c *= mix(shadowTint, tint, smoothstep(0.0, 0.6, l));
       vec2 q = vUv - 0.5; c *= 1.0 - vignette * dot(q, q) * 1.6;
       // thermal imager: brightness only, stretched, with the coarse grain and faint line structure of an imager; white or black for hot
       if (thermal != 0.0) { float t = clamp(0.1 + l * 0.75 + smoothstep(0.5, 0.9, l) * 0.5, 0.0, 1.0);   /* the ground and trees stay grey; only what glows (crews, vehicles, fire) goes to white */ if (thermal < 0.0) t = 1.0 - t; t += (h(floor(vUv * vec2(640.0, 360.0)) + fract(time) * 19.0) - 0.5) * 0.07; t *= 0.96 + 0.04 * sin(vUv.y * 720.0 * 3.14159); c = vec3(t) * vec3(0.93, 1.0, 0.94); }
