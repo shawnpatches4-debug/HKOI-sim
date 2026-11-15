@@ -5,7 +5,7 @@ const hash = (i, j, s) => { let h = (i * 374761393 + j * 668265263 + s * 2147483
 const INK = { open: [226, 224, 204], field: [[232, 226, 190], [222, 228, 196], [236, 222, 184]], plough: [214, 200, 178], wood: [168, 200, 150], scrub: [204, 214, 176], built: [200, 196, 190], contour: [150, 110, 70], water: [150, 190, 220] };
 
 export class MapView {
-  constructor(canvas) { this.cv = canvas; this.x = canvas.getContext('2d'); this.scale = 0; this.cx = 0; this.cn = 0; this.shed = null; this.shedKey = ''; this.onPick = null; this.pickMode = false; this._wire(); this.cdr = new CommanderView(this);   /* the enemy commander's own picture (cdrview.js): its button, its list and its drawing */ }
+  constructor(canvas) { this.cv = canvas; this.x = canvas.getContext('2d'); this.scale = 0; this.cx = 0; this.cn = 0; this.shed = null; this.shedKey = ''; this.onPick = null; this.onClick = null; this.overlay = null; this.pickMode = false; this._wire(); this.cdr = new CommanderView(this);   /* the enemy commander's own picture (cdrview.js): its button, its list and its drawing */ }
   setWorld(world) { this.cdr.seenAt = 0;   /* the map is being opened: the commander view may close in on his forces again */ if (this.world === world) return; this.world = world; this.base = this._bake(world); this.shed = null; this.shedKey = ''; this.fit(); }
   fit() { const r = this.cv.getBoundingClientRect(); this.scale = Math.min(r.width, r.height) / this.world.size * 0.98; this.cx = 0; this.cn = 0; }
   // one pixel per ~4 m: land cover, hill shading from the north-west, a contour every 10 m with every fifth one heavier
@@ -47,6 +47,7 @@ export class MapView {
     const dot = (e, n, col, rad, label, ring) => { const [a, b] = this.toScreen(e, n); x.beginPath(); x.arc(a, b, rad * dpr, 0, 6.283); if (ring) { x.strokeStyle = col; x.lineWidth = 2 * dpr; x.setLineDash([4 * dpr, 3 * dpr]); x.stroke(); x.setLineDash([]); } else { x.fillStyle = col; x.fill(); x.strokeStyle = '#000'; x.lineWidth = 1.2 * dpr; x.stroke(); } if (label) { x.font = `${600} ${11 * dpr}px ui-monospace, Menlo, monospace`; const tw = x.measureText(label).width; x.fillStyle = 'rgba(0,0,0,.7)'; x.fillRect(a + 9 * dpr, b - 8 * dpr, tw + 8 * dpr, 16 * dpr); x.fillStyle = col; x.fillText(label, a + 13 * dpr, b + 4 * dpr); } };
     for (const u of st.units || []) { if (!u.alive) continue; if (u.known) dot(u.e, u.n, '#ff5a4d', 6, u.name); else if (st.showAll) dot(u.e, u.n, '#ff9d8f', 6, `${u.name} · ${u.state}`, true); }
     for (const m of st.missiles || []) dot(m.e, m.n, '#ffb347', 3.5);
+    if (this.overlay) this.overlay(x, dpr, st);   /* command.js: the player's order and its route */
     if (st.tank) { const T = st.tank, [a, b] = this.toScreen(T.e, T.n), h = T.h * Math.PI / 180; x.save(); x.translate(a, b); x.rotate(h); x.fillStyle = '#39d98a'; x.strokeStyle = '#03130b'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(7 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-7 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore(); }
     this._scale(x, k, dpr);
   }
@@ -57,6 +58,8 @@ export class MapView {
     cv.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(), dpr = cv.width / r.width, sx = (e.clientX - r.left) * dpr, sy = (e.clientY - r.top) * dpr, [we, wn] = this.toWorld(sx, sy), f = Math.exp(-e.deltaY * 0.0015); this.scale = Math.max(0.02, Math.min(3, this.scale * f)); this.k = this.scale * dpr; const [we2, wn2] = this.toWorld(sx, sy); this.cx += we - we2; this.cn += wn - wn2; }, { passive: false });
     cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; moved = 0; cv.setPointerCapture(e.pointerId); });
     cv.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; moved += Math.abs(dx) + Math.abs(dy); this.cx -= dx / this.scale; this.cn += dy / this.scale; drag = { x: e.clientX, y: e.clientY }; });
-    cv.addEventListener('pointerup', e => { if (drag && moved < 5 && this.pickMode && this.onPick) { const r = cv.getBoundingClientRect(), dpr = cv.width / r.width, [we, wn] = this.toWorld((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr); this.onPick(we, wn); } drag = null; });
+    cv.addEventListener('pointerup', e => { if (drag && moved < 5 && this.pickMode && this.onPick) { const r = cv.getBoundingClientRect(), dpr = cv.width / r.width, [we, wn] = this.toWorld((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr); this.onPick(we, wn); }
+      if (drag && moved < 5 && !this.pickMode && this.onClick && e.button === 0) { const r = cv.getBoundingClientRect(), dpr = cv.width / r.width, [we, wn] = this.toWorld((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr); this.onClick(we, wn, e); }   /* command.js: an order at the place clicked */
+      drag = null; });
   }
 }

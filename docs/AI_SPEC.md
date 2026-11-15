@@ -218,3 +218,44 @@ Measured, the same hit (Konkurs, hull side front, fuel cell, fire; nobody wounde
 | Green | already 0.88 to 1.00 (panicked) | 1.00 all four | 0.96 | 0.60 to 0.67 (shaken) | 1.00 all four |
 A hole without a fire (an RPG through the hull rear, nobody hurt), veteran: 0.18 before, 0.55 to 0.70 one second after (strained,
 the loader shaken), back to steady after about 30 s. A hit the armour held (turret front), veteran: +0.07 to +0.08 (a jolt).
+
+## The player commands (15 Nov 2026; src/battle/orders.js, src/app/command.js, tests/battle/orders.js)
+Setup choice "Who commands": the crew (you watch; every battle exactly as before) or you. With "you" the crew still runs every drill
+(the gunner lays and fires, the loader loads, HKOI and Trophy work by themselves) and the decisions of "The tank" above come from the
+player: the vehicle moves only when ordered, and it does not break contact by itself (the gunner reports low protection once).
+
+Orders: move to a point (the driver's own route search, which keeps out of the located enemy's view where the ground allows), halt,
+back to cover (nearest ground within 220 m that hides the hull from the known firing points; reversed if it is behind and within 150 m),
+face the hull to a bearing (or back to "front to the main threat", the crew's drill), break contact, smoke, hatches open or kept shut,
+engage a located team first, target order (most dangerous / missile teams / vehicles / nearest first), main gun fire at will or hold,
+next round (gunner's choice / sabot / multi-purpose: matters only with enemy vehicles about), machine guns free or hold, HKOI mode
+(automatic / obscurant only / airburst only / hold), and two standing instructions for the moment a missile warning comes: what the
+driver does (crew's judgement / hold still for HKOI / make for cover) and whether smoke goes (crew's judgement / at once / only on my order).
+
+What is honest about it, and what is a limit of the model:
+- Every order waits the time to say it plus the crewman's reaction, and the crew stress model (crew.js) stretches that: 1.0 s to say an
+  order (A); driver 1.6 s (the same as his reaction to a warning), 0.8 s to halt or turn (A); gunner 1.0 s (A); "cease fire" is obeyed
+  as it is heard; machine guns 0.5 s (A); the commander's own switches (HKOI mode, standing instructions) 1.0 s (A); smoke button 0.5 s (A);
+  hatches 1.5 s (A). A frozen commander passes nothing on until he comes back; with the driver down the vehicle cannot be moved.
+- An engagement is decided by the engine the moment the enemy fires, with the vehicle's path fixed. So orders to the driver given while
+  missiles are in the air wait until the engagement is over, and smoke or an HKOI mode ordered then counts from the next enemy shot.
+  The player decides the engagement drill beforehand through the two standing instructions.
+- Fired on while moving on an order, the vehicle brakes to a halt along its heading at 4 m/s2 (it stops dead when the crew's own
+  move is caught; that older behaviour is unchanged when the crew commands). The move goes on afterwards unless the crew took cover,
+  in which case the order is dropped and said so.
+- Smoke: 2 salvos (A: two six-tube dischargers, one side at a time). The screen stands 3 s after the grenades and lasts 25 s (the
+  engine's own figures). A guided missile arriving while it stands misses 75% of the time, but only if the vehicle has moved more than
+  its half width plus a metre across the line of fire since it vanished (the engine's rule for the crew's smoke); a rocket launched
+  after it stands cannot be aimed; drones are not affected. Inside its own smoke the crew's guns see nothing either. NOT modelled:
+  HKOI's camera losing the missile behind the player's smoke (the engine does this for the crew's own smoke), and enemy teams holding
+  their fire because they cannot see the vehicle. When the crew commands, the engine's unlimited crew smoke is as before: so the
+  salvo limit applies only to the player. Measured (tests/battle/orders.js, twelve battles against ten expert teams): "smoke at once"
+  with "make for cover" fired 20 salvos and 18 rockets were lost in the smoke, no missiles.
+- HKOI on hold is switched off for the engagement in the engine; "obscurant only" and "airburst only" give the engine an empty
+  magazine of the other kind for that engagement (the rounds are not lost).
+- Hatches kept shut: the loader stays inside and loads, the commander's all-round scan is cut as in crew.js.
+- Debrief: a separate mark out of 20 for decisions (src/battle/ladder.js decide()), never added to the 100: 8 for the share of contact
+  time with the hull out of every located team's view, 6 for the share of missiles and rockets that came from within 45 degrees of the
+  hull front, 6 for the share of main gun rounds at teams that knocked their target out. It judges by results, so luck is in it.
+- Replays: every order is kept as { t, k, ... }; the same seed and the same list give the same battle (node test), and replay codes
+  carry the list as "cmd" (codes without it load as before).

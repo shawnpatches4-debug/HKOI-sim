@@ -136,7 +136,7 @@ async def main():
           out.sliders = R.length; out.ticks = C.length; if (R[2]) { R[2].value = 40; R[2].oninput(); } if (C[0]) { C[0].checked = true; C[0].onchange(); }
           out.effects = s.mix.group.effects; out.night = s.mix.night; out.stored = JSON.parse(localStorage.getItem('hkoi.snd') || '{}');
           if (R[2]) { R[2].value = 100; R[2].oninput(); } if (C[0]) { C[0].checked = false; C[0].onchange(); } out.back = [s.mix.group.effects, s.mix.night];
-          const on0 = s.on; window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyX', key: 'x' })); out.muted = s.on !== on0; window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyX', key: 'x' })); out.unmuted = s.on === on0;
+          const on0 = s.on; window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyU', key: 'u' })); out.muted = s.on !== on0; window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyU', key: 'u' })); out.unmuted = s.on === on0;
           if (b) { const b2 = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Mix'); if (b2) b2.click(); } out.closed = !P || P.style.display === 'none';
           out.unknown = s.unknown; } catch (e) { out.err = String(e.stack || e); } return out; })())"""))
         print('5b. sound menu:', json.dumps(m))
