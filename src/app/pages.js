@@ -152,9 +152,9 @@ export function initPages(ctx) {
         await new Promise(r => setTimeout(r, 60)); if (halt) return;
         const run = Study.raidStart(deps.HK, deps.HK.defaultConfig(), { preset: 'old' }, n), t0 = performance.now();
         /* raids are fought in short slices between frames. A slice is 12 ms while the page is drawing fast, so the picture and the buttons stay
-           smooth; where frames are slow (seconds apart in a software-drawn browser) it grows to as much as 0.4 s, or the run would crawl. */
+           smooth; where frames are slow (seconds apart in a software-drawn browser) it grows to as much as 1.5 s, or the run would crawl. */
         let done = false, lastEnd = performance.now();
-        while (!halt && !done) { const begin = performance.now(), budget = Math.min(400, Math.max(12, (begin - lastEnd) * 0.5));
+        while (!halt && !done) { const begin = performance.now(), budget = Math.min(1500, Math.max(12, (begin - lastEnd) * 0.8));
           do { done = Study.raidStep(deps.HK, run, 1); } while (!done && performance.now() - begin < budget);
           lastEnd = performance.now(); fill.style.width = (100 * run.i / n).toFixed(1) + '%'; status.textContent = `Raid ${run.i} of ${n}, each fought four times`; if (!done) await wait(); }
         if (halt || !run.i) return; fill.style.width = '100%';

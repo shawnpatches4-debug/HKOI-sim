@@ -408,7 +408,7 @@ class Briefing {
       else if (this.phase === 'run' && !A.playing && this.frames > 2 && this.rateTag.textContent !== 'PAUSED') { /* the page stopped the clock itself (end of the replay) */ this.phase = 'hold'; this._rate(); }
       this.frames++;
       A.director.film(this.shot, t);
-      this._lift(A.cams.mode === 'free' ? Math.round((this.cardH || 150) * 0.42) : 0);
+      this._lift(A.cams.mode === 'free' && this.shot.rig !== 'cloud' ? Math.round((this.cardH || 150) * 0.42) : 0);   /* (the side view of the guidance line looks up at it from the ground: it already sits high in the picture) */
       this._draw(st, t);
     } catch (e) { this._fail(e); }
   }
