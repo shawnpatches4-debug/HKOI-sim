@@ -227,7 +227,7 @@ export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map ==
 // The page
 const CSS = `
   body.tour-on #status, body.tour-on #sline, body.tour-on #gauges, body.tour-on #warn, body.tour-on #facerow, body.tour-on #threats, body.tour-on #engleft, body.tour-on #engright,
-  body.tour-on #logov, body.tour-on #strip, body.tour-on #dock, body.tour-on #hud, body.tour-on #marks, body.tour-on #units, body.tour-on #xr, body.tour-on #dir-tag, body.tour-on #title, body.tour-on #result { display: none !important; }
+  body.tour-on #logov, body.tour-on #strip, body.tour-on #dock, body.tour-on #hud, body.tour-on #marks, body.tour-on #units, body.tour-on #xr, body.tour-on #dir-tag, body.tour-on #title, body.tour-on #result, body.tour-on #cmd, body.tour-on #cmdmenu { display: none !important; }
   #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(14px, .95vw, 21px); }   /* everything in the briefing is sized in em from this: 14 px on a small window, about 18 px at 1920 wide */
   #tour svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   #tour .tl { position: absolute; left: 0; top: 0; padding: .28em .6em .32em; border-radius: 5px; background: rgba(5, 9, 8, .86); border: 1px solid rgba(255, 255, 255, .5); color: #fff; font-weight: 650; font-size: 1em; line-height: 1.2; white-space: nowrap; will-change: transform; text-shadow: 0 1px 2px #000; }

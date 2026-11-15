@@ -7,7 +7,7 @@
 //
 // This file has two parts: the list and its checking (no page needed: the node test loads it), and the page itself (ScenarioPage).
 
-// Every scenario: mission 'hold', the vehicle's own crew trained with stress on, armour option off, daylight.
+// Every scenario: mission 'hold', the vehicle's own crew trained with stress on and fighting by itself (no player orders), armour option off, daylight.
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
 const n2 = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const w = n => (n >= 0 && n < n2.length ? n2[n] : String(n)), W = n => w(n).charAt(0).toUpperCase() + w(n).slice(1), pl = (n, one, many) => (n === 1 ? one : many || one + 's');
@@ -136,7 +136,7 @@ export class ScenarioPage {
     }
     c.append(g);
     const foot = el('div', 'sc-foot'), back = el('button', 'btn primary', 'Back'); back.onclick = () => { this.close(); this.app.back(); };
-    foot.append(back, el('span', null, 'Each scenario sets the battle up for you (your own crew trained, crew stress on, daylight) and replaces the setup on the title screen. A scenario is one battle: for what happens over thousands, use Run the numbers.'));
+    foot.append(back, el('span', null, 'Each scenario sets the battle up for you (your own crew trained and fighting by itself, crew stress on, daylight) and replaces the setup on the title screen. A scenario is one battle: for what happens over thousands, use Run the numbers.'));
     c.append(foot); this.s.hidden = false; this.s.scrollTop = 0; c.scrollTop = 0;
   }
   close() { this.s.hidden = true; }
