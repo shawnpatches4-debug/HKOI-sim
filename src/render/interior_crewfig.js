@@ -72,9 +72,9 @@ function woundable(mat) {
   mat.vertexShader = vs.replace(a1, a1 + ' varying vec3 vBind;').replace(a2, a2 + ' vBind = position;');
   mat.fragmentShader = `uniform vec4 uW[${NW}]; uniform vec4 uWk[${NW}]; uniform vec3 uWUp; uniform float uBurn; uniform float uSoot; varying vec3 vBind;\n` + fs.replace(a3, a3 + `
       { float n1 = texture2D(uBloodT, vUv * 4.0).a; float n2 = texture2D(uBloodT, vUv * 9.0 + 0.37).a;
-        for (int i = 0; i < ${NW}; i++) { float R = uW[i].w; if (R <= 0.0) continue; vec3 dv = vBind - uW[i].xyz; float hgt = dot(dv, uWUp); if (hgt < 0.0) dv -= uWUp * hgt * 0.5; float d = length(dv); float k = uWk[i].x;
+        for (int i = 0; i < ${NW}; i++) { float R = uW[i].w; if (R <= 0.0) continue; vec3 dv = vBind - uW[i].xyz; float hgt = dot(dv, uWUp); if (hgt < 0.0) dv -= uWUp * hgt * 0.72; float d = length(dv); float k = uWk[i].x;
           if (k > 1.5 && k < 2.5) { float b = smoothstep(R, R * 0.3, d + (n1 - 0.5) * R * 0.8) * uWk[i].z; alb = mix(alb, mix(vec3(0.11, 0.05, 0.03), vec3(0.02, 0.016, 0.013), n2), b); }
-          else { float soak = smoothstep(R, R * 0.45, d + (n1 - 0.5) * R * 0.5); alb = mix(alb, vec3(0.21, 0.012, 0.012) * (0.55 + 0.45 * n2), soak * 0.95);
+          else { float soak = smoothstep(R, R * 0.45, d + (n1 - 0.5) * R * 0.5); alb = mix(alb, vec3(0.12, 0.006, 0.006) * (0.5 + 0.5 * n2), soak * 0.92);
             float c = uWk[i].y; float core = smoothstep(c, c * 0.5, d + (n2 - 0.5) * c * 0.6); alb = mix(alb, k > 0.5 ? vec3(0.03, 0.008, 0.008) : vec3(0.075, 0.004, 0.004), core); } }
         alb = mix(alb, vec3(0.022, 0.018, 0.015) + vec3(0.5, 0.09, 0.0) * step(0.93, n2) * step(0.5, uBurn), uBurn * smoothstep(0.1, 0.75, n1 * 0.6 + uBurn * 0.75));
         alb *= 1.0 - uSoot * (0.3 + 0.45 * n2); }`);
@@ -82,15 +82,15 @@ function woundable(mat) {
   mat.needsUpdate = true; return true;
 }
 // what each kind of wound looks like on the body: [core radius, how far the blood soaks at the end, seconds to soak that far]
-const WOUND = { frag: [0.022, 0.1, 50], trauma: [0.085, 0.3, 14], sever: [0.06, 0.2, 10], burn: [0, 0.13, 1] };
+const WOUND = { frag: [0.022, 0.065, 50], trauma: [0.085, 0.17, 14], sever: [0.06, 0.13, 10], burn: [0, 0.13, 1] };   /* soaks kept to the wound and what runs down from it, so the uniform's own pattern shows between them */
 const PART_UP = { head: 0.07, chest: 0.06, belly: 0.03 }, PART_R = { head: 0.085, chest: 0.13, belly: 0.12, armL: 0.05, armR: 0.05, foreL: 0.04, foreR: 0.04, thighL: 0.075, thighR: 0.075, shinL: 0.05, shinR: 0.05 };
 const CHILD = { LeftArm: 'LeftForeArm', RightArm: 'RightForeArm', LeftForeArm: 'LeftHand', RightForeArm: 'RightHand', LeftUpLeg: 'LeftLeg', RightUpLeg: 'RightLeg', LeftLeg: 'LeftFoot', RightLeg: 'RightFoot' };
 const SEVER_AT = { foreL: 'LeftForeArm', foreR: 'RightForeArm', shinL: 'LeftLeg', shinR: 'RightLeg' };
 // ways of lying, in the man's own terms: tip (forward lean), roll (per unit of side), nod, look (per unit of side), where the head goes [to the side, up, forward] (m), limbs
 const LIE = {
-  over: { tip: 0.95, roll: 0.1, nod: 0.75, look: 0.35, head: [0.02, -0.2, 0.14], upper: [0.16, -0.9, 0.42], fore: [0.05, -1, 0.25] },
-  side: { tip: 0.15, roll: 0.55, nod: 0.45, look: -0.55, head: [0.26, -0.24, 0], upper: [0.2, -1, 0.1], fore: [0.1, -0.9, 0.4] },
-  slid: { tip: -0.35, roll: 0.3, nod: -0.2, look: -0.3, head: [0.1, -0.42, 0.1], upper: [0.55, -0.7, 0.2], fore: [0.3, -0.9, 0.3], thigh: [0.36, -0.2, 1], shin: [0.05, -0.75, 0.65] },
+  over: { tip: 0.95, roll: 0.1, nod: 0.9, look: 0.35, head: [0.02, -0.2, 0.14], upper: [0.16, -0.9, 0.42], fore: [0.05, -1, 0.25] },
+  side: { tip: 0.2, roll: 0.6, nod: 0.75, look: -0.55, head: [0.26, -0.24, 0], upper: [0.2, -1, 0.1], fore: [0.1, -0.9, 0.4] },
+  slid: { tip: -0.35, roll: 0.35, nod: 0.6, look: -0.3, head: [0.1, -0.42, 0.1], upper: [0.55, -0.7, 0.2], fore: [0.3, -0.9, 0.3], thigh: [0.36, -0.2, 1], shin: [0.05, -0.75, 0.65] },
   back: { tip: -0.3, roll: 0.15, nod: -0.5, look: -0.25, head: [0, -0.12, -0.1], upper: [0.22, -1, 0.05], fore: [0.1, -1, 0.2] },
   lie: { tip: 0.08, roll: 0.25, nod: 0.4, look: -0.5, head: [0.05, -0.04, 0], upper: [0.25, -0.6, 0.4], fore: [0.1, -0.9, 0.3] },   /* the driver, already lying back: his head rolls to one side */
 };
