@@ -1,3 +1,6 @@
+# STATE 15 Nov 2026, about 14:00 UTC: VERSION 1.0 BUILT, being checked for publishing
+All seven 1.0 workstreams are merged on claude/loving-newton-czylil (see the WORKLOG entry of 14:00 UTC for what each did and the known faults). Next: release page checks, publish to "HKOI Battlefield Beta", Notion entry. Open questions for Shawn: the HKOI station position (left rear corner, tall) vs "beside the CROWS"; a study of the obscurant's burst spacing; the cloud look; veterans' timed arrival; rocket teams in plain view; stand-off raid spread.
+
 # STATE 15 Nov 2026, about 02:45 UTC: VERSION 1.0 IN PROGRESS
 Live page: 0.90.3 (artifact version 35). Shawn's order of 15 Nov: "Make this sim 1000 times better. you call the shot ... night and day". The lead split it into six helper workstreams, each in its own git worktree (.claude/worktrees/, branch worktree-agent-<id>), all following scratchpad V1_COMMON.md (copy of the rules: one browser at a time through tools/run_test.sh, .cache never tracked, files added by name, no engine.js edits, before/after pictures):
 1. command: the player commands the tank (src/battle/orders.js, src/app/command.js, tankai.js, ladder.js).
