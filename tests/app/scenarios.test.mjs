@@ -5,12 +5,14 @@ import { createRequire } from 'module';
 import fs from 'fs';
 import { SCENARIOS, runToEnd, facts, mismatches, cardText } from '../../src/app/scenarios.js';
 const require = createRequire(import.meta.url);
-const { HK, World, Battle, EnemyVeh } = require('../battle/load.js');
+const { HK, World, Battle, EnemyVeh, Support } = require('../battle/load.js');
 const show = process.argv[2] === 'show';
 // the page's own list of enemy forces, read out of main.js so that this test and the page can never disagree about a force
 const mainSrc = fs.readFileSync(new URL('../../src/app/main.js', import.meta.url), 'utf8'), fm = mainSrc.match(/const FORCES = \{[\s\S]*?\n\};/);
 if (!fm) { console.log('FAIL cannot find FORCES in src/app/main.js'); process.exit(1); }
-const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVeh.FORCES);
+const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVeh.FORCES, Support.FORCES);
+// the page fights every battle with fate on (src/battle/fate.js) and the force's own support with every support choice on 'Auto' (supportOf in main.js)
+const supportOf = F => { const S = F.support || {}, o = {}; if (S.wingman) o.wingman = S.wingman; if (S.artillery) o.artillery = S.artillery; if (S.scout) o.scout = true; if (S.air) o.air = S.air; return Object.keys(o).length ? o : undefined; };
 const cfg = HK.defaultConfig(), lookup = HK.meetLookup(cfg);
 let bad = 0; const fail = (...a) => { bad++; console.log('FAIL', ...a); };
 const keys = new Set();
@@ -19,7 +21,7 @@ for (const sc of SCENARIOS) {
   if (keys.has(sc.key)) fail(sc.key, 'listed twice'); keys.add(sc.key);
   if (!F) { fail(sc.key, 'unknown force', u.force); continue; }
   // as battleOpts() in main.js builds it for a scenario: hold, own crew trained with stress on, armour off, day, default position
-  const B = new Battle.Battle({ world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true, armour: false, tank: undefined });
+  const B = new Battle.Battle({ support: supportOf(F), fate: true, world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true, armour: false, tank: undefined });
   const f = facts(runToEnd(B)), miss = mismatches(sc, f), t = cardText(sc);
   for (const m of miss) fail(sc.key, m);
   for (const line of t.lines.concat(t.watch, sc.name)) { if (/undefined|NaN|—/.test(line)) fail(sc.key, 'bad text:', line); if (!line || line.length > 240) fail(sc.key, 'text missing or too long:', line); }

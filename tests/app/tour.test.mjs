@@ -7,10 +7,12 @@ import fs from 'fs';
 import { CHAPTERS, sameSetup } from '../../src/app/tour.js';
 import { runToEnd } from '../../src/app/scenarios.js';
 const require = createRequire(import.meta.url);
-const { HK, World, Battle, EnemyVeh } = require('../battle/load.js');
+const { HK, World, Battle, EnemyVeh, Support } = require('../battle/load.js');
 const show = process.argv[2] === 'show';
 const mainSrc = fs.readFileSync(new URL('../../src/app/main.js', import.meta.url), 'utf8'), fm = mainSrc.match(/const FORCES = \{[\s\S]*?\n\};/);
-const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVeh.FORCES);
+const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVeh.FORCES, Support.FORCES);
+// the page fights every battle with fate on (src/battle/fate.js) and the force's own support with every support choice on 'Auto' (supportOf in main.js)
+const supportOf = F => { const S = F.support || {}, o = {}; if (S.wingman) o.wingman = S.wingman; if (S.artillery) o.artillery = S.artillery; if (S.scout) o.scout = true; if (S.air) o.air = S.air; return Object.keys(o).length ? o : undefined; };
 const cfg = HK.defaultConfig(), lookup = HK.meetLookup(cfg);
 let bad = 0, nSteps = 0; const fail = (...a) => { bad++; console.log('FAIL', ...a); };
 const RIGS = ['tank', 'wide', 'hold', 'low', 'gun', 'cloud', 'replay', 'ride', 'follow', 'site', 'downrange', 'shoulder'], CAMS = ['enemy', 'hkoi', 'in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'troops', 'cut'];
@@ -18,7 +20,7 @@ const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'cloud', 'beam',
 let last = null, B = null;
 for (const ch of CHAPTERS) {
   const u = ch.setup, F = FORCES[u.force];
-  if (!sameSetup(u, last)) { B = runToEnd(new Battle.Battle({ world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true, armour: false })); last = u; }
+  if (!sameSetup(u, last)) { B = runToEnd(new Battle.Battle({ support: supportOf(F), fate: true, world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true, armour: false })); last = u; }
   const T = Math.max(5, B.t + 4), M = ch.find(B, HK);
   if (!M) { fail(ch.key, 'the battle no longer holds the moment this chapter needs'); continue; }
   const steps = ch.steps(M); if (!steps.length) fail(ch.key, 'no steps');

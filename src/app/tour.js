@@ -40,7 +40,16 @@ function settings(B) {
 function tally(B) {
   const s = B.summary(), by = s.by || {}, hkoi = (by.hkoi_cut || 0) + (by.hkoi_he || 0) + (by.neighbour_obs || 0) + (by.neighbour_he || 0), aps = by.aps || 0, hits = s.hits || 0;
   let thin = 0; for (const v of B.volleys) for (const b of v.rec.bursts) if (b.kind === 'obs' && b.res && b.res.reason === 'cloud_thin') thin++;
-  return { fired: s.fired, cut: by.hkoi_cut || 0, he: by.hkoi_he || 0, hkoi, aps, hits, miss: Math.max(0, s.fired - hkoi - aps - hits), thin, obs: s.obs, heLeft: s.he, apsL: s.apsL, apsR: s.apsR, t: s.t, alive: s.alive, result: B.over ? B.over.result : null };
+  // what became of the vehicle (src/battle/fate.js: the page fights every battle with it on): how it was lost, and since when it could not move
+  const F = B.tank.fate, ev = (B.events || []).filter(e => !e.wing), stuck = ev.find(e => e.type === 'tank_fate' && e.kind === 'mobility_kill'), out = ev.filter(e => e.type === 'bail_out').length;
+  const end = !s.alive && F && F.t != null ? { kind: F.kind, by: NAME[F.by] || F.by, t: F.t, out } : null;
+  return { fired: s.fired, cut: by.hkoi_cut || 0, he: by.hkoi_he || 0, hkoi, aps, hits, miss: Math.max(0, s.fired - hkoi - aps - hits), thin, obs: s.obs, heLeft: s.he, apsL: s.apsL, apsR: s.apsR, t: s.t, alive: s.alive, result: B.over ? B.over.result : null, end, stuck: stuck ? stuck.t : null };
+}
+// how the vehicle was lost, in a few words ('' while it is not)
+function endWords(e) {
+  if (!e) return '';
+  const who = e.out === 4 ? 'all four of the crew get out' : e.out ? `${word(e.out)} of the crew get out` : 'nobody gets out';
+  return e.kind === 'catastrophic' ? `${clock(e.t)} in, a ${e.by} reaches the ammunition and the crew is lost` : e.kind === 'ammo_vented' ? `${clock(e.t)} in, a ${e.by} sets the turret ammunition burning; the blow-out panels vent it and ${who}` : `${clock(e.t)} in, a ${e.by} knocks it out and ${who}`;
 }
 // a Kornet whose guidance beam HKOI's cloud cut: the first one whose first burst did it (a clean example), else any
 function findCut(B) {
@@ -94,13 +103,16 @@ function findSaturation(B, HK) {
   const mkHit = (v, th) => { const tags = th.tags || [], aps = (v.rec.aps || []).find(q => q.idx === th.idx);
     const hk = tags.includes('no_ammo') ? 'HKOI had no rounds of the right kind left for it' : tags.includes('unguided_ignored') || th.key === 'rpg' ? 'it is unguided, so HKOI held its fire' : tags.includes('handed_to_aps') ? 'it was launched too close for a cloud, so the fire control handed it to Trophy' : tags.includes('gun_busy') ? 'the gun was busy with another threat' : tags.includes('no_time') || tags.includes('min_range') ? 'there was no time for HKOI to engage it' : tags.includes('he_miss') ? 'HKOI\'s airbursts missed it' : tags.includes('drift_hit') ? 'HKOI cut its guidance too late to throw it off' : tags.includes('cloud_thin') ? 'HKOI\'s cloud was too thin to break its guidance' : tags.includes('saclos_unaffected') ? 'the cloud did not blind it' : th.viz.fired != null ? 'HKOI fired at it and did not stop it' : 'HKOI did not get a shot at it';
     const ap = tags.includes('aps_empty') ? 'Trophy had no shot left on that side' : tags.includes('aps_reset') ? 'Trophy on that side had fired a moment before and was not ready again' : aps ? (aps.kill ? 'Trophy fired' : 'Trophy fired and missed') : 'Trophy did not fire';
-    return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tH: v.t0 + th.viz.end.t, R: th.R, name: NAME[th.key] || th.key, hk, aps: ap, empty: tags.includes('aps_empty'), killing: !!th.viz.end.killing, pk: HK && HK.THREATS && HK.THREATS[th.key] ? HK.THREATS[th.key].kill : null }; };
+    const tH = v.t0 + th.viz.end.t, fe = (B.events || []).find(e => !e.wing && e.type === 'tank_fate' && Math.abs(e.t - tH) < 0.5);
+    return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tH, R: th.R, harm: fe && !th.viz.end.killing && fe.kind !== 'ok' ? fe.cause : null, name: NAME[th.key] || th.key, hk, aps: ap, empty: tags.includes('aps_empty'), killing: !!th.viz.end.killing, pk: HK && HK.THREATS && HK.THREATS[th.key] ? HK.THREATS[th.key].kill : null }; };
   const hit = each(B, (v, th) => (th.viz.end.type === 'hit' ? mkHit(v, th) : null)), empty = each(B, (v, th) => (th.viz.end.type === 'hit' && (th.tags || []).includes('aps_empty') ? mkHit(v, th) : null));
   if (!big || !hit) return null;
-  const kinds = {}; for (const th of big.rec.threats) kinds[th.key] = (kinds[th.key] || 0) + 1; const dirs = new Set(big.rec.threats.map(th => Math.round((((th.brg % 360) + 360) % 360) / 45) % 8));
+  const all = tally(B), kinds = {}; for (const th of big.rec.threats) kinds[th.key] = (kinds[th.key] || 0) + 1; const dirs = new Set(big.rec.threats.map(th => Math.round((((th.brg % 360) + 360) % 360) / 45) % 8));
   const cs = B.crewState ? B.crewState() : null, crew = {}; if (cs && cs.who) for (const r of Object.keys(CREW)) if (cs.who[r]) crew[r] = { state: cs.who[r].state, status: cs.who[r].status };
   return { big: { v: big.i, t0: big.t0, n: big.rec.threats.length, spread: Math.max(...big.rec.threats.map(o => o.t0)) - Math.min(...big.rec.threats.map(o => o.t0)), dirs: dirs.size, kinds: Object.entries(kinds).map(([k, n]) => `${word(n)} ${NAME[k] || k}${n > 1 && !/s$/.test(NAME[k] || k) ? 's' : ''}`), brg: big.rec.threats[0].brg },
-    hit, empty: empty && hit && empty.tH !== hit.tH ? empty : null, crew, tEnd: Math.max(1, B.t - 0.5), cfg: settings(B), all: tally(B) };
+    hit, empty: empty && hit && empty.tH !== hit.tH ? empty : null, crew, cfg: settings(B), all,
+    /* the closing still: a lost vehicle is shown 3.5 s after the hit that decided it, with the first man climbing out (the replay runs 4 s past the end) */
+    tEnd: all.end ? Math.min(B.t + 3.5, all.end.t + 3.5) : Math.max(1, B.t - 0.5) };
 }
 
 // ---- reading the battle as it stands now (the page hands the live battle; the node test hands the finished one) -----------------
@@ -198,13 +210,13 @@ export const CHAPTERS = [
       text: () => `A prepared defence does not fire one missile at a time. In this volley ${word(M.big.n)} threats were launched within ${s1(M.big.spread)} s from ${word(M.big.dirs)} ${pl(M.big.dirs, 'direction')}: ${list(M.big.kinds)}. HKOI has one gun, and Trophy a few shots a side.` },
     { head: 'The first one through', from: Math.max(0, M.hit.tH - 3), to: M.hit.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.hit.id),
       marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.hit.name}`, null, { tone: 'bad', after: M.hit.tH })],
-      text: () => `${clock(M.hit.tH)} into the battle a ${M.hit.name} fired from ${km(M.hit.R)} hits the vehicle: ${M.hit.hk}, and ${M.hit.aps}. ${M.hit.killing ? 'The vehicle is lost.' : `The vehicle survives it${M.hit.pk != null ? `: in the model a hit from this weapon knocks the vehicle out ${Math.round(100 * M.hit.pk)}% of the time (assumed)` : ''}.`}` },
+      text: () => `${clock(M.hit.tH)} into the battle a ${M.hit.name} fired from ${km(M.hit.R)} hits the vehicle: ${M.hit.hk}, and ${M.hit.aps}. ${M.hit.killing ? 'The vehicle is lost.' : `The vehicle survives it${M.hit.pk != null ? `: in the model a hit from this weapon knocks the vehicle out ${Math.round(100 * M.hit.pk)}% of the time (assumed)` : ''}.${M.hit.harm ? ` But not whole. ${M.hit.harm}` : ''}`}` },
     !M.empty ? null : { head: 'Handed to an empty launcher', from: Math.max(0, M.empty.tH - 3), to: M.empty.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.empty.id),
       marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.empty.name}`, null, { tone: 'bad', after: M.empty.tH }), mk('trophy', 'Trophy: empty on this side', M.empty.id, { tone: 'warn', side: 'empty' })],
       text: X => { const m = mags(X.b); return `${clock(M.empty.tH)} into the battle, a ${M.empty.name} from ${km(M.empty.R)}: ${M.empty.hk}, and ${M.empty.aps}. It hits.${m.obs != null ? ` Magazines at this point: obscurant ${m.obs}, airburst ${m.he}, Trophy ${m.L} left and ${m.R} right.` : ''}`; } },
-    { head: 'Where it runs out', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id),
+    { head: M.all.alive ? 'Where it runs out' : 'How it ends', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id),
       marks: [mk('station', `Obscurant rounds left: ${M.all.obs}`, null, { tone: 'warn' }), mk('trophy', `Trophy shots left: ${M.all.apsL + M.all.apsR}`, M.hit.id, { tone: 'warn', side: 'L' })],
-      text: () => `By the end, ${Math.round(M.all.t / 60)} minutes in: ${M.all.fired} threats fired at the vehicle. HKOI stopped ${M.all.hkoi}, Trophy ${M.all.aps}, ${M.all.miss} missed and ${word(M.all.hits)} hit. Obscurant rounds left: ${M.all.obs} of ${M.cfg.obs0}. Trophy shots left: ${M.all.apsL + M.all.apsR} of ${2 * M.cfg.aps0}. ${M.all.alive ? `The vehicle is still alive${M.all.result === 'withdrawn' ? ' and breaks contact, which is the right call' : ''}: the next volley would meet almost no defence.` : 'The vehicle is lost.'}` },
+      text: () => `By the end, ${Math.round(M.all.t / 60)} minutes in: ${M.all.fired} threats fired at the vehicle. HKOI stopped ${M.all.hkoi}, Trophy ${M.all.aps}, ${M.all.miss} missed and ${word(M.all.hits)} hit. Obscurant rounds left: ${M.all.obs} of ${M.cfg.obs0}. Trophy shots left: ${M.all.apsL + M.all.apsR} of ${2 * M.cfg.aps0}. ${M.all.alive ? `The vehicle is still alive${M.all.result === 'withdrawn' ? ' and breaks contact, which is the right call' : ''}: the next volley would meet almost no defence.` : `The vehicle is lost${M.all.stuck != null ? `, still where the hit at ${clock(M.all.stuck)} stopped it` : ''}: ${endWords(M.all.end) || 'destroyed'}.`}` },
   ].filter(Boolean) },
   { key: 'crew', name: 'The crew', setup: DESERT, find: findSaturation, steps: M => [
     { head: 'Inside, when it hits', from: Math.max(0, M.hit.tH - 2.2), to: M.hit.tH + 2.5, rate: 0.5, shot: shotOf({ cam: 'in_gnr', inside: true }, M.hit.id), marks: [],
@@ -212,13 +224,14 @@ export const CHAPTERS = [
     { head: 'Stress', from: M.hit.tH + 6, to: M.hit.tH + 6, rate: 1, shot: shotOf({ rig: 'tank', turn: 180 }, M.hit.id), marks: [mk('tank', 'Four men inside', null, { tone: 'warn' })],
       text: X => { const c = crewNow(X.b); return `${c ? `A few seconds after the hit: ${crewLine(c)}. ` : ''}A shaken man works slower. A panicked one can freeze or get his drill wrong, and a crew can abandon a vehicle that could still fight. How hard stress bites is an assumption in the model, not a measurement.`; } },
     { head: 'What it leaves behind', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id), marks: [mk('tank', 'The crew at the end of the battle', null, { tone: 'warn' })],
-      text: () => `At the end of this battle: ${Object.keys(M.crew).length ? crewLine(M.crew) : 'crew stress was switched off'}. ${word(M.all.hits) === 'no' ? 'No hit landed.' : `${Word(M.all.hits)} ${pl(M.all.hits, 'hit')} landed and the vehicle survived them`}${Object.values(M.crew).every(c => c.status === 'ok') ? ', nobody was wounded' : ''}, and the crew is still spent. Keeping hits off the armour matters even when the armour would have held.` },
+      text: () => { const C = Object.values(M.crew), hurt = C.some(c => c.status !== 'ok'), spent = C.some(c => c.state !== 'steady');
+        return `At the end of this battle: ${C.length ? crewLine(M.crew) : 'crew stress was switched off'}. ${!M.all.hits ? 'No hit landed.' : M.all.alive ? `${Word(M.all.hits)} ${pl(M.all.hits, 'hit')} landed and the vehicle survived them${hurt ? '' : ', nobody was wounded'}${spent ? ', and the crew is still spent' : ''}. Keeping hits off the armour matters even when the armour would have held.` : `${Word(M.all.hits)} ${pl(M.all.hits, 'hit')} landed and the last one ended it: ${endWords(M.all.end) || 'the vehicle is destroyed'}. Being steady is not protection: only the defences and the armour are.`}`; } },
   ] },
   { key: 'evidence', name: 'The evidence', setup: DESERT, find: findSaturation, steps: M => [
     { head: 'One battle proves nothing', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'numbers',
       text: () => `Everything so far was one battle each, picked to show something. To learn what HKOI is worth, the simulator fights the same raid many times under four setups, on the same dice: both systems, Trophy alone, HKOI alone, neither. A small run is being fought right now, below.` },
     { head: 'Where to go from here', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'next',
-      text: () => `Run the numbers fights thousands of raids, map by map or as whole battles, and lists why hits got through. Scenarios has ten battles picked to show one thing each. The Ladder is ten raids of rising difficulty to fight yourself. Every figure in this simulator is a model's answer built on stated assumptions, not a test result.` },
+      text: () => `Run the numbers fights thousands of raids, map by map or as whole battles, and lists why hits got through. Scenarios has twelve battles picked to show one thing each. The Ladder is ten raids of rising difficulty to fight yourself. Every figure in this simulator is a model's answer built on stated assumptions, not a test result.` },
   ] },
 ];
 export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map === b.map && a.force === b.force && a.skill === b.skill && a.waves === b.waves && a.seed === b.seed;
