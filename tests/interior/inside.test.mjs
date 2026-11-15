@@ -62,10 +62,11 @@ try {
       if (x.fire) real.fires++; if (x.breach) real.breach++; }
     for (const r of GORE.ROLES) ok(W[r].list.every(w => hits.some(h => h.idx === w.idx && h.crew[r] && h.crew[r] !== 'ok') || w.idx >= 900), 'no wound without a report (' + r + ')');
     // the drawing, through the whole battle in steps, as the interior drives it
-    for (let t = 0; t <= b.t + 3; t += 0.37) { b.t0 = b.t; const keep = b.t; b.t = t; const S = FXM.fxState(hits, t); b.t = keep; if (S.emergency) real.emergency++; if (S.hyd) real.hyd++; fx.update(S, true); const c = fx.cost();
+    for (let t = 0; t <= b.t + 3; t += 0.37) { const keep = b.t; b.t = t; const c0 = performance.now(); const S = FXM.fxState(hits, t); b.t = keep; if (S.emergency) real.emergency++; if (S.hyd) real.hyd++; fx.update(S, true); const ms = performance.now() - c0; real.steps = (real.steps || 0) + 1; real.ms = (real.ms || 0) + ms; real.msMax = Math.max(real.msMax || 0, ms); const c = fx.cost();
       real.maxMarks = Math.max(real.maxMarks, c.marks); real.maxSmoke = Math.max(real.maxSmoke, c.smoke); real.maxGlow = Math.max(real.maxGlow, c.glow); real.maxBits = Math.max(real.maxBits, c.bits);
       if (!finite(fx.decals.mesh) || !finite(fx.bits.mesh) || !finite(fx.kit) || fx._err) real.bad++; for (const P of [fx.lit, fx.glow]) { const a = P.aP.array; for (let i = 0; i < P.mesh.count * 4; i++) if (!Number.isFinite(a[i])) { real.bad++; break; } } } }
   ok(real.bad === 0, 'drawing: bad numbers or a fault in ' + real.bad + ' steps'); ok(real.maxMarks <= 96 && real.maxSmoke <= 360 && real.maxGlow <= 220 && real.maxBits <= 160, 'drawing stays inside its pools'); ok(real.hits > 0, 'the battles produced hits');
+  real.ms = +(real.ms / real.steps).toFixed(3); real.msMax = +real.msMax.toFixed(2);   /* processor time of the state and the drawing lists for one frame, in node (no graphics card work) */
   console.log('  real battles: ' + JSON.stringify(real));
 } catch (e) { console.log('  real battles NOT checked: ' + (e && e.message)); fails++; }
 

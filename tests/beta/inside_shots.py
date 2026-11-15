@@ -3,7 +3,7 @@
 # the form the damage report gives (battle.interiorHits, as the node test does) and the crew model's state (battle.crewState),
 # with the battle clock stopped. Nothing here goes round the interior's code: what is drawn is what a real hit of that kind draws.
 # Use: PORT=87xx bash tools/run_test.sh tests/beta/inside_shots.py <out dir> <tag> "<hash params>"     (ONLY=a,b: scenes whose name contains a or b)
-import asyncio, os, sys, json
+import asyncio, os, sys, json, time
 from playwright.async_api import async_playwright
 HELP = """void (window.hud = v => { let st = document.getElementById('nohud'); if (!st) { st = document.createElement('style'); st.id = 'nohud'; document.head.appendChild(st); } st.textContent = v ? '' : ['status','log','logov','bar','crew','caption','marks','seatcap','hud','replay','threats','engleft','engright','crewmen','defences','enemybox','strip','dock','subs','ticker','facerow','gauges','warn','units','map'].map(i => '#' + i).join(',') + ' { visibility: hidden !important; }'; },
   window.lk = (m, y, p, z, off) => { if (__beta.cams.mode !== m) __beta.cams.set(m); __beta.interior.setLook(y, p, z || 1, off || null); },
@@ -60,7 +60,9 @@ async def main():
             if '"crewReady":true' in st.replace(' ', '') or '"crewFailed":true' in st.replace(' ', ''): break
             await pg.wait_for_timeout(1500)
         print('crew', st[:300]); await pg.set_viewport_size(FULL); await pg.wait_for_timeout(1500); frames = int(os.environ.get('FRAMES', '3'))
+        t0 = time.time(); maxs = float(os.environ.get('MAXS', '520'))   # one browser on this machine for everybody: stop taking pictures after this many seconds
         for name, js in scenes():
+            if time.time() - t0 > maxs: print('out of time before', name); break
             if ONLY and not any(k in name for k in ONLY):
                 if 'stage(' in js: await pg.evaluate('void (' + js.split(", lk(")[0].split(", hud(")[0] + '))')   # keep the staging of a skipped scene, for the views that follow it
                 continue

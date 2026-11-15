@@ -71,6 +71,14 @@ export function woundsOf(hits, battle) {
     M.list.push({ part: k < 0.5 ? 'chest' : 'armL', kind: 'frag', sev: 0.9, side: [k < 0.5 ? 0.2 : -0.6, 0.6, 0.6], T: e.t, idx: 900 + i, dist: 0 }); if (k < 0.3) M.list.push({ part: 'head', kind: 'frag', sev: 0.6, side: [0.3, 0.2, 0.9], T: e.t, idx: 950 + i, dist: 0 }); if (M.o == null) { M.dir = [0, -0.5, -0.8]; M.idx = 900 + i; } }
   hits._w = W; hits._wn = hits.length; hits._we = nE; return W;
 }
+// The same wounds straight from one entry of the damage report (DMG.report), for the X-ray and the debrief:
+// { gnr: { list, text }, ... } for the men that hit hurt (text: "fragment wounds, chest and right upper arm; flash burns")
+export function woundsFromReport(h) {
+  const l = Math.hypot(h.dir[0], h.dir[1], h.dir[2]) || 1, comps = {}; for (const c of h.comps || []) comps[c.id] = c.state;
+  const hit = { T: h.t || 0, pen: !!h.penetrated, kill: !!h.killing, minor: false, s: 1.6, e: { x: h.entry[0], y: h.entry[1] - 1.617, z: h.entry[2] }, d: { x: h.dir[0] / l, y: h.dir[1] / l, z: h.dir[2] / l }, comps, crew: h.crew || {}, idx: h.idx || 0, zoneKey: h.zone, turA: h.turA || 0, reach: h.reach }, out = {};
+  for (const r of ROLES) { const w = woundsOfHit(hit, r); if (!w) continue; const W = {}; for (const q of ROLES) W[q] = { list: q === r ? w.list : [] }; out[r] = { list: w.list, text: describe(r, W, 1e9) }; }
+  return out;
+}
 const EMPTY = {}; for (const r of ROLES) EMPTY[r] = { list: [], T0: null, Tk: null, dir: [0, 0, 1], idx: 0, sever: {}, o: null, d: null, hatch: null };
 
 // How each man is, for drawing, at battle time `now`: the wounds he has by then and what the crew model says of him.

@@ -226,7 +226,8 @@ export class Interior {
     const fired = L.main != null && T.main < L.main; L.main = T.main; L.t = B.t; if (fired) { this.st.rec = 0; this.head.vz += 0.5; }
     if (L.alive === true && !T.alive) { this.head.vz -= 0.9; this.head.vx += 0.6; } L.alive = T.alive;   /* the hit that knocks the vehicle out throws the crew about */
     this.st.rec += sdt; const r = this.st.rec, recoil = r < 0.07 ? r / 0.07 : r < 0.75 ? 1 - (r - 0.07) / 0.68 : 0;   /* back fast, forward slowly */
-    P.breech.position.z = P.breech.userData.home.z + 0.3 * recoil * recoil * (3 - 2 * recoil);
+    { const gh = this.fxS && this.fxS.gunHit && this.fxS.gunHit.gun ? this.fxS.gunHit : null;   /* the gun or its recoil gear hit (the damage report's "main gun breech"): the breech hangs out of battery, runs back too far and judders home (drawn only: the battle model does not stop a damaged gun firing) */
+      P.breech.position.z = P.breech.userData.home.z + 0.3 * recoil * recoil * (3 - 2 * recoil) * (gh ? 1.3 : 1) + (gh ? 0.055 + 0.02 * recoil * Math.sin(B.t * 47) : 0); }
     const ldrUp = !!(A.ldr && A.ldr.up), loading = !T.loaded && T.main > 0 && !ldrUp && T.alive, f = loading ? clamp((T.loadT || 0) / LOAD_S, 0, 1) : 0;
     this.st.door = ease(this.st.door, loading && f > 0.02 && f < 0.6 ? 1 : 0, 5, sdt || dt * 0.5); P.door.position.x = P.door.userData.home.x + this.st.door * 0.96; P.knee.position.z = P.knee.userData.home.z + (loading && f < 0.6 ? 0.012 : 0);
     this.st.block = ease(this.st.block, !T.loaded && r > 0.5 ? 1 : 0, 8, sdt || dt * 0.5); P.block.position.y = -0.2 * this.st.block;
