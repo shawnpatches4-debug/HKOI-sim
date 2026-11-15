@@ -4,7 +4,7 @@
 //   pointing             right-click the ground (or the map) for a small menu at that spot: move here, face this way, engage
 //                        the located team there; or arm an order with its key and click (G move, R face)
 //   keys                 G move, X halt, B back to cover, R face, P smoke, C main gun hold / fire at will, N machine guns,
-//                        K HKOI mode, U hatches, O the panel, Esc cancels
+//                        K HKOI mode, O the panel, Esc cancels
 //   feedback             the order and the crew's answer above the bar with the seconds until it takes effect, the recorded
 //                        intercom line where the voice pack has one that says it, a ghost path and marker on the ground and
 //                        on the map, and smoke where the grenades burst
@@ -36,7 +36,7 @@ body.in-seat #cmd .c-say { display: none; } body.hud-none #cmd, body.hud-none #c
 #r-cmd { margin: 10px 0 2px; padding: 10px 12px; border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; } #r-cmd[hidden] { display: none; } #r-cmd h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: .08em; } #r-cmd h4 b { color: var(--accent); font-size: 16px; margin-left: 6px; }
 #r-cmd table { border-collapse: collapse; width: 100%; font-size: 12.5px; } #r-cmd td { padding: 2px 8px 2px 0; vertical-align: top; } #r-cmd td:last-child { text-align: right; white-space: nowrap; font-family: var(--mono); } #r-cmd small { display: block; color: var(--dim); font-size: 11.5px; margin-top: 6px; line-height: 1.4; }
 `;
-const KEYS = { KeyG: 'move', KeyX: 'halt', KeyB: 'reverse', KeyR: 'face', KeyP: 'smoke', KeyC: 'main', KeyN: 'mg', KeyK: 'hkoi', KeyU: 'hatch', KeyO: 'more' };
+const KEYS = { KeyG: 'move', KeyX: 'halt', KeyB: 'reverse', KeyR: 'face', KeyP: 'smoke', KeyC: 'main', KeyN: 'mg', KeyK: 'hkoi', KeyO: 'more' }   /* U is the sound on/off key (main.js); hatches are in the More pop-up */;
 const SHORT = { hkoi: { auto: 'HKOI: auto', obs: 'HKOI: obscurant', he: 'HKOI: airburst', hold: 'HKOI: HOLD' }, main: { free: 'Gun: free', hold: 'Gun: HOLD' }, mg: { free: 'MGs: free', hold: 'MGs: HOLD' } };
 const ROW_MIN = 700;   // px the one-row bar needs; in a narrower gap it collapses to a single "Orders" button
 const KNAME = { move: 'move', halt: 'halt', reverse: 'back to cover', withdraw: 'break contact', face: 'face the hull', smoke: 'smoke', engage: 'target' };
