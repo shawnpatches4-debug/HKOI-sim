@@ -18,7 +18,7 @@ SETUP = """void (() => {
   /* run the battle to time t: fast to a few seconds before, then step by step with the drawing following */
   window.__to = t => { if (b.battle.t < t - 3) b.runTo(t - 3); if (t > b.battle.t) b.playFor(t - b.battle.t); return +b.battle.t.toFixed(2); };
   /* look at a point from `dist` metres away on bearing `brg` from it, `h` metres up; the look point is lifted by `up` metres */
-  window.__look = (e, n, brg, dist, h, up) => { const a = brg * Math.PI / 180, ce = e + Math.sin(a) * dist, cn = n + Math.cos(a) * dist; b.view(ce, cn, 0, h, e, n); const c = b.scene.camera; c.lookAt(e, b.world.h(e, n) + 2 + (up || 0), -n); };
+  window.__look = (e, n, brg, dist, h, up) => { const a = brg * Math.PI / 180, ce = e + Math.sin(a) * dist, cn = n + Math.cos(a) * dist; b.view(ce, cn, 0, h, e, n); const c = b.scene.camera, y = b.world.h(e, n) + 2 + (up || 0); if (b.scene.controls && b.scene.controls.target) b.scene.controls.target.set(e, y, -n);   /* the orbit control, if it still runs, must aim where we do */ c.lookAt(e, y, -n); };
   window.__brg = (e0, n0, e1, n1) => (Math.atan2(e1 - e0, n1 - n0) * 180 / Math.PI + 360) % 360;
   window.__info = () => { const B = b.battle, S = b.scene.stats(), G = B.wing; return JSON.stringify({ t: +B.t.toFixed(1), drawn: b.support.info, calls: S.calls, tris: S.triangles, wing: G ? { alive: G.alive, e: Math.round(G.e), n: Math.round(G.n), fate: G.fate && G.fate.kind } : null, tank: { alive: B.tank.alive, e: Math.round(B.tank.e), n: Math.round(B.tank.n) }, err: document.getElementById('errbar').hidden ? null : document.getElementById('errbar').textContent.slice(0, 300) }); };
 })()"""
