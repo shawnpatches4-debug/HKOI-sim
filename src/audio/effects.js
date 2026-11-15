@@ -39,10 +39,10 @@ export const Effects = {
     if (thump) M.tone(v.in, t, { f0: thumpHz, f1: thumpHz / 3, dur: thumpDur, gain: thump });
     if (sub) M.tone(v.in, t, { f0: subHz, f1: subHz / 2, dur: subDur, gain: sub, attack: 0.006 });
     if (tail) M.noise(v.in, t + 0.015, { dur: tailDur * (1 + 2.5 * a.roll), color: 'brown', f0: tailHz, f1: 70, gain: tail * (1 + 3 * a.roll) });
-    if (slap && !this.lite && a.d < 700) for (const [ts, amp] of M.env.slaps) {   /* walls, tree lines, the ground: each answers a little later and duller */
+    if (slap && !this.lite && a.d < 700) for (const [ts, amp] of (slap < 1 ? M.env.slaps.slice(0, 2) : M.env.slaps)) {   /* walls, tree lines, the ground: each answers a little later and duller (small arms: the first two answers only, to keep a long burst cheap) */
       const tt = t + ts * rnd(0.85, 1.15);
       M.noise(v.in, tt, { dur: barkDur * 1.6 + 0.03, attack: 0.003, type: 'bandpass', f0: barkHz * 0.8, f1: barkHz * 0.3, q: 0.5, gain: bark * amp * slap });
-      if (thump) M.tone(v.in, tt, { f0: thumpHz * 0.9, f1: thumpHz / 3, dur: thumpDur, gain: thump * amp * slap * 0.6 });
+      if (thump && slap >= 1) M.tone(v.in, tt, { f0: thumpHz * 0.9, f1: thumpHz / 3, dur: thumpDur, gain: thump * amp * slap * 0.6 });
     }
   },
 
