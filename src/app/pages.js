@@ -141,5 +141,32 @@ export function initPages(ctx) {
     out.append(table(['Setup', 'Reasons, most common first'], S.map(st => [st.name, Object.entries(res[st.key].why).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} (${v})`).join('; ') || 'no hits'])));
     copyBox(out, [`HKOI Battlefield, whole battles: ${sc.text}, ${both.n} per setup.`].concat(S.map(st => { const r = res[st.key]; return `${st.name}: vehicle survives ${pc(r.survival)} (${pc(r.range[0])} to ${pc(r.range[1])}), ${r.hitsPerBattle.toFixed(2)} hits per battle.`; })).join('\n'));
   }
-  return { debrief, openLadder, openNumbers, closeAll() { L.s.hidden = true; N.s.hidden = true; stop = true; } };
+  // ---------------------------------------------------------------- a small live run for the briefing (src/app/tour.js)
+  // The old simulator's raid (three threats over six seconds, Kornet-class launches from 2 km or more), n times, the four setups on
+  // the same raids. Draws into `box` as it goes; returns { stop() }. The same engine and the same counting as the full screen above.
+  function quick(box, n) {
+    let halt = false; box.textContent = ''; const status = el('div', 'pg-note', 'Building the fire-control tables for the four setups'), bar = el('div', 'pg-bar'), fill = el('div'), out = el('div'); bar.append(fill); box.append(bar, status, out);
+    const wait = () => new Promise(r => setTimeout(r, 0));
+    (async () => {
+      try {
+        await new Promise(r => setTimeout(r, 60)); if (halt) return;
+        const run = Study.raidStart(deps.HK, deps.HK.defaultConfig(), { preset: 'old' }, n), t0 = performance.now();
+        /* raids are fought in short slices between frames. A slice is 12 ms while the page is drawing fast, so the picture and the buttons stay
+           smooth; where frames are slow (seconds apart in a software-drawn browser) it grows to as much as 1.5 s, or the run would crawl. */
+        let done = false, lastEnd = performance.now();
+        while (!halt && !done) { const begin = performance.now(), budget = Math.min(1500, Math.max(12, (begin - lastEnd) * 0.8));
+          do { done = Study.raidStep(deps.HK, run, 1); } while (!done && performance.now() - begin < budget);
+          lastEnd = performance.now(); fill.style.width = (100 * run.i / n).toFixed(1) + '%'; status.textContent = `Raid ${run.i} of ${n}, each fought four times`; if (!done) await wait(); }
+        if (halt || !run.i) return; fill.style.width = '100%';
+        const R = {}; for (const st of Study.SETUPS) R[st.key] = Study.raidSummary(run.S[st.key]); const p1 = Study.paired(run.S.both, run.S.aps), p2 = Study.paired(run.S.hkoi, run.S.none);
+        const sure = z => Math.abs(z) >= 3 ? 'far beyond chance' : Math.abs(z) >= 2 ? 'unlikely to be chance' : 'within what chance alone could give with this few raids';
+        const line = (p, a, b, tag) => `${tag}: adding HKOI ${p.net >= 0 ? 'raised' : 'lowered'} survival from ${pc1(b.survival)} to ${pc1(a.survival)}. Raid by raid it saved the vehicle ${p.saved} times and cost it ${p.cost} times: ${sure(p.z)}.`;
+        out.append(table(['Setup', 'Vehicle survives', 'Likely range', 'Hits per raid'], Study.SETUPS.map(st => { const r = R[st.key]; return [st.name, pc1(r.survival), `${pc1(r.range[0])} to ${pc1(r.range[1])}`, r.hitsPerRaid.toFixed(2)]; })));
+        out.append(el('div', 'pg-take', line(p1, R.both, R.aps, 'With Trophy fitted')), el('div', 'pg-take', line(p2, R.hkoi, R.none, 'Without Trophy')));
+        status.textContent = `${run.i} raids per setup in ${Math.round((performance.now() - t0) / 1000)} s, just now, on this machine. Three threats over six seconds, launches from 2 km or more, the vehicle halted. The inputs are assumptions, not test results (among them ${deps.HK.defaultConfig().rnd.payload_g} g of obscurant a round and the enemy gunner's steadiness), and with this few raids the likely range is wide: Run the numbers fights thousands.`;
+      } catch (e) { status.textContent = 'The run stopped on an error: ' + (e && e.message); console.error(e); }
+    })();
+    return { stop() { halt = true; } };
+  }
+  return { debrief, openLadder, openNumbers, quick, closeAll() { L.s.hidden = true; N.s.hidden = true; stop = true; } };
 }
