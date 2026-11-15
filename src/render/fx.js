@@ -397,7 +397,7 @@ export class Particles {
     for (let i = 0; i < this.cnt(6 * k); i++) this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * k, y + (this.R() - 0.5) * k, z + (this.R() - 0.5) * k, vx * 0.03 + (this.R() - 0.5) * 4, (this.R() - 0.5) * 3, vz * 0.03 + (this.R() - 0.5) * 4, 4 + this.R() * 4, 1.2 * k, 6 * k, 0.16, 0.16, 0.16, 0.55, 2, 0.15, 0, 0);
   }
   // one puff of a missile's smoke trail
-  trail(x, y, z, k = 1, c = 0.9) { const j = 0.5 * k; this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * j, y + (this.R() - 0.5) * j, z + (this.R() - 0.5) * j, (this.R() - 0.5) * 0.9, 0.2 + this.R() * 0.3, (this.R() - 0.5) * 0.9, 4.5 + this.R() * 3.5, (1.5 + this.R() * 0.7) * k, (5 + this.R() * 3) * k, c, c, c * 0.98, 0.55, 1, 0.12, 0, 0); }
+  trail(x, y, z, k = 1, c = 0.9) { const j = 0.5 * k; this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * j, y + (this.R() - 0.5) * j, z + (this.R() - 0.5) * j, (this.R() - 0.5) * 1.3, 0.2 + this.R() * 0.4, (this.R() - 0.5) * 1.3, 4.5 + this.R() * 4.5, (1.5 + this.R() * 1.3) * k, (4.5 + this.R() * 4.5) * k, c, c, c * 0.98, 0.38 + this.R() * 0.16, 1, 0.12, 0, 0); }   /* uneven on purpose: a trail that twists and thins as it hangs */
   // old name kept for callers that still use it: the cloud is now drawn by the obscurant layer, so this is only the fuze pop
   cloud(x, y, z) { this.cloudPop(x, y, z); }
 }

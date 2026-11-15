@@ -117,7 +117,8 @@ export class Scene3D {
     if (this.cover) this.cover.setLevel(Q.cover || 0);
   }
   // contact shade and light shafts: on at High and Ultra, never in the thermal picture; the strength of each comes from the condition
-  _air() { const C = CONDITIONS[this.condition] || CONDITIONS.day, on = !!this.airOn && !this.thermal; this.air.enabled = on; this.air.ao = C.ao == null ? 0.85 : C.ao; this.air.shafts = C.shaft ? C.shaft[1] : 0; if (C.shaft) this.air.lay.uniforms.shaftCol.value.set(C.shaft[0]).multiplyScalar(C.shaft[1] > 0 ? 1 : 0); else this.air.lay.uniforms.shaftCol.value.setScalar(0); if (this.sunDir) this.air.sunDir.copy(this.sunDir); }
+  setAir(on) { this.airUser = on !== false; this._air(); }   /* for a view that wants the plain picture (pass false); true gives it back */
+  _air() { const C = CONDITIONS[this.condition] || CONDITIONS.day, on = !!this.airOn && !this.thermal && this.airUser !== false; this.air.enabled = on; this.air.ao = C.ao == null ? 0.85 : C.ao; this.air.shafts = C.shaft ? C.shaft[1] : 0; if (C.shaft) this.air.lay.uniforms.shaftCol.value.set(C.shaft[0]).multiplyScalar(C.shaft[1] > 0 ? 1 : 0); else this.air.lay.uniforms.shaftCol.value.setScalar(0); if (this.sunDir) this.air.sunDir.copy(this.sunDir); }
   // Thermal picture for the sights. mode 0 off, 1 white hot, -1 black hot. Warm things (crews, vehicles, missiles) are made to glow by how
   // warm their group says they are (userData.heat, 0 to 1; assumed values), the sky goes cold, and the picture is shown as brightness only.
   setThermal(mode) {

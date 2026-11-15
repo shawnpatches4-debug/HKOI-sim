@@ -93,7 +93,7 @@ async def main():
                     if s == 'WAIT': await settle(2)
                     elif s == 'VEH': await pg.evaluate(VEH); await settle(3)
                     else: await pg.evaluate(s)
-                await settle(3)
+                await pg.evaluate('__L.hide()'); await settle(3)
                 await pg.screenshot(path=os.path.join(OUT, name + '.png'), timeout=120000)
                 print('%-18s %5.0f s' % (name, time.time() - T0), json.dumps(await pg.evaluate('__L.stats()')), (await pg.evaluate('__L.err()'))[:300], flush=True)
             except Exception as e: print(name, 'FAILED', str(e)[:300], flush=True)

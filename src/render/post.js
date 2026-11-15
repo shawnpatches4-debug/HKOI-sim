@@ -30,7 +30,8 @@ const AIR = /* glsl */`
       vec3 dx = abs(zl - z) < abs(zr - z) ? P - vpos(vUv - ex, zl) : vpos(vUv + ex, zr) - P;
       vec3 dy = abs(zd - z) < abs(zu - z) ? P - vpos(vUv - ey, zd) : vpos(vUv + ey, zu) - P;
       vec3 N = normalize(cross(dx, dy));
-      float rr = min(radius / (z * proj.y * 2.0), 0.11), a0 = ign(gl_FragCoord.xy) * 6.2832, sum = 0.0, R2 = radius * radius;
+      float rad = min(radius, z * 0.3 + 0.08);   /* things right in front of the lens (the inside of the turret) are shaded over centimetres, not over a metre */
+      float rr = min(rad / (z * proj.y * 2.0), 0.11), a0 = ign(gl_FragCoord.xy) * 6.2832, sum = 0.0, R2 = rad * rad;
       for (int i = 0; i < TAPS; i++) {
         float t = (float(i) + 0.5) / float(TAPS), r = sqrt(t) * rr, a = a0 + float(i) * 2.39996;
         vec2 uv = vUv + vec2(cos(a) / aspect, sin(a)) * r; float zs = lin(texture2D(tDepth, uv).x);

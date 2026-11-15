@@ -170,7 +170,7 @@ export class VolleyView {
           if (!drone && tv - th.t0 < 1.5) {   /* the launch: flame and smoke out of the back, dust, a flash that marks the position */
             const p = this._launcher(v, th, l, this.tmp), T0 = B.tankAt(v.t0 + th.t0), dx = T0.e - l.u0.e, dn = T0.n - l.u0.n, dd = Math.hypot(dx, dn) || 1;
             fx.seed(v.i * 53 + th.idx * 7 + 1); fx.backblast(p.x, p.y, p.z, dx / dd, -dn / dd, rpg ? 0.75 : 1.4); fx.dustRing(p.x, p.y - 1.2, p.z, rpg ? 0.4 : 0.8, 5);
-            this.emit('launch', p, { big: !rpg }); s.blast(p, 0.3, false);
+            this.emit('launch', p, { big: !rpg, key: th.key }); s.blast(p, 0.3, false);
           }
         }
         const p = this.pos(v, th, l, tv, this.tmp), p2 = this.pos(v, th, l, tv + 0.05, this.tmp2), m = st.mesh; m.position.copy(p); m.lookAt(p2);
@@ -180,7 +180,7 @@ export class VolleyView {
         if (U.glow) { U.glow.visible = burning; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
-          const spacing = (drone ? 7 : rpg ? 1.8 : th.v > 320 ? 3 : 2.3) / Math.max(0.35, fx.q), step = spacing / Math.max(10, th.v); let guard = 0;
+          const spacing = (drone ? 7 : rpg ? 1.4 : th.v > 320 ? 2.1 : 1.6) / Math.max(0.35, fx.q)   /* close enough that the puffs join into one trail instead of a string of beads */, step = spacing / Math.max(10, th.v); let guard = 0;
           if (st.next < tv - 1.2) st.next = tv - 1.2;
           while (st.next <= tv && guard++ < 160) { const q = this.pos(v, th, l, st.next, this.tmp3);
             if (drone) fx.puff(q.x, q.y, q.z, 0, 0, 0, 1.6, 0.25, 0.9, 0.5, 0.52, 0.55, 0.1, 1, 0);
@@ -208,7 +208,7 @@ export class VolleyView {
         else if (end.type === 'hit') {
           const hp = s.at(T.e + this._ae * 2.4, T.n + this._an * 2.4, 1.7, this.tmp2), k = end.killing ? 1.6 : 1;
           fx.vehicleHit(hp.x, hp.y, hp.z, -this._ae, this._an, k); fx.dustRing(hp.x, hp.y - 1.6, hp.z, 1.2, 12);
-          this.emit('hit', hp, { killing: !!end.killing }); s.blast(hp, end.killing ? 2 : 1.2, false);
+          this.emit('hit', hp, { killing: !!end.killing, key: th.key }); s.blast(hp, end.killing ? 2 : 1.2, false);
           if (end.killing) this._kill(T, t);
         } else if (end.type === 'ground') {
           p.y = W.h(p.x, -p.z) + 0.3; fx.explosion(p.x, p.y, p.z, 0.9, { surface: this._surf(p.x, p.z) }); this.emit('explosion', p, { size: 0.9 }); s.blast(p, 0.9); s.marks.add(p.x, p.z, 1.5, (x, z) => W.h(x, -z), { kind: MARK.CRATER });
