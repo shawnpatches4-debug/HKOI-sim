@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>HKOI look lab (test only)</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:">
+<link rel="icon" href="data:,">
+<style>html, body { margin: 0; background: #000; overflow: hidden } canvas { display: block; width: 100vw; height: 100vh } #errbar { position: fixed; left: 0; top: 0; right: 0; background: #a00; color: #fff; font: 12px monospace; z-index: 9 }</style>
+<script type="importmap">{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }</script>
+</head><body><canvas id="c"></canvas><div id="errbar" hidden></div>
+<script src="engine.js"></script><script>window.HK = window.HK || (typeof HK !== 'undefined' ? HK : null);</script>
+<script src="world/world.js"></script>
+<script type="module">
+// A bare stage for judging the look of the battlefield quickly (test only, not part of the page Shawn gets): the real renderer,
+// the real ground, sky, trees and effects and the real tank model, but no battle, no crew, no interior, so it loads in seconds.
+// Nothing moves by itself: tests/beta/lab.py sets the place, weather and camera, steps the clocks by hand and asks for a frame.
+import * as THREE from 'three';
+const q = new URLSearchParams(location.hash.slice(1)), canvas = document.getElementById('c'), D = Math.PI / 180;
+/* r=render_old loads the drawing code as it was at an earlier commit (tests/beta/lab.py OLD=<commit> puts it there), for before-and-after pictures from the same cameras */
+const RD = './' + (q.get('r') || 'render') + '/';
+const { Scene3D, QUALITY, CONDITIONS } = await import(RD + 'scene3d.js'), { TankView } = await import(RD + 'units.js'), { FINISH, setFinish } = await import(RD + 'env.js'), { ObscurantCloud } = await import(RD + 'obscurant.js');
+window.addEventListener('error', e => { const c = document.getElementById('errbar'); c.hidden = false; c.textContent = 'page error: ' + e.message; });
+let world = new HKWorld.World({ seed: +(q.get('map') || 3), biome: q.get('biome') || 'farmland' });
+const scene = new Scene3D(canvas, world, { condition: q.get('cond') || 'day', quality: q.get('gfx') || 'high' });
+const tank = q.get('tank') === '0' ? null : new TankView('assets/'); if (tank) { tank.group.userData.heat = 0.5; scene.units.add(tank.group); }
+const cloud = new ObscurantCloud(); scene.scene.add(cloud.mesh);
+const T = { e: 0, n: 0, h: 20 };
+const L = window.__lab = { scene, THREE, tank, cloud, T, QUALITY, CONDITIONS, get world() { return world; }, bt: 0,
+  /* choose the place, the weather and where the tank stands (a passable spot near the middle of the map, the same every time) */
+  place(biome, cond, map = 3, e = null, n = null) {
+    if (world.biomeKey !== biome || world.seed !== map) { world = new HKWorld.World({ seed: map, biome }); scene.setWorld(world); }
+    scene.setCondition(cond); setFinish(biome, cond); scene.setThermal(0); scene.fx.sync(scene); scene.fx.clear();   /* (sync first: taking the graphics level empties the effects) */ cloud.clear(); scene.marks.clear && scene.marks.clear();
+    scene.fx.ground = (x, z) => world.h(x, -z);
+    if (e == null) { e = 0; n = 0; for (let r = 0; r < 600; r += 20) { let ok = false; for (let a = 0; a < 6.28; a += 0.5) { const x = Math.sin(a) * r, y = Math.cos(a) * r; if (world.passable(x, y, true)) { e = x; n = y; ok = true; break; } } if (ok) break; } }
+    T.e = e; T.n = n; L.putTank(); return [e, n, scene.buildMs];
+  },
+  putTank() { const p = scene.at(T.e, T.n, 0); FINISH.ground.value = world.h(T.e, T.n); if (tank) { tank.place(p, T.h, 0, 0); tank.aim(T.h + 25, T.h, 9); } scene.setFocus(T.e, T.n); },
+  /* camera: brg degrees round from north of the tank, dist metres out, h metres above the ground there, looking `up` metres above the tank's ground */
+  cam(brg, dist, h, up = 2, fov = 50) { const a = brg * D, e = T.e + Math.sin(a) * dist, n = T.n + Math.cos(a) * dist, c = scene.camera; scene.controls.enabled = false; c.up.set(0, 1, 0); c.fov = fov; c.updateProjectionMatrix(); c.position.set(e, world.h(e, n) + h, -n); c.lookAt(T.e, world.h(T.e, T.n) + up, -T.n); c.updateMatrixWorld(); },
+  look(px, py, pz, tx, ty, tz, fov = 50) { const c = scene.camera; scene.controls.enabled = false; c.up.set(0, 1, 0); c.fov = fov; c.updateProjectionMatrix(); c.position.set(px, py, pz); c.lookAt(tx, ty, tz); c.updateMatrixWorld(); },
+  /* a scene point `fwd` metres from the tank on bearing brg, `up` metres above the ground there */
+  pt(brg, fwd, up = 0) { const a = brg * D, e = T.e + Math.sin(a) * fwd, n = T.n + Math.cos(a) * fwd; return scene.at(e, n, up); },
+  /* move the effects clock on by sec, in frames of 1/fps (the battle's cloud clock moves with it) */
+  step(sec, fps = 60) { const n = Math.max(1, Math.round(sec * fps)), dt = sec / n; for (let i = 0; i < n; i++) { scene.fx.sync(scene); scene.fx.step(dt); L.bt += dt; for (const l of scene.flares) if (l.intensity > 0) { l.intensity *= Math.exp(-dt * (l.userData.decay || 7)); if (l.intensity < 1) l.intensity = 0; } } },
+  frame(n = 2) { try { for (let i = 0; i < n; i++) { cloud.update(L.bt, scene); scene.fx.sync(scene); scene.render(0); } } catch (e) { const c = document.getElementById('errbar'); c.hidden = false; c.textContent = 'frame error: ' + e.message + ' ' + String(e.stack).split('\n').slice(1, 3).join(' < '); throw e; } return scene.stats(); },
+  err() { const c = document.getElementById('errbar'); return c.hidden ? '' : c.textContent; },
+  ready() { return !tank || tank.loaded || tank.failed; },
+};
+scene.fx.driven = true; L.place(q.get('biome') || 'farmland', q.get('cond') || 'day', +(q.get('map') || 3)); L.cam(215, 42, 13); L.up = true;
+</script></body></html>

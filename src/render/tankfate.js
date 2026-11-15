@@ -6,7 +6,7 @@
 //   mobility 'killed'    dark smoke from the engine deck; a track run off its sprocket and laid out behind, if a hit's parts list names a track
 //   firepower 'killed'   grey smoke at the gun mantlet (the gun and turret are one piece of the model: it cannot be shown drooped)
 // Without battle.tank.fate nothing here runs and the vehicle keeps today's fire and smoke. Particles go through the public calls of
-// scene.fx only (burn, fireball, sparks, puff, flash, column). One point light, made at start with no brightness, flickers with the jets.
+// scene.fx only (burn, fireball, sparks, puff, flash, column, flameJet). One point light, made at start with no brightness, flickers with the jets.
 // The men bailing out are acted by the crew figures: src/render/interior.js _bailOut.
 import * as THREE from 'three';
 // MEASURED on the turret model (tests/interior/roof_survey.json): the raised plate x -0.775 to 0.775, z -2.125 to -0.975, top 0.65
@@ -22,13 +22,10 @@ export class TankFate {
   }
   _build() {
     const tk = this.tank; if (!tk.turret) return false; this.built = true; const paint = new THREE.MeshStandardMaterial({ color: '#4a4e3b', roughness: 0.8, metalness: 0.2 }), black = new THREE.MeshBasicMaterial({ color: '#050403' });
-    const flame = (c, o) => new THREE.MeshBasicMaterial({ color: c, vertexColors: true, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
     this.root = new THREE.Group(); this.root.name = 'tank-fate'; this.s.scene.add(this.root); this.onTur = new THREE.Group(); tk.turret.add(this.onTur); this.panels = []; this.jets = [];
-    const jetGeo = new THREE.CylinderGeometry(0.05, 0.34, 1, 18, 12, true); jetGeo.translate(0, 0.5, 0); { const p = jetGeo.attributes.position, col = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const y = p.getY(i), a = Math.atan2(p.getZ(i), p.getX(i)), k = (1 + 0.35 * Math.sin(y * 3.1) * (1 - y)) * (1 + 0.22 * y * Math.sin(a * 3 + y * 9)); p.setX(i, p.getX(i) * k + 0.12 * y * Math.sin(y * 7)); p.setZ(i, p.getZ(i) * k * 1.5);
-        const c = Math.pow(1 - y, 1.5) * (0.75 + 0.25 * Math.sin(a * 5 + y * 13)); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = Math.max(0, c); } jetGeo.setAttribute('color', new THREE.BufferAttribute(col, 3)); }   /* a tongue: wide along the opening, ragged, drawn in and fading out toward the top (it is added to the picture, so darker = thinner) */
     for (let i = 0; i < 2; i++) { const P = PANEL[i], pan = new THREE.Mesh(new THREE.BoxGeometry(P.w, 0.035, P.l), paint); pan.castShadow = true; pan.visible = false; this.root.add(pan); this.panels.push(pan);
       const hole = new THREE.Mesh(new THREE.PlaneGeometry(P.w, P.l), black); hole.rotation.x = -Math.PI / 2; hole.position.set(P.x, PY + 0.006, P.z); this.onTur.add(hole);
-      const outer = new THREE.Mesh(jetGeo, flame('#ff6a14', 0.5)), inner = new THREE.Mesh(jetGeo, flame('#ffd890', 0.6));   /* a glowing core only: the fire itself is particles */ for (const j of [outer, inner]) { j.position.set(P.x, PY, P.z); j.renderOrder = 5; this.onTur.add(j); } this.jets.push({ outer, inner, ph: i * 1.7 }); }
+      this.jets.push({ ph: i * 1.7 }); }   /* the jet itself is drawn by scene.fx.flameJet (particles), no mesh */
     // a thrown track: a strip of links laid out on the ground behind the sprocket (made once, shown on the side that was hit)
     { const g = new THREE.Group(), link = new THREE.BoxGeometry(0.62, 0.07, 0.15), mat = new THREE.MeshStandardMaterial({ color: '#2b2a27', roughness: 0.9, metalness: 0.3 }); for (let k = 0; k < 26; k++) { const m = new THREE.Mesh(link, mat); m.position.set(0.1 * Math.sin(k * 0.45), 0.04, -k * 0.165); m.rotation.y = 0.12 * Math.cos(k * 0.45); m.castShadow = true; g.add(m); } g.visible = false; this.track = g; this.root.add(g); }
     this.onTur.visible = false; return true;
@@ -48,9 +45,9 @@ export class TankFate {
       if (y > gy) { pan.position.set(gx, y, gz); this._e.set(f.wx * t, tk.group.rotation.y + f.yaw * t, f.wz * t); pan.quaternion.setFromEuler(this._e); }
       else { const tl = (f.up + Math.sqrt(f.up * f.up + 2 * G * Math.max(0, p0.y - gy))) / G, lx = p0.x + (oxx * f.out + ox.x * f.back) * tl, lz = p0.z + (oxz * f.out + ox.z * f.back) * tl; pan.position.set(lx, W.h(lx, -lz) + 0.04, lz); this._e.set(0.05 * P.s, tk.group.rotation.y + f.yaw * tl, 0.03); pan.quaternion.setFromEuler(this._e); if (once('land' + i, bo.t0 + tl)) fx.dust(lx, pan.position.y, lz, 0.8); }
       // the jet: up in 0.15 s, full for most of the burn, dying over the last 3 s (15 s for a catastrophic burn); it wavers
-      const J = this.jets[i], tail = F.kind === 'catastrophic' ? 15 : 3, env = Math.max(0, Math.min(1, t / 0.15, (bo.t1 - now) / tail)), wav = 0.82 + 0.12 * Math.sin(now * 23 + J.ph) + 0.08 * Math.sin(now * 61 + J.ph * 2), H = (F.kind === 'catastrophic' ? 6.5 : 5) * env * wav;
-      J.outer.visible = J.inner.visible = env > 0.01; J.outer.scale.set(1 + 0.25 * env, Math.max(0.01, H), 1); J.inner.scale.set(0.55, Math.max(0.01, H * 0.72), 0.6); J.outer.rotation.z = 0.05 * Math.sin(now * 7 + J.ph); J.inner.rotation.z = J.outer.rotation.z; glow = Math.max(glow, env * wav);
-      if (env > 0.02 && tick) { const m = at(P.x, PY + 0.3, P.z, this._b); fx.fireball(m.x, m.y, m.z, 0.8 * env, 6, 12, 1.2, [0.06, 0.058, 0.055], 0.5, 11); fx.fireball(m.x, m.y + 1.6 * env, m.z, 0.6 * env, 3, 6, 1.0, [0.06, 0.058, 0.055], 0.4, 7); fx.sparks(m.x, m.y + 0.5, m.z, 0, 1, 0, 9, 19, 0.6, 1.3);   /* turbulent fire up the jet, burning propellant grains thrown out */
+      const J = this.jets[i], tail = F.kind === 'catastrophic' ? 15 : 3, env = Math.max(0, Math.min(1, t / 0.15, (bo.t1 - now) / tail)), wav = 0.82 + 0.12 * Math.sin(now * 23 + J.ph) + 0.08 * Math.sin(now * 61 + J.ph * 2), H = (F.kind === 'catastrophic' ? 6.5 : 5) * env * wav, jk = (F.kind === 'catastrophic' ? 1.1 : 0.85) * env * wav;   /* flameJet strength 1 = about a 6 m tongue */
+      if (jk > 0.01 && dt > 0) { const m = at(P.x, PY + 0.05, P.z, this._b), u = this._a.set(0, 1, 0).transformDirection(tur.matrixWorld); fx.flameJet(m.x, m.y, m.z, u.x, u.y, u.z, jk, dt); } glow = Math.max(glow, env * wav);
+      if (env > 0.02 && tick) { const m = at(P.x, PY + 0.3, P.z, this._b); fx.fireball(m.x, m.y, m.z, 0.8 * env, 6, 12, 1.2, [0.06, 0.058, 0.055], 0.5, 11);   /* rolling fire at the opening (the tongue, its sparks and smoke come from flameJet) */
         fx.puff(m.x, m.y + H * 0.8, m.z, P.s * 0.4, 4.5, 0, 9, 1.6, 9, 0.04, 0.04, 0.04, 0.8, 0.4, 0.5); }   /* and the black smoke it turns into above */
       if (once('pop' + i, bo.t0)) { const m = at(P.x, PY + 0.4, P.z, this._b); fx.flash(m.x, m.y + 1, m.z, 2.2); fx.fireball(m.x, m.y, m.z, 1.5, 14, 16, 2.2, [0.08, 0.08, 0.08], 0.5, 12); fx.sparks(m.x, m.y, m.z, 0, 1, 0, 40, 26, 0.7, 1.6); } }
     { const L = this.light; if (glow > 0.01) { at(0, PY + 2.2, -1.55, L.position); L.intensity = 70 * glow; } else if (L.intensity) L.intensity = 0; }
