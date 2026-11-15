@@ -86,9 +86,11 @@ export function vehicleFinish(mat) {
       { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), paintable = smoothstep(0.02, 0.09, l); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * paintable);   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
         vec3 gn = normalize(cross(dFdx(vWp), dFdy(vWp))), pm = vOp;
         float nA = hkw_n(pm.xz * 3.1 + pm.y * vec2(2.2, 1.6)), nB = hkw_n(pm.xz * 11.0 + pm.y * vec2(7.8, 5.9) + 4.0), nC = hkw_n(pm.xz * 37.0 + pm.y * vec2(26.0, 19.0) + 9.0);
-        diffuseColor.rgb *= mix(1.0, 0.7 + 0.55 * (nA * 0.5 + nB * 0.32 + nC * 0.18), paintable);                                             /* grime */
+        float nL = hkw_n(pm.xz * 0.85 + pm.y * vec2(0.6, 0.45) + 2.0);   /* broad patches, a metre and more across: what still shows from 30 m */
+        diffuseColor.rgb *= mix(1.0, (0.7 + 0.55 * (nA * 0.5 + nB * 0.32 + nC * 0.18)) * (0.74 + 0.52 * nL), paintable);                      /* grime */
         float upright = 1.0 - smoothstep(0.25, 0.7, abs(gn.y));
         float run = upright * smoothstep(0.52, 0.82, hkw_n(vec2((pm.x + pm.z * 0.8) * 13.0, pm.y * 0.9))) * (0.45 + 0.55 * nA);
+        run = max(run, upright * smoothstep(0.5, 0.8, hkw_n(vec2((pm.x + pm.z * 0.8) * 3.6 + 7.0, pm.y * 0.5))) * 0.8);                       /* and broad stains, for the same reason */
         diffuseColor.rgb *= 1.0 - 0.5 * run * paintable;                                                                                       /* dark run-off */
         float pale = upright * smoothstep(0.58, 0.9, hkw_n(vec2((pm.x * 0.8 - pm.z) * 9.0 + 31.0, pm.y * 0.6)));
         diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.9 + 0.3 * nB), pale * 0.32);                                                      /* dusty streaks */
@@ -98,7 +100,7 @@ export function vehicleFinish(mat) {
         diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93));  /* mud and dust thrown up by the tracks */
         #ifndef FLAT_SHADED
           { float curv = length(fwidth(normalize(vNormal))) / max(length(fwidth(vWp)), 1e-5);
-            hkvChip = smoothstep(2.5, 9.0, curv) * smoothstep(0.4, 0.62, nC * 0.6 + nB * 0.4) * paintable;
+            hkvChip = smoothstep(16.0, 45.0, curv) * smoothstep(0.4, 0.62, nC * 0.6 + nB * 0.4) * paintable;   /* only real corners (a bend tighter than about 5 cm), not round barrels and wheels */
             diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.285, 0.25) * (0.7 + 0.6 * nB), hkvChip * 0.8); }                              /* chipped edges */
         #endif
         diffuseColor.rgb *= 1.0 - 0.5 * (1.0 - smoothstep(0.1, 1.25, vWp.y - uFGround)) * (1.0 - smoothstep(-0.2, 0.6, gn.y));                 /* the running gear in the hull's shade */

@@ -102,7 +102,7 @@ const VERT_BODY = /* glsl */`
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
     /* grass and scrub splay outward from the foot (each of the two cards leans its own way), so that from above a tuft is a small
        bushy patch and not a thin cross; crops stand straight in their rows */
-    float lean = (0.34 + 0.34 * aSeed.z) * (1.0 - crop) * position.y;
+    float lean = (0.34 + 0.34 * aSeed.z) * (1.0 - crop) * position.y * trod;
     vec2 pl = position.xz + (position.z == 0.0 ? vec2(0.0, lean) : vec2(lean, 0.0));
     vec3 lp = vec3(pl.x * ca * w - pl.y * sa * w, position.y * h, pl.x * sa * w + pl.y * ca * w);
     float gy = hkGround(wxz) - 0.04;
