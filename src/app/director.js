@@ -62,7 +62,9 @@ export class Director {
     if (on === this.hold) return; if (on) { this._release(false); this.hold = true; this.tag.hidden = true; this.capText = null; this.cap.style.opacity = 0; if (this.cap.classList.contains('docked')) this.cap.style.display = 'none'; }
     else { this.hold = false; this.filmEnd(); this.b = null; }
   }
-  film(s, t) { const A = this.app; if (!A.battle) return; this.b = A.battle; if (s !== this.shot) this._enter(s, t); this._drive(s, t); }
+  film(s, t) { const A = this.app; if (!A.battle) return; this.b = A.battle;
+    if (s !== this.shot) { if (s.cam !== 'enemy' && A.cams._near0 != null) A.cams.set('orbit');   /* leaving an enemy sight: its 30 m near limit must go back, or the vehicle and the ground beside the camera are cut away */ this._enter(s, t); }
+    this._drive(s, t); }
   filmEnd() { this.shot = null; this.ctrl = false; this.modeSet = null; this.fall = null; this.hasLast = false; }
 
   // once a frame, before the cameras are updated
@@ -160,7 +162,7 @@ export class Director {
       const m = this._missile(s);
       if (m) { this.lastP.copy(m.p); this.hasLast = true;
         if (rig === 'ride') { P.copy(m.p).addScaledVector(m.dir, -16); P.y += 4.5; S.at(T.e, T.n, 2, L); }   /* behind and above it, so its flame sits low in the picture and the way ahead is clear */
-        else { const a = (s.brg || 0) * DEG; P.copy(m.p); P.x += Math.cos(a) * 30; P.z += Math.sin(a) * 30; P.y += 5; L.copy(m.p); }
+        else { const a = (s.brg || 0) * DEG, out = s.out || 30; P.copy(m.p); P.x += Math.cos(a) * out; P.z += Math.sin(a) * out; P.y += s.up || 5; L.copy(m.p); }   /* out, up: the briefing stands further off and higher for a drone over trees */
         const g = S.world.h(P.x, -P.z) + 1; if (P.y < g) P.y = g; this._set(rig === 'ride' ? 55 : 45);
       } else if (this.hasLast) { if (rig === 'follow') { L.copy(this.lastP); this._set(45); } }
       else { const a = (s.brg || 0) * DEG; S.at(T.e - Math.sin(a) * 14, T.n - Math.cos(a) * 14, 5, P); S.at(T.e + Math.sin(a) * 80, T.n + Math.cos(a) * 80, 6, L); this._set(50); }   /* not in the air yet, or the view jumped here late */

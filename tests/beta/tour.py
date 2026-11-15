@@ -16,13 +16,15 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path=os.environ.get('CHROME', '/usr/bin/google-chrome'), args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
         pg = await b.new_page(viewport={'width': W, 'height': H}); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:300])); pg.on('console', lambda m: m.type == 'error' and 'GPU stall' not in m.text and '404' not in m.text and errs.append(m.text[:300]))
-        bad = 0; fresh = 'help' in PARTS   # after the help part (a live battle) the briefing starts from a newly loaded page
+        costed = False; bad = 0; fresh = 'help' in PARTS   # after the help part (a live battle) the briefing starts from a newly loaded page
         async def ready(hash_):
-            await pg.goto(os.environ['BASE'] + '#' + hash_, timeout=180000); await pg.wait_for_function('window.__beta && window.__beta.ready && window.__beta.guide', timeout=400000); print('ready after %.0f s' % (time.time() - T0), flush=True)
+            await pg.goto('about:blank'); await pg.goto(os.environ['BASE'] + '#' + hash_, timeout=180000);   # (a new address that differs only after the # would not load the page again) await pg.wait_for_function('window.__beta && window.__beta.ready && window.__beta.guide', timeout=400000); print('ready after %.0f s' % (time.time() - T0), flush=True)
         async def shot(name): path = os.path.join(OUT, name + '.png'); await pg.screenshot(path=path, timeout=180000); print('  picture', path, flush=True)
         if 'help' in PARTS:
+            await pg.set_viewport_size({'width': 960, 'height': 540})   # the help is always pictured at the small size: it must fit one screen there
             await ready('gfx=min&help=1&play=1'); await pg.wait_for_timeout(4000)
-            o = await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, t: __beta.battle.t })"); print('help', o); await shot('help')
+            o = await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, t: __beta.battle.t, fits: (c => c.scrollHeight <= c.clientHeight + 1)(document.querySelector('#help .card')) })"); print('help', o); await shot('help')
+            if not json.loads(o)['fits']: bad += 1; print('FAIL the help does not fit one screen at 960 x 540')
             if not json.loads(o)['open']: bad += 1; print('FAIL the first-run help did not open')
             await pg.evaluate("void document.querySelector('#help .btn.primary').click()"); await pg.wait_for_timeout(3000)
             o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, seen: localStorage.getItem('hkoi.help1'), q: !!document.querySelector('#bar .btn[title^=\"How to watch\"], #bar .btn[data-tip^=\"How to watch\"]') })")); print('after Got it', o)
@@ -33,6 +35,7 @@ async def main():
             except Exception as e: bad += 1; print('FAIL hover', str(e)[:200])
             await pg.keyboard.press('?'); await pg.wait_for_timeout(2500); o = await pg.evaluate("!document.getElementById('help').hidden"); print('? key reopens', o); await pg.keyboard.press('Escape'); await pg.wait_for_timeout(1000)
             if not o: bad += 1; print('FAIL the ? key did not reopen the help')
+            await pg.set_viewport_size({'width': W, 'height': H})
         if 'title' in PARTS or 'scen' in PARTS or 'keys' in PARTS:
             await ready('gfx=%s&demo=0' % GFX); await pg.wait_for_timeout(3000)
             if 'title' in PARTS:
@@ -75,6 +78,7 @@ async def main():
                 if L[1] < 0 or L[1] + L[3] > W or L[2] < 0 or L[2] + L[4] > lab['card'][1] + 2: bad += 1; print('FAIL label off the picture or over the card', L)
             if lab['card'][1] < H * 0.45: bad += 1; print('FAIL the card covers more than half the picture', lab['card'])
             await shot('tour_%d_%d%s' % (ci, si, os.environ.get('TAG', '')))
+            if not costed: costed = True; print('   cost of the briefing, one frame (camera rig, lines, labels), mean of 300: %.3f ms' % (await pg.evaluate("(() => { const b = __beta.guide.brief, t0 = performance.now(); for (let i = 0; i < 300; i++) b.update(0); return (performance.now() - t0) / 300; })()")))
         if 'exit' in PARTS and await pg.evaluate("!!(window.__beta && __beta.guide && __beta.guide.brief.on)"):
             before = await pg.evaluate("JSON.stringify(__beta.set)")
             await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(6000); a = json.loads(await pg.evaluate(STATE)); await pg.keyboard.press('ArrowLeft'); await pg.wait_for_timeout(6000); c = json.loads(await pg.evaluate(STATE)); print('arrow keys', a['ci'], a['si'], '->', c['ci'], c['si'])

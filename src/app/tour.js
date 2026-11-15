@@ -56,7 +56,7 @@ function findCut(B) {
       tAcq: th.acq != null ? v.t0 + th.acq : null, tTrack: th.track != null ? v.t0 + th.track : null, dTrack: th.track != null ? distAt(th, th.track) : null, cueSrc: th.cue_src || null,
       tF: v.t0 + r0.t_fire, dFire: distAt(th, r0.t_fire), rounds: cb.rounds.length, tPass: v.t0 + tPass, xPass: distAt(th, tPass),
       tB: v.t0 + (cb.t_ref != null ? cb.t_ref : tPass), tCut: v.t0 + cb.res.t_cut, x: xs / cb.puffs.length, span: x1 - x0, severD: th.viz.sever.d,
-      xFirst: r0.bx != null ? r0.bx : distAt(th, tPass), nOut: out.length, xNear: near.reduce((a, b) => a + b, 0) / near.length, spanNear: Math.max(36, near[near.length - 1] - near[0] + 26), form: settings(B).form,
+      xFirst: r0.bx != null ? r0.bx : distAt(th, tPass), xAtB: distAt(th, (cb.t_ref != null ? cb.t_ref : tPass) + 0.05),   /* where the first puff is, and where the missile is when that puff has opened */ nOut: out.length, xNear: near.reduce((a, b) => a + b, 0) / near.length, spanNear: Math.max(36, near[near.length - 1] - near[0] + 26), form: settings(B).form,
       end: { type: end.type, d: end.d != null ? end.d : null, miss: end.miss != null ? end.miss : null }, inAir: v.rec.threats.length,
       spread: Math.max(...v.rec.threats.map(o => o.t0)) - Math.min(...v.rec.threats.map(o => o.t0)), cfg: settings(B), all: tally(B) };
   });
@@ -146,7 +146,7 @@ export const CHAPTERS = [
     { head: 'HKOI answers', from: Math.max(0, M.tF - 1.8), to: M.tF + 1.3, rate: 0.5, shot: shotOf({ rig: 'gun' }, M.id), lines: ['track'],
       marks: [mk('station', 'HKOI: 30 mm weapon station', null, { tone: 'good' }), mk('missile', `Kornet, ${km(M.dFire)}`, M.id, { tone: 'bad' })],
       text: () => `${s1(M.tF - M.tL)} s after launch the fire control has picked a point on the missile's line back to its launcher, and the gun opens fire: ${word(M.rounds)} obscurant rounds${M.cfg.gap ? `, one every ${s1(M.cfg.gap)} s` : ''}. It is not trying to hit the missile.` },
-    { head: 'Overtake', from: M.tPass - 1.2, to: M.tB + 0.15, rate: 0.25, shot: shotOf({ rig: 'cloud', x: (M.xFirst + distAt({ R: M.R, v: M.speed, t0: M.tL - M.t0 }, M.tB - M.t0)) / 2, span: 70 }, M.id), lines: ['beam'],
+    { head: 'Overtake', from: M.tPass - 1.2, to: M.tB + 0.05, rate: 0.25, shot: shotOf({ rig: 'cloud', x: (M.xFirst + M.xAtB) / 2, span: Math.max(60, M.xFirst - M.xAtB + 14) }, M.id), lines: ['beam'],
       marks: [mk('missile', 'Kornet, still guided', M.id, { tone: 'bad' }), mk('cloud', 'First burst', M.id, { tone: 'good', x: M.xFirst, r: 60 }), mk('beam', 'Guidance beam from the launcher', M.id, { tone: 'bad' })],
       text: () => `The first round meets the incoming missile ${km(M.xPass)} from the vehicle and bursts beside it. The missile flies on at ${Math.round(M.speed)} m/s, so by the time the puff has opened${M.form ? `, ${s1(M.form)} s later,` : ''} it lies behind the missile, on the line back to the launcher. That is the overtake: the cloud is put exactly where the beam has to pass.` },
     { head: 'Bloom', from: M.tB - 0.2, to: M.tCut + 0.25, rate: 0.5, shot: shotOf({ rig: 'cloud', x: M.xNear, span: M.spanNear }, M.id), lines: ['beam'],
@@ -158,8 +158,8 @@ export const CHAPTERS = [
     { head: 'And from HKOI\'s own sight', from: Math.max(0, M.tF - 1.2), to: M.tB + 1.2, rate: 1, shot: shotOf({ cam: 'hkoi' }, M.id),
       marks: [mk('missile', 'Kornet', M.id, { tone: 'bad' })],
       text: () => `The weapon station's own sensor through the engagement. It holds the track, lays the gun on the meeting point and fires; the crew does nothing but watch. From launch to cut this engagement took ${s1(M.tCut - M.tL)} s.` },
-    { head: 'Blind', from: M.tCut - 0.4, to: M.tE + 0.4, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.id), lines: ['beam'],
-      marks: [mk('missile', 'Kornet: no guidance', M.id, { tone: 'warn' })].concat(M.end.type === 'ground' && M.end.d != null ? [mk('point', `Hits the ground ${Math.round(M.end.d)} m short`, M.id, { tone: 'good', d: M.end.d, after: M.tE })] : []),
+    { head: 'Blind', from: M.tCut - 0.4, to: M.tE + 0.5, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.id), lines: ['beam'],
+      marks: [mk('missile', 'Kornet: no guidance', M.id, { tone: 'warn', gone: M.end.type === 'ground' && M.end.d != null ? `Hit the ground ${Math.round(M.end.d)} m short` : 'Missed the vehicle', goneTone: 'good' })],
       text: () => `With no beam the missile holds whatever course it had. ${M.end.type === 'ground' && M.end.d != null ? `This one flew into the ground ${Math.round(M.end.d)} m short of the vehicle` : M.end.miss != null ? `This one passed ${Math.round(Math.abs(M.end.miss))} m wide of the vehicle` : 'This one missed the vehicle'}, ${s1(Math.max(0, M.tE - M.tCut))} s after the cut.` },
     { head: 'Not every time', from: M.tE + 1.5, to: M.tE + 1.5, rate: 1, shot: shotOf({ rig: 'tank' }, M.id),
       marks: [mk('station', 'HKOI weapon station', null, { tone: 'good' })],
@@ -169,23 +169,23 @@ export const CHAPTERS = [
     { head: 'A threat with no beam to cut', from: Math.max(0, M.one.t0 - 2.5), to: Math.max(M.one.t0 + 0.2, M.one.tF - 0.4), rate: 1, shot: shotOf({ rig: 'gun' }, M.one.id), lines: ['track'],
       marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad' }), mk('station', 'HKOI weapon station', null, { tone: 'good' })],
       text: () => `An FPV drone: a small racing aircraft with an anti-tank warhead, flown by a pilot through a video link at about ${Math.round(M.one.speed * 3.6 / 10) * 10} km/h. There is no guidance beam to cut, and a drone on a fibre-optic line cannot be jammed either. It has to be shot down.` },
-    { head: 'Airburst', from: Math.max(0, M.one.tF - 1), to: M.one.tK + 0.6, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.one.id), lines: ['track'],
+    { head: 'Airburst', from: Math.max(0, M.one.tF - 1), to: M.one.tK + 0.6, rate: 0.5, shot: shotOf({ rig: 'follow', up: 16, out: 36 }, M.one.id), lines: ['track'],
       marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' }), mk('station', 'HKOI: high-explosive rounds', null, { tone: 'good' })],
       text: () => `The same gun, the other magazine. HKOI fires ${word(M.one.first)} high-explosive rounds set to burst beside the drone, and it is destroyed ${km(M.one.d)} from the vehicle, ${s1(Math.max(0, M.one.tK - M.one.tF))} s after the first round left the gun.` },
-    !M.multi ? null : { head: 'Sometimes it takes more than one burst', from: Math.max(0, M.multi.tF - 1), to: M.multi.tK + 0.6, rate: 1, shot: shotOf({ rig: 'follow' }, M.multi.id), lines: ['track'],
+    !M.multi ? null : { head: 'Sometimes it takes more than one burst', from: Math.max(0, M.multi.tF - 1), to: M.multi.tK + 0.6, rate: 1, shot: shotOf({ rig: 'follow', up: 16, out: 36 }, M.multi.id), lines: ['track'],
       marks: [mk('missile', cap(M.multi.name), M.multi.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' })],
       text: () => `This ${M.multi.name} took ${word(M.multi.n)} bursts, ${M.multi.rounds} rounds, and came within ${km(M.multi.d)} before it fell. In the model one full burst brings a drone down ${Math.round(100 * M.cfg.hePk)}% of the time before the pilot's dodging is counted (assumed). The magazine holds ${M.cfg.he0} of these rounds; this whole battle used ${M.cfg.he0 - M.all.heLeft}.` },
   ].filter(Boolean) },
   { key: 'limits', name: 'Limits', setup: TOWN, find: findLimits, steps: M => [
     !M.close ? null : { head: M.close.why === 'handed' || M.close.why === 'min' ? 'Too close for a cloud' : 'When the cloud is not enough', from: Math.max(0, M.close.tL - 0.6), to: M.close.tA + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.close.id), lines: ['beam'],
-      marks: [mk('missile', cap(M.close.name), M.close.id, { tone: 'bad', gone: 'Destroyed by Trophy here', goneTone: 'good' }), mk('trophy', 'Trophy launcher', M.close.id, { tone: 'good', side: M.close.side })],
+      marks: [mk('missile', cap(M.close.name), M.close.id, { tone: 'bad' }), mk('point', 'Destroyed by Trophy here', M.close.id, { tone: 'good', d: M.close.d, h: 1.6, after: M.close.tA }), mk('trophy', 'Trophy launcher', M.close.id, { tone: 'good', side: M.close.side })],
       text: () => (M.close.why === 'handed' ? `This ${M.close.name} was launched from only ${km(M.close.R)}: ${s1(M.close.flight)} s of flight. The fire control judged there was no time for a cloud to form and work, and handed it straight to Trophy, the inner layer, which destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'min' ? `This ${M.close.name} was launched from only ${km(M.close.R)}, inside the distance HKOI needs to put a cloud on its line. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'saclos' ? `A ${M.close.name} is steered by commands from its launcher, which watches a flare in the missile's tail. A cloud blinds that kind less surely than a beam-rider: ${Math.round(100 * M.cfg.saclos)}% of the time in the model (assumed), and not this time. Trophy destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'thin' ? `HKOI fired at this ${M.close.name}, but the cloud was too thin to break its guidance. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
         : `HKOI did not stop this ${M.close.name}. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`) },
     !M.rpg ? null : { head: 'Nothing to blind', from: Math.max(0, M.rpg.tL - 1.2), to: M.rpg.tA + 0.6, rate: 0.25, shot: shotOf({ rig: 'replay' }, M.rpg.id),
-      marks: [mk('missile', 'RPG rocket', M.rpg.id, { tone: 'bad', gone: 'Destroyed by Trophy here', goneTone: 'good' }), mk('trophy', 'Trophy launcher', M.rpg.id, { tone: 'good', side: M.rpg.side })],
+      marks: [mk('missile', 'RPG rocket', M.rpg.id, { tone: 'bad' }), mk('point', 'Destroyed by Trophy here', M.rpg.id, { tone: 'good', d: M.rpg.d, h: 1.6, after: M.rpg.tA }), mk('trophy', 'Trophy launcher', M.rpg.id, { tone: 'good', side: M.rpg.side })],
       text: () => `An RPG is unguided: once it is fired there is nothing to blind. This one came from ${Math.round(M.rpg.R)} m and was on the vehicle in ${s1(M.rpg.flight)} s. HKOI holds its fire on rockets, and Trophy destroyed it ${Math.round(M.rpg.d)} m from the armour.` },
     { head: 'Eight shots, and what nothing stops', from: (M.rpg || M.close).tA + 2, to: (M.rpg || M.close).tA + 2, rate: 1, shot: shotOf({ rig: 'tank' }, (M.rpg || M.close).id),
       marks: [mk('trophy', 'Trophy: one launcher each side', (M.rpg || M.close).id, { tone: 'good', side: 'L' })],
@@ -251,8 +251,8 @@ const CSS = `
   #help { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(4, 8, 7, .72); }
   #help .card { width: min(980px, 100%); max-height: calc(100vh - 24px); overflow-y: auto; padding: 18px 22px; box-sizing: border-box; }
   #help h2 { margin: 0 0 2px; font-size: clamp(19px, 2.4vw, 28px); letter-spacing: .06em; } #help .sub { color: var(--dim); margin: 0 0 12px; font-size: 13.5px; }
-  #help .hg { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; }
-  #help .hi { border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px; padding: 9px 12px; background: rgba(255, 255, 255, .03); } #help .hi b { display: block; font-size: 14.5px; margin-bottom: 3px; color: var(--accent); }
+  #help .hg { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  #help .hi { border: 1px solid rgba(255, 255, 255, .12); border-radius: 8px; padding: 9px 12px; background: rgba(255, 255, 255, .03); } #help .hi > b { display: block; font-size: 14.5px; margin-bottom: 3px; color: var(--accent); } #help .hi p b { color: #fff; font-weight: 700; }
   #help .hi p { margin: 0; font-size: 13px; line-height: 1.4; color: #dfe8e2; } #help kbd { font: 11px var(--mono); border: 1px solid rgba(255, 255, 255, .3); border-radius: 4px; padding: 0 5px; margin: 0 1px; background: rgba(255, 255, 255, .07); white-space: nowrap; }
   #help .hf { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; } #help .hf span { color: var(--dim); font-size: 12.5px; flex: 1; min-width: 200px; }
   #bartip { position: fixed; z-index: 7; left: 0; top: 0; max-width: 300px; padding: 6px 10px; border-radius: 6px; background: rgba(5, 9, 8, .96); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.35; color: var(--fg); pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
@@ -373,6 +373,7 @@ class Briefing {
     if (!st) { this.fault = 'This chapter\'s battle no longer contains the moment the chapter was built on.'; this.phase = 'hold'; A.playing = false; this._paint(); return; }
     const T = A.replay ? A.replay.T : 1e9, from = Math.max(0, Math.min(T - 0.2, st.from)), to = Math.max(from, Math.min(T - 0.1, st.to));
     this.to = to; this.shot = Object.assign({ t0: from }, st.shot); for (const m of st.marks) m._seen = false;
+    { const u = this.shot.uid != null ? A.battle.units.find(x => x.id === this.shot.uid) : null; if (u) { this.shot.le = u.e; this.shot.ln = u.n; } }   /* where the launcher is: the rigs that frame the guidance line need its height */
     A.seek(from); A.speed = st.rate || 1; A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
     this.seen.add(this.ci + ':' + this.si); this._paint();
     if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.panel, 600); } catch (e) { console.error(e); } }
@@ -441,7 +442,7 @@ class Briefing {
       const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let best = (mk.r || 80), hit = false;
       if (C && C.puffs) for (const p of C.puffs) { if (!p.on || t < p.tb) continue; const age = Math.max(0, t - p.t0), px = p.x + (p.vx || 0) * age, pz = p.z + (p.vz || 0) * age, d = Math.hypot(px - ce, -pz - cn); if (d >= best) continue; best = d; out.set(px, p.y, pz); hit = true; }
       return hit; }
-    if (mk.at === 'point') { if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false; const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
+    if (mk.at === 'point') { if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false; const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, mk.h || 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
     return false;
   }
   // a point in the world to a point on the page; false when it is behind the camera
