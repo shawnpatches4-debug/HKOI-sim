@@ -76,19 +76,19 @@ export function detail(h) {
 
 // what the battle says became of the tank, if it keeps that: { t, kind } (kind: a word such as catastrophic, blowout, fire, mobility, abandoned)
 export function fateOf(battle) {
-  if (!battle) return null; const f = battle.tank && battle.tank.fate;
-  if (f && typeof f === 'object' && (f.t != null || f.T != null)) return { t: f.t != null ? f.t : f.T, kind: String(f.kind || f.fate || f.type || f.how || '').toLowerCase() };
+  if (!battle) return null; const f = battle.tank && battle.tank.fate;   /* src/battle/fate.js: { t, kind 'catastrophic' | 'ammo_vented' | 'knocked_out' | 'abandoned' | 'ok', blowout { t0, t1 }, fire { t0, t1, where }, crew } */
+  if (f && typeof f === 'object' && f.t != null) { f._k = f._k || String(f.kind || f.fate || '').toLowerCase(); return f; }
   const E = battle.events; if (!E || !E.length) return null; if (battle._inFateN === E.length) return battle._inFate; let out = null;
-  for (let i = E.length - 1; i >= 0 && i > E.length - 400; i--) { const e = E[i]; if (e.type === 'tank_fate' || e.type === 'blowout') { out = { t: e.t, kind: String(e.fate || e.kind || e.type || '').toLowerCase() }; break; } }
+  for (let i = E.length - 1; i >= 0 && i > E.length - 400; i--) { const e = E[i]; if (e.type === 'tank_fate' || e.type === 'blowout') { out = { t: e.t, _k: String(e.fate || e.kind || e.type || '').toLowerCase() }; break; } }
   battle._inFateN = E.length; battle._inFate = out; return out;
 }
 
 // The state of the inside at battle time `now`. hits: the list from interior_fx.hitList (time order); crew: battle.crewState() or null.
 const ST = { shake: 0, flick: 0, glitch: 0, smoke: 0, dust: 0, flash: 0, fire: false, lightsOut: false, emergency: false, alarm: false, dark: {}, weak: {}, last: null, lastAge: 1e9, blood: {}, pulse: null,
-  outside: false, hits: null, now: 0, lastAny: null, lastAnyAge: 1e9, arcs: [], hyd: null, fires: [], halon: null, blow: null, breach: null, cracked: {}, manual: false, powerOut: false, gunHit: null, optics: 0, abandoned: false, rock: 0, quiet: 1e9, engine: null };
+  outside: false, hits: null, now: 0, lastAny: null, lastAnyAge: 1e9, arcs: [], hyd: null, fires: [], halon: null, blow: null, breach: null, cracked: {}, manual: false, powerOut: false, gunHit: null, optics: 0, abandoned: false, rock: 0, quiet: 1e9, engine: null, tripAge: 1e9 };
 export function insideState(hits, now, crew, fate) {
   const S = ST; S.shake = S.flick = S.glitch = S.smoke = S.dust = S.flash = S.optics = S.rock = 0; S.fire = S.lightsOut = S.emergency = S.alarm = S.manual = S.powerOut = false; S.dark = {}; S.weak = {}; S.cracked = {}; S.last = null; S.lastAge = 1e9; S.blood = {}; S.pulse = null;
-  S.outside = false; S.hits = hits; S.now = now; S.lastAny = null; S.lastAnyAge = 1e9; S.arcs.length = 0; S.hyd = null; S.fires.length = 0; S.halon = null; S.blow = null; S.breach = null; S.gunHit = null; S.abandoned = !!(crew && crew.abandoned); S.quiet = 1e9; S.engine = null;
+  S.outside = false; S.hits = hits; S.now = now; S.lastAny = null; S.lastAnyAge = 1e9; S.arcs.length = 0; S.hyd = null; S.fires.length = 0; S.halon = null; S.blow = null; S.breach = null; S.gunHit = null; S.abandoned = !!(crew && crew.abandoned); S.quiet = 1e9; S.engine = null; S.tripAge = 1e9;
   let trips = 0, lastTrip = -1e9, hardDown = 0;
   for (const h of hits) { const age = now - h.T; if (age < 0) break; S.quiet = age;
     if (age < 5) { S.shake += h.s * Math.exp(-2.2 * age); S.rock += h.s * Math.exp(-0.9 * age) * Math.cos(age * 5.2); }   /* the hull rocks on its suspension for a few seconds after a blow: what the swinging things follow */
@@ -111,22 +111,25 @@ export function insideState(hits, now, crew, fate) {
     for (const id in h.comps) for (const scr of SCREEN_OF[id] || []) { if (h.comps[id] === 'destroyed') { S.dark[scr] = true; S.cracked[scr] = h.idx; } else if (bad(h.comps[id])) { S.weak[scr] = true; if (!S.cracked[scr] && hsh(h.idx, scr.length) < 0.6) S.cracked[scr] = h.idx; } } }
   // the crew model's own fire record decides when a fire is out (it also knows about the second bottle)
   const cf = crew && crew.on ? crew.fire : null;
-  for (let i = S.fires.length - 1; i >= 0; i--) { const f = S.fires[i]; if (f.until < 1e8 && cf && cf.where === f.where && cf.since <= f.since + 0.5) f.until = cf.until; f.age = now - f.since; f.on = now < f.until; f.out = f.on ? 0 : now - f.until; if (!f.on && f.out > 60) S.fires.splice(i, 1); }
+  for (let i = S.fires.length - 1; i >= 0; i--) { const f = S.fires[i]; if (f.until < 1e8 && cf && cf.where === f.where && cf.since <= f.since + 0.5) f.until = cf.until; f.age = now - f.since; f.on = now < f.until; f.out = f.on ? 0 : now - f.until; }
   for (const f of S.fires) { if (f.on) S.fire = true; if (f.where === 'hull' && (!S.halon || f.since > S.halon.T)) S.halon = { T: f.since + HALON.delay, age: now - f.since - HALON.delay, side: f.side }; if (f.where === 'ammo') S.blow = { T: f.since, age: f.age, on: f.on }; }
   if (S.halon && (S.halon.age < 0 || S.halon.age > HALON.fogS)) S.halon = null;
-  if (fate && fate.t <= now && /cata|cook|brew|turret|explod/.test(fate.kind)) { if (!S.breach || fate.t < S.breach.T) S.breach = { T: fate.t, age: now - fate.t }; S.fire = true; S.lightsOut = true; }
-  if (fate && fate.t <= now && /blow|panel/.test(fate.kind) && !S.blow) S.blow = { T: fate.t, age: now - fate.t, on: now - fate.t < FIRE_S.ammo };
+  if (fate && fate.t <= now) { const k = fate._k || '';
+    if (/cata|cook|brew|explod/.test(k)) { if (!S.breach || fate.t < S.breach.T) S.breach = { T: fate.t, age: now - fate.t }; S.fire = true; S.lightsOut = true; }
+    const bo = fate.blowout; if (bo && now >= bo.t0 && !S.blow) S.blow = { T: bo.t0, age: now - bo.t0, on: now <= bo.t1 }; else if (!bo && /blow|panel|vent/.test(k) && !S.blow) S.blow = { T: fate.t, age: now - fate.t, on: now - fate.t < FIRE_S.ammo };
+    const fr = fate.fire; if (fr && now >= fr.t0 && fr.where !== 'ammo' && !S.fires.some(f => f.where === (fr.where === 'engine' ? 'engine' : 'hull'))) { const f = { where: fr.where === 'engine' ? 'engine' : 'hull', since: fr.t0, until: fr.t1, hit: null, side: 0, age: now - fr.t0, on: now < fr.t1, out: now < fr.t1 ? 0 : now - fr.t1 }; S.fires.push(f); if (f.on) S.fire = true; } }
   if (S.breach) { S.smoke = 1; S.alarm = true; }
   // emergency lighting: from the first tripped breaker until someone resets it; for good when the damage is too much
   const able = !crew || !crew.on || ['ldr', 'cdr', 'gnr'].some(r => crew.who[r] && crew.who[r].status === 'ok');
-  if (trips && (hardDown || !able || now - lastTrip < ELEC.resetS)) S.emergency = true; S.powerOut = !!S.engine;
+  if (trips) S.tripAge = now - lastTrip; if (trips && (hardDown || !able || now - lastTrip < ELEC.resetS)) S.emergency = true; S.powerOut = !!S.engine;
   if (S.hyd && S.hyd.age > HYD.mistS) S.hyd = null;
   for (const f of S.fires) if (f.on) S.smoke = Math.max(S.smoke, Math.min(0.85, 0.25 + f.age * (f.where === 'hull' ? 0.07 : 0.025))); else S.smoke = Math.max(S.smoke, 0.5 * Math.exp(-f.out / 18));
   if (S.halon) S.smoke = Math.max(S.smoke, 0.75 * Math.exp(-S.halon.age / 6));   /* the Halon cloud itself */
   return S;
 }
 // the same, when nothing of the inside is to be shown (seen from outside)
-export function noState() { const S = insideState([], 0, null, null); S.outside = true; return S; }
+const OUT = { ...ST, dark: {}, weak: {}, cracked: {}, blood: {}, arcs: [], fires: [], outside: true, hits: null };
+export function noState() { return OUT; }   /* a separate, empty record: the live one (which the crew figures also read) is left alone */
 
 // How hard a hit is felt at a seat, 0 to 1 (for the viewer's ringing ears and for flinching): strength, falling off with the
 // distance from where it struck or from the jet's line. seat: [x, y, z]; frame: 'tur' | 'hul' (the driver)

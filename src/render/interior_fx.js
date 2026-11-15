@@ -217,10 +217,10 @@ export class InteriorFx {
   // The viewer's own head after a blow: vision closing in from the edges, the edges blurred, the picture shaking, a white-out at
   // the instant of a penetration. One fixed layer over the 3D picture (under the displays' text), touched only while it shows.
   _overlay(C, now) {
-    if (typeof document === 'undefined' || !document.body || !document.body.appendChild || !document.createElement) return;
+    if (this.noOv || typeof document === 'undefined' || !document.body || !document.body.appendChild || !document.createElement) return;
     const on = !!C && (C.tunnel > 0.015 || C.flash > 0.01 || C.shake > 0.01 || C.blur > 0.02);
     if (!on) { if (this.ov && this.ovOn) { this.ovOn = false; this.ov.style.display = 'none'; const cv = document.getElementById('view'); if (cv && cv.style) cv.style.transform = ''; } return; }
-    if (!this.ov) { const el = this.ov = document.createElement('div'); if (!el.style) { this.ov = null; return; } el.id = 'concuss'; el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1;display:none'; const bl = this.ovB = document.createElement('div'); bl.style.cssText = 'position:absolute;inset:0'; const wh = this.ovW = document.createElement('div'); wh.style.cssText = 'position:absolute;inset:0;background:#fff8ec;opacity:0'; el.appendChild(bl); el.appendChild(wh); document.body.appendChild(el); }
+    if (!this.ov) { const el = this.ov = document.createElement('div'); if (!el || !el.style || !el.appendChild) { this.ov = null; this.noOv = true; return; } el.id = 'concuss'; el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1;display:none'; const bl = this.ovB = document.createElement('div'); bl.style.cssText = 'position:absolute;inset:0'; const wh = this.ovW = document.createElement('div'); wh.style.cssText = 'position:absolute;inset:0;background:#fff8ec;opacity:0'; el.appendChild(bl); el.appendChild(wh); document.body.appendChild(el); }
     if (!this.ovOn) { this.ovOn = true; this.ov.style.display = 'block'; }
     const t = Math.round(C.tunnel * 50) / 50, b = Math.round(C.blur * 20) / 20, f = Math.round(C.flash * 25) / 25, key = t + '|' + b;
     if (key !== this.ovKey) { this.ovKey = key; const inner = Math.round(78 - 58 * t), outer = Math.round(118 - 52 * t), px = (b * 7).toFixed(1), mask = `radial-gradient(ellipse at center, transparent ${Math.round(42 - 22 * b)}%, #000 ${Math.round(88 - 20 * b)}%)`;
