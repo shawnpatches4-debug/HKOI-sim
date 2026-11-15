@@ -66,18 +66,18 @@ export const Effects = {
     if (!this._live()) return; const M = this.mix, k = rnd(0.95, 1.05); this._shot();
     if (this.seat === 'in') {
       const v = M.voice('weapons', { direct: true, cabin: 0.55 }); if (M.sample('gun30_in', v)) return;
-      M.tone(v.in, v.t, { f0: 92 * k, f1: 36, dur: 0.17, gain: 0.75 });                                        /* the blow on the roof, through the turret ring */
+      M.tone(v.in, v.t, { f0: 92 * k, f1: 36, dur: 0.17, gain: 0.55 });                                        /* the blow on the roof, through the turret ring */
       M.noise(v.in, v.t, { dur: 0.08, attack: 0.001, f0: 1100, f1: 230, gain: 1.5 });                          /* the report, through steel */
-      M.noise(v.in, v.t, { dur: 0.03, attack: 0.0005, type: 'bandpass', f0: 720 * k, q: 1.2, gain: 2.0 });     /* the knock */
-      M.noise(v.in, v.t, { dur: 0.1, attack: 0.001, color: 'pink', type: 'bandpass', f0: 300 * k, f1: 170, q: 0.8, gain: 3.2 });   /* the weight of it in the range small loudspeakers can still play */
-      M.tone(v.in, v.t, { f0: 184 * k, f1: 80, dur: 0.09, gain: 0.5 });
+      M.noise(v.in, v.t, { dur: 0.03, attack: 0.0005, type: 'bandpass', f0: 720 * k, q: 1.2, gain: 2.8 });     /* the knock */
+      M.noise(v.in, v.t, { dur: 0.1, attack: 0.001, color: 'pink', type: 'bandpass', f0: 300 * k, f1: 170, q: 0.8, gain: 4.6 });   /* the weight of it in the range small loudspeakers can still play */
+      M.tone(v.in, v.t, { f0: 184 * k, f1: 80, dur: 0.09, gain: 0.7 });
       M.noise(v.in, v.t, { dur: 0.012, attack: 0.0004, type: 'bandpass', f0: 2300, q: 1.5, gain: 0.6 });       /* its hard edge */
       if (this.lite) return;
-      M.ring(v.in, v.t + 0.004, { freqs: [318, 527, 1240, 2090, 3170], dur: 0.24, gain: 0.16 });               /* the mount and the roof plate ring */
+      M.ring(v.in, v.t + 0.004, { freqs: [318, 527, 1240, 2090, 3170], dur: 0.24, gain: 0.24 });               /* the mount and the roof plate ring */
       this._mech30(v, 1.4);
       return;
     }
-    const a = M.far(d, 1), v = M.voice('weapons', { far: a, space: 0.4 }); if (M.sample('gun30_out', v)) return;
+    const a = M.far(d, 1.5), v = M.voice('weapons', { far: a, space: 0.4 }); if (M.sample('gun30_out', v)) return;   /* 1.5: the star of the mix, a little above its true place beside the machine guns */
     this._report(v, a, { crack: 1.4, crackHz: 1500, crackDur: 0.035, bark: 2.3, barkHz: 950 * k, barkDur: 0.09, body: 2.2, bodyHz: 520, bodyDur: 0.12, thump: 0.55, thumpHz: 150 * k, thumpDur: 0.12, sub: 0.25, subHz: 62, subDur: 0.22, tail: 0.12, tailDur: 0.5, slap: 1 });
     if (this.seat === 'hatch' && a.d < 12) { const w = M.voice('weapons', { direct: true, cabin: 0.3 }); M.tone(w.in, w.t, { f0: 92 * k, f1: 36, dur: 0.15, gain: 0.45 }); }   /* felt through the hatch ring */
     if (this.lite || a.d > 140) return;
