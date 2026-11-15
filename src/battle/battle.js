@@ -24,7 +24,7 @@
     fpv: { name: 'FPV drone crew', key: 'fpv', rmin: 300, rmax: 4000, aim: 3, needsLos: false, indirect: true, ammo: 6, reload: 14, setup: 60, move: 2.2, agl: 1.2 },
     fpv_fiber: { name: 'Fibre FPV crew', key: 'fpv_fiber', rmin: 300, rmax: 7000, aim: 3, needsLos: false, indirect: true, ammo: 4, reload: 18, setup: 60, move: 2.2, agl: 1.2 },
     /* support.js: a heavy multirotor that flies over and drops bombs on the roof. ammo = sorties; the drone finds the vehicle itself (selfSpot). Its flight and its bombs are worked out in support.js, NOT by the engine. */
-    bomber: { name: 'Bomber drone crew', key: 'bomber', rmin: 500, rmax: 6000, aim: 3, needsLos: false, indirect: true, bomber: true, selfSpot: true, ammo: 3, reload: 75, setup: 60, move: 2.2, agl: 1.2 },
+    bomber: { name: 'Bomber drone crew', key: 'bomber', rmin: 500, rmax: 6000, aim: 3, needsLos: false, indirect: true, bomber: true, selfSpot: true, drawAs: 'fpv' /* the crew on the ground is drawn as a drone crew */, ammo: 3, reload: 75, setup: 60, move: 2.2, agl: 1.2 },
   };
   // Enemy crew levels. aim = multiplier on the time to acquire and fire; open = longest the leader holds the opening ambush after the first
   // clean shot (s); coord = share of the teams he wants ready before opening, and how well shots are timed; misfire = chance per launch;
@@ -144,7 +144,7 @@
             taken.push(pick);
             const alts = pool.filter(s => { const d = Math.hypot(s.e - pick.e, s.n - pick.n); return d > 120 && d < 700; }).slice(0, 2);
             this.units.push({
-              id: this.units.length, type: f.type, spec, e: pick.e, n: pick.n, sites: [pick].concat(alts), site: 0,
+              id: this.units.length, type: spec.drawAs || f.type, spec, e: pick.e, n: pick.n, sites: [pick].concat(alts), site: 0,
               state: 'hidden', since: 0, ammo: spec.ammo, readyAt: 0, sight: 0, lastSeen: null, alive: true, known: false, fired: 0, path: null, suppressedUntil: 0,
             });
           }

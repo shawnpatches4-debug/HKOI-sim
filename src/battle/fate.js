@@ -79,8 +79,9 @@
     },
     // every step: hits whose time has come are named
     _fateStep() {
-      const T = this.tank, q = T.fateQ; if (q) while (q.length && this.t >= q[0].t) { const x = q.shift(); this._fateHit(T, x.h, x.t); }
+      const T = this.tank, q = T.fateQ; if (!T.fate) T.fate = fresh(); if (q) while (q.length && this.t >= q[0].t) { const x = q.shift(); this._fateHit(T, x.h, x.t); }
       const F = T.fate; if (!F || !this.fateOn || !T.alive) return;
+      this._fateSync(T);
       if (this.over) { if (this.over.result === 'withdrawn' && F.firepower === 'killed' && T === this._fatePlayer()) this.over.text = 'The vehicle broke contact with its main gun out of action.'; return; }
       if (F.wantWithdraw && T.ai && T.ai.m && !this._volleyActive() && !this._pending) { F.wantWithdraw = false; const M = T.ai.m;
         if (M.phase !== 'withdraw' && F.mobility !== 'killed') { M.phase = 'withdraw'; T.ai.search = null; this._goTo(M.home, 9, { text: `Commander breaks contact: ${F.firepowerWhy}. Pulling back to the start line.`, why: 'a tank that cannot fire its main gun is only a target' }); T.intent = 'Withdrawing: main gun out of action'; } }
@@ -90,6 +91,8 @@
         this._fsay(this.t, 'result', null, `${this._fateWho(T)}: the crew abandons the vehicle. It can neither move nor fire.`, `${ABANDON_S} s after the second loss with nothing inbound (assumed)`);
         if (T === this._fatePlayer()) { this.over = { result: 'abandoned', text: 'The crew left a vehicle that could neither move nor fire.' }; this._fev(this.t, 'over', { result: 'abandoned' }); } else { T.alive = false; T.out = 'abandoned'; } }
     },
+    // the crew's own panic (crew.js) can empty a tank that could still fight: the ending says so too
+    _fateSync(T) { const F = T.fate; if (F && T === this._fatePlayer() && this.over && this.over.result === 'abandoned' && F.kind !== 'abandoned' && T.alive) { F.kind = 'abandoned'; F.t = +this.t.toFixed(2); F.cause = this.over.text || 'the crew abandoned the vehicle'; this._fateBail(T, this.t - BAIL.first); this._fev(this.t, 'tank_fate', { kind: 'abandoned', cause: F.cause, zone: null, by: null }); } },
     _fatePlayer() { return this._supPlayer ? this._supPlayer() : this.tank; },
     _fateWho(T) { return T === this._fatePlayer() ? 'The vehicle' : 'Wingman'; },
     _fateTag(T, o) { if (T !== this._fatePlayer()) o.wing = true; return o; },
@@ -102,6 +105,7 @@
     _fateHit(T, h, t) {
       const F = this._fate(T), has = (id, st) => h.comps.some(c => c.id === id && (!st || c.state === st)), who = this._fateWho(T);
       const note = { t: +t.toFixed(2), key: h.key, zone: h.zone, penetrated: h.penetrated, killing: h.killing, comps: h.comps.map(c => c.id), note: null }; F.hits.push(note);
+      if (F.kind === 'knocked_out' || F.kind === 'ammo_vented' || F.kind === 'catastrophic') { note.note = 'struck again after it was lost'; return; }   /* the first killing hit decided it */
       for (const k of ['cdr', 'gnr', 'ldr', 'drv']) { const s = h.crew[k]; if (s === 'killed') F.crew[k].state = 'killed'; else if (s === 'wounded' && F.crew[k].state === 'ok') F.crew[k].state = 'wounded'; }
       if (T.st && T.st.crew) for (const k of ['cdr', 'gnr', 'ldr', 'drv']) if (T.st.crew[k] === 'wounded' && F.crew[k].state === 'ok') F.crew[k].state = 'wounded';   /* a man hurt earlier (the loader in his hatch) */
       if (h.killing) {
@@ -133,7 +137,7 @@
       const F = T.fate; if (F.kind === 'ok' || kind === 'mobility_kill' && F.kind === 'firepower_kill') { /* the first loss names the state; both together are shown through mobility + firepower */ } F.kind = F.kind === 'ok' ? kind : F.kind; F.t = F.t == null ? +t.toFixed(2) : F.t; F.cause = F.cause || text; F.zone = F.zone || h.zone; F.zoneName = F.zoneName || h.zoneName; F.by = F.by || h.key;
       this._fev(t, 'tank_fate', this._fateTag(T, { kind, cause: text, zone: h.zone, by: h.key })); this._fsay(t, T === this._fatePlayer() ? 'tank' : 'wing', T === this._fatePlayer() ? 'CDR' : 'WING', `${this._fateWho(T)}: ${text}`, `${h.zoneName} penetrated (damage model)`);
     },
-    fateReport() { const P = this._fatePlayer(); return { on: !!this.fateOn, tank: this._fate(P), wing: this.wing ? this._fate(this.wing) : null }; },
+    fateReport() { const P = this._fatePlayer(); this._fate(P); this._fateSync(P); return { on: !!this.fateOn, tank: this._fate(P), wing: this.wing ? this._fate(this.wing) : null }; },
   };
 
   // what a crippled crew does: wrapped round the drills of tankai.js and battle.js without editing them
