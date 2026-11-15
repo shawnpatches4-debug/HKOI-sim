@@ -1,3 +1,13 @@
+# STATE 15 Nov 2026, about 02:45 UTC: VERSION 1.0 IN PROGRESS
+Live page: 0.90.3 (artifact version 35). Shawn's order of 15 Nov: "Make this sim 1000 times better. you call the shot ... night and day". The lead split it into six helper workstreams, each in its own git worktree (.claude/worktrees/, branch worktree-agent-<id>), all following scratchpad V1_COMMON.md (copy of the rules: one browser at a time through tools/run_test.sh, .cache never tracked, files added by name, no engine.js edits, before/after pictures):
+1. command: the player commands the tank (src/battle/orders.js, src/app/command.js, tankai.js, ladder.js).
+2. visual: graphics leap, new Ultra level (scene3d, env, sky, terrain, flora, fx, obscurant, volleyview).
+3. briefing: guided "HKOI briefing" tour, scenarios page, first-run help (tour.js, scenarios.js, title.js, pages.js, director).
+4. battle: wingman, artillery, scout drone, bomber drone, what kills an Abrams (battle.js, support.js, fate.js, enemyveh/enemycdr, study.js).
+5. tank: HKOI station moved clear of the loader's hatch (lead's decision; must be proven clash-free by a node test), sights to GHPC standard, tank fate drawn, interior quality (units.js, interior*.js, cameras.js, xray.js).
+6. sound: sound leap, measured offline (src/audio/*).
+Merge order when they report: battle, command, tank, visual, sound, briefing (briefing last: it depends on what the others show). Before each merge the .cache check; after each: node tests, node --check of main.js/pages.js copies. Then dev.sh check and the page tests, one release 1.0, Notion entry. Send Shawn before/after pictures as they come.
+
 # STATE AT 18:05 UTC 14 Nov 2026: 0.90 PUBLISHED
 0.90 is on Shawn's "HKOI Battlefield Beta" page (artifact version 32), built from be974de. Nobody has confirmed it on his machine yet.
 Open, waiting for Shawn: where the HKOI station goes (right beside the CROWS / rear bustle / keep and block the loader's hatch); the questions in the 13:35 entry below. Known faults are listed in the last WORKLOG entry.
