@@ -9,7 +9,7 @@
 //    (the same figures the interior is built with, interior_build.js). A jet is followed from the damage report's entry point along its
 //    line to where it meets that box: that is the hole a man sees. If its reach (the report's own figure) carries it to the far wall
 //    it scars that wall; it does not go out through the second wall (the far plate is as thick as the near one).
-//  - a destroyed electrical unit (sight, thermal viewer, weapon station, radio, turret drive, stabiliser) trips breakers: red
+//  - a damaged or destroyed electrical unit (sight, thermal viewer, weapon station, radio, turret drive, stabiliser) trips breakers: red
 //    emergency lighting until a man who can still work resets them (ELEC.resetS); with the radio rack or two units destroyed it stays red
 //  - a hit on the turret drive sprays hydraulic fluid for HYD.sprayS and leaves a mist for HYD.mistS; if the unit was DESTROYED (the jet
 //    itself went through it) the mist flashes once (the M1's fluid is fire-resistant, a hot jet through an atomised spray still flashes)
@@ -100,8 +100,8 @@ export function insideState(hits, now, crew, fate) {
       if (h.kill) { S.fire = true; S.lightsOut = true; } if (age < 25 || h.kill) S.alarm = true;
       for (const r in h.crew) if (h.crew[r] !== 'ok') S.blood[r] = S.blood[r] === 'killed' ? 'killed' : h.crew[r];
       // electrical: arcing where a unit was hit, breakers tripping
-      let dead = 0; for (const id in x.comps) { const st = x.comps[id]; if (!ELECTRICAL[id] || !bad(st)) continue; const life = ELEC.arcS[st] || 6; if (st === 'destroyed') dead++; if (age < life && AT[id]) S.arcs.push({ id, at: AT[id], age, life, seed: h.idx * 7 + id.length }); }
-      if (dead) { trips++; lastTrip = h.T; if (x.comps.radio === 'destroyed' || dead > 1) hardDown++; }
+      let dead = 0, hitE = 0; for (const id in x.comps) { const st = x.comps[id]; if (!ELECTRICAL[id] || !bad(st)) continue; hitE++; const life = ELEC.arcS[st] || 6; if (st === 'destroyed') dead++; if (age < life && AT[id]) S.arcs.push({ id, at: AT[id], age, life, seed: h.idx * 7 + id.length }); }
+      if (hitE) { trips++; lastTrip = h.T; if (x.comps.radio === 'destroyed' || dead > 1) hardDown++; }
       if (bad(x.comps.tdrive)) { S.hyd = { T: h.T, age, at: AT.tdrive, destroyed: x.comps.tdrive === 'destroyed', seed: h.idx }; S.manual = true; }   /* turret power lost: the gunner goes to the hand crank */
       if (bad(x.comps.gun) || bad(x.comps.stab)) S.gunHit = { T: h.T, age, gun: x.comps.gun || null, stab: x.comps.stab || null, seed: h.idx };
       if (x.comps.engine === 'destroyed' || x.comps.trans === 'destroyed') S.engine = { T: h.T, age };
