@@ -145,6 +145,7 @@ export class Intercom {
     const h = this.hiss.g.gain, hv = isRadio ? 0.03 : 0.012, tOff = tEnd + (isRadio ? 0.12 : 0.06);   /* the open line hisses; explicit ramps only (one audio engine mishandles chained targets here) */
     h.cancelScheduledValues(t0); h.setValueAtTime(0, t0); h.linearRampToValueAtTime(hv, t0 + 0.02); h.setValueAtTime(hv, tOff); h.linearRampToValueAtTime(0, tOff + 0.04);
     const end = tEnd + (isRadio ? 0.2 : 0.1);
+    if (this.listening && this.mix.duck) this.mix.duck(t0, tEnd + 0.05);   /* while he talks, the guns and the engine are held back (mixer.js duck) so the words stay clear */
     this.cur = { who: q.who, ev: q.ev, pri: q.pri, level: q.level, group: q.group, line, src: s, end, gapAfter: q.gap != null ? q.gap : rnd(0.22, 0.5) };
     this.said.push({ t: tClip, end: tEnd, who: q.who, ev: q.ev, clip: x[4], text: x[5], made: x[6] || '', pri: q.pri, level: q.level, stress: +(q.stress || 0).toFixed(2), waited: +(now - q.asked).toFixed(2) });
     if (this.said.length > 400) this.said.splice(0, 100);

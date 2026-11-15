@@ -16,6 +16,7 @@ import { Command } from './command.js';   // the player commands the tank: order
 import { TitleShow } from './title.js';
 import { Faces } from './faces.js';
 import { Sound } from '../audio/sound.js';
+import { soundPanel } from '../audio/panel.js';
 import { FINISH, setFinish } from '../render/env.js';
 
 const VERSION = '0.90';
@@ -43,9 +44,9 @@ if (q.get('stress')) set.stress = q.get('stress') !== '0';
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
 
 const canvas = $('view'), hud = $('hud');
-const sound = new Sound(); sound.on = store.get('sound', true);
+const sound = new Sound(); sound.on = store.get('sound', true); const sndPanel = soundPanel(sound, store, () => buildBar());   /* the sound menu: volumes, night mode, tension layer (src/audio/panel.js) */
 const camDist = p => scene.camera.position.distanceTo(p);
-function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01 || state !== 'play') return;   /* the battle behind the title screen is silent */ voiceEvent(type, o); const d = camDist(p); if (type === 'gun') sound.gun30(d); else if (type === 'explosion') sound.explosion(d, o.size); else if (type === 'airburst') sound.airburst(d, o.size); else if (type === 'aps') sound.aps(d); else if (type === 'launch') sound.launch(d, o.big); else if (type === 'pass') sound.whoosh(0.5, Math.min(0.6, 30 / (30 + d))); else if (type === 'hit') { sound.explosion(d, o.killing ? 2.2 : 1.4); if (cams.mode === 'cdr' || cams.mode === 'gnr' || interior.inside || d < 25) sound.hit(o.killing); } }   /* a hit heard from any seat inside (interior.inside) */
+function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01 || state !== 'play') return;   /* the battle behind the title screen is silent */ voiceEvent(type, o); const d = camDist(p); if (type === 'gun') sound.gun30(d); else if (type === 'explosion') sound.explosion(d, o.size); else if (type === 'airburst') sound.airburst(d, o.size); else if (type === 'aps') sound.aps(d); else if (type === 'launch') sound.event('launch', { d, big: o.big, key: o.key }); else if (type === 'pass') sound.event('pass', { d }); else if (type === 'hit') { sound.explosion(d, o.killing ? 2.2 : 1.4); if (cams.mode === 'cdr' || cams.mode === 'gnr' || interior.inside || d < 25) sound.hit(o.killing, o); } }   /* a hit heard from any seat inside (interior.inside) */
 let world = new HKWorld.World({ seed: set.map, biome: set.biome });
 const scene = new Scene3D(canvas, world, { condition: set.cond, quality: set.gfx });
 const cams = new Cameras(scene);
@@ -359,7 +360,7 @@ function buildBar() {
   if (seat) g.append(btn('out', 'Back outside', '', 'Leave the inside view (Esc)', () => setView(lastOutside)));
   if (SENSOR[cams.mode] || cams.mode === 'gnr') g.append(btn(null, 'Thermal: ' + (wantThermal() === 1 ? 'white hot' : wantThermal() === -1 ? 'black hot' : 'off'), 'on', 'Thermal picture for this sight (T)', cycleThermal));
   if (!slim) { g = grp(); g.append(btn('map', 'Map', '', 'Topographic map (M)', openMap));
-    g.append(btn(sound.on ? 'sound' : 'mute', 'Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); }
+    g.append(btn(sound.on ? 'sound' : 'mute', 'Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); g.append(btn(null, 'Mix', sndPanel.open ? 'on' : '', 'Sound menu: volumes, night mode (X: sound on or off)', () => { sndPanel.toggle(); buildBar(); })); }
   g = grp(); g.append(btn('display', eng ? 'Engineer' : 'Simple', '', 'Display: engineer shows everything, simple shows almost nothing (H)', () => setHud(eng ? 'simple' : 'engineer')));
   if (!slim) g.append(director.button());   /* film director on or off (key F) */
   if (!slim) g.append(btn('menu', 'Menu', '', 'Back to the title screen', toTitle));
@@ -369,7 +370,7 @@ window.addEventListener('pointerdown', e => { if (barOpen && !(e.target.closest 
 $('r-replay').onclick = replayStart; $('r-code').onclick = () => { const c = replayCode(), box = $('r-codebox'); box.value = c; box.select(); if (navigator.clipboard) navigator.clipboard.writeText(c).then(() => { $('r-code').textContent = 'Copied'; setTimeout(() => { $('r-code').textContent = 'Copy replay code'; }, 1500); }).catch(() => {}); };
 $('o-codebtn').onclick = () => { const msg = replayLoad($('o-code').value); if (msg) { $('o-note').textContent = msg; $('s-msg').textContent = msg; } };
 $('r-again').onclick = () => { replayStop(); start(); }; $('r-next').onclick = () => { replayStop(); set.seed++; store.set('setup', set); start(); }; $('r-menu').onclick = toTitle; $('r-numbers').onclick = () => openPage('numbers');
-window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } if (e.key === '[' || e.key === ']') { if (cams.mode === 'enemy' || cams.mode === 'troops') cams.cycle(battle.units, e.key === ']' ? 1 : -1); } if (e.code === 'KeyT') cycleThermal();
+window.addEventListener('keydown', e => { if (state !== 'play' || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return; if (e.code === 'KeyM') { mapOpen ? closeMap() : openMap(); } if (e.code === 'Space') { playing = !playing; buildBar(); e.preventDefault(); } if (e.key === '[' || e.key === ']') { if (cams.mode === 'enemy' || cams.mode === 'troops') cams.cycle(battle.units, e.key === ']' ? 1 : -1); } if (e.code === 'KeyT') cycleThermal(); if (e.code === 'KeyX') sndPanel.mute();   /* X: sound on or off */
   if (e.code === 'KeyH') setHud(hudMode === 'engineer' ? 'simple' : 'engineer'); if (e.code === 'KeyL' && hudMode === 'engineer') setLog(!logOpen);
   if (e.code === 'Escape') { if (logOpen) setLog(false); else if (barOpen) { barOpen = false; buildBar(); } else if (SEATV[cams.mode]) setView(lastOutside); }
   const n = '123456789'.indexOf(e.key); if (n >= 0 && KEY_VIEWS[n]) setView(KEY_VIEWS[n]); });
@@ -481,7 +482,7 @@ function frameBody(now) {
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
-  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
+  if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p), fiber: m.th.key === 'fpv_fiber' })) : [], threat: act ? volleys.info.length : 0, ...voices() }); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } }
   else if (state !== 'play' && (pagesOpen || state === 'title' && !demoLive())) { stillT -= raw; if (stillT <= 0) { stillT = 0.5; scene.render(dt); drawMarks(); } }   /* a still picture behind a menu is redrawn twice a second, not every frame */
   else { scene.render(dt); drawMarks(); }

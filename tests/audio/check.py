@@ -44,7 +44,8 @@ if all(e.values()):
 # ---- inside / outside
 a, b = M('fx_gun30_burst_out_10m'), M('fx_gun30_burst_in')
 if a and b:
-    need(a['cen'] > 5 * b['cen'], '30 mm outside centre %.0f Hz, inside %.0f Hz (inside is a thud)' % (a['cen'], b['cen']))
+    # version 1.0: inside, the round keeps its weight between 150 and 1000 Hz (so small loudspeakers can play it) but stays far duller than outside
+    need(a['cen'] > 3 * b['cen'] and b['cen'] < 500, '30 mm outside centre %.0f Hz, inside %.0f Hz (inside is a thud)' % (a['cen'], b['cen']))
     need(a['bands'][2] > 12 and a['bands'][3] > 12 and a['bands'][1] < 60, '30 mm outside energy: low %.0f%% mid %.0f%% high %.0f%% air %.0f%% (a hard report, not only a boom)' % tuple(a['bands'][1:]))
 a, b = M('fx_explosion_30m_size1.5'), M('fx_explosion_30m_size1.5_inside')
 if a and b: need(b['cen'] < 0.6 * a['cen'], 'blast at 30 m: centre %.0f Hz outside, %.0f Hz inside the hull' % (a['cen'], b['cen']))
@@ -101,7 +102,9 @@ V = {v: M('view_' + v) for v in ['orbit', 'chase', 'cdr', 'in_cdr', 'in_gnr', 'i
 if all(V.values()):
     need(all(r['peak'] <= -2 for r in V.values()), 'every view, crew talking under 30 mm, 120 mm, Trophy and a blast: peaks ' + ' '.join('%s %.1f' % (k, r['peak']) for k, r in V.items()) + ' dB (ceiling holds)')
     ins = [V[k]['cen'] for k in ['in_cdr', 'in_gnr', 'in_ldr', 'in_drv']]; out = [V[k]['cen'] for k in ['orbit', 'chase', 'cut']]
-    need(max(ins) * 1.5 < min(out), 'centre of the mix: seats inside %s Hz, outside views %s Hz, head out %.0f Hz' % ('/'.join('%.0f' % c for c in ins), '/'.join('%.0f' % c for c in out), V['cdr']['cen']))
+    # since version 1.0 the seats' mix is led by the intercom (speech sits near 1 kHz) and the guns are trimmed under it, so the
+    # centre of the WHOLE mix inside is only a little below the open air's; how dull the hull makes a gun is checked above on single sounds
+    need(max(ins) * 1.1 < min(out), 'centre of the mix: seats inside %s Hz, outside views %s Hz, head out %.0f Hz' % ('/'.join('%.0f' % c for c in ins), '/'.join('%.0f' % c for c in out), V['cdr']['cen']))
     def voice_band(name):   # share of the energy in the speech band while the crew talks, and whether lines were played
         x, sr = mono(name); S = np.abs(np.fft.rfft(x)) ** 2; f = np.fft.rfftfreq(len(x), 1 / sr); return 100 * S[(f > 500) & (f < 3300)].sum() / S.sum()
     need(True, 'share of energy in the speech band: inside %.0f%%, orbit %.0f%%' % (voice_band('view_in_gnr'), voice_band('view_orbit')))
