@@ -382,12 +382,14 @@ export class Particles {
   // tongue), dt the simulated seconds since the last call. Draws a turbulent tongue of flame, sparks thrown along it and black smoke
   // rolling off its end; the fire light and the glow on nearby smoke follow it. The same at any frame rate (it emits by time, not by frame).
   flameJet(x, y, z, dx, dy, dz, k = 1, dt = 0.016) {
-    if (!(dt > 0) || !(k > 0)) return; const A = this._acc, rk = Math.sqrt(k); A.jet = (A.jet || 0) + Math.min(dt, 0.25) * 44 * this.q * rk; A.jetS = (A.jetS || 0) + Math.min(dt, 0.25) * 8 * this.q * rk;
-    while (A.jet >= 1) { A.jet -= 1; const s = (14 + this.R() * 20) * rk, j = 0.2;
-      this.spawn(KIND.FIRE, x, y, z, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s, (dz + (this.R() - 0.5) * j) * s, 0.3 + this.R() * 0.35, 0.45 * k, (1.8 + this.R() * 1.4) * k, 0, 0, 0, 0, 2.6, 2.5, 1, 0);
-      if (this.R() < 0.45) { const v = (30 + this.R() * 40) * rk; this.spawn(KIND.SPARK, x, y, z, (dx + (this.R() - 0.5) * 0.5) * v, (dy + (this.R() - 0.5) * 0.5) * v, (dz + (this.R() - 0.5) * 0.5) * v, 0.5 + this.R() * 0.8, 0.07, 0.03, 1, 0.6 + this.R() * 0.25, 0.25, 1, 0.8, -9.8, 5, 0); } }
-    while (A.jetS >= 1) { A.jetS -= 1; const d = (3 + this.R() * 3) * rk, g = 0.035 + this.R() * 0.05;
-      this.spawn(KIND.FIRE, x + dx * d, y + dy * d, z + dz * d, dx * 5 + (this.R() - 0.5) * 2.5, dy * 5 + 1.5 + this.R() * 2, dz * 5 + (this.R() - 0.5) * 2.5, 7 + this.R() * 7, 1.3 * k, (6 + this.R() * 5) * k, g * 1.08, g, g * 0.94, 0.72, 0.9, 0.9, 0.08, 0); }
+    if (!(dt > 0) || !(k > 0)) return; const A = this._acc, rk = Math.sqrt(k), dc = Math.min(dt, 1);   /* a long frame (a slow machine, a fast-forward) still emits its full share, each particle */
+    A.jet = (A.jet || 0) + dc * 110 * this.q * rk; A.jetS = (A.jetS || 0) + dc * 8 * this.q * rk;                                  /* born at its own moment inside the frame (negative delay), so the tongue is continuous, not a clump */
+    while (A.jet >= 1) { A.jet -= 1; const s = (10 + this.R() * 14) * rk, j = 0.22, de = -this.R() * dc;
+      // ASSUMED, by eye against film of vented ammunition fires: a tongue about 5 to 6 m long at k = 1 (speed 10 to 24 m/s braked by drag 2.2 over a 0.35 to 0.7 s life)
+      this.spawn(KIND.FIRE, x + (this.R() - 0.5) * 0.5, y, z + (this.R() - 0.5) * 0.5, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s, (dz + (this.R() - 0.5) * j) * s, 0.35 + this.R() * 0.35, 0.65 * k, (1.7 + this.R() * 1.1) * k, 0, 0, 0, 0, 2.2, 2.5, 1, de);
+      if (this.R() < 0.2) { const v = (30 + this.R() * 40) * rk; this.spawn(KIND.SPARK, x, y, z, (dx + (this.R() - 0.5) * 0.5) * v, (dy + (this.R() - 0.5) * 0.5) * v, (dz + (this.R() - 0.5) * 0.5) * v, 0.5 + this.R() * 0.8, 0.07, 0.03, 1, 0.6 + this.R() * 0.25, 0.25, 1, 0.8, -9.8, 5, de); } }
+    while (A.jetS >= 1) { A.jetS -= 1; const d = (4 + this.R() * 2.5) * rk, g = 0.035 + this.R() * 0.05;   /* black smoke rolling off the end of the tongue */
+      this.spawn(KIND.FIRE, x + dx * d, y + dy * d, z + dz * d, dx * 4 + (this.R() - 0.5) * 2.5, dy * 4 + 1.5 + this.R() * 2, dz * 4 + (this.R() - 0.5) * 2.5, 7 + this.R() * 7, 1.6 * k, (6 + this.R() * 5) * k, g * 1.08, g, g * 0.94, 0.78, 0.9, 0.9, 0.04, -this.R() * dc); }
     { const H = this.hot; let h = null; for (let i = 0; i < H.length; i++) if (Math.abs(H[i].x - x) + Math.abs(H[i].z - z) < 4) { h = H[i]; break; }
       if (!h) { if (H.length < 8) h = H[H.length] = { x: 0, y: 0, z: 0, k: 1, t: 0 }; else { h = H[0]; for (let i = 1; i < H.length; i++) if (H[i].t < h.t) h = H[i]; } }
       h.x = x; h.y = y; h.z = z; h.k = Math.max(1, k * 1.5); h.t = this.time; }
