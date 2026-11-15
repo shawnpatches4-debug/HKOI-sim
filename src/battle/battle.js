@@ -23,6 +23,8 @@
     sal: { name: 'Laser designator team', key: 'sal', rmin: 800, rmax: 6000, aim: 8, needsLos: true, ammo: 2, reload: 45, setup: 50, move: 2.0, agl: 1.4 },
     fpv: { name: 'FPV drone crew', key: 'fpv', rmin: 300, rmax: 4000, aim: 3, needsLos: false, indirect: true, ammo: 6, reload: 14, setup: 60, move: 2.2, agl: 1.2 },
     fpv_fiber: { name: 'Fibre FPV crew', key: 'fpv_fiber', rmin: 300, rmax: 7000, aim: 3, needsLos: false, indirect: true, ammo: 4, reload: 18, setup: 60, move: 2.2, agl: 1.2 },
+    /* support.js: a heavy multirotor that flies over and drops bombs on the roof. ammo = sorties; the drone finds the vehicle itself (selfSpot). Its flight and its bombs are worked out in support.js, NOT by the engine. */
+    bomber: { name: 'Bomber drone crew', key: 'bomber', rmin: 500, rmax: 6000, aim: 3, needsLos: false, indirect: true, bomber: true, selfSpot: true, ammo: 3, reload: 75, setup: 60, move: 2.2, agl: 1.2 },
   };
   // Enemy crew levels. aim = multiplier on the time to acquire and fire; open = longest the leader holds the opening ambush after the first
   // clean shot (s); coord = share of the teams he wants ready before opening, and how well shots are timed; misfire = chance per launch;
@@ -85,6 +87,8 @@
         this.force0 = force0; this.nWaves = Math.max(1, Math.min(6, opt.waves | 0 || 1)); this.wave = 0; this.waveAt = null; this.waveFrom = 0;
         if (this.mission === 'hold' && !opt.tank && this._pickStart) this._pickStart();
         this._place(this._waveForce(0));
+        this.fateOn = !!opt.fate;   /* fate.js: a crippled crew acts on what it has lost (off by default: stored battles stay as they were) */
+        if (opt.support && this._supInit) this._supInit(opt.support, opt);   /* support.js: wingman, artillery, scout drone, air support (all off unless asked for) */
         this.say(0, 'setup', null, `Battle on ${this.world.biome.name}, map seed ${this.world.seed}. ${this.units.length} enemy teams in position.`);
       }
 
@@ -166,6 +170,8 @@
         const dt = this.dt; this.t += dt;
         if (!this.tank.alive) return;
         this._crewStep(dt);   /* crew.js: the crew's stress moves on one step */
+        if (this._fateStep) this._fateStep();   /* fate.js: hits whose time has come are named (knocked out, ammunition fire, mobility kill ...) */
+        if (this.sup) this._supStep(dt);   /* support.js: wingman, artillery, scout drone, air support, bomber drones in the air */
         this._moveTank(dt);
         for (const u of this.units) this._unit(u, dt);
         if (this._vehStep) this._vehStep(dt);   /* enemyveh.js, enemycdr.js: enemy vehicles and the enemy commander move on one step */
@@ -251,13 +257,14 @@
         if (u.ammo <= 0) { u.state = 'spent'; return; }
         // watching: does this team have a shot right now?
         const d = Math.hypot(T.e - u.e, T.n - u.n);
-        let seen = sp.indirect ? this._spotted() : (d >= sp.rmin && d <= sp.rmax && W.los(u.e, u.n, sp.agl, T.e, T.n, 2.2).clear);
+        let seen = sp.indirect ? (sp.selfSpot ? !!this.belief : this._spotted()) : (d >= sp.rmin && d <= sp.rmax && W.los(u.e, u.n, sp.agl, T.e, T.n, 2.2).clear);
         // Crews that know their trade do not waste a missile on a sliver of turret showing over a crest: the vehicle only has to roll back a
         // metre to break the guidance. They hold fire until more of it shows (checked twice a second), and move if it never does.
         if (seen && !sp.indirect && S.adapt >= 2 && sp.needsLos) { if (this.t >= (u.defAt || 0)) { u.defAt = this.t + 0.5; const sl = W.defilade(u.e, u.n, sp.agl, T.e, T.n) === 'full'; if (sl && !u.sliver) u.sliverSince = this.t; u.sliver = sl; } if (u.sliver && this.t - u.sliverSince < 10) seen = false; else u.sliver = false; } else u.sliver = false;   /* at most ten seconds: after that a poor shot is better than none */
+        const wSeen = this.wing ? this._wingSeen(u, seen) : false; if (wSeen) seen = true;   /* support.js: a team that has no shot at the vehicle but has one at the wingman lays on the wingman */
         u.sight = seen ? u.sight + dt * (this.t < (u.lightUntil || 0) ? 0.5 : 1) : 0;   /* harassing fire slows the lay */
         u.hasShot = seen && this.t >= u.readyAt && this.t >= u.suppressedUntil && u.sight >= sp.aim * S.aim;
-        if (seen) { u.lastSeen = this.t; if (!sp.indirect) { const B = this.belief || (this.belief = {}); B.e = T.e; B.n = T.n; B.t = this.t; } }   /* reported on the radio net: where the vehicle was last seen */
+        if (seen) { u.lastSeen = this.t; if (!sp.indirect && !wSeen) { const B = this.belief || (this.belief = {}); B.e = T.e; B.n = T.n; B.t = this.t; } }   /* reported on the radio net: where the vehicle was last seen */
         // A direct-fire team that has lost its view of the vehicle does not sit blind for ever. After a wait (shorter for green crews, who
         // fidget; longer for experts, who expect the vehicle to come back up) it moves to whichever of its prepared positions looks onto
         // where the vehicle now is, provided someone on its side can see the vehicle to tell it so.
@@ -317,6 +324,7 @@
         if (this.waveAt != null) {   /* a lull: the next wave is on its way */
           if (this.t >= this.waveAt && !this._volleyActive() && !this._pending && this.tank.alive) { this.waveAt = null; this._nextWave(); } return; }
         if (this._volleyActive() || this._pending) return;
+        if (this.sup && this._bomberBusy()) return;   /* support.js: a bomber drone on its way finishes its sortie before the group's morale is judged again (assumed) */
         // a later wave that never gets a shot does not hang about for ever
         // stalemate: how long since this group last got a missile, rocket or drone away (or since it arrived). After 90 s its teams press in for a shot;
         // after 300 s it gives the attempt up.
@@ -338,6 +346,7 @@
       _commander() {
         const S = SKILL[this.skill], T = this.tank; this.transit = (this.transit || []).filter(d => d.u.alive && !d.u.gone);
         // drone crews launch whenever they are ready once the fight is open: a drone on its way does not stop anyone else firing
+        if (!this.opened && this._bomberOpen) this._bomberOpen();   /* support.js: bomber drone crews do not wait for the ambush signal for ever */
         if (this.opened) for (const u of this.units) if (u.alive && !u.gone && u.spec.indirect && u.state === 'hidden' && u.hasShot) this._launchDrone(u);
         if (this._volleyActive() || this._pending) return;
         const arrivals = this.transit.filter(d => d.arrive <= this.t), ready = this.units.filter(u => u.alive && !u.gone && !u.spec.indirect && u.state === 'hidden' && u.hasShot);
@@ -369,6 +378,7 @@
       }
       // a drone crew sends one off. It flies in on its own; the engine takes over when it is DRONE_TERMINAL metres out.
       _launchDrone(u) {
+        if (u.spec.bomber) { if (this._bomberLaunch) this._bomberLaunch(u); else u.ammo = 0; return; }   /* support.js flies it */
         const T = this.tank, S = SKILL[this.skill], r = this.rng, tt = HK.THREATS[u.spec.key] || { speed: 30 }; let R = Math.hypot(T.e - u.e, T.n - u.n), brg = brgOf(T.e, T.n, u.e, u.n), how = 'straight in';
         if (r.random() < S.misfire) { u.readyAt = this.t + 8 + r.random() * 6; this.say(this.t, 'enemy', u.id, `${u.spec.name} #${u.id + 1}: drone fails to launch.`, 'friction'); return; }
         // expert pilots swing round to come from behind the hull, where HKOI's mount is masked (assumed 70% of the time, 25% further to fly)
@@ -406,6 +416,7 @@
 
       _fireVolley(teams, exposed, waited, how) {
         how = how || { atWill: false, why: '' };
+        if (this.wing && !this._inWing) { teams = this._wingSplit(teams, exposed, waited, how); if (!teams.length && !(how.arrivals || []).length) return; }   /* support.js: teams that chose the wingman fire at it as an engagement of its own */
         if (this._vehVolley) teams = this._vehVolley(teams);   /* enemyveh.js: an enemy tank's round that misses is settled there; a hit goes on to the engine */
         const W = this.world, T = this.tank, S = SKILL[this.skill], r = this.rng, at = { e: T.e, n: T.n, h: T.h, v: T.v }, launches = [];
         for (const u of teams) {
@@ -469,11 +480,13 @@
           order = { ev: `Warning: driver makes for ${what}, ${dm} m ${side}${c.all ? '' : ' (covers some of the launchers)'}`, cdr: [`Driver, ${what}, ${side}, ${dm} metres. Go.`, `Driver, get us into ${what}! ${side === 'behind us' ? 'Back up' : side[0].toUpperCase() + side.slice(1)}! Now!`, `${what.toUpperCase()}! ${side.toUpperCase()}! GO GO GO!`], drv: ['Moving.', 'On it!', 'GOING!'] };
         } else if (warnT != null) order = { ev: `Warning: the commander holds position${this._holdWhy ? ' (' + this._holdWhy + ')' : ''}: HKOI gets a clean engagement`, cdr: ['No cover in reach. Hold here.', 'Nothing to hide behind! Hold!', 'NOWHERE TO GO!'], drv: null };
         const res = mk(plan.path, masks), rec = res.rec;
+        if (this.wing) this._supShare(rec, res.c, at, T);   /* support.js: the other tank's HKOI may take a threat that was about to hit this one (the engine's platoonShare) */
         for (const th of rec.threats) { const l = launches.find(q => q.u.id === th.uid); if (l && l.jit_k > 1.15 && th.defeated_by === 'gunner_jitter') th.defeated_by = 'suppressed_aim'; }   /* a miss by a gunner under fire is credited to the counter-fire, not to ordinary unsteadiness */
         // a destroyed vehicle stops where it was hit
         if (rec.killed && rec.kill_t != null) { let stop = null; for (const p of plan.path) { if (p[0] >= rec.kill_t) { if (!stop) stop = p.slice(); p[1] = stop[1]; p[2] = stop[2]; p[3] = stop[3]; p[4] = 0; } } }
         const v = { i: this.volleys.length, t0: this.t, tEnd: this.t + rec.t_end, at, path: plan.path, rec, cfg: res.c, launches, exposed, plan, masks };
         this.volleys.push(v);
+        if (this._fateVolley) this._fateVolley(v, T);   /* fate.js: note when each hit of this engagement lands */
         for (const th of rec.threats) { const l = launches.find(q => q.u.id === th.uid) || {}, end = th.viz.end, by = th.state === 'hit' ? 'hit' : (th.defeated_by || th.state);
           this.ev(this.t + th.t0, 'launch', { v: v.i, idx: th.idx, uid: th.uid, key: th.key, R: Math.round(l.R || 0), brg: Math.round(l.brg || 0), arrival: !!l.arrival });
           if (th.viz.fired != null) this.ev(this.t + th.viz.fired, 'hkoi_fire', { v: v.i, idx: th.idx, key: th.key });
@@ -582,6 +595,8 @@
     const EC = deps.EnemyCdr || (typeof HKEnemyCdr !== 'undefined' ? HKEnemyCdr : null); if (EV && EC) EC.install(Battle, { HK, TEAMS, SKILL });
     const TA = deps.TankAI || (typeof HKTankAI !== 'undefined' ? HKTankAI : null); if (TA) TA.install(Battle, SKILL);   /* the tank crew's drills live in tankai.js */
     /* the crew's stress and panic live in crew.js; without that file every hook answers "no change" */
+    const SUP = deps.Support || (typeof HKSupport !== 'undefined' ? HKSupport : null); if (SUP) SUP.install(Battle, { HK, CAMP, TEAMS, SKILL, DMG: deps.DMG });   /* friendly support and the bomber drone live in support.js; after tankai.js, whose drills the wingman borrows */
+    const FT = deps.Fate || (typeof HKFate !== 'undefined' ? HKFate : null); if (FT) FT.install(Battle, { DMG: deps.DMG });   /* what a hit does to the vehicle as a whole lives in fate.js; it wraps the drills above */
     const CW = deps.Crew || (typeof HKCrew !== 'undefined' ? HKCrew : null); if (CW) CW.install(Battle, { HK, DMG: deps.DMG }); else Object.assign(Battle.prototype, { _crewStep() {}, _crewAdd() { return 0; }, _crewMul() { return 1; }, _crewOut() { return false; }, _crewFlinch() { return false; } });
     return { Battle, TEAMS, SKILL };
   }
