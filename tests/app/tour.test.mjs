@@ -31,7 +31,7 @@ for (const ch of CHAPTERS) {
     if ((st.to - st.from) / st.rate > 24) fail(tag, 'takes more than 24 s to watch', ((st.to - st.from) / st.rate).toFixed(1));
     if (!st.shot || !(RIGS.includes(st.shot.rig) || CAMS.includes(st.shot.cam))) fail(tag, 'camera', JSON.stringify(st.shot));
     for (const l of st.lines || []) if (!LINES.includes(l)) fail(tag, 'unknown line', l);
-    for (const m of st.marks) { if (!AT.includes(m.at)) fail(tag, 'unknown mark', m.at); if (['missile', 'launcher', 'cloud', 'beam', 'trophy', 'point'].includes(m.at) && !m.id) fail(tag, 'mark without its threat', m.at); const t = typeof m.text === 'function' ? m.text({ b: B, inAir: 2 }) : m.text; if (!t || /undefined|NaN|null|—/.test(t) || t.length > 44) fail(tag, 'label', t); }
+    for (const m of st.marks) { if (!AT.includes(m.at)) fail(tag, 'unknown mark', m.at); if (['missile', 'launcher', 'cloud', 'beam', 'trophy', 'point'].includes(m.at) && !m.id) fail(tag, 'mark without its threat', m.at); const t = typeof m.text === 'function' ? m.text({ b: B, inAir: 2 }) : m.text; if (!t || /undefined|NaN|null|—/.test(t) || t.length > 44) fail(tag, 'label', t); if (m.gone != null && (!m.gone || /undefined|NaN|null|—/.test(m.gone) || m.gone.length > 44)) fail(tag, 'label once the missile is gone', m.gone); }
     if ((st.lines || []).some(l => l === 'beam' || l === 'track') && !st.marks.some(m => m.at === 'missile' || m.at === 'beam')) fail(tag, 'a beam or track line needs a missile to follow');
     let text = ''; try { text = st.text({ b: B, inAir: 3 }); } catch (e) { fail(tag, 'text threw', e.message); }
     if (!text || /undefined|NaN|null|—|Infinity/.test(text)) fail(tag, 'text has a hole in it:', text);

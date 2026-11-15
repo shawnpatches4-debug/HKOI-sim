@@ -169,23 +169,23 @@ export const CHAPTERS = [
     { head: 'A threat with no beam to cut', from: Math.max(0, M.one.t0 - 2.5), to: Math.max(M.one.t0 + 0.2, M.one.tF - 0.4), rate: 1, shot: shotOf({ rig: 'gun' }, M.one.id), lines: ['track'],
       marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad' }), mk('station', 'HKOI weapon station', null, { tone: 'good' })],
       text: () => `An FPV drone: a small racing aircraft with an anti-tank warhead, flown by a pilot through a video link at about ${Math.round(M.one.speed * 3.6 / 10) * 10} km/h. There is no guidance beam to cut, and a drone on a fibre-optic line cannot be jammed either. It has to be shot down.` },
-    { head: 'Airburst', from: Math.max(0, M.one.tF - 1), to: M.one.tK + 1, rate: 0.5, shot: shotOf({ rig: 'gun' }, M.one.id), lines: ['track'],
-      marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad' }), mk('station', 'HKOI: high-explosive rounds', null, { tone: 'good' })],
+    { head: 'Airburst', from: Math.max(0, M.one.tF - 1), to: M.one.tK + 0.6, rate: 0.5, shot: shotOf({ rig: 'follow' }, M.one.id), lines: ['track'],
+      marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' }), mk('station', 'HKOI: high-explosive rounds', null, { tone: 'good' })],
       text: () => `The same gun, the other magazine. HKOI fires ${word(M.one.first)} high-explosive rounds set to burst beside the drone, and it is destroyed ${km(M.one.d)} from the vehicle, ${s1(Math.max(0, M.one.tK - M.one.tF))} s after the first round left the gun.` },
-    !M.multi ? null : { head: 'Sometimes it takes more than one burst', from: Math.max(0, M.multi.tF - 1), to: M.multi.tK + 1, rate: 1, shot: shotOf({ rig: 'gun' }, M.multi.id), lines: ['track'],
-      marks: [mk('missile', cap(M.multi.name), M.multi.id, { tone: 'bad' })],
+    !M.multi ? null : { head: 'Sometimes it takes more than one burst', from: Math.max(0, M.multi.tF - 1), to: M.multi.tK + 0.6, rate: 1, shot: shotOf({ rig: 'follow' }, M.multi.id), lines: ['track'],
+      marks: [mk('missile', cap(M.multi.name), M.multi.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' })],
       text: () => `This ${M.multi.name} took ${word(M.multi.n)} bursts, ${M.multi.rounds} rounds, and came within ${km(M.multi.d)} before it fell. In the model one full burst brings a drone down ${Math.round(100 * M.cfg.hePk)}% of the time before the pilot's dodging is counted (assumed). The magazine holds ${M.cfg.he0} of these rounds; this whole battle used ${M.cfg.he0 - M.all.heLeft}.` },
   ].filter(Boolean) },
   { key: 'limits', name: 'Limits', setup: TOWN, find: findLimits, steps: M => [
     !M.close ? null : { head: M.close.why === 'handed' || M.close.why === 'min' ? 'Too close for a cloud' : 'When the cloud is not enough', from: Math.max(0, M.close.tL - 0.6), to: M.close.tA + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.close.id), lines: ['beam'],
-      marks: [mk('missile', cap(M.close.name), M.close.id, { tone: 'bad' }), mk('trophy', 'Trophy launcher', M.close.id, { tone: 'good', side: M.close.side })],
+      marks: [mk('missile', cap(M.close.name), M.close.id, { tone: 'bad', gone: 'Destroyed by Trophy here', goneTone: 'good' }), mk('trophy', 'Trophy launcher', M.close.id, { tone: 'good', side: M.close.side })],
       text: () => (M.close.why === 'handed' ? `This ${M.close.name} was launched from only ${km(M.close.R)}: ${s1(M.close.flight)} s of flight. The fire control judged there was no time for a cloud to form and work, and handed it straight to Trophy, the inner layer, which destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'min' ? `This ${M.close.name} was launched from only ${km(M.close.R)}, inside the distance HKOI needs to put a cloud on its line. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'saclos' ? `A ${M.close.name} is steered by commands from its launcher, which watches a flare in the missile's tail. A cloud blinds that kind less surely than a beam-rider: ${Math.round(100 * M.cfg.saclos)}% of the time in the model (assumed), and not this time. Trophy destroyed it ${Math.round(M.close.d)} m from the armour.`
         : M.close.why === 'thin' ? `HKOI fired at this ${M.close.name}, but the cloud was too thin to break its guidance. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
         : `HKOI did not stop this ${M.close.name}. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`) },
     !M.rpg ? null : { head: 'Nothing to blind', from: Math.max(0, M.rpg.tL - 1.2), to: M.rpg.tA + 0.6, rate: 0.25, shot: shotOf({ rig: 'replay' }, M.rpg.id),
-      marks: [mk('missile', 'RPG rocket', M.rpg.id, { tone: 'bad' }), mk('trophy', 'Trophy launcher', M.rpg.id, { tone: 'good', side: M.rpg.side })],
+      marks: [mk('missile', 'RPG rocket', M.rpg.id, { tone: 'bad', gone: 'Destroyed by Trophy here', goneTone: 'good' }), mk('trophy', 'Trophy launcher', M.rpg.id, { tone: 'good', side: M.rpg.side })],
       text: () => `An RPG is unguided: once it is fired there is nothing to blind. This one came from ${Math.round(M.rpg.R)} m and was on the vehicle in ${s1(M.rpg.flight)} s. HKOI holds its fire on rockets, and Trophy destroyed it ${Math.round(M.rpg.d)} m from the armour.` },
     { head: 'Eight shots, and what nothing stops', from: (M.rpg || M.close).tA + 2, to: (M.rpg || M.close).tA + 2, rate: 1, shot: shotOf({ rig: 'tank' }, (M.rpg || M.close).id),
       marks: [mk('trophy', 'Trophy: one launcher each side', (M.rpg || M.close).id, { tone: 'good', side: 'L' })],
@@ -196,10 +196,10 @@ export const CHAPTERS = [
       marks: [mk('station', 'One gun, one cloud at a time', null, { tone: 'warn' })],
       text: () => `A prepared defence does not fire one missile at a time. In this volley ${word(M.big.n)} threats were launched within ${s1(M.big.spread)} s from ${word(M.big.dirs)} ${pl(M.big.dirs, 'direction')}: ${list(M.big.kinds)}. HKOI has one gun, and Trophy a few shots a side.` },
     { head: 'The first one through', from: Math.max(0, M.hit.tH - 3), to: M.hit.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.hit.id),
-      marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad' })],
+      marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad', gone: `${cap(M.hit.name)}: hit` })],
       text: () => `${clock(M.hit.tH)} into the battle a ${M.hit.name} fired from ${km(M.hit.R)} hits the vehicle: ${M.hit.hk}, and ${M.hit.aps}. ${M.hit.killing ? 'The vehicle is lost.' : `The vehicle survives it${M.hit.pk != null ? `: in the model a hit from this weapon knocks the vehicle out ${Math.round(100 * M.hit.pk)}% of the time (assumed)` : ''}.`}` },
     !M.empty ? null : { head: 'Handed to an empty launcher', from: Math.max(0, M.empty.tH - 3), to: M.empty.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.empty.id),
-      marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad' }), mk('trophy', 'Trophy launcher', M.empty.id, { tone: 'warn', side: 'R' })],
+      marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad', gone: `${cap(M.empty.name)}: hit` }), mk('trophy', 'Trophy: empty on this side', M.empty.id, { tone: 'warn', side: 'empty' })],
       text: X => { const m = mags(X.b); return `${clock(M.empty.tH)} into the battle, a ${M.empty.name} from ${km(M.empty.R)}: ${M.empty.hk}, and ${M.empty.aps}. It hits.${m.obs != null ? ` Magazines at this point: obscurant ${m.obs}, airburst ${m.he}, Trophy ${m.L} left and ${m.R} right.` : ''}`; } },
     { head: 'Where it runs out', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id),
       marks: [mk('station', `Obscurant rounds left: ${M.all.obs}`, null, { tone: 'warn' }), mk('trophy', `Trophy shots left: ${M.all.apsL + M.all.apsR}`, M.hit.id, { tone: 'warn', side: 'L' })],
@@ -370,7 +370,7 @@ class Briefing {
     const st = this.step;
     if (!st) { this.fault = 'This chapter\'s battle no longer contains the moment the chapter was built on.'; this.phase = 'hold'; A.playing = false; this._paint(); return; }
     const T = A.replay ? A.replay.T : 1e9, from = Math.max(0, Math.min(T - 0.2, st.from)), to = Math.max(from, Math.min(T - 0.1, st.to));
-    this.to = to; this.shot = Object.assign({ t0: from }, st.shot);
+    this.to = to; this.shot = Object.assign({ t0: from }, st.shot); for (const m of st.marks) m._seen = false;
     A.seek(from); A.speed = st.rate || 1; A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
     this.seen.add(this.ci + ':' + this.si); this._paint();
     if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.panel, 600); } catch (e) { console.error(e); } }
@@ -428,8 +428,12 @@ class Briefing {
     const A = this.app, S = A.scene, T = A.shown, id = mk.id;
     if (mk.at === 'tank') { S.at(T.e, T.n, 2.3, out); return true; }
     if (mk.at === 'station') { const p = A.tank.hkoiMuzzle ? A.tank.hkoiMuzzle(out) : null; if (!p) S.at(T.e, T.n, 3.3, out); return true; }
-    if (mk.at === 'trophy') { const V = A.volleys; if (V && V._apsPort && V.tankView) V._apsPort(mk.side || 'R', T, out); else S.at(T.e, T.n, 2.7, out); return true; }
-    if (mk.at === 'missile') { const m = this._missile(id); if (!m) return false; out.copy(m.p); return true; }
+    if (mk.at === 'trophy') { const V = A.volleys; let side = mk.side || 'R'; if (side === 'empty') { const st = A.battle.tank.st || {}; side = st.apsR === 0 ? 'R' : 'L'; }   /* 'empty': the side with no shot left */
+      if (V && V._apsPort && V.tankView) V._apsPort(side, T, out); else S.at(T.e, T.n, 2.7, out); return true; }
+    if (mk.at === 'missile') { const m = this._missile(id); this.gone = false;
+      if (m) { (mk._last || (mk._last = out.clone())).copy(m.p); mk._seen = true; out.copy(m.p); return true; }
+      if (mk.gone && mk._seen) { this.gone = true; out.copy(mk._last); return true; }   /* it has ended: the label stays where it was last seen and says what became of it */
+      return false; }
     if (mk.at === 'launcher') { const u = this._unit(id.uid); if (!u || !u.alive || u.gone) return false; out.copy(A.unitPos(u)); out.y += 0.9; return true; }
     if (mk.at === 'cloud') {   /* the puff that is out now nearest to where this burst was laid: a real puff, never the empty air between two */
       const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let best = (mk.r || 80), hit = false;
@@ -475,8 +479,8 @@ class Briefing {
       if (mkv.at === 'beam') { on = beamMid.on; ax = beamMid.x; ay = beamMid.y; }
       else { on = this._where(mkv, P) && this._project(P, pt); ax = pt.x; ay = pt.y; if (on && (ax < 6 || ax > this.W - 6 || ay < 44 || ay > floor - 4)) { if (mkv.at === 'cloud' || mkv.at === 'trophy' || mkv.at === 'station') on = false; else { off = true; ax = Math.max(14, Math.min(this.W - 14, ax)); ay = Math.max(52, Math.min(floor - 12, ay)); } } }
       if (!on) { m.el.style.display = 'none'; m.ln.style.display = 'none'; m.dot.style.display = 'none'; m.slot = -1; continue; }
-      const text = typeof mkv.text === 'function' ? mkv.text(this._ctx()) : mkv.text, tone = (mkv.tone || '') + (off ? ' off' : '');
-      if (text !== m.text || tone !== m.tone || m.k !== k) { m.text = text; m.tone = tone; m.k = k; m.el.textContent = text; m.el.className = 'tl ' + tone; m.el.style.display = ''; m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; m.slot = -1; const c = TONES[mkv.tone] || '#fff'; m.ln.setAttribute('stroke', c); m.dot.setAttribute('stroke', c); }
+      const gone = mkv.at === 'missile' && this.gone, text = gone ? mkv.gone : typeof mkv.text === 'function' ? mkv.text(this._ctx()) : mkv.text, tone = ((gone && mkv.goneTone) || mkv.tone || '') + (off ? ' off' : '');
+      if (text !== m.text || tone !== m.tone || m.k !== k) { m.text = text; m.tone = tone; m.k = k; m.el.textContent = text; m.el.className = 'tl ' + tone; m.el.style.display = ''; m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; m.slot = -1; const c = TONES[(gone && mkv.goneTone) || mkv.tone] || '#fff'; m.ln.setAttribute('stroke', c); m.dot.setAttribute('stroke', c); }
       const dx = 44 * k, dy = 52 * k, fits = s => { const x = s & 1 ? ax - dx - m.w : ax + dx, y = s & 2 ? ay + dy - m.h / 2 : ay - dy - m.h / 2; if (x < 6 || x + m.w > this.W - 6 || y < 44 || y + m.h > floor) return false; for (const q of placed) if (x < q[0] + q[2] + 6 && x + m.w + 6 > q[0] && y < q[1] + q[3] + 4 && y + m.h + 4 > q[1]) return false; m.x = x; m.y = y; return true; };
       if (m.slot < 0 || !fits(m.slot)) { m.slot = -1; for (const s of [nm % 2 ? 0 : 1, nm % 2 ? 1 : 0, 2, 3]) if (fits(s)) { m.slot = s; break; } }
       if (m.slot < 0) { m.x = Math.max(6, Math.min(this.W - m.w - 6, ax + dx)); m.y = Math.max(44, Math.min(floor - m.h, ay - dy - m.h / 2 - placed.length * (m.h + 4))); }   /* nowhere free: over the picture, stacked */

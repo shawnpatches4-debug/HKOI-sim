@@ -16,7 +16,7 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path=os.environ.get('CHROME', '/usr/bin/google-chrome'), args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
         pg = await b.new_page(viewport={'width': W, 'height': H}); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:300])); pg.on('console', lambda m: m.type == 'error' and 'GPU stall' not in m.text and '404' not in m.text and errs.append(m.text[:300]))
-        bad = 0
+        bad = 0; fresh = 'help' in PARTS   # after the help part (a live battle) the briefing starts from a newly loaded page
         async def ready(hash_):
             await pg.goto(os.environ['BASE'] + '#' + hash_, timeout=180000); await pg.wait_for_function('window.__beta && window.__beta.ready && window.__beta.guide', timeout=400000); print('ready after %.0f s' % (time.time() - T0), flush=True)
         async def shot(name): path = os.path.join(OUT, name + '.png'); await pg.screenshot(path=path, timeout=180000); print('  picture', path, flush=True)
@@ -53,7 +53,7 @@ async def main():
         for s in STEPS:
             if left() < 100: print('out of time before step', s); break
             ci, si = [int(x) for x in s.split('.')]
-            if not await pg.evaluate("!!(window.__beta && __beta.guide)"): await ready('gfx=%s&demo=0&tour=%d.%d' % (GFX, ci, si))
+            if fresh or not await pg.evaluate("!!(window.__beta && __beta.guide)"): fresh = False; await ready('gfx=%s&demo=0&tour=%d.%d' % (GFX, ci, si))
             else: await pg.evaluate("void __beta.guide.brief[__beta.guide.brief.on ? 'go' : 'start'](%d, %d)" % (ci, si))
             st = None; t1 = time.time()
             while left() > 25:
@@ -66,6 +66,10 @@ async def main():
                     else: await pg.evaluate("void (__beta.guide.app.speed = %s)" % ('2' if rem > 0.45 else str(st['rate'])))
             print('step %s after %.0f s: %s' % (s, time.time() - t1, st), flush=True)
             if not st or st['err'] or st['fault'] or st['phase'] != 'hold': bad += 1; print('FAIL step', s, 'did not reach its moment')
+            if await pg.evaluate("!!(__beta.guide.brief.step && __beta.guide.brief.step.panel === 'numbers')"):   # the small live run: wait for its table
+                try: await pg.wait_for_function("!!document.querySelector('#tour-panel table')", timeout=int(max(5, min(150, left() - 40)) * 1000))
+                except Exception: bad += 1; print('FAIL the live run did not finish with a table')
+                print('   panel:', (await pg.evaluate("document.getElementById('tour-panel').innerText"))[:900].replace('\n', ' / '))
             await pg.wait_for_timeout(2500); lab = json.loads(await pg.evaluate(LABELS)); print('  ', lab['tag'], '|', lab['head'], '|', lab['rate'], '| lines', lab['lines']); print('  ', lab['text']); print('   labels', lab['labels'], 'card', lab['card'])
             for L in lab['labels']:
                 if L[1] < 0 or L[1] + L[3] > W or L[2] < 0 or L[2] + L[4] > lab['card'][1] + 2: bad += 1; print('FAIL label off the picture or over the card', L)
