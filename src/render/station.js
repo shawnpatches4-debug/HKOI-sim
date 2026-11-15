@@ -4,7 +4,7 @@
 //
 // Frame: the turret model's own (x to the tank's LEFT, y up from the turret's turning point, z FORWARD along the main gun).
 //
-// THE GUN. M230LF 30 x 113 mm chain gun. ASSUMED from the maker's public data sheet: 2.18 m overall, receiver about 0.26 m wide and
+// THE GUN. The owner has not named the gun. ASSUMED (Claude): an M230LF-class 30 x 113 mm chain gun, sizes from that gun's public data sheet: 2.18 m overall, receiver about 0.26 m wide and
 // 0.29 m high; the split into a 0.85 m receiver and 1.33 m of barrel in front of it is an estimate from photographs. It is hung in
 // its cradle well back (0.35 m of receiver behind the trunnion, 1.83 m in front) so the breech end swings in a small circle and the
 // station stays compact: the price is a long barrel sweep, which the check below accounts for.
@@ -13,13 +13,13 @@
 // roof, on the roof plate over the left bustle wall, outboard of the ammunition blow-out panels and behind the loader's hatch.
 // ELEVATION -10 to +65 degrees (the same limits TankView.aimStation has always used), all round traverse.
 export const STATION = {
-  at: [1.22, -1.50],        // the traverse axis on the roof (x, z)
+  at: [1.25, -1.50],        // the traverse axis on the roof (x, z)
   ped: 0.50,                // height of the pedestal: roof plate to the underside of the slew bearing, metres
   bearing: 0.10,            // slew bearing and turntable, metres
   trunnion: 0.42,           // trunnion axis above the turntable deck: lets the breech end swing down clear of the deck at full elevation
   elMin: -10, elMax: 65,    // degrees
-  rear: 0.35, reach: 1.83,  // gun behind and in front of the trunnion, metres (sum 2.18 = M230LF overall length)
-  bodyR: 0.45, foot: 0.31,              // nothing but the gun in front of the cradle is farther than this from the traverse axis (checked by the test)
+  rear: 0.35, reach: 1.83,  // gun behind and in front of the trunnion, metres (sum 2.18 = overall length of the ASSUMED gun; change here and run the check)
+  bodyR: 0.48, foot: 0.31, box: [0.22, 0.70, 0.44],   /* box: inside size of EACH of the two ammunition boxes, metres (see stationParts) */              // nothing but the gun in front of the cradle is farther than this from the traverse axis (checked by the test)
   roofY: 0.58,              // measured height of the roof plate under the pedestal (the view measures it again on the real model)
 };
 // height of the trunnion axis above the roof plate
@@ -41,20 +41,21 @@ export function stationParts(S = STATION) {
   // ---- turntable and cradle (turn with the station)
   cyl('yaw', 'paint', 0.28, 0.28, 0.035, 'y', 0, -0.0175, 0, { seg: 32, name: 'turntable' });
   box('yaw', 'paint', 0.04, T + 0.10, 0.30, -0.165, (T + 0.10) / 2, 0, { name: 'cheek L' }); box('yaw', 'paint', 0.04, T + 0.10, 0.30, 0.165, (T + 0.10) / 2, 0, { name: 'cheek R' });
-  box('yaw', 'dark', 0.07, 0.16, 0.20, -0.22, 0.12, -0.02, { name: 'elevation drive' });
+  box('yaw', 'dark', 0.12, 0.10, 0.12, 0, 0.07, 0.17, { name: 'elevation drive' });
   box('yaw', 'dark', 0.20, 0.14, 0.16, 0, 0.07, -0.17, { name: 'traverse drive' });
-  // ammunition box on the right with its lid and feed motor. 0.20 x 0.50 x 0.36 m = 36 litres: ASSUMED about 85 linked 30 x 113 mm rounds
-  box('yaw', 'paint', 0.20, 0.50, 0.36, 0.30, 0.29, 0, { name: 'ammunition box' }); box('yaw', 'paint', 0.21, 0.02, 0.37, 0.30, 0.55, 0, { name: 'ammunition box lid' });
-  box('yaw', 'dark', 0.11, 0.06, 0.13, 0.30, 0.59, -0.06, { name: 'feed motor' });
+  // AMMUNITION: 300 rounds ready on the mount (the owner's figure: 150 obscurant + 150 airburst), in two boxes, one each side of the
+  // gun, one nature in each, feeding the gun from both sides (dual feed). ASSUMED 0.45 litres a linked 30 x 113 mm round as packed
+  // (round 200 mm long, 42 mm link pitch, folded in layers: 0.2 x 0.042 x 0.042 = 0.35 l, plus 30% for folds and the box): 150 rounds
+  // = 67.5 l. Each box inside: S.box = [0.22 across (the round's length), 0.70 high, 0.44 long] = 67.8 l. ASSUMED about 105 kg of rounds in all.
+  for (const sx of [-1, 1]) { const [bw, bh, bl] = S.box, x = sx * (0.19 + bw / 2); box('yaw', 'paint', bw, bh, bl, x, 0.04 + bh / 2, 0, { name: 'ammunition box ' + (sx > 0 ? 'L' : 'R') }); box('yaw', 'paint', bw + 0.01, 0.02, bl + 0.01, x, 0.05 + bh, 0, { name: 'ammunition box lid' }); box('yaw', 'dark', 0.11, 0.05, 0.13, x, 0.085 + bh, -0.06, { name: 'feed motor' }); }
   // ---- elevating mass (the gun in its cradle, the sight)
   cyl('pitch', 'steel', 0.045, 0.045, 0.40, 'x', 0, 0, 0, { seg: 14, name: 'trunnion pin' });
   box('pitch', 'dark', 0.26, 0.29, 0.55, 0, 0.005, -0.075, { name: 'receiver' }); box('pitch', 'dark', 0.26, 0.29, 0.30, 0, 0.005, 0.35, { name: 'receiver front', barrel: true });   /* one receiver 0.85 m long; the part in front of the cradle sweeps with the barrel and is checked with it */
   box('pitch', 'dark', 0.14, 0.07, 0.30, 0, 0.185, -0.12, { name: 'feed cover' });
   box('pitch', 'dark', 0.10, 0.09, 0.16, 0.0, -0.185, 0.05, { name: 'gun drive motor', small: true });
-  // sight unit on the left of the cradle: day camera, thermal camera, laser rangefinder behind one armoured face
-  box('pitch', 'paint', 0.18, 0.30, 0.26, -0.29, 0.0, 0.01, { name: 'sight unit' });
-  box('pitch', 'paint', 0.19, 0.015, 0.28, -0.29, 0.158, 0.012, { name: 'sight hood' });
-  for (const [lx, ly, lr] of [[-0.26, 0.06, 0.05], [-0.34, 0.06, 0.026], [-0.255, -0.06, 0.026], [-0.33, -0.05, 0.026]]) cyl('pitch', 'glass', lr, lr, 0.012, 'z', lx, ly, 0.146, { seg: 18, name: 'sight window', small: true });
+  // sight unit on top of the gun's cradle (it elevates with the gun): day camera, thermal camera, laser rangefinder behind one armoured face
+  box('pitch', 'paint', 0.20, 0.20, 0.26, 0, 0.33, 0.03, { name: 'sight unit' }); box('pitch', 'paint', 0.21, 0.015, 0.28, 0, 0.437, 0.035, { name: 'sight hood' });
+  for (const [lx, ly, lr] of [[-0.04, 0.345, 0.045], [0.05, 0.37, 0.026], [0.05, 0.3, 0.026]]) cyl('pitch', 'glass', lr, lr, 0.012, 'z', lx, ly, 0.166, { seg: 18, name: 'sight window', small: true });
   // ---- the barrel group (recoils): sleeve, barrel, muzzle brake. Everything from the front of the receiver (0.50) to the muzzle (reach)
   cyl('slide', 'dark', 0.06, 0.06, 0.45, 'z', 0, 0, 0.725, { seg: 14, name: 'recoil sleeve', barrel: true });
   cyl('slide', 'dark', 0.034, 0.04, S.reach - 0.23 - 0.95, 'z', 0, 0, (0.95 + S.reach - 0.23) / 2, { seg: 12, name: 'barrel', barrel: true });
@@ -76,6 +77,6 @@ export function partPoints(pt, step = 0.03) {
 // The tables are written by `node tests/interior/station_clear.mjs table` (run through tests/interior/run.sh) and checked by the test.
 export const FLOOR = { fixed: null, crewUp: null };
 // fixed: hatches shut (the two rear whip aerials are the 13 and 42 degree entries); crewUp: a man standing in each hatch as well
-FLOOR.fixed = [-10,-10,-8.5,-8.5,-9,-9,-4,-4.5,-3,-2.5,-2.5,-3,-3,-3,-3,-3.5,-10,-10,-10,-10,13,13,13,-10,-9.5,-9.5,-10,-10,-10,-10,-10,-10,42,42,42,42,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10];
-FLOOR.crewUp = [-9,-7.5,-7,-7,-6.5,-6.5,-4,-4.5,-3,5.5,5.5,5.5,5.5,5.5,5,-3.5,-6,-6.5,-6.5,-7,13,13,13,-10,-9.5,-9.5,-10,-10,-10,-10,-10,-10,42,42,42,42,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-9];
+FLOOR.fixed = [-10,-9.5,-8.5,-8.5,-9,-9,-4.5,-4,-4,-2.5,-2.5,-3,-3,-3,-3,-3.5,-10,-10,-10,-10,13,13,13,-10,-9.5,-9.5,-10,-10,-10,-10,-10,-10,42,42,42,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10];
+FLOOR.crewUp = [-9,-8,-7,-7,-6.5,-6.5,-4.5,-4,-4,5,5.5,5.5,5.5,5.5,4.5,-3.5,-6,-6,-6.5,-7,13,13,13,-10,-9.5,-9.5,-10,-10,-10,-10,-10,-10,42,42,42,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10,-10];
 export function elevationFloor(bearingDeg, crewUp) { const T = (crewUp && FLOOR.crewUp) || FLOOR.fixed; if (!T) return STATION.elMin; const b = ((bearingDeg % 360) + 360) % 360 / 5, i = Math.floor(b) % 72, j = (i + 1) % 72, f = b - Math.floor(b); return Math.max(T[i], T[j], T[i] + (T[j] - T[i]) * f); }

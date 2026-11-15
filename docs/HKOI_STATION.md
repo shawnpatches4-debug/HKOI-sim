@@ -13,16 +13,16 @@ wants it there anyway it is one line (`at` in `src/render/station.js`); the chec
 
 | | Old | New |
 | --- | --- | --- |
-| Axis on the roof (x, z) | 0.55, -0.95 | **1.22, -1.50** |
-| Stands on | roof plate and the edge of an ammunition blow-out panel | roof plate over the left bustle wall, 0.13 m clear of the blow-out panels |
+| Axis on the roof (x, z) | 0.55, -0.95 | **1.25, -1.50** |
+| Stands on | roof plate and the edge of an ammunition blow-out panel | roof plate over the left bustle wall, 0.16 m clear of the blow-out panels |
 | Pedestal | a 7 cm ring | 0.50 m welded column, flange 0.62 m across, four gussets, twelve bolts |
 | Trunnion height | about 1.34 | 1.60 (1.02 m above the roof plate; 0.21 m above the commander's shield panels) |
-| Highest point | about 2.0 (its sensor mast) | about 1.85 (the feed chute; 0.46 m above the commander's shield panels, which were the highest thing before) |
-| Gun | drawn 3.3 m long | 2.18 m (M230LF data sheet), 0.35 m behind the trunnion, 1.83 m in front |
-| Body turning circle | 0.89 m radius | 0.445 m radius |
-| Ammunition box | 0.42 x 0.46 x 0.90 m | 0.20 x 0.50 x 0.36 m: 36 litres, ASSUMED about 85 linked rounds |
-| Distance to the loader's hatch centre | 0.40 | 0.99 |
-| Distance to the commander's hatch centre | 1.22 | 2.08 |
+| Highest point | about 2.0 (its sensor mast) | about 2.05 (the sight on top of the gun; ammunition boxes 1.94; 0.65 m above the commander's shield panels, which were the highest thing before) |
+| Gun | drawn 3.3 m long | 2.18 m, 0.35 m behind the trunnion, 1.83 m in front. THE GUN IS AN ASSUMPTION: Shawn has not named it; an M230LF-class 30 x 113 mm chain gun was taken (public data sheet). Its sizes are in one place, `STATION` in `src/render/station.js`; change them and run the check |
+| Body turning circle | 0.89 m radius | 0.47 m radius |
+| Ammunition | one box 0.42 x 0.46 x 0.90 m (174 litres) | **300 rounds ready on the mount** (Shawn's figure: 150 obscurant + 150 airburst): two boxes, one each side of the gun, one nature in each, dual feed. Each 0.22 x 0.70 x 0.44 m = 67.8 litres for 150 rounds. ASSUMED 0.45 litres a linked round as packed (0.2 x 0.042 x 0.042 m = 0.35 l, plus 30% for folds and the box); about 105 kg of rounds |
+| Distance to the loader's hatch centre | 0.40 | 1.00 |
+| Distance to the commander's hatch centre | 1.22 | 2.11 |
 
 Measured clashes of the OLD place with the new, smaller station (so the place itself, not the old shapes, was the fault): body
 0.59 m deep into the standing loader / his lid / his gun, 0.13 m into roof fittings, the flange on a blow-out panel, the body 0.42 m
@@ -30,12 +30,12 @@ in over the panels.
 
 ## What was tried (`node tests/interior/station_clear.mjs search`, run through `tests/interior/run.sh`'s folder or with `SRC=src`)
 
-Every place on a 5 cm grid over the whole roof, pedestals 0.1 to 0.9 m: 36,855 combinations. A place counts only if the flange is on
-flat roof plate (not a hatch, not a blow-out panel) and the turning body clears everything by 3 cm. 374 pass, in three regions:
+Every place on a 5 cm grid over the whole roof, pedestals 0.1 to 0.9 m: 36,855 combinations (run again with the 300-round boxes). A place counts only if the flange is on
+flat roof plate (not a hatch, not a blow-out panel) and the turning body clears everything by 3 cm. 333 pass, in three regions:
 
 | Region | Best place, pedestal | Level fire, hatches shut | With crew heads out | What it costs |
 | --- | --- | --- | --- | --- |
-| **Left rear corner (chosen)** | (1.22, -1.50), 0.5 m | all round, except 10 degrees behind each rear aerial | commander up: right front 45 to 70 degrees needs +5.5; loader up: nothing | nothing taken from any other sight or weapon; station sheltered behind the turret from the front |
+| **Left rear corner (chosen)** | (1.25, -1.50), 0.5 m | all round, except 10 to 15 degrees behind each rear aerial | commander up: right front 45 to 70 degrees needs +5.5; loader up: nothing | nothing taken from any other sight or weapon; station sheltered behind the turret from the front |
 | Front left corner ("beside" the roof guns) | (0.95, 1.15), 0.5 m | all round | commander up: rear right 125 to 145 needs +8 | stands 0.65 m in front of the commander's independent viewer (a blind arc of about 44 degrees to its front left) and squarely in the loader's M240 arc (about 28 degrees straight ahead): both estimated from the geometry, not by the check; on the turret's front, exposed |
 | Rear centre / right rear | (-0.7, -2.55), 0.4 m | 10 degrees masked | 80 degrees masked | over the bustle rack and the wind sensor; right rear also clashes with the commander's lid as it swings aside |
 | Between the hatches (old place), beside the commander's .50 (0.10, 0.45) | none passes | | | body through the loader / his gun (0.6 to 0.9 m deep) and the .50's travel (1.4 m) |
@@ -50,7 +50,7 @@ round the line of fire). The limits are in `src/render/station.js` (`FLOOR`, eve
 them: it lifts its gun over its own tank as it traverses (`TankView.aimStation`).
 
 - Hatches shut: level (0 degrees) everywhere except bearings 100 to 110 (the right rear aerial, a thin whip: +13) and 160 to 175
-  (its own-side aerial, 0.65 m away: +42).
+  (its own-side aerial, 0.65 m away: +42). The sight sits on top of the gun, so the gun never masks it.
 - Below level: the full -10 is reached over about 245 degrees of bearing; over the turret itself (bearings 10 to 75) the limit is -2.5 to -9.
 - Loader standing behind his M240: no further limit (his head top is 0.24 m under the bore line; his lid, upright, 0.25 m).
 - Commander head and shoulders out: bearings 45 to 70 need +5.5 or more.
@@ -63,7 +63,8 @@ limit. Honest effect if it were modelled: small (25 degrees of 360 behind the tu
 head-out). It is listed for the battle's owner.
 
 ## Assumptions
-- M230LF: 2.18 m overall, 0.26 m wide, 0.29 m high (data sheet); the 0.85 m receiver / 1.33 m barrel split is read off photographs.
+- The gun (not named by Shawn; ASSUMED M230LF class): 2.18 m overall, 0.26 m wide, 0.29 m high (data sheet); the 0.85 m receiver / 1.33 m barrel split is read off photographs.
+- 300 rounds fit on the mount without a clash: the finding the check gives is that the two 68-litre boxes make the station 0.65 m taller than anything else on the turret, not that they do not fit.
 - Traverse all round, elevation -10 to +65 degrees (the limits the model has always used). Rates unchanged (90 and 60 degrees a second).
 - A standing loader fits inside 0.42 m of his hatch centre, head top 1.36 (his eye is 0.2 m above his gun's bore); a head-out
   commander inside 0.40 m of the cupola centre, head top 1.64. From the interior's own dimensions (`interior_build.js`).
