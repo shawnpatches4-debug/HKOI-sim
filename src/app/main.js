@@ -13,6 +13,7 @@ import { XRayPanel } from './xraypanel.js';
 import { MapView } from './mapview.js';
 import { Hud } from './hud.js';
 import { TitleShow } from './title.js';
+import { Guide } from './tour.js';
 import { Faces } from './faces.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
@@ -112,7 +113,7 @@ function seek(t) {
 function replayEvents() { const ev = []; for (const l of battle.log) { const k = l.kind === 'volley' ? 'v' : /knocked out|position destroyed/.test(l.text) ? 'k' : /Vehicle destroyed|hits the vehicle|We.re hit|HIT/.test(l.text) && l.kind !== 'tank' ? 'h' : /springs the ambush|breaks contact|changes tactics|launches a drone/.test(l.text) ? 'v' : null; if (k && (!ev.length || l.t - ev[ev.length - 1].t > 0.4)) ev.push({ t: l.t, text: l.text, k }); } return ev; }
 function replayStart() {
   sound.start(); sound.loadVoices(ASSETS); ensureWorld(); if (!battle || !ended || replay) { newBattle(); runQuiet(1800, true); }   /* a battle not yet fought (from a replay code): play it through once, unseen, to learn its length and its events */
-  const T = Math.max(5, battle.t + 4), ev = replayEvents(), specWas = replay ? replay.specWas : set.spectator; replay = { T, ev, specWas }; set.spectator = true; ended = true;
+  const T = Math.max(5, battle.t + 4), ev = replayEvents(), specWas = replay ? replay.specWas : set.spectator; replay = { T, ev, specWas, full: battle }; set.spectator = true; ended = true;
   rewind(); state = 'play'; playing = true; setupOpen = false; pagesOpen = false; cams.set('orbit'); { const T0 = battle.tank; scene.camera.position.copy(scene.at(T0.e - 26, T0.n - 34, 13)); }
   const tk = $('rp-ticks'); tk.textContent = ''; for (const e of ev) { const i = el('i', e.k === 'k' ? 'k' : e.k === 'h' ? 'h' : ''); i.style.left = (e.t / T * 100).toFixed(2) + '%'; i.title = e.text; tk.append(i); }
   buildBar(); show();
@@ -357,6 +358,7 @@ function buildBar() {
     g.append(btn(sound.on ? 'sound' : 'mute', 'Sound', sound.on ? 'on' : '', 'Sound on or off', () => { sound.start(); sound.setOn(!sound.on); store.set('sound', sound.on); buildBar(); })); }
   g = grp(); g.append(btn('display', eng ? 'Engineer' : 'Simple', '', 'Display: engineer shows everything, simple shows almost nothing (H)', () => setHud(eng ? 'simple' : 'engineer')));
   if (!slim) g.append(director.button());   /* film director on or off (key F) */
+  if (!slim) g.append(guide.helpButton());   /* how to watch (key ?) */
   if (!slim) g.append(btn('menu', 'Menu', '', 'Back to the title screen', toTitle));
 }
 // the view picker is a pop-up: a click anywhere else closes it
@@ -449,6 +451,12 @@ const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
 const film = { scene, cams, tank, store, el, shown, get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get playing() { return playing; }, get mapOpen() { return mapOpen; }, get speed() { return speed; }, set speed(v) { speed = v; buildBar(); }, get review() { return !!replay; }, get spectator() { return !!set.spectator; }, seek(t) { if (replay) { seek(t); rpSig = ''; } }, refresh() { if (state === 'play') buildBar(); } };
 const director = new Director(film), xray = new XRayPanel(film);
+// the briefing, the scenarios page and the first-run help (src/app/tour.js, scenarios.js): what they may read and do here
+const guide = new Guide({ scene, cams, tank, store, el, shown, director, pages, HK, q, unitPos, names: { biome: k => (BIOMES.find(b => b[0] === k) || [k, k])[1], force: k => (FORCES[k] || { name: k }).name, skill: k => (SKILLS.find(b => b[0] === k) || [k, k])[1] },
+  get battle() { return battle; }, get volleys() { return volleys; }, get tNow() { return tNow; }, get state() { return state; }, get replay() { return replay; }, get mapOpen() { return mapOpen; }, get playing() { return playing; }, set playing(v) { playing = !!v; rpSig = ''; if (state === 'play') buildBar(); }, get speed() { return speed; }, set speed(v) { speed = v; },
+  seek(t) { if (replay) { seek(t); rpSig = ''; } }, toTitle, snapshot: () => JSON.stringify(set), exit(snap) { replayStop(); if (snap) { for (const k of Object.keys(set)) delete set[k]; Object.assign(set, JSON.parse(snap)); } toTitle(); }, page(on) { pagesFrom = 'title'; pagesOpen = !!on; show(); },
+  /* a chosen battle: mission hold, own crew trained with stress on, armour option off, daylight, the map's default position; 'live' to fight it, 'replay' to watch it */
+  load(u, how) { replayStop(); pages.closeAll(); Object.assign(set, { biome: u.biome, cond: 'day', force: u.force, skill: u.skill, mission: 'hold', waves: u.waves, crew: 'trained', stress: true, armour: false, map: u.map, seed: u.seed, custom: null }); if (set.pos) delete set.pos[u.biome + ':' + u.map]; if (how === 'live') { store.set('setup', set); start(); } else { battle = null; ended = false; ensureWorld(); replayStart(); } } });
 // One bad frame must never freeze the whole simulator: an error is shown on screen (so it can be reported) and the loop carries on.
 let frameErrs = 0;
 function frame(now) {
@@ -475,6 +483,7 @@ function frameBody(now) {
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
   else if (!demo.manual) { /* behind the menus: the title's own director (a live battle, or a still picture on Minimum graphics); behind the result, a slow turn */
     titleShow.side = state === 'title' ? 0.17 : 0; titleShow.update(dt, ctx(), state === 'title' ? demoLive() : scene.quality !== 'min'); }
+  guide.update(dt);   /* the briefing's camera and labels; the first-run help */
   if (sound.ctx) { const T = battle.tank, tp = scene.at(T.e, T.n, 2), act = state === 'play' && playing; sound.update(dt, { view: state === 'play' ? cams.mode : 'title', cond: set.cond, biome: set.biome, speed: act ? T.v : 0, heading: T.h, turret: T.tur, alive: T.alive && state === 'play', camDist: camDist(tp), rate: speed, interior, drones: act ? volleys.info.filter(m => m.drone).map(m => ({ id: m.th.idx + ':' + m.th.t0, d: camDist(m.p) })) : [], ...voices() }); }
   if (mapOpen) { mapv.draw(mapState()); if (state === 'play') { drawLog(); } }
   else if (state !== 'play' && (pagesOpen || state === 'title' && !demoLive())) { stillT -= raw; if (stillT <= 0) { stillT = 0.5; scene.render(dt); drawMarks(); } }   /* a still picture behind a menu is redrawn twice a second, not every frame */

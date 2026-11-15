@@ -25,7 +25,7 @@ export class Director {
   // app: what the page lets the director read and set (see the one line in main.js):
   //   scene, cams, tank, store, el, shown {e, n, h}; battle, volleys, tNow, state, playing, mapOpen (read); speed (read and set); refresh()
   constructor(app) {
-    this.app = app; this.on = !!app.store.get('director', false); this.yielded = false; this.ctrl = false; this.slow = false; this.slowSkip = false; this.saved = 1;
+    this.app = app; this.on = !!app.store.get('director', false); this.hold = false; this.yielded = false; this.ctrl = false; this.slow = false; this.slowSkip = false; this.saved = 1;
     this.plan = new Plan({ HK: typeof HK !== 'undefined' ? HK : window.HK, DMG: typeof DMG !== 'undefined' ? DMG : window.DMG });   /* the engine and the damage model are page globals, not properties of window */ this.b = null; this.shot = null; this.modeSet = null; this.userMode = 'orbit'; this.capText = null; this.side = 1; this.az = 0;
     this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.v1 = new THREE.Vector3(); this.lastP = new THREE.Vector3(); this.hasLast = false;
     document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));
@@ -55,10 +55,21 @@ export class Director {
     this.modeSet = null; this._paint(); A.refresh();
   }
 
+  // ---- for the guided briefing (src/app/tour.js) -------------------------------------------------------------------------------
+  // While `hold` is set the director films nothing and says nothing by itself; the briefing hands it one shot at a time and the
+  // rigs below place the camera exactly as they do for the director's own film.
+  setHold(on) {
+    if (on === this.hold) return; if (on) { this._release(false); this.hold = true; this.tag.hidden = true; this.capText = null; this.cap.style.opacity = 0; if (this.cap.classList.contains('docked')) this.cap.style.display = 'none'; }
+    else { this.hold = false; this.filmEnd(); this.b = null; }
+  }
+  film(s, t) { const A = this.app; if (!A.battle) return; this.b = A.battle; if (s !== this.shot) this._enter(s, t); this._drive(s, t); }
+  filmEnd() { this.shot = null; this.ctrl = false; this.modeSet = null; this.fall = null; this.hasLast = false; }
+
   // once a frame, before the cameras are updated
   update(dt) {
     const A = this.app, b = A.battle, live = this.on && A.state === 'play' && !!b && !!A.volleys;
     if (window.__beta && window.__beta.director !== this) window.__beta.director = this;
+    if (this.hold) return;   /* the briefing has the camera and the words */
     for (const id of ['caption', 'subs']) { const o = document.getElementById(id); if (o) { const v = live ? 'none' : ''; if (o.style.display !== v) o.style.display = v; } }   /* the page's own caption line and the crew subtitles give way to the director's captions */
     if (this.tag.hidden === live) this.tag.hidden = !live;
     if (!live) { if (this.capText !== null) { this.capText = null; this.cap.style.opacity = 0; if (this.cap.classList.contains('docked')) this.cap.style.display = 'none'; } if (this.ctrl || this.slow) this._release(false); return; }
@@ -109,7 +120,7 @@ export class Director {
     if (s.cam === 'troops') { if (secret) { this.fall = s.brg != null ? 'gun' : 'tank'; this._free(); } else if (u0 && u0.alive && !u0.gone) { cams.choose(u0); cams.set('troops'); this.modeSet = 'troops'; } else { this.fall = 'site'; this._free(); } }
     else if (s.inside) { if (cams.interior && cams.interior.owns(s.cam) && A.tank.loaded) { cams.set(s.cam); this.modeSet = s.cam; } else { this.fall = 'low'; this._free(); } }   /* no interior to show: stay outside */
     else if ((s.rig === 'site' || s.rig === 'downrange') && secret) { this.fall = s.brg != null ? 'gun' : 'tank'; this._free(); }
-    else if (s.cam) { cams.set(s.cam); this.modeSet = s.cam; }
+    else if (s.cam) { if (s.cam === 'enemy' && u0) cams.choose(u0);   /* the briefing asks for one team's own sight */ cams.set(s.cam); this.modeSet = s.cam; }
     else this._free();
     // which side of the line to stand on, and for the calm shots which way round: the first choice with a clear view
     const T = A.shown, W = A.scene.world, brg = (s.brg != null ? s.brg : 0) * DEG; this.side = 1; this.az = s.brg != null ? s.brg + 110 : [35, 145, 215, 325][Math.round(s.t0 * 10) % 4] + (s.turn || 0);
@@ -152,6 +163,9 @@ export class Director {
         const g = S.world.h(P.x, -P.z) + 1; if (P.y < g) P.y = g; this._set(rig === 'ride' ? 55 : 45);
       } else if (this.hasLast) { if (rig === 'follow') { L.copy(this.lastP); this._set(45); } }
       else { const a = (s.brg || 0) * DEG; S.at(T.e - Math.sin(a) * 14, T.n - Math.cos(a) * 14, 5, P); S.at(T.e + Math.sin(a) * 80, T.n + Math.cos(a) * 80, 6, L); this._set(50); }   /* not in the air yet, or the view jumped here late */
+    } else if (rig === 'shoulder') {   /* behind and beside the launching team, looking down its line of fire at the vehicle (the briefing) */
+      const u = this._unit(s.uid), e = u ? u.e : T.e, n = u ? u.n : T.n, a = Math.atan2(e - T.e, n - T.n), se = Math.sin(a), sn = Math.cos(a), W = S.world;
+      S.at(e + se * 7.5 + sn * 2.8, n + sn * 7.5 - se * 2.8, 2.4, P); S.at(e - se * 30, n - sn * 30, 0, L); L.y = Math.max(W.h(e - se * 30, n - sn * 30), W.h(e, n) - 1.5) + 1.3; this._set(40);
     } else if (rig === 'site' || rig === 'downrange') {
       const u = this._unit(s.uid), e = u && rig === 'site' && s.e == null ? u.e : s.e != null ? s.e : u ? u.e : T.e, n = u && rig === 'site' && s.n == null ? u.n : s.n != null ? s.n : u ? u.n : T.n;
       const far = rig === 'downrange', a = Math.atan2(T.e - e, T.n - n) + (35 + age * 3) * DEG, r = far ? 28 : 10;
