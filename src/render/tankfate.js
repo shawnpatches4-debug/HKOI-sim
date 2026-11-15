@@ -12,8 +12,8 @@ import * as THREE from 'three';
 // MEASURED on the turret model (tests/interior/roof_survey.json): the raised plate x -0.775 to 0.775, z -2.125 to -0.975, top 0.65
 // above the turret's turning point. Taken as two panels side by side (the real vehicle's bustle roof has two), ASSUMED split on the centre line.
 const PANEL = [{ x: 0.39, z: -1.55, w: 0.755, l: 1.13, s: 1 }, { x: -0.39, z: -1.55, w: 0.755, l: 1.13, s: -1 }], PY = 0.655, G = 9.81;
-// ASSUMED flight of a panel: thrown up at 13 m/s and outward at 2 to 3 m/s, tumbling; it comes down after about 2.7 s and lies where it fell
-const FLY = [{ up: 13.2, out: 2.6, back: 1.1, wx: 5.3, wz: 3.1, yaw: 0.6 }, { up: 12.4, out: 3.1, back: 2.0, wx: -4.4, wz: -3.7, yaw: -0.9 }];
+// ASSUMED flight of a panel: thrown up at 13 m/s and outward at about 1.5 m/s, tumbling; it comes down after about 2.7 s, 4 m from the turret, and lies where it fell
+const FLY = [{ up: 13.2, out: 1.3, back: 0.7, wx: 5.3, wz: 3.1, yaw: 0.6 }, { up: 12.4, out: 1.6, back: 1.3, wx: -4.4, wz: -3.7, yaw: -0.9 }];
 export class TankFate {
   constructor(scene3d, tankView) {
     this.s = scene3d; this.tank = tankView; this.built = false; this.acc = 0; this.last = null; this.done = {};
@@ -22,12 +22,13 @@ export class TankFate {
   }
   _build() {
     const tk = this.tank; if (!tk.turret) return false; this.built = true; const paint = new THREE.MeshStandardMaterial({ color: '#4a4e3b', roughness: 0.8, metalness: 0.2 }), black = new THREE.MeshBasicMaterial({ color: '#050403' });
-    const flame = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const flame = (c, o) => new THREE.MeshBasicMaterial({ color: c, vertexColors: true, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
     this.root = new THREE.Group(); this.root.name = 'tank-fate'; this.s.scene.add(this.root); this.onTur = new THREE.Group(); tk.turret.add(this.onTur); this.panels = []; this.jets = [];
-    const jetGeo = new THREE.CylinderGeometry(0.07, 0.34, 1, 14, 4, true); jetGeo.translate(0, 0.5, 0); { const p = jetGeo.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i), k = 1 + 0.35 * Math.sin(y * 3.1) * (1 - y); p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k * 1.5); } }   /* a tongue: wide along the opening, drawn in at the top */
+    const jetGeo = new THREE.CylinderGeometry(0.05, 0.34, 1, 18, 12, true); jetGeo.translate(0, 0.5, 0); { const p = jetGeo.attributes.position, col = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const y = p.getY(i), a = Math.atan2(p.getZ(i), p.getX(i)), k = (1 + 0.35 * Math.sin(y * 3.1) * (1 - y)) * (1 + 0.22 * y * Math.sin(a * 3 + y * 9)); p.setX(i, p.getX(i) * k + 0.12 * y * Math.sin(y * 7)); p.setZ(i, p.getZ(i) * k * 1.5);
+        const c = Math.pow(1 - y, 1.5) * (0.75 + 0.25 * Math.sin(a * 5 + y * 13)); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = Math.max(0, c); } jetGeo.setAttribute('color', new THREE.BufferAttribute(col, 3)); }   /* a tongue: wide along the opening, ragged, drawn in and fading out toward the top (it is added to the picture, so darker = thinner) */
     for (let i = 0; i < 2; i++) { const P = PANEL[i], pan = new THREE.Mesh(new THREE.BoxGeometry(P.w, 0.035, P.l), paint); pan.castShadow = true; pan.visible = false; this.root.add(pan); this.panels.push(pan);
       const hole = new THREE.Mesh(new THREE.PlaneGeometry(P.w, P.l), black); hole.rotation.x = -Math.PI / 2; hole.position.set(P.x, PY + 0.006, P.z); this.onTur.add(hole);
-      const outer = new THREE.Mesh(jetGeo, flame('#ff7a1c', 0.5)), inner = new THREE.Mesh(jetGeo, flame('#ffe6a0', 0.75)); for (const j of [outer, inner]) { j.position.set(P.x, PY, P.z); j.renderOrder = 5; this.onTur.add(j); } this.jets.push({ outer, inner, ph: i * 1.7 }); }
+      const outer = new THREE.Mesh(jetGeo, flame('#ff6a14', 0.85)), inner = new THREE.Mesh(jetGeo, flame('#ffd890', 0.9)); for (const j of [outer, inner]) { j.position.set(P.x, PY, P.z); j.renderOrder = 5; this.onTur.add(j); } this.jets.push({ outer, inner, ph: i * 1.7 }); }
     // a thrown track: a strip of links laid out on the ground behind the sprocket (made once, shown on the side that was hit)
     { const g = new THREE.Group(), link = new THREE.BoxGeometry(0.62, 0.07, 0.15), mat = new THREE.MeshStandardMaterial({ color: '#2b2a27', roughness: 0.9, metalness: 0.3 }); for (let k = 0; k < 26; k++) { const m = new THREE.Mesh(link, mat); m.position.set(0.1 * Math.sin(k * 0.45), 0.04, -k * 0.165); m.rotation.y = 0.12 * Math.cos(k * 0.45); m.castShadow = true; g.add(m); } g.visible = false; this.track = g; this.root.add(g); }
     this.onTur.visible = false; return true;
@@ -51,11 +52,11 @@ export class TankFate {
       J.outer.visible = J.inner.visible = env > 0.01; J.outer.scale.set(1 + 0.25 * env, Math.max(0.01, H), 1); J.inner.scale.set(0.55, Math.max(0.01, H * 0.72), 0.6); J.outer.rotation.z = 0.05 * Math.sin(now * 7 + J.ph); J.inner.rotation.z = J.outer.rotation.z; glow = Math.max(glow, env * wav);
       if (env > 0.02 && tick) { const m = at(P.x, PY + 0.3, P.z, this._b); fx.fireball(m.x, m.y, m.z, 0.55 * env, 3, 7, 1.1, [0.09, 0.085, 0.08], 0.45, 9); if (i === 0) fx.sparks(m.x, m.y + 0.5, m.z, 0, 1, 0, 5, 16, 0.5, 1.1); }
       if (once('pop' + i, bo.t0)) { const m = at(P.x, PY + 0.4, P.z, this._b); fx.flash(m.x, m.y + 1, m.z, 2.2); fx.fireball(m.x, m.y, m.z, 1.5, 14, 16, 2.2, [0.08, 0.08, 0.08], 0.5, 12); fx.sparks(m.x, m.y, m.z, 0, 1, 0, 40, 26, 0.7, 1.6); } }
-    { const L = this.light; if (glow > 0.01) { at(0, PY + 2.2, -1.55, L.position); L.intensity = 260 * glow; } else if (L.intensity) L.intensity = 0; }
+    { const L = this.light; if (glow > 0.01) { at(0, PY + 2.2, -1.55, L.position); L.intensity = 70 * glow; } else if (L.intensity) L.intensity = 0; }
     // ---- fire and smoke from the right place
     const fr = F.fire; if (fr && now >= fr.t0) { const burning = now <= fr.t1, w = fr.where, left = fr.t1 - now, k = burning ? Math.max(0.3, Math.min(1, left / 20)) : 0, p = this._b;
       if (burning && dt > 0) { if (w === 'engine' || w === 'all') { hullAt(0, 1.55, -2.9, p); fx.burn(p.x, p.y, p.z, dt, 0.8 * k); } if (w === 'hull' || w === 'all') { hullAt(1.2, 1.3, 0.2, p); fx.burn(p.x, p.y, p.z, dt * 0.6, 0.7 * k); }
-        if (w === 'crew' || w === 'all') { at(-0.52, 0.95, -0.36, p); fx.burn(p.x, p.y, p.z, dt * (w === 'all' ? 0.8 : 0.35), (w === 'all' ? 0.55 : 0.3) * k); at(0.77, 0.75, -0.62, p); fx.burn(p.x, p.y, p.z, dt * (w === 'all' ? 0.7 : 0.25), (w === 'all' ? 0.5 : 0.25) * k); } }
+        if (w === 'crew' || w === 'all') { at(-0.52, 0.95, -0.36, p); fx.burn(p.x, p.y, p.z, dt * (w === 'all' ? 1 : 0.35), (w === 'all' ? 0.8 : 0.3) * k); at(0.77, 0.75, -0.62, p); fx.burn(p.x, p.y, p.z, dt * (w === 'all' ? 1 : 0.25), (w === 'all' ? 0.75 : 0.25) * k); } }
       if (!burning && once('after', fr.t1)) { hullAt(0, 1.6, w === 'engine' ? -2.9 : -0.3, p); fx.column(p.x, p.y, p.z, 150, 0.6); } }   /* burnt out: a thinning column for another two and a half minutes */
     if (F.kind === 'catastrophic' && F.t != null && once('cat', F.t)) { const p = at(0, 0.4, 0, this._b); fx.flash(p.x, p.y + 1.5, p.z, 4); fx.explosion(p.x, p.y + 0.6, p.z, 2.4); for (const [x, y, z] of [[-0.52, 0.95, -0.36], [0.77, 0.75, -0.62]]) { at(x, y, z, p); fx.fireball(p.x, p.y, p.z, 1.3, 18, 20, 2.6, [0.07, 0.07, 0.07], 0.55, 14); fx.sparks(p.x, p.y, p.z, 0, 1, 0, 60, 30, 0.8, 2); } hullAt(0, 1.2, 3.0, p); fx.fireball(p.x, p.y, p.z, 1.0, 10, 14, 2.0, [0.07, 0.07, 0.07], 0.5, 6); }
     // ---- mobility and firepower kills on a living tank

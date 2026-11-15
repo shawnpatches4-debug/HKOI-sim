@@ -114,7 +114,7 @@ export class Sights {
       } else {
         this.sty('ts-tape', 'display', 'none'); const k = S.tank, vol = S.volleys, aim = vol && vol.aimAt, m = vol && vol.info ? vol.info.reduce((a, x) => x.cued && (!a || x.range < a.range) ? x : a, null) : null;
         const fl = k.rwsY != null ? elevationFloor(k.rwsY, k.stationCrewUp) : -10, st = T.st || {}; let warn = '';
-        if (m && m.p) { const e = cams.hkoiEye, dy = m.p.y - e.y, dh = Math.hypot(m.p.x - e.x, m.p.z - e.z), el = Math.atan2(dy, dh) / DEG; if (el < fl - 0.5) warn = 'MASKED BY OWN TANK: GUN HELD AT ' + fl.toFixed(0) + '°'; }
+        if (m && m.p && cams.hkoiEye) { const e = cams.hkoiEye, dy = m.p.y - e.y, dh = Math.hypot(m.p.x - e.x, m.p.z - e.z), el = Math.atan2(dy, dh) / DEG; if (el < fl - 0.5) warn = 'MASKED BY OWN TANK: GUN HELD AT ' + fl.toFixed(0) + '°'; }
         this.set('ts-warn', warn);
         this.set('ts-side', `STN BRG ${k.rwsY == null ? '---' : pad(((k.rwsY % 360) + 360) % 360, 3)}\nGUN EL  ${k.rwsP == null ? '--' : (k.rwsP >= 0 ? '+' : '−') + pad(Math.abs(k.rwsP), 2)}\nLIMIT   ${(fl >= 0 ? '+' : '−') + pad(Math.abs(fl), 2)}\n${m ? 'TTG ' + (m.tti != null ? m.tti.toFixed(1) : m.speed ? (m.range / m.speed).toFixed(1) : '--') + ' s' : 'NO TRACK'}\n${aim ? 'FIRING' : m ? 'TRACKING' : 'SEARCH'}`);
         // where the gun points, against the camera's cross: the station's own bearing and elevation, projected

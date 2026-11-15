@@ -402,12 +402,17 @@ export class Interior {
   _bailOut(B, men) {
     const F = B && B.tank && B.tank.fate, C = F && F.crew; if (!C) return; const GY = -(this.tank.turret ? this.tank.turret.position.y : 1.62) + 0.02, [CX, CZ] = DIM.CUP, [HX, HZ] = DIM.HAT; let any = false;
     for (const r of ['cdr', 'gnr', 'ldr', 'drv']) { const o = C[r] && C[r].out; if (!o || B.t < o.t0) continue; any = true; const M = men[r], u = clamp((B.t - o.t0) / Math.max(0.5, o.t1 - o.t0), 0, 1), e = SEATS['in_' + r].eye;
-      // way points [x, y, z, rise]: seat, standing in the hatch, sitting on the edge, standing on the ground, gone to ground
-      const P = r === 'ldr' ? [[e[0], e[1], e[2], 0], [HX, DIM.RF + 0.8, HZ, 1], [HX - 0.75, 1.25, HZ + 0.25, 1], [-2.35, GY + 1.6, HZ + 0.5, 1], [-3.4, GY + 0.86, HZ + 1.7, 0]]
-        : r === 'drv' ? [[e[0], e[1], e[2], 0], [0, DIM.DRF + 0.85, DIM.DZ, 1], [0.9, DIM.DRF + 0.9, DIM.DZ - 0.2, 1], [2.35, GY + 1.6, DIM.DZ - 0.3, 1], [3.6, GY + 0.86, DIM.DZ + 1.4, 0]]
-        : [[e[0], e[1], e[2], 0], [CX, DIM.CUPTOP + 0.7, CZ, 1], [CX + 0.85, 1.3, CZ + 0.35, 1], [2.35, GY + 1.6, CZ + 0.6, 1], [r === 'gnr' ? 4.3 : 3.3, GY + 0.86, CZ + (r === 'gnr' ? 2.6 : 1.5), 0]];
+      // way points [x, y, z, rise]: seat, standing in the hatch, sitting on the edge, standing on the ground, gone to ground. The two on
+      // the ground are laid out beside the HULL (whichever way the turret is turned), on the side his hatch is nearer to, then brought
+      // into the frame his figure lives in (the turret's for the three turret men)
+      const inTur = r !== 'drv', hx = r === 'ldr' ? HX : r === 'drv' ? 0 : CX, hz = r === 'ldr' ? HZ : r === 'drv' ? DIM.DZ : CZ, top = r === 'ldr' ? DIM.RF + 0.8 : r === 'drv' ? DIM.DRF + 0.85 : DIM.CUPTOP + 0.7, far = r === 'gnr' ? 1 : 0, W = this._bw || (this._bw = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Matrix4()]);
+      if (inTur) { this.tur.updateWorldMatrix(true, false); this.hul.updateWorldMatrix(true, false); W[2].copy(this.hul.matrixWorld).invert().multiply(this.tur.matrixWorld); W[0].set(hx, 0, hz).applyMatrix4(W[2]); } else W[0].set(hx, 0, hz);   /* the hatch, in the hull's frame */
+      const side = r === 'drv' ? 1 : W[0].x >= 0 ? 1 : -1, zh = Math.max(-2.6, Math.min(2.6, W[0].z)); W[1].set(side * (3.4 + far), GY + 0.86, zh + 1.3 + far * 1.1); W[0].set(side * 2.45, GY + 1.6, zh);
+      if (inTur) { W[2].invert(); W[0].applyMatrix4(W[2]); W[1].applyMatrix4(W[2]); }
+      const ex = W[0].x - hx, ez = W[0].z - hz, el = Math.hypot(ex, ez) || 1, P = this._bp || (this._bp = [[0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 0]]);
+      P[0][0] = e[0]; P[0][1] = e[1]; P[0][2] = e[2]; P[1][0] = hx; P[1][1] = top; P[1][2] = hz; P[2][0] = hx + ex / el * 0.85; P[2][1] = top + (r === 'drv' ? 0.05 : 0.5); P[2][2] = hz + ez / el * 0.85; P[3][0] = W[0].x; P[3][1] = W[0].y; P[3][2] = W[0].z; P[4][0] = W[1].x; P[4][1] = W[1].y; P[4][2] = W[1].z;
       const K = [0, 0.32, 0.55, 0.78, 1]; let i = 0; while (i < 3 && u > K[i + 1]) i++; const f = sm((u - K[i]) / (K[i + 1] - K[i])), a = P[i], b = P[i + 1], hop = i === 2 ? 0.25 * Math.sin(f * Math.PI) : 0;
-      const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f + hop, z = a[2] + (b[2] - a[2]) * f, face = u >= 1 ? Math.atan2(-(b[0]), b[2]) / DEG + 180 : Math.atan2(b[0] - a[0], -(b[2] - a[2])) / DEG;   /* walking: the way he goes; on the ground: looking back at the vehicle */
+      const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f + hop, z = a[2] + (b[2] - a[2]) * f, face = u >= 1 ? Math.atan2(hx - b[0], -(hz - b[2])) / DEG : Math.atan2(b[0] - a[0], -(b[2] - a[2])) / DEG;   /* walking: the way he goes; on the ground: looking back at the vehicle */
       M.on = true; M.status = C[r].state === 'wounded' && u >= 1 ? 'wounded' : 'ok'; M.state = 'steady'; M.frozen = false; M.up = 0; M.load = -1; M.firing = false; M.bodyOnly = false; M.snap = false; M.rise = a[3] + (b[3] - a[3]) * f; M.face = face; M.head[0] = x; M.head[1] = y; M.head[2] = z;
       const fs = Math.sin(face * DEG), fc = Math.cos(face * DEG), climb = i < 2 ? 1 - Math.abs(f - 0.5) * 0 : 0; for (let h = 0; h < 2; h++) { const sx = h ? 1 : -1, H = M.hands[h], up = i === 0 ? 0.25 * f : i === 1 ? 0.25 * (1 - f) : 0;   /* hands up to the rim on the way through the hatch, then at his sides */ H[0] = x + fc * sx * 0.24 + fs * 0.16; H[1] = y - 0.62 + up * 2.2; H[2] = z + fs * sx * 0.24 - fc * 0.16; } }
     if (any) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); } }

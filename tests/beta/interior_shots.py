@@ -361,12 +361,13 @@ async def main():
                 await pg.evaluate('void __beta.setPlaying(false)'); await shot('fate_' + name, js)
             await pg.evaluate("void stageFate('ammo_vented', t => ({ blowout: { t0: t + 0.15, t1: t + 12.15 }, fire: { t0: t, t1: t + 12.15, where: 'bustle' } }))"); await pg.evaluate("void outv(-7, -7, 6)")
             await to(0.7, 'vented_0.7s_panels_off', "outv(-7, -7, 6)"); await to(1.8, 'vented_1.8s_jets', "outv(-9, -3, 4, 3.5)"); await to(3.0, 'vented_3s_inside_loader_looks_back', "lk('in_ldr', 150, 0, 1)")
-            await to(5.6, 'vented_5.6s_bailing', "outv(6, -6, 5)"); await to(8.2, 'vented_8s_bailing', "outv(7, 3, 4)"); await to(13.5, 'vented_13s_crew_on_the_ground', "outv(8, -7, 6, 1.5)")
+            await to(5.6, 'vented_5.6s_bailing', "outv(6, -6, 5)"); await to(8.2, 'vented_8s_bailing', "outv(7, 3, 4)"); await shot('fate_vented_8s_bailing_from_above', "outv(-1, -3, 14, 1)"); await to(13.5, 'vented_13s_crew_on_the_ground', "outv(8, -7, 6, 1.5)")
             print('fate men', await pg.evaluate("JSON.stringify({ t: __beta.battle.t - window.fateT, hatch: __beta.interior.st.hatch, cup: __beta.interior.cupHatch, mode: __beta.interior.mode, panels: __beta.scene.scene.getObjectByName('tank-fate').children.slice(0, 2).map(p => p.position.toArray().map(v => +v.toFixed(1))) })"))
             await pg.evaluate("void stageFate('catastrophic', t => ({ blowout: { t0: t + 0.15, t1: t + 120 }, fire: { t0: t, t1: t + 120, where: 'all' }, crew: { cdr: { state: 'killed', out: null }, gnr: { state: 'killed', out: null }, ldr: { state: 'killed', out: null }, drv: { state: 'killed', out: null } } }))")
             await to(0.5, 'catastrophic_0.5s', "outv(-9, -6, 5, 3.5)"); await to(4, 'catastrophic_4s', "outv(-9, -6, 5, 3.5)"); await to(5, 'catastrophic_5s_inside_gunner', "lk('in_gnr', 0, 0, 1)")
             await pg.evaluate("void stageFate('mobility_kill', t => ({ mobility: 'killed', firepower: 'killed', gunOut: true, crew: { cdr: { state: 'ok', out: null }, gnr: { state: 'ok', out: null }, ldr: { state: 'ok', out: null }, drv: { state: 'ok', out: null } }, hits: [{ t, comps: ['track_l', 'engine'] }] }))")
-            await to(4, 'mobility_and_firepower_kill_4s', "outv(-7, -6, 3.5, 1.5)")
+            await pg.evaluate("void (window.outh = (right, fwd, h, ty) => { const tk = __beta.tank, keep = tk.turretYaw; tk.turretYaw = 0; outv(right, fwd, h, ty); tk.turretYaw = keep; })")   # the same, in the HULL's frame
+            await to(4, 'mobility_and_firepower_kill_4s_hull_left_rear', "outh(-6, -8, 3.2, 1.2)"); await shot('fate_mobility_kill_hull_right_rear', "outh(6, -8, 3.2, 1.2)")
         if which == 'cuts':   # the cutaway from every side, at rest and again with the turret laid on a target
             CU = [('left', "cutv(-5.2, 2.4, 3.0)"), ('right', "cutv(5.2, 2.0, 3.0)"), ('above', "cutv(-0.6, -1.5, 8.5)"), ('front_left', "cutv(-3.6, 5.2, 2.0)"), ('rear_right_high', "cutv(3.2, -3.4, 5.6)")]
             for name, js in CU: await shot('cut_' + name, js)
