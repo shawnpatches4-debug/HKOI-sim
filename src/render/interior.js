@@ -257,7 +257,7 @@ export class Interior {
     P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(-0.25, 0, -this.st.steer * 0.6);   /* the T-bar turns like handlebars, seen from his eye as a roll */
     this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.set(0, 0, -(Math.PI / 2 + 0.16)); P.throttle.rotateY(-this.st.thr * 1.3);   /* twist grip: more power, more twist */
     this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.z = -this.st.gear * 0.6;
-    this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose();
+    this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose(); this.tank.stationCrewUp = this.st.ldrU > 0.25 || this.st.hatch > 0.05 || this._cupK(1) > 0.02;   /* a man or a lid is up: the HKOI station keeps its gun above them (station.js second table) */
     // ---- hits: everything from the battle's records and the battle clock
     this.simT = B.t; SHARED.uSimT.value = B.t; const FX = this.fxS = fxState(hitList(B), B.t); this.hitPulse = FX.pulse; this.alarm = FX.alarm; this.smoke = Math.max(FX.smoke, FX.dust);
     // head: leans against acceleration and jolts with the main gun

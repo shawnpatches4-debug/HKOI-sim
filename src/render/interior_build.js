@@ -265,7 +265,7 @@ export function buildInterior(labels) {
   T.tag = 'loader';
   T.ring('fit', D.HATR, 0.028, C.steel, HX, RF, HZ, Math.PI / 2, 0, 0, 28); T.cyl('shell', D.HATR, D.HATR, 0.05, C.cream, HX, RF + 0.025, HZ, 0, 0, 0, 24, true);
   // The loader's hatch: hinged at the back, with a spring arm that helps him lift it and holds it open.
-  T.box('fit', 0.05, 0.04, 0.3, C.steel, HX - D.HATR - 0.035, RF + 0.05, HZ); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX - D.HATR - 0.01, RF + 0.065, HZ, Math.PI / 2, 0, 0, 8);   /* hinge block and pin on the roof, on the outboard side: the HKOI station's pedestal stands over the hatch's rear rim, so the lid opens outward and lies back over the turret side */
+  T.box('fit', 0.05, 0.04, 0.3, C.steel, HX - D.HATR - 0.035, RF + 0.05, HZ); T.cyl('fit', 0.02, 0.02, 0.34, C.gunm, HX - D.HATR - 0.01, RF + 0.065, HZ, Math.PI / 2, 0, 0, 8);   /* hinge block and pin on the roof, on the outboard side: the lid opens outward and lies back over the turret side (the HKOI station now stands 0.9 m behind, clear of it: tests/interior/station_clear.mjs) */
   moving.hatch = { g: 'tur', out: true, build: k => { k.cyl('p', D.HATR + 0.03, D.HATR + 0.03, 0.03, C.olive, 0, 0, -D.HATR, 0, 0, 0, 24); k.cyl('p', D.HATR - 0.03, D.HATR - 0.03, 0.012, C.creamD, 0, -0.02, -D.HATR, 0, 0, 0, 20);
     for (const sx of [-1, 1]) k.box('p', 0.035, 0.035, 0.1, C.steel, sx * 0.1, 0.0, -0.04);                                                                                   /* hinge lugs */
     k.box('p', 0.03, 0.02, 0.3, C.gunm, 0.22, -0.02, -0.17, 0.0, 0.0, 0); k.cyl('p', 0.018, 0.018, 0.16, C.steel, 0.22, -0.035, -0.06, Math.PI / 2, 0, 0, 8);          /* spring arm and its cylinder */
