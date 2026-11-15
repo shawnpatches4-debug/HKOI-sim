@@ -113,6 +113,9 @@
         else if (k === 'mg') { delay = K.issue + K.mg; if (v === 'hold') cue = ['CDR', 'cease']; }
         else if (k === 'hatch') { who = 'LDR'; delay = K.issue + K.hatch; }
         else { delay = K.own + this._crewAdd('handover', K.own); if (k === 'warn' && v === 'hold') cue = ['CDR', 'hold']; }
+      } else if ((k === 'fire' || k === 'air') && this._supCheck) {   /* support.js: a fire mission or an air strike, called over the radio */
+        const e = Math.round(+o.e), n = Math.round(+o.n), bad = this._supCheck({ k, e, n, kind: o.kind }); if (bad) return no(`${k === 'fire' ? 'Fire mission' : 'Air strike'} refused: ${bad}.`);
+        rec.e = e; rec.n = n; if (o.kind) rec.kind = o.kind; if (o.uid != null) rec.uid = o.uid; if (o.vid != null) rec.vid = o.vid; if (o.what) rec.what = o.what; delay = K.issue + 8 + this._crewAdd('handover', 8); text = `You call for ${k === 'fire' ? 'a fire mission' : o.kind === 'bomb' ? 'an air strike: a guided bomb' : 'an air strike: a gun run'}${o.what ? ' on ' + o.what : ''}.`;
       } else return no('Unknown order.');
       // the newest order of a kind replaces one still on its way to the crew
       C.q = C.q.filter(it => !(it.o.k === k || (DRIVE[k] && DRIVE[it.o.k])));
@@ -177,6 +180,8 @@
       } else if (k === 'smoke') {
         if (C.smokes <= 0) return; C.smokes--; C.smokeAt = this.t; C.smokeXY = { e: T.e, n: T.n }; this.ev(this.t, 'smoke', { left: C.smokes });
         ack('CDR', `Smoke grenades fired: the screen stands in ${K.smokeForm} s and lasts about ${K.smokeLast} s. ${C.smokes} salvo${C.smokes === 1 ? '' : 's'} left.`, null, this._volleyActive() ? 'missiles already in the air were aimed before the smoke: it counts for shots fired from now on' : 'enemy gunners lose the vehicle while it stands, and so does the crew: the guns cannot see out of it');
+      } else if (k === 'fire' || k === 'air') {   /* support.js */
+        const r = this._supOrderDo ? this._supOrderDo(o) : { ok: false, why: 'no support' }; ack('CDR', r.ok ? (k === 'fire' ? 'Fire mission sent.' : 'Air strike on its way.') : `${k === 'fire' ? 'Fire mission' : 'Air strike'} refused: ${r.why}.`);
       } else if (k === 'engage') {
         C.target = o.uid; const u = o.uid == null ? null : this.units.find(q => q.id === o.uid);
         ack('GNR', u ? `Gunner: ${u.spec.name} #${u.id + 1}, identified.` : 'Gunner: my own targets.', u ? 'identified' : null, u ? 'he takes it before anything else while it is in view; out of view he fights what he can see' : null);
