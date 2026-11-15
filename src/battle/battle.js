@@ -77,6 +77,7 @@
         };
         this.mission = ['hold', 'advance', 'hunt'].includes(opt.mission) ? opt.mission : 'hold';
         this.xOpt = { commander: opt.commander || false, ai: opt.enemyAI === 'classic' ? 'classic' : 'v2' };   /* enemycdr.js: commander true, or 'auto' (5 or more teams, or any vehicle), off by default; enemyAI 'classic' switches off the teams' newer judgement (kept for the tests that compare with stored battles) */
+        this.cmd = this._ordFresh ? this._ordFresh(opt) : null;   /* orders.js: the player's standing orders when opt.command is 'player'; null (the crew commands) otherwise */
         this.raid = opt.raid || null;   /* { minR, window }: the old simulator's kind of raid: launchers no closer than minR metres, shots spread over window seconds */
         // Advance: the objective lies 2 km ahead of the hull (assumed), pulled in to the nearest ground a tank can stand on inside the map
         if (this.mission === 'advance') { const W = this.world, T = this.tank, a = T.h * DEG; let o = null; for (let R = 2000; R >= 600 && !o; R -= 100) { const e = T.e + Math.sin(a) * R, n = T.n + Math.cos(a) * R; if (W.inside(e, n) && W.passable(e, n, true)) o = { e, n }; } this.objective = o || { e: T.e, n: T.n + 600 }; }
@@ -445,6 +446,7 @@
           const c = CAMP.applyState(JSON.parse(JSON.stringify(this.cfg0)), T.st);
           c.seed = this.seed * 1000 + this.volleys.length;
           c.vehicle.hull_deg = at.h; c.enemy.drone_skill = S.pilot; c.enemy.gunner_jitter_mrad = S.jitter;
+          if (this.cmd) this._ordCfg(c);   /* orders.js: the player's HKOI mode and smoke instruction for this engagement */
           if (exposed === 'hull') c.vehicle.half_h *= 0.5;   // hull-down: only the turret is there to hit (approximation: the target is half as tall)
           c.enemy.fixed = launches.map((l, i) => ({ key: l.key, R: Math.max(60, l.R), brg: l.brg, t0: l.t0, id: l.u.id, uid: l.u.id, los_clear: l.los, mask: masks ? masks[i] : null, jit_k: masks ? l.jit_k : null, mask_by: masks ? l.mask_by : null }));
           if (path) { c.ext = { path }; if (order) c.ext.order = order; }
@@ -598,6 +600,7 @@
     const SUP = deps.Support || (typeof HKSupport !== 'undefined' ? HKSupport : null); if (SUP) SUP.install(Battle, { HK, CAMP, TEAMS, SKILL, DMG: deps.DMG });   /* friendly support and the bomber drone live in support.js; after tankai.js, whose drills the wingman borrows */
     const FT = deps.Fate || (typeof HKFate !== 'undefined' ? HKFate : null); if (FT) FT.install(Battle, { DMG: deps.DMG });   /* what a hit does to the vehicle as a whole lives in fate.js; it wraps the drills above */
     const CW = deps.Crew || (typeof HKCrew !== 'undefined' ? HKCrew : null); if (CW) CW.install(Battle, { HK, DMG: deps.DMG }); else Object.assign(Battle.prototype, { _crewStep() {}, _crewAdd() { return 0; }, _crewMul() { return 1; }, _crewOut() { return false; }, _crewFlinch() { return false; } });
+    const OR = deps.Orders || (typeof HKOrders !== 'undefined' ? HKOrders : null); if (OR) OR.install(Battle);   /* the player's orders live in orders.js; without that file, or with the crew in command, nothing changes */
     return { Battle, TEAMS, SKILL };
   }
 
