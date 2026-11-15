@@ -37,7 +37,7 @@ const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five wa
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
 const set = Object.assign({ biome: 'farmland', cond: 'day', force: 'ambush', skill: 'trained', map: 3, spectator: false, seed: 1, gfx: 'auto', mission: 'hold', waves: 3, crew: 'trained', stress: true, figures: true, armour: false, command: 'crew' }, store.get('setup', {}));
 if (q.get('waves')) set.waves = +q.get('waves') || 1;
-for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission']) if (q.get(k)) set[k] = q.get(k);
+for (const k of ['biome', 'cond', 'force', 'skill', 'gfx', 'mission', 'command']) if (q.get(k)) set[k] = q.get(k);
 if (q.get('owncrew')) set.crew = q.get('owncrew');   /* (the hash word crew=1 belongs to the interior's trial figures) */
 if (q.get('stress')) set.stress = q.get('stress') !== '0';
 if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get('seed'); if (q.get('spectator')) set.spectator = q.get('spectator') === '1';
