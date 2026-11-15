@@ -31,17 +31,17 @@ export const SCENARIOS = [
     lines: x => [`A prepared defence: Kornets, Konkurs, a laser designator, drones and RPGs. ${x.fired} threats in three groups.`,
       `${W(x.cut)} blinded, ${w(x.airburst)} shot down, ${w(x.trophy)} taken by Trophy, the rest miss: no hits. The vehicle pulls out with its obscurant rounds gone and ${w(x.trophyLeft)} Trophy ${pl(x.trophyLeft, 'shot')} left.`],
     watch: 'cloud, airburst and Trophy all working on the same volley.' },
+  { key: 'armour', group: 'HKOI at work', name: 'Armoured counter-attack', setup: S('farmland', 7, 'armoured_counter', 'veteran', 1, 1),
+    expect: { alive: true, hits: 0, vehLost: 4, trophy: 3, cut: 1, maxSecs: 240, result: 'won' },
+    lines: x => [`A veteran T-90M, two T-72B3, two BMP-2 and a Konkurs team move on the position.`,
+      `The main gun destroys ${w(x.vehLost)} vehicles in under four minutes. Trophy stops ${w(x.trophy)} missiles and the cloud ${w(x.cut)}.`],
+    watch: 'the gunner\'s sight (key 3): he picks an aim point and a round for each target.' },
   // the tank's end is drawn and acted on since fate.js (15 Nov): the four cards below were redone then from the battles as they now go
   { key: 'stuck', group: 'Where it runs out', name: 'Stuck in the open', setup: S('desert', 6, 'heavy', 'trained', 3, 2),
     expect: { alive: false, end: 'knocked_out', stuckSecs: 8, stuckBy: 'saclos', lostSecs: 460, lostBy: 'saclos', fired: 19, hits: 2, cut: 6, airburst: 4, trophy: 4, bailed: 4 },
     lines: x => [`A prepared defence on open desert. ${W(x.stuckSecs)} seconds in, a ${NM[x.stuckBy]} hits the engine compartment: the transmission is destroyed and the vehicle can no longer move.`,
       `It fights on where it stands for ${w(Math.round((x.lostSecs - x.stuckSecs) / 60))} minutes: HKOI blinds ${w(x.cut)} and shoots down ${w(x.airburst)}, Trophy stops ${w(x.trophy)}. Then a ${NM[x.lostBy]} knocks it out and all ${w(x.bailed)} crew get out.`],
     watch: 'the first ten seconds: one missile gets through while Trophy on that side is reloading, and the vehicle never moves again.' },
-  { key: 'armour', group: 'HKOI at work', name: 'Armoured counter-attack', setup: S('farmland', 7, 'armoured_counter', 'veteran', 1, 1),
-    expect: { alive: true, hits: 0, vehLost: 4, trophy: 3, cut: 1, maxSecs: 240, result: 'won' },
-    lines: x => [`A veteran T-90M, two T-72B3, two BMP-2 and a Konkurs team move on the position.`,
-      `The main gun destroys ${w(x.vehLost)} vehicles in under four minutes. Trophy stops ${w(x.trophy)} missiles and the cloud ${w(x.cut)}.`],
-    watch: 'the gunner\'s sight (key 3): he picks an aim point and a round for each target.' },
   { key: 'laststand', group: 'Where it runs out', name: 'Last stand', setup: S('farmland', 4, 'heavy', 'veteran', 5, 4),
     expect: { alive: false, end: 'catastrophic', fired: 23, hits: 3, cut: 4, airburst: 12, trophy: 3, heLeft: 14, stuckSecs: 605, stuckBy: 'fpv', lostSecs: 754, lostBy: 'kornet', wave: 2, mins: 13 },
     lines: x => [`Veterans, five groups planned. The vehicle holds through the first and into the ${['', 'first', 'second', 'third', 'fourth', 'fifth'][x.wave]}: ${x.fired} threats in ${x.mins} minutes. HKOI blinds ${w(x.cut)} and shoots down ${w(x.airburst)}, Trophy stops ${w(x.trophy)}.`,
@@ -122,7 +122,7 @@ export const cardText = sc => ({ lines: sc.lines(sc.expect), watch: 'Watch for '
 // ------------------------------------------------------------------------------------------------------------------------------
 // The page: a title-screen screen of cards. app: { el, names: { biome, force, skill }, play(setup), replay(setup), back() }
 const CSS = `
-  #scen .card { width: min(1500px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 20px 24px; }
+  #scen .card { box-sizing: border-box; width: min(1500px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 20px 24px; }
   #scen h1 { font-size: clamp(22px, 3vw, 34px); } #scen .sub { margin-bottom: 12px; }
   .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 10px; }
   .sc-h { grid-column: 1 / -1; font: 600 11px/1 var(--mono); color: var(--accent); letter-spacing: .14em; text-transform: uppercase; margin: 8px 0 0; padding-top: 9px; border-top: 1px solid var(--line); }
@@ -162,7 +162,7 @@ export class ScenarioPage {
     }
     c.append(g);
     const foot = el('div', 'sc-foot'), back = el('button', 'btn primary', 'Back'); back.onclick = () => { this.close(); this.app.back(); };
-    foot.append(back, el('span', null, 'Each scenario sets the battle up for you (your own crew trained and fighting by itself, crew stress on, daylight) and replaces the setup on the title screen. A scenario is one battle: for what happens over thousands, use Run the numbers.'));
+    foot.append(back, el('span', null, 'Each scenario sets the battle up for you (your own crew trained and fighting by itself, crew stress on, daylight, friendly support only where the enemy force brings it) and replaces the setup on the title screen. A scenario is one battle: for what happens over thousands, use Run the numbers.'));
     c.append(foot); this.s.hidden = false; this.s.scrollTop = 0; c.scrollTop = 0;
   }
   close() { this.s.hidden = true; }

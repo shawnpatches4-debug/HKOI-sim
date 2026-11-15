@@ -13,10 +13,11 @@
 //
 // Frame rate: the simulation is advanced by the page as always; this file only reads battle time. The only things it animates
 // are label positions (a function of where the objects are this frame) and nothing else, so it looks the same at any frame rate.
-import { ScenarioPage } from './scenarios.js';
+import { ScenarioPage, SCENARIOS } from './scenarios.js';
 
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
 const TOWN = S('town', 6, 'ambush', 'trained', 3, 2), FARM = S('farmland', 6, 'drones', 'trained', 1, 1), DESERT = S('desert', 6, 'heavy', 'trained', 3, 2);
+const NUM = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen'];
 const NAME = { kornet: 'Kornet', vikhr: 'Vikhr', saclos: 'Konkurs', sal: 'laser-homing missile', fpv: 'FPV drone', fpv_fiber: 'fibre-optic FPV drone', rpg: 'RPG', ir: 'infrared missile', ke: 'tank round' };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const word = n => (n >= 0 && n < WORDS.length ? WORDS[n] : String(n)), Word = n => { const s = word(n); return s.charAt(0).toUpperCase() + s.slice(1); };
@@ -231,7 +232,7 @@ export const CHAPTERS = [
     { head: 'One battle proves nothing', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'numbers',
       text: () => `Everything so far was one battle each, picked to show something. To learn what HKOI is worth, the simulator fights the same raid many times under four setups, on the same dice: both systems, Trophy alone, HKOI alone, neither. A small run is being fought right now, below.` },
     { head: 'Where to go from here', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'next',
-      text: () => `Run the numbers fights thousands of raids, map by map or as whole battles, and lists why hits got through. Scenarios has twelve battles picked to show one thing each. The Ladder is ten raids of rising difficulty to fight yourself. Every figure in this simulator is a model's answer built on stated assumptions, not a test result.` },
+      text: () => `Run the numbers fights thousands of raids, map by map or as whole battles, and lists why hits got through. Scenarios has ${String(NUM[SCENARIOS.length] || SCENARIOS.length).toLowerCase()} battles picked to show one thing each. The Ladder is ten raids of rising difficulty to fight yourself. Every figure in this simulator is a model's answer built on stated assumptions, not a test result.` },
   ] },
 ];
 export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map === b.map && a.force === b.force && a.skill === b.skill && a.waves === b.waves && a.seed === b.seed;
@@ -296,7 +297,7 @@ export class Guide {
     const el = this.app.el, go = document.getElementById('go'), main = document.getElementById('t-main'); if (!go || !main) return;
     const mb = (id, cls, head, small, fn) => { const b = el('button', 'mbtn ' + cls); b.id = id; b.append(el('b', null, head), el('small', null, small)); b.onclick = fn; return b; };
     const t = mb('o-tour', 'primary big', 'The HKOI briefing', 'A guided tour: what the threat is, how HKOI beats it, where it stops', () => this.brief.start(0));
-    const sc = mb('o-scen', '', 'Scenarios', 'Ten chosen battles, to play or to watch as a replay', () => this.openScenarios());
+    const sc = mb('o-scen', '', 'Scenarios', `${NUM[SCENARIOS.length] || SCENARIOS.length} chosen battles, to play or to watch as a replay`, () => this.openScenarios());
     go.classList.remove('primary'); go.classList.add('second'); go.before(t); go.after(sc);
     const lad = document.getElementById('o-ladder'), num = document.getElementById('o-numbers');
     if (lad && num) { const pair = el('div', 't-pair'); sc.after(pair); pair.append(lad, num); }

@@ -21,10 +21,10 @@ async def main():
             await pg.goto('about:blank'); await pg.goto(os.environ['BASE'] + '#' + hash_, timeout=180000);   # (a new address that differs only after the # would not load the page again) await pg.wait_for_function('window.__beta && window.__beta.ready && window.__beta.guide', timeout=400000); print('ready after %.0f s' % (time.time() - T0), flush=True)
         async def shot(name): path = os.path.join(OUT, name + '.png'); await pg.screenshot(path=path, timeout=180000); print('  picture', path, flush=True)
         if 'help' in PARTS:
-            await pg.set_viewport_size({'width': 960, 'height': 540})   # the help is always pictured at the small size: it must fit one screen there
+            HW, HH = int(os.environ.get('HELP_W', '960')), int(os.environ.get('HELP_H', '540')); await pg.set_viewport_size({'width': HW, 'height': HH})   # the help is pictured at the small size by default (it must fit one screen there); HELP_W/HELP_H for others
             await ready('gfx=min&help=1&play=1'); await pg.wait_for_timeout(4000)
-            o = await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, t: __beta.battle.t, fits: (c => c.scrollHeight <= c.clientHeight + 1)(document.querySelector('#help .card')) })"); print('help', o); await shot('help')
-            if not json.loads(o)['fits']: bad += 1; print('FAIL the help does not fit one screen at 960 x 540')
+            o = await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, t: __beta.battle.t, fits: (c => c.scrollHeight <= c.clientHeight + 1)(document.querySelector('#help .card')) })"); print('help', o); await shot('help_%dx%d' % (HW, HH))
+            if not json.loads(o)['fits']: bad += 1; print('FAIL the help does not fit one screen at %d x %d' % (HW, HH))
             if not json.loads(o)['open']: bad += 1; print('FAIL the first-run help did not open')
             await pg.evaluate("void document.querySelector('#help .btn.primary').click()"); await pg.wait_for_timeout(3000)
             o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('help').hidden, playing: __beta.guide.app.playing, seen: localStorage.getItem('hkoi.help1'), q: !!document.querySelector('#bar .btn[title^=\"How to watch\"], #bar .btn[data-tip^=\"How to watch\"]') })")); print('after Got it', o)
@@ -43,7 +43,9 @@ async def main():
                 if not o['btns'] or o['btns'][0][0] != 'o-tour': bad += 1; print('FAIL the briefing is not the first button')
             if 'scen' in PARTS:
                 await pg.evaluate("void document.getElementById('o-scen').click()"); await pg.wait_for_timeout(2500)
-                o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('scen').hidden, cards: document.querySelectorAll('.sc-card').length, title: document.getElementById('title').hidden })")); print('scenarios', o); await shot('scenarios')
+                o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('scen').hidden, cards: document.querySelectorAll('.sc-card').length, title: document.getElementById('title').hidden, scroll: (c => [c.scrollHeight, c.clientHeight])(document.querySelector('#scen .card')), wide: (c => c.scrollWidth <= c.clientWidth + 1)(document.querySelector('#scen .card')), cols: getComputedStyle(document.querySelector('.sc-grid')).gridTemplateColumns.split(' ').length })")); print('scenarios', o); await shot('scenarios_%dx%d' % (W, H))
+                if not o['wide']: bad += 1; print('FAIL the scenarios page scrolls sideways')
+                if o['scroll'][0] > o['scroll'][1] + 1: await pg.evaluate("void (document.querySelector('#scen .card').scrollTop = 1e6)"); await pg.wait_for_timeout(1200); await shot('scenarios_%dx%d_end' % (W, H))   # the cards below the fold
                 if not o['open'] or o['cards'] < 10: bad += 1; print('FAIL scenarios page')
                 await pg.evaluate("void document.querySelector('#scen .sc-foot .btn').click()"); await pg.wait_for_timeout(1500)
                 o = json.loads(await pg.evaluate("JSON.stringify({ open: !document.getElementById('scen').hidden, title: !document.getElementById('title').hidden })")); print('back', o)
