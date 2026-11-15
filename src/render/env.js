@@ -69,14 +69,46 @@ export const FINISHES = {
 };
 export function setFinish(biome, cond) { const f = FINISHES[cond === 'snow' ? 'winter' : cond === 'rain' ? 'mud' : biome === 'desert' ? 'desert' : 'temperate']; FINISH.tint.value.set(f.tint); FINISH.amt.value = f.amt; FINISH.dirt.value.set(f.dirt); FINISH.dirtAmt.value = f.dirtAmt; }
 // Apply to a vehicle material (after weatherise, which supplies the world position and the noise it uses).
+// The surface of a vehicle in service, worked out in the shader from where each point is on the hull (so it stays put when the
+// vehicle moves) and which way it faces. No picture files. On top of the repaint and the mud that climbs from the tracks:
+//   grime      the paint is mottled, never one even tone
+//   run-off    dark and dusty streaks down upright plates
+//   dust       gathered on flat tops (roof, engine deck, fenders), which also go matt
+//   chips      paint knocked off along sharp edges, showing dull primer and a little bare metal that catches the light
+//   shade      the running gear and the underside sit in the hull's own shade
+//   sheen      the paint is given a real, uneven gloss and a fine cast-steel relief, so the roof and sloped plates pick up the sky
+// All strengths are assumed, by eye against photographs of vehicles in the field.
 export function vehicleFinish(mat) {
   weatherise(mat, 0.7); const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => { prev(sh, r); sh.uniforms.uFTint = FINISH.tint; sh.uniforms.uFAmt = FINISH.amt; sh.uniforms.uFDirt = FINISH.dirt; sh.uniforms.uFDirtAmt = FINISH.dirtAmt; sh.uniforms.uFGround = FINISH.ground;
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uFTint; uniform float uFAmt; uniform vec3 uFDirt; uniform float uFDirtAmt; uniform float uFGround;').replace('#include <map_fragment>', `#include <map_fragment>
-      { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * smoothstep(0.02, 0.09, l));   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
-        float low = 1.0 - smoothstep(0.15, 1.9, vWp.y - uFGround), n = hkw_n(vWp.xz * 2.7) * 0.6 + hkw_n(vWp.xz * 9.0) * 0.4;
-        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93)); }`); };
-  mat.customProgramCacheKey = () => 'hkfinish'; return mat;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvOp = transformed * length(modelMatrix[0].xyz);');   /* the point on the part itself, in metres */
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vOp; uniform vec3 uFTint; uniform float uFAmt; uniform vec3 uFDirt; uniform float uFDirtAmt; uniform float uFGround; float hkvDust = 0.0, hkvChip = 0.0, hkvBump = 0.5, hkvWet = 0.0;').replace('#include <map_fragment>', `#include <map_fragment>
+      { float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), paintable = smoothstep(0.02, 0.09, l); diffuseColor.rgb = mix(diffuseColor.rgb, uFTint * (0.62 + l * 2.6), uFAmt * paintable);   // repaint, keeping the texture's light and dark; leave black rubber and glass alone
+        vec3 gn = normalize(cross(dFdx(vWp), dFdy(vWp))), pm = vOp;
+        float nA = hkw_n(pm.xz * 3.1 + pm.y * vec2(2.2, 1.6)), nB = hkw_n(pm.xz * 11.0 + pm.y * vec2(7.8, 5.9) + 4.0), nC = hkw_n(pm.xz * 37.0 + pm.y * vec2(26.0, 19.0) + 9.0);
+        diffuseColor.rgb *= mix(1.0, 0.7 + 0.55 * (nA * 0.5 + nB * 0.32 + nC * 0.18), paintable);                                             /* grime */
+        float upright = 1.0 - smoothstep(0.25, 0.7, abs(gn.y));
+        float run = upright * smoothstep(0.52, 0.82, hkw_n(vec2((pm.x + pm.z * 0.8) * 13.0, pm.y * 0.9))) * (0.45 + 0.55 * nA);
+        diffuseColor.rgb *= 1.0 - 0.5 * run * paintable;                                                                                       /* dark run-off */
+        float pale = upright * smoothstep(0.58, 0.9, hkw_n(vec2((pm.x * 0.8 - pm.z) * 9.0 + 31.0, pm.y * 0.6)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.9 + 0.3 * nB), pale * 0.32);                                                      /* dusty streaks */
+        hkvDust = smoothstep(0.6, 0.92, gn.y) * smoothstep(0.28, 0.72, nA * 0.6 + nB * 0.4) * (0.3 + 0.55 * uFDirtAmt);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.85 + 0.3 * nC), hkvDust);                                                         /* dust on flat tops */
+        float low = 1.0 - smoothstep(0.15, 1.9, vWp.y - uFGround), n = nA * 0.6 + nB * 0.4;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uFDirt * (0.8 + 0.4 * n), clamp(uFDirtAmt * (low * 1.1 + 0.18) * (0.5 + 0.9 * n), 0.0, 0.93));  /* mud and dust thrown up by the tracks */
+        #ifndef FLAT_SHADED
+          { float curv = length(fwidth(normalize(vNormal))) / max(length(fwidth(vWp)), 1e-5);
+            hkvChip = smoothstep(2.5, 9.0, curv) * smoothstep(0.4, 0.62, nC * 0.6 + nB * 0.4) * paintable;
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.285, 0.25) * (0.7 + 0.6 * nB), hkvChip * 0.8); }                              /* chipped edges */
+        #endif
+        diffuseColor.rgb *= 1.0 - 0.5 * (1.0 - smoothstep(0.1, 1.25, vWp.y - uFGround)) * (1.0 - smoothstep(-0.2, 0.6, gn.y));                 /* the running gear in the hull's shade */
+        hkvBump = nB * 0.55 + nC * 0.45; hkvWet = paintable; }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = clamp(mix(roughnessFactor, 0.56, 0.5 * hkvWet) * (0.8 + 0.4 * hkvBump) + hkvDust * 0.35 - hkvChip * 0.22, 0.06, 1.0);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      { vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition), r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
+        vec3 g = sign(det) * (dFdx(hkvBump) * r1 + dFdy(hkvBump) * r2); normal = normalize(abs(det) * normal - g * 0.0035); }`); };
+  mat.customProgramCacheKey = () => 'hkfinish2'; return mat;
 }
 
 // Falling rain or snow: short streaks in a box that travels with the camera, wrapped in the shader so nothing is updated on the CPU.

@@ -42,10 +42,12 @@ void main() {
   float seed = vB.y, age = vB.z, r = length(vUv);
   float ang = seed * 6.2832 + age * 0.05 * (fract(seed * 7.13) - 0.5), cs = cos(ang), sn = sin(ang);
   vec2 q = vec2(vUv.x * cs - vUv.y * sn, vUv.x * sn + vUv.y * cs) * 0.3 + vec2(seed * 13.7, seed * 7.3 - age * 0.006);
-  vec4 n = texture2D(noise, q); float n2 = texture2D(noise, q * 2.7 + 0.37).g;
-  float d = r + (n.r - 0.5) * 0.8 + (n2 - 0.5) * 0.36, m = (1.0 - smoothstep(0.3, 1.0, d));
+  vec4 n = texture2D(noise, q); float n2 = texture2D(noise, q * 2.7 + 0.37).g, n3 = texture2D(noise, q * 5.6 + 0.71).b;
+  /* a ragged cloud: lumps of three sizes shape its outline, and its thickness varies inside (thin veils between dense knots).
+     The size and the total opacity still come from the engine's puff; only the way they are spread over the picture is uneven. */
+  float d = r + (n.r - 0.5) * 0.95 + (n2 - 0.5) * 0.46 + (n3 - 0.5) * 0.22, m = min(1.0, (1.0 - smoothstep(0.42, 0.98, d)) * (0.5 + 0.75 * smoothstep(0.25, 0.75, n.g * 0.6 + n3 * 0.4)));
   if (m < 0.004) discard;
-  vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 1.5, sqrt(max(0.04, 1.0 - r * r))));
+  vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 2.3, sqrt(max(0.04, 1.0 - r * r))));   /* strongly lumpy: a cloud of many small billows, not one smooth ball */
   float sun = dot(N, sunV) * 0.5 + 0.5, soft = smoothstep(vB.w - 0.05, vB.w + 0.3 * vSoft.y, vSoft.x);
   float a = vB.x * m * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
   float sunL = max(max(sunColor.r, sunColor.g), sunColor.b) + max(max(skyColor.r, skyColor.g), skyColor.b);
@@ -53,7 +55,7 @@ void main() {
      the far side, sky from above, and a bright thin rim when the sun is behind it. The light it scatters is part of the "highlight". */
   float direct = clamp(dot(N, sunV) * 0.62 + 0.38, 0.0, 1.0); direct *= mix(1.0, 0.55, m * (1.0 - direct));
   float rim = pow(max(-sunV.z, 0.0), 3.0) * (1.0 - m) * (1.0 - m) * 2.6;
-  vec3 lit = vec3(0.86, 0.89, 0.92) * (skyColor * (0.72 + 0.28 * dot(N, upV)) + sunColor * (direct + rim) * (0.84 + 0.28 * n.a));
+  vec3 lit = vec3(0.86, 0.89, 0.92) * (skyColor * (0.72 + 0.28 * dot(N, upV)) + sunColor * (direct + rim)) * (0.62 + 0.62 * n.a);
   lit = mix(lit, fogColor, vFog * 0.8);
   // the highlight: a cool tint in the soft fringe of each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
   // part of the cloud: it stays readable while the real cloud thins, and carries a little light of its own after dark.
@@ -103,7 +105,7 @@ export class ObscurantCloud {
       const age = Math.max(0, t - p.t0), cx = p.x + p.vx * age, cz = p.z + p.vz * age, L = this.lobes, each = 1 - Math.pow(1 - op * st.f, 1 / Math.sqrt(L));
       for (let k = 0; k < L; k++) {
         const o = n * STRIDE, h1 = hash(p.id * 3.1 + k * 17.3), h2 = hash(p.id * 5.7 + k * 29.9), h3 = hash(p.id * 9.3 + k * 7.1);
-        const off = k === 0 ? 0 : st.sigma * 1.1, a = h1 * TAU, e = (h2 - 0.5) * 1.6;
+        const off = k === 0 ? 0 : st.sigma * (0.9 + 0.8 * h3), a = h1 * TAU, e = (h2 - 0.5) * 1.6;
         const x = cx + Math.cos(a) * Math.cos(e) * off, y = Math.max(p.y + Math.sin(e) * off * 0.7, p.gy + st.sigma * 0.6), z = cz + Math.sin(a) * Math.cos(e) * off;
         D[o] = x; D[o + 1] = y; D[o + 2] = z; D[o + 3] = st.sigma * (k === 0 ? 2.4 : 1.5 + h3 * 0.7);
         D[o + 4] = each; D[o + 5] = h3; D[o + 6] = st.age; D[o + 7] = p.gy; D[o + 8] = hl; D[o + 9] = 0; D[o + 10] = 0; D[o + 11] = 0;

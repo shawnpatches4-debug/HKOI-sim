@@ -190,6 +190,13 @@ const BODY = /* glsl */`
         vec2 nd = w0 * (texture(hkNrm, vec3(pa, 0.0)).rg - 0.5) * 1.5 + w1 * (texture(hkNrm, vec3(pa, 1.0)).rg - 0.5) * 2.2 + w2 * (texture(hkNrm, vec3(pa, 2.0)).rg - 0.5) * 1.6
           + w3 * (texture(hkNrm, vec3(pa, 3.0)).rg - 0.5) * 1.6 + w4 * (texture(hkNrm, vec3(pa, 4.0)).rg - 0.5) * 1.8;
         hkTilt = nd * fN * (1.0 - road * 0.5);
+        /* right under the camera the 3.3 m surface is stretched thin: a second, five times finer reading of the soil and grass surfaces
+           adds grit, small clods and blades that hold up at two metres, and fades out by fifteen */
+        { float fM = 1.0 - smoothstep(4.0, 15.0, dC);
+          { vec2 pm = (mat2(0.6, -0.8, 0.8, 0.6) * vWp.xz) * (1.0 / 0.67); float wS = clamp(w1 + w4, 0.0, 1.0), wG = 1.0 - wS;
+            vec4 m1 = texture(hkDet, vec3(pm, 1.0)), m0 = texture(hkDet, vec3(pm, 0.0));
+            dcol *= mix(1.0, 0.62 + 0.76 * (wS * m1.a + wG * m0.a), fM * 0.75);
+            hkTilt += (wS * (texture(hkNrm, vec3(pm, 1.0)).rg - 0.5) * 2.4 + wG * (texture(hkNrm, vec3(pm, 0.0)).rg - 0.5) * 1.5) * fM * (1.0 - road * 0.5); } }
       #endif
     #else
       dcol = vec3(0.82 + 0.36 * (n1 * 0.6 + n3 * 0.4));
@@ -199,7 +206,8 @@ const BODY = /* glsl */`
        straw and stones lie about. Grass and crops thin out and thicken. Three sizes of drift, strongest on bare earth. */
     #if HK_DETAIL > 1
     { float mv = hk_n(vWp.xz * 0.0085 + 3.0) * 0.5 + hk_n(vWp.xz * 0.037 + 11.0) * 0.32 + n1 * 0.18, earth = clamp(wSoil + wBuilt * 0.5, 0.0, 1.0);
-      base *= mix(0.9 + 0.2 * mv, 0.74 + 0.5 * mv, earth);
+      base *= mix(0.8 + 0.4 * mv, 0.74 + 0.5 * mv, earth);
+      base = mix(base, base * vec3(1.16, 1.02, 0.74), (1.0 - earth) * (1.0 - wFor) * smoothstep(0.42, 0.8, hk_n(vWp.xz * 0.006 + 17.0) * 0.65 + hk_n(vWp.xz * 0.031 + 2.0) * 0.35) * 0.55);   /* grass and crops yellow off in broad dry patches */
       base = mix(base, base * vec3(1.34, 1.27, 1.14), earth * smoothstep(0.5, 0.78, mv) * 0.75);                       /* dried-out crust */
       float weed = wSoil * smoothstep(0.6, 0.74, hk_n(vWp.xz * 0.027 + 40.0) * 0.7 + n3 * 0.3) * smoothstep(0.35, 0.6, hgt + (n1 - 0.5) * 0.3);
       base = mix(base, mc.rgb * vec3(0.5, 0.78, 0.3) * (0.7 + 0.5 * n3), weed * 0.7);                                   /* weeds coming through */

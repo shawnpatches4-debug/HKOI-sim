@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { ENV, atmosphere } from './env.js';
 import { ROAD_RANGE } from './terrain.js';
 
-const MAX = 110000, MAX_CLEAR = 16;
+const MAX = 110000, MAX_CLEAR = 16, MAX_TRAIL = 28;
 // level: [number of tufts, radius of the patch in metres]
 const LEVELS = { 0: [0, 0], 1: [14000, 26], 2: [36000, 38], 3: [72000, 48], 4: [110000, 60] };   /* 4 = Ultra: the same thickness of growth, out to 60 m */
 
@@ -64,7 +64,7 @@ const VERT_PARS = /* glsl */`
   attribute vec4 aSeed;
   uniform highp sampler2D hkHeight; uniform sampler2D hkCol; uniform sampler2D hkC1; uniform sampler2D hkC2;
   uniform vec4 hkGrid; uniform vec2 hkCellN; uniform vec2 hkCentre; uniform vec2 hkEye; uniform vec3 hkPatch; uniform float hkTime; uniform vec3 hkWind; uniform float uSnow; uniform float uWet; uniform float hkDry;
-  uniform vec3 hkClear[${MAX_CLEAR}];
+  uniform vec3 hkClear[${MAX_CLEAR}]; uniform vec3 hkTrail[${MAX_TRAIL}];
   varying vec3 vTint; varying vec3 vWp; varying float vUp;
   float hkGround(vec2 xz){
     vec2 g = clamp(vec2(xz.x + hkGrid.z, -xz.y + hkGrid.z) / hkCellN.x, vec2(0.0), vec2(hkCellN.y - 1.001)); ivec2 i = ivec2(floor(g)); vec2 f = fract(g);
@@ -77,6 +77,7 @@ const VERT_BODY = /* glsl */`
     float T = hkPatch.x, R = hkPatch.y;
     vec2 base = aSeed.xy * T, wxz = base + floor((hkCentre - base) / T + 0.5) * T;
     vec2 wuv = (wxz + hkGrid.z) / hkGrid.w;
+    wuv += (fract(aSeed.xy * 53.7 + aSeed.w) - 0.5) * (5.0 / hkGrid.w);   /* each tuft reads the coarse map (4 m a pixel) a couple of metres off, so a field's edge is ragged, not a staircase */
     vec4 mc = textureLod(hkCol, wuv, 0.0), c1 = textureLod(hkC1, wuv, 0.0), c2 = textureLod(hkC2, wuv, 0.0);
     float low = step(0.5, c1.g), tall = step(0.5, c1.b), wood = step(0.5, c2.r), rd = c2.a * ${ROAD_RANGE.toFixed(1)};
     // crops stand in their rows (the same rows the ground shows)
@@ -95,6 +96,7 @@ const VERT_BODY = /* glsl */`
     // fade out at the rim of the patch, and where something stands on it
     float edge = 1.0 - smoothstep(R * 0.62, R, distance(wxz, hkCentre));
     float trod = 1.0; for (int i = 0; i < ${MAX_CLEAR}; i++) { vec3 q = hkClear[i]; float r = max(q.z, 0.01); trod *= mix(1.0, smoothstep(r * 0.72, r, distance(wxz, q.xy)), step(0.0, q.z)); }
+    for (int i = 0; i < ${MAX_TRAIL}; i++) { vec3 q = hkTrail[i]; trod *= mix(1.0, smoothstep(q.z * 0.55, q.z, distance(wxz, q.xy)), step(0.0, q.z)); }   /* the lane the tank has driven: crushed, and it stays crushed */
     float sc = there * edge * smoothstep(1.0, 2.8, distance(wxz, hkEye)) * hkPatch.z *   /* nothing right against the lens */ (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
     h *= sc * mix(1.0, 0.18, 1.0 - trod) * (1.0 - 0.45 * uSnow * crop); w *= step(0.02, sc);
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
@@ -132,6 +134,7 @@ export class GroundCover {
       hkHeight: { value: null }, hkCol: { value: null }, hkC1: { value: null }, hkC2: { value: null }, hkGrid: { value: new THREE.Vector4(1, 0, 4000, 8000) }, hkCellN: { value: new THREE.Vector2(15.6, 513) },
       hkCentre: { value: new THREE.Vector2() }, hkEye: { value: new THREE.Vector2() }, hkPatch: { value: new THREE.Vector3(90, 45, 1) }, hkTime: ENV.time, hkWind: ENV.wind, uSnow: ENV.snow, uWet: ENV.wet, hkDry: { value: 1 },
       hkClear: { value: Array.from({ length: MAX_CLEAR }, () => new THREE.Vector3(0, 0, -1)) },
+      hkTrail: { value: Array.from({ length: MAX_TRAIL }, () => new THREE.Vector3(0, 0, -1)) },
     };
     const mat = new THREE.MeshStandardMaterial({ map: coverSheet(), alphaTest: 0.36, side: THREE.DoubleSide, roughness: 1, metalness: 0 });
     mat.alphaToCoverage = true;
@@ -162,6 +165,14 @@ export class GroundCover {
   }
   setLevel(level) {
     const L = LEVELS[level] || LEVELS[0]; this.level = level; this.mesh.geometry.instanceCount = L[0]; this.uniforms.hkPatch.value.set(L[1] * 2, L[1], 1); this.mesh.visible = L[0] > 0;
+  }
+  // The tank's wake through grass and crops: a flattened spot is left every 3 m it drives (the last 28, about 85 m; the oldest is reused).
+  // By distance driven, so it is the same at any frame rate. A jump of more than 40 m (a new battle, a rewind) starts a new wake.
+  track(x, z) {
+    const T = this.uniforms.hkTrail.value, dx = x - (this._tx || 0), dz = z - (this._tz || 0), d2 = dx * dx + dz * dz;
+    if (this._tx == null || d2 > 1600) { for (const q of T) q.z = -1; this._ti = 0; this._tx = x; this._tz = z; return; }
+    if (d2 < 9) return;
+    T[this._ti].set(this._tx, this._tz, 2.5); this._ti = (this._ti + 1) % T.length; this._tx = x; this._tz = z;
   }
   // each frame: slide the patch to lie ahead of the camera, and note where vehicles and teams stand (they tread it flat)
   update(camera, units) {

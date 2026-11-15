@@ -80,7 +80,7 @@ export class AirPass extends Pass {
     this.air = new THREE.ShaderMaterial({ defines: { TAPS: 8, RAYS: 20, AO_FAR: '240.0' }, depthTest: false, depthWrite: false, vertexShader: VERT, fragmentShader: AIR,
       uniforms: { tDepth: { value: null }, proj: { value: new THREE.Vector4() }, px: { value: new THREE.Vector2() }, radius: { value: 1.3 }, aoOn: { value: 1 }, aspect: { value: 1 }, sun: { value: new THREE.Vector4(0.5, 0.5, 0, 5) } } });
     this.lay = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, vertexShader: VERT, fragmentShader: LAY,
-      uniforms: { tDepth: { value: null }, proj: this.air.uniforms.proj, tDiffuse: { value: null }, tAir: { value: this.half.texture }, hpx: { value: new THREE.Vector2() }, aoK: { value: 0.9 }, shaftCol: { value: new THREE.Color(0, 0, 0) }, aoTint: { value: new THREE.Color(0.0, 0.0, 0.0) } } });
+      uniforms: { tDepth: { value: null }, proj: this.air.uniforms.proj, tDiffuse: { value: null }, tAir: { value: this.half.texture }, hpx: { value: new THREE.Vector2() }, aoK: { value: 0.9 }, shaftCol: { value: new THREE.Color(0, 0, 0) }, aoTint: { value: new THREE.Color(0.34, 0.37, 0.43) }   /* the deepest shade keeps about a third of its light, a little blue: thick grass and crops must not go black */ } });
     this.fsq = new FullScreenQuad(this.air);
   }
   // level 1 (High) or 2 (Ultra): how many depth look-ups each pixel gets
