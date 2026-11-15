@@ -261,7 +261,7 @@ export class Particles {
     for (let i = 0, n = this.cnt(9 * k); i < n; i++) { const a = this.R() * TAU, e = this.R() * 1.3, s = (2 + this.R() * 7) * rk;
       this.spawn(KIND.FIRE, x, y + 0.8 * k, z, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 2, Math.sin(a) * Math.cos(e) * s, 0.35 + this.R() * 0.3, 2.6 * k, 6.5 * k, 0, 0, 0, 0, 2.5, 2, 1, 0); }
     for (let i = 0, n = this.cnt(22 * k); i < n; i++) { const a = this.R() * TAU, e = (this.R() - 0.15) * 1.4, s = (3 + this.R() * 9) * rk;
-      this.spawn(KIND.FIRE, x + Math.cos(a) * 0.6 * k, y + 0.6 * k + this.R() * 1.2 * k, z + Math.sin(a) * 0.6 * k, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 2.5, Math.sin(a) * Math.cos(e) * s, 5 + this.R() * 5, 2.0 * k, 7.5 * k, 0.11, 0.1, 0.09, 0.8, 2.2, 1.6, 0.06 + this.R() * 0.05, 0); }
+      this.spawn(KIND.FIRE, x + Math.cos(a) * 0.6 * k, y + 0.6 * k + this.R() * 1.2 * k, z + Math.sin(a) * 0.6 * k, Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 2.5, Math.sin(a) * Math.cos(e) * s, 5 + this.R() * 5, 2.0 * k, (4.2 + this.R() * 2.6) * k, 0.11 + this.R() * 0.05, 0.1 + this.R() * 0.04, 0.09 + this.R() * 0.03, 0.74, 1.5, 0.7 + this.R() * 1.8, 0.06 + this.R() * 0.05, 0); }   /* lobes of different size that travel apart and rise at different rates: the cloud keeps its shape as it ages instead of merging into one ball */
     this.sparks(x, y + 0.4, z, 0, 0.8, 0, 30 * k, 30 * rk, 1.3, 0.9);
     if (dirt > 0) {
       // the fountain: jets of earth thrown up in streaks that fall back, clods flying further, and dust rolling out along the ground
@@ -376,6 +376,21 @@ export class Particles {
     const A = this._acc; A.burn += dt * 16 * this.q; A.smoke += dt * 5.5 * this.q;
     while (A.burn >= 1) { A.burn -= 1; this.spawn(KIND.FIRE, x + (this.R() - 0.5) * 2.4 * k, y + this.R() * 0.8, z + (this.R() - 0.5) * 3 * k, (this.R() - 0.5) * 1.2, 2.2 + this.R() * 3, (this.R() - 0.5) * 1.2, 0.7 + this.R() * 0.6, 1.3 * k, 0.5 * k, 0, 0, 0, 0, 0.6, 1.5, 1, 0); }
     while (A.smoke >= 1) { A.smoke -= 1; const d2 = 0.045 * (0.7 + this.R() * 1.3); this.spawn(KIND.SMOKE, x + (this.R() - 0.5) * 2 * k, y + 1.6, z + (this.R() - 0.5) * 2 * k, (this.R() - 0.5) * 2.6, 3 + this.R() * 2.8, (this.R() - 0.5) * 2.6, 16 + this.R() * 10, (1.6 + this.R() * 1.2) * k, (9 + this.R() * 8) * k, d2 * 1.08, d2, d2 * 0.94, 0.78 * (0.75 + this.R() * 0.3), 0.22, 0.5, 0, 0); }
+  }
+  // A jet of burning gas (propellant or ammunition venting through a hatch or a blow-off panel). Call it every frame while it burns:
+  // (x, y, z) the opening, (dx, dy, dz) the way it blows (unit length), k its strength (1 = a blow-off panel in full cry, about a 6 m
+  // tongue), dt the simulated seconds since the last call. Draws a turbulent tongue of flame, sparks thrown along it and black smoke
+  // rolling off its end; the fire light and the glow on nearby smoke follow it. The same at any frame rate (it emits by time, not by frame).
+  flameJet(x, y, z, dx, dy, dz, k = 1, dt = 0.016) {
+    if (!(dt > 0) || !(k > 0)) return; const A = this._acc, rk = Math.sqrt(k); A.jet = (A.jet || 0) + Math.min(dt, 0.25) * 44 * this.q * rk; A.jetS = (A.jetS || 0) + Math.min(dt, 0.25) * 8 * this.q * rk;
+    while (A.jet >= 1) { A.jet -= 1; const s = (14 + this.R() * 20) * rk, j = 0.2;
+      this.spawn(KIND.FIRE, x, y, z, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s, (dz + (this.R() - 0.5) * j) * s, 0.3 + this.R() * 0.35, 0.45 * k, (1.8 + this.R() * 1.4) * k, 0, 0, 0, 0, 2.6, 2.5, 1, 0);
+      if (this.R() < 0.45) { const v = (30 + this.R() * 40) * rk; this.spawn(KIND.SPARK, x, y, z, (dx + (this.R() - 0.5) * 0.5) * v, (dy + (this.R() - 0.5) * 0.5) * v, (dz + (this.R() - 0.5) * 0.5) * v, 0.5 + this.R() * 0.8, 0.07, 0.03, 1, 0.6 + this.R() * 0.25, 0.25, 1, 0.8, -9.8, 5, 0); } }
+    while (A.jetS >= 1) { A.jetS -= 1; const d = (3 + this.R() * 3) * rk, g = 0.035 + this.R() * 0.05;
+      this.spawn(KIND.FIRE, x + dx * d, y + dy * d, z + dz * d, dx * 5 + (this.R() - 0.5) * 2.5, dy * 5 + 1.5 + this.R() * 2, dz * 5 + (this.R() - 0.5) * 2.5, 7 + this.R() * 7, 1.3 * k, (6 + this.R() * 5) * k, g * 1.08, g, g * 0.94, 0.72, 0.9, 0.9, 0.08, 0); }
+    { const H = this.hot; let h = null; for (let i = 0; i < H.length; i++) if (Math.abs(H[i].x - x) + Math.abs(H[i].z - z) < 4) { h = H[i]; break; }
+      if (!h) { if (H.length < 8) h = H[H.length] = { x: 0, y: 0, z: 0, k: 1, t: 0 }; else { h = H[0]; for (let i = 1; i < H.length; i++) if (H[i].t < h.t) h = H[i]; } }
+      h.x = x; h.y = y; h.z = z; h.k = Math.max(1, k * 1.5); h.t = this.time; }
   }
   // the fire burning nearest to a point (the camera), or null: a lasting fire with flame, or a place burn() fed within the last second
   nearestFire(cx, cy, cz) {

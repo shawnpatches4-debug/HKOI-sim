@@ -49,7 +49,7 @@ void main() {
   if (m < 0.004) discard;
   vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 2.3, sqrt(max(0.04, 1.0 - r * r))));   /* strongly lumpy: a cloud of many small billows, not one smooth ball */
   float sun = dot(N, sunV) * 0.5 + 0.5, soft = smoothstep(vB.w - 0.05, vB.w + 0.3 * vSoft.y, vSoft.x);
-  float a = vB.x * m * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
+  float a = vB.x * min(1.0, m * 1.7) * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* the knots are as thick as the engine says the puff is (they hide what is behind them when it says the line is cut); only the veils between them are thin */   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
   float sunL = max(max(sunColor.r, sunColor.g), sunColor.b) + max(max(skyColor.r, skyColor.g), skyColor.b);
   /* lit as any cloud of fine particles is (the same sum as the smoke in fx.js): sun on the near side, its own shade in the thick middle of
      the far side, sky from above, and a bright thin rim when the sun is behind it. The light it scatters is part of the "highlight". */

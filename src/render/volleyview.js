@@ -117,7 +117,7 @@ export class VolleyView {
     for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear();
     this.fx.clear(); this.cloud.clear(); this.lastT = t; if (!v) return;
     const tv = t - v.t0, rec = v.rec; this._first(v);
-    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
+    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); if (!B.tank.fate) this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
     for (const b of rec.bursts) { if (b.idx < 0) continue; const th = rec.threats[b.idx], l = this._l(v, th, b.idx); if (!l) continue;
       for (const r of b.rounds || []) { const tb = r.t_burst != null ? r.t_burst : r.t_pass, rk = v.i + ':' + b.idx + ':' + r.t_fire; if (tv >= r.t_fire) this.seen.add(rk + 'm'); if (tv >= tb) { this.seen.add(rk); if (b.kind === 'obs') this._bloom(v, b, th, l, r, true); } } }
     for (const a of rec.aps || []) if (tv >= a.t) this.seen.add(v.i + ':aps:' + a.t);
@@ -264,7 +264,7 @@ export class VolleyView {
 
   // the vehicle is destroyed: fire that stays, a black column, and ammunition going up over the next few seconds
   _kill(T, t) {
-    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); fx.fire(p.x, p.y, p.z, 1e9, 1.2);
+    const s = this.s, fx = this.fx, p = s.at(T.e, T.n, 2, new THREE.Vector3()); if (!this.b.tank.fate) fx.fire(p.x, p.y, p.z, 1e9, 1.2);   /* with a fate, src/render/tankfate.js draws what burns and how */
     [0.9, 2.2, 3.9].forEach((d, i) => { const dd = d + hash(T.e + i) * 0.6; this.later.push({ t: t + dd, fn: () => { fx.seed(T.e + i * 3); fx.secondary(p.x, p.y + 0.6, p.z, 1 - i * 0.15); s.blast(p, 1.4 - i * 0.2, false); this.emit('explosion', p, { size: 1.2 }); } }); });
   }
   // missiles that missed: they carry on along their last heading, sink, and burst where they meet the ground
