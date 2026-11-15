@@ -315,10 +315,16 @@
     P.step = function () { if (this.cmd) this._ordFeed(); return step0.call(this); };
     // the standing order for a missile warning decides the driver's plan for the engagement
     P._drivePlan = function (at, warnT, observers, tEnd, firstImpact, holdForHkoi) {
-      const C = this.cmd; if (!C || C.warn === 'judge') return plan0.call(this, at, warnT, observers, tEnd, firstImpact, holdForHkoi);
-      if (C.warn === 'cover') return plan0.call(this, at, warnT, observers, tEnd, firstImpact, false);
-      const flinch = !holdForHkoi && this._crewFlinch();   /* a shaken crew may still bolt (crew.js) */
-      const r = plan0.call(this, at, warnT, observers, tEnd, firstImpact, !flinch); if (!flinch && !r.cover && warnT != null) this._holdWhy = 'your standing order: hold still on a warning';
+      const C = this.cmd; if (!C) return plan0.call(this, at, warnT, observers, tEnd, firstImpact, holdForHkoi);
+      let r;
+      if (C.warn === 'judge') r = plan0.call(this, at, warnT, observers, tEnd, firstImpact, holdForHkoi);
+      else if (C.warn === 'cover') r = plan0.call(this, at, warnT, observers, tEnd, firstImpact, false);
+      else { const flinch = !holdForHkoi && this._crewFlinch();   /* a shaken crew may still bolt (crew.js) */
+        r = plan0.call(this, at, warnT, observers, tEnd, firstImpact, !flinch); if (!flinch && !r.cover && warnT != null) this._holdWhy = 'your standing order: hold still on a warning'; }
+      // Caught on the move by the player's order with no dash for cover planned: the vehicle brakes to a halt along its heading
+      // (4 m/s2, the same braking as everywhere else) instead of stopping dead. Its speed is real: HKOI and the enemy gunners meet a moving target for those seconds.
+      if (!r.cover && Math.abs(at.v || 0) > 0.3) { let v = at.v, e = 0, n = 0; const sh = Math.sin(at.h * DEG), ch = Math.cos(at.h * DEG);
+        for (const p of r.path) { if (p[0] > 0) { v = v > 0 ? Math.max(0, v - 4 * 0.1) : Math.min(0, v + 4 * 0.1); e += sh * v * 0.1; n += ch * v * 0.1; } p[1] = +e.toFixed(2); p[2] = +n.toFixed(2); p[4] = +(p[0] > 0 ? v : at.v).toFixed(2); } }
       return r;
     };
     P._finishVolleys = function () {
