@@ -23,7 +23,8 @@
 //     (one per round, at the time it lands), fire_refused { why }, fire_cancel { id }, scout_found { uid | vid }, scout_lost { how },
 //     bomber_launch { id, uid, arrive }, bomber_hkoi { id, from, R, kill }, bomber_down { id, by }, bomb_drop { id, land, hit, target },
 //     bomb_hit { id, zone, penetrated, killing, target }; team_lost carries by: 'artillery' | 'wing_main' | 'wing_m2' ...
-//   log lines of the wingman have kind 'wing'.
+//   log lines of the wingman have kind 'wing' (its crew, its engagements' start and end) or 'wingx' (the engine's blow-by-blow of an
+//   engagement on it, kept out of the on-screen log).
 // ============================================================================================================================
 //
 // HOW THE WINGMAN FIGHTS, AND WHAT IS NOT MODELLED
@@ -55,8 +56,8 @@
 // | Effect on a team (men lying in position) | knocked out 80% within 10 m of a round, 35% within 25 m, 10% within 40 m; pinned for 30 s within 100 m; survivors within 100 m move when the mission ends | 155 mm HE against prone troops: judgement |
 // | Effect on vehicles | light truck: destroyed 70% within 15 m, 25% within 30 m. BMP-2: mobility kill 40% within 6 m. Tanks: mobility kill 25% within 3 m | fragments do not harm armour; a near-direct hit breaks tracks |
 // | Check fire | a mission the commander called himself is stopped, and not used up, if before the guns fire (25 s before the first round lands) his crew sees that the target has moved more than 60 m, gone or been knocked out | time of flight of a 155 mm round at mid range; judgement |
-// | Danger close | no mission within 600 m of a friendly tank | the usual danger-close distance for artillery |
-// | The AI's call | a located team that is not moving, located at least 3 s, at least 600 m from both tanks, and that the tank cannot deal with itself (no line of sight, or beyond 1,500 m, or no multi-purpose rounds left); most dangerous first; not twice on the same place within 2 minutes | judgement |
+// | Danger close | no mission within 600 m of a friendly tank; a mission is stopped (and not used up) if a friendly tank comes within 600 m of its target before the guns fire | the usual danger-close distance for artillery |
+// | The AI's call | a located team that is not moving, located at least 3 s, at least 600 m from both tanks, and that the tank cannot deal with itself (no line of sight; or no multi-purpose rounds left; or beyond 1,500 m while the gunner is laying on another target); most dangerous first; not twice on the same place within 2 minutes | judgement |
 // | Scout drone | flies circles round the player at 20 m/s and 150 m up, 800 m out widening to 2,400 m and back; sees 800 m (slant) | a small quadcopter or fixed-wing scout |
 // | Scout finds a team | 6% a second in the open, x0.5 in scrub or crops, x0.25 under trees, x3 if moving, x2 if setting up, x the weather factor of the tank's thermal scan; vehicles 20% a second | judgement |
 // | Scout lost | 0.08% a second to jamming, link loss or a crash (about one in three over a 7 minute battle); +0.2% a second while within 600 m of an enemy team that is not pinned (small arms) | judgement |
@@ -118,7 +119,7 @@
       const P = Object.getPrototypeOf(this), self = this;
       this._crewStep = function () { return self._sw ? undefined : P._crewStep.apply(this, arguments); }; this._crewAdd = function () { return self._sw ? 0 : P._crewAdd.apply(this, arguments); };
       this._crewMul = function () { return self._sw ? 1 : P._crewMul.apply(this, arguments); }; this._crewOut = function () { return self._sw ? false : P._crewOut.apply(this, arguments); }; this._crewFlinch = function () { return self._sw ? false : P._crewFlinch.apply(this, arguments); };
-      this.say = function (t, kind, who, text, why) { if (self._sw && kind !== 'enemy') { kind = 'wing'; if (typeof who === 'string') who = 'WING'; text = 'Wingman: ' + text; } return P.say.call(this, t, kind, who, text, why); };
+      this.say = function (t, kind, who, text, why) { if (self._sw && kind !== 'enemy') { kind = kind === 'engine' ? 'wingx' : 'wing'; if (typeof who === 'string') who = 'WING'; text = 'Wingman: ' + text; } return P.say.call(this, t, kind, who, text, why); };
       this.ev = function (t, type, o) { if (self._sw) { if (type === 'team_lost' && o && o.by) o.by = 'wing_' + o.by; if (!PASS.test(type)) { type = 'wing_' + type; o = Object.assign({ wing: true }, o || {}); } } return P.ev.call(this, t, type, o); };
       if (this._crew) this._asWing(() => this._crew());   /* tankai.js: magazines and crew state */
       void S;
@@ -132,7 +133,7 @@
       try { return fn(); }
       finally { this._sw = false; this.tank = P; for (const k of SWAP) { C[k] = this[k]; this[k] = save[k]; } if (X) for (const k of XSWAP) { G.x[k] = X[k]; X[k] = xs[k]; } }
     },
-    wingAt(t) { return this.wing ? this._asWing(() => this.tankAt(t)) : null; },
+    wingAt(t) { const G = this.wing; if (!G) return null; return this.tankAt.call(G.atCtx || (G.atCtx = { volleys: G.volleys, tank: G }), t); },   /* the battle's own tankAt, looking at the wingman's engagements */
     wingView() { const b = this; return this.wing ? (this.wing.view || (this.wing.view = { volleys: this.wing.volleys, world: this.world, transit: [], tankAt: t => b.wingAt(t) })) : null; },
     // can this team hit the wingman from where it lies? (looked at twice a second)
     _wingSeen(u, seen) {
@@ -187,7 +188,7 @@
       rec.events.sort((p, q) => p.t - q.t);
     },
     _wingStep(dt) {
-      const G = this.wing, S = this.sup; if (!G.alive) return;
+      const G = this.wing, S = this.sup; if (!G.alive) { if (!G.lostSaid) { G.lostSaid = true; this.ev(this.t, 'wing_lost', { how: G.out || (G.fate && G.fate.kind) || 'destroyed' }); } return; }
       this._asWing(() => {
         if (this._pending) { const f = this._pending; this._pending = null; f(); }   /* the second half of an engagement on the wingman, one step after the first (no hitch) */
         this._wingMove(dt);
@@ -252,7 +253,7 @@
       const S = this.sup, T = S.player, A = S.art; if (!T.alive || S.fires.some(f => f.state !== 'over' && f.state !== 'cancelled') || !this._targets) return;
       const clearOf = (e, n) => this._friends().every(F => Math.hypot(F.e - e, F.n - n) >= ART.danger), fresh = (e, n) => !S.fires.some(f => f.state !== 'cancelled' && this.t - f.t0 < ART.again && Math.hypot(f.e - e, f.n - n) < 60);
       for (const q of this._targets()) { if (q.moving || this.t - q.k.t < 3 || !clearOf(q.k.e, q.k.n) || !fresh(q.k.e, q.k.n)) continue;
-        const why = !q.los ? 'the tank cannot see the position from here' : q.R > 1500 ? 'too far for a sure main gun round' : T.main <= 0 ? 'no multi-purpose rounds left' : null; if (!why) continue;
+        const why = !q.los ? 'the tank cannot see the position from here' : T.main <= 0 ? 'no multi-purpose rounds left' : q.R > 1500 && this._rf && this._rf.k !== q.k ? 'beyond 1,500 m and the gunner is busy with another target' : null; if (!why) continue;
         this._artCall({ e: q.k.e, n: q.k.n, uid: q.u.id, what: `${q.u.spec.name} #${q.u.id + 1}`, why: `${why}; the battery needs time to work out the data and lay the guns` }, 'ai'); return; }
       for (const v of this.vehs || []) { if (!v.known || !v.alive || v.gone || !v.kv || v.state === 'moving' || v.K.armed && !/bmp/.test(v.kind) || !clearOf(v.kv.e, v.kv.n) || !fresh(v.kv.e, v.kv.n)) continue;
         if (this.world.los(T.e, T.n, 2.5, v.kv.e, v.kv.n, 1.5).clear && Math.hypot(v.kv.e - T.e, v.kv.n - T.n) <= 2500) continue;
@@ -263,6 +264,7 @@
       const S = this.sup, W = this.world, r = S.rng, SC = S.scout;
       for (const F of S.fires) { if (F.state === 'over' || F.state === 'cancelled') continue;
         // check fire: if the crew learns before the guns fire that the target has gone or is dead, the mission is stopped and not used up
+        if (F.state === 'called' && this.t < F.splash - ART.flight && this._friends().some(X => Math.hypot(X.e - F.e, X.n - F.n) < ART.danger)) { F.state = 'cancelled'; S.art.left++; S.stat.artCancelled = (S.stat.artCancelled || 0) + 1; this.ev(this.t, 'fire_cancel', { id: F.id }); this.say(this.t, 'tank', 'CDR', `Check fire: a friendly tank is now within ${ART.danger} m of the target. Mission cancelled, ${S.art.left} left.`, 'danger close'); continue; }
         if (F.state === 'called' && F.by === 'ai' && F.uid != null && this.t < F.splash - ART.flight) { const k = (S.player.known || []).find(q => q.id === F.uid);
           if (k && (k.done || Math.hypot(k.e - F.e, k.n - F.n) > 60)) { F.state = 'cancelled'; S.art.left++; S.stat.artCancelled = (S.stat.artCancelled || 0) + 1; this.ev(this.t, 'fire_cancel', { id: F.id }); this.say(this.t, 'tank', 'CDR', `Check fire: the target of the fire mission has ${k.done ? 'gone or been dealt with' : 'moved'}. Mission cancelled, ${S.art.left} left.`, 'the guns had not fired yet'); continue; } }
         for (const rd of F.rounds) { if (rd.done || this.t < rd.t) continue; rd.done = true; F.state = 'falling';

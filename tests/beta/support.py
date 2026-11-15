@@ -1,14 +1,14 @@
 # python3 tests/beta/support.py <out dir> [hash params]
 # Friendly support and the bomber drone in the real page (src/render/support.js drawing what src/battle/support.js fights).
 # One page load, two battles of the "Section attack" force with artillery switched on:
-#   seed 3:  the wingman on station, the wingman under fire, the wingman's main gun, HKOI firing at a bomber drone, an artillery mission landing
+#   seed 18: the wingman on station, the wingman under fire, the wingman's main gun, HKOI firing at a bomber drone, an artillery mission landing
 #   seed 22: a bomber drone over the wingman, its bombs falling and striking
 # then the real frame loop through the opening engagement. Takes pictures at those moments and checks that what should be drawn is
 # drawn (the view's own count), that nothing reaches the page's red error bar and that no error is logged.
 # Run it through tools/run_test.sh (one headless browser at a time). Env: W, H (default 960x540), WAITMS per picture (default 2600).
 import asyncio, os, sys, json, time
 from playwright.async_api import async_playwright
-OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=low&spectator=1&play=1&biome=farmland&map=3&force=section_attack&seed=3&speed=1&waves=1&arty=on&skill=trained&mission=hold&cond=day'
+OUT = sys.argv[1]; PARAMS = sys.argv[2] if len(sys.argv) > 2 else 'gfx=low&spectator=1&play=1&biome=farmland&map=3&force=section_attack&seed=18&speed=1&waves=1&arty=on&skill=trained&mission=hold&cond=day'
 WAIT = int(os.environ.get('WAITMS', '2600')); T0 = time.time()
 SETUP = """void (() => {
   const b = window.__beta; b.setPlaying(false);
@@ -36,7 +36,7 @@ async def main():
             return info
         has = await ev('JSON.stringify({ wing: !!__beta.battle.wing, scout: !!__beta.battle.scout(), art: !!(__beta.battle.sup && __beta.battle.sup.art), force: __beta.set.force })'); print('battle 1', has)
         if not json.loads(has)['wing']: fails.append('no wingman in the battle')
-        # ---- seed 3
+        # ---- seed 18
         await ev('void (() => { const B = __beta.battle, T = B.tank, G = B.wing; __to(1); __look((T.e + G.e) / 2, (T.n + G.n) / 2, (__brg(T.e, T.n, G.e, G.n) + 90) % 360, 150, 22, 0); })()'); i = await shot('1_station', 'both tanks on station (player and wingman)')
         if not i['drawn']['wing'] or not i['drawn']['scout']: fails.append('wingman or scout not drawn')
         await ev('void (() => { const B = __beta.battle, G = B.wing; __look(G.e, G.n, (G.h + 150) % 360, 16, 4.5, 0); })()'); await shot('2_wing_close', 'the wingman close up, before the fight')
@@ -67,7 +67,7 @@ async def main():
             await ev('void (() => { __to(%f); const B = __beta.battle, F = "%s" === "wing" ? B.wing : B.tank; __look(F.e, F.n, (F.h + 140) %% 360, 28, 5, 1); })()' % (t1 + 0.25, who)); await shot('8_bomb_land', 'the bomb lands (t=%.1f)' % t1)
             await ev('__to(%f)' % (t1 + 7.5)); await shot('9_bomb_after', 'a few seconds later')
         # ---- the real frame loop through the opening engagement on both tanks
-        await ev('void (() => { __beta.set.seed = 3; __beta.start(); })()'); t_a = await ev('__beta.battle.t'); await pg.wait_for_timeout(28000); t_b = await ev('__beta.battle.t'); i = await shot('10_loop', 'after the real frame loop (battle time %.1f to %.1f)' % (t_a, t_b))
+        await ev('void (() => { __beta.set.seed = 18; __beta.start(); })()'); t_a = await ev('__beta.battle.t'); await pg.wait_for_timeout(28000); t_b = await ev('__beta.battle.t'); i = await shot('10_loop', 'after the real frame loop (battle time %.1f to %.1f)' % (t_a, t_b))
         if not t_b > t_a + 3: fails.append('the battle did not advance in the real frame loop')
         print('errors', json.dumps(errs[:8], indent=1)); await b.close()
         if errs: fails.append('%d page errors' % len(errs))
