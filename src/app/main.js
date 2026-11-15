@@ -50,6 +50,11 @@ if (q.get('map')) set.map = +q.get('map'); if (q.get('seed')) set.seed = +q.get(
 const canvas = $('view'), hud = $('hud');
 const sound = new Sound(); sound.on = store.get('sound', true); const sndPanel = soundPanel(sound, store, () => buildBar());   /* the sound menu: volumes, night mode, tension layer (src/audio/panel.js) */
 const camDist = p => scene.camera.position.distanceTo(p);
+/* the tank's end and its blow-out panels heard as they happen on screen (battle events 'tank_fate' and 'blowout'); a jump back in time starts over silently */
+const _fs = { E: null, n: 0, t: -1 };
+function fateSounds() { if (!battle) return; const E = battle.events || [], now = Math.min(tNow, battle.t); if (_fs.E !== E || now < _fs.t - 0.05) { _fs.E = E; _fs.n = 0; while (_fs.n < E.length && E[_fs.n].t <= now) _fs.n++; } _fs.t = now;
+  const live = !!sound.ctx && state === 'play' && speed <= 2.01;
+  for (; _fs.n < E.length && E[_fs.n].t <= now; _fs.n++) { const e = E[_fs.n]; if (!live || (e.type !== 'tank_fate' && e.type !== 'blowout')) continue; const T = e.wing && battle.wing ? battle.wing : battle.tank, p = scene.at(T.e, T.n, 2); sound.event(e.type, Object.assign({ d: camDist(p), seconds: 5 }, e)); } }
 function onVolleyEvent(type, p, o) { if (!sound.ctx || speed > 2.01 || state !== 'play') return;   /* the battle behind the title screen is silent */ voiceEvent(type, o); const d = camDist(p); if (type === 'gun') sound.gun30(d); else if (type === 'explosion') sound.explosion(d, o.size); else if (type === 'airburst') sound.airburst(d, o.size); else if (type === 'aps') sound.aps(d); else if (type === 'launch') sound.event('launch', { d, big: o.big, key: o.key }); else if (type === 'pass') sound.event('pass', { d }); else if (type === 'hit') { sound.explosion(d, o.killing ? 2.2 : 1.4); if (cams.mode === 'cdr' || cams.mode === 'gnr' || interior.inside || d < 25) sound.hit(o.killing, o); } }   /* a hit heard from any seat inside (interior.inside) */
 let world = new HKWorld.World({ seed: set.map, biome: set.biome });
 const scene = new Scene3D(canvas, world, { condition: set.cond, quality: set.gfx });
@@ -488,7 +493,7 @@ function frameBody(now) {
   hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], enemy: !!ENEMYV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   cmdUI.update(dt);   /* command.js: order bar, ghost path, the crew's answers */
   if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
-  drawReplay(dt); drawSensors(); tankFate.update(battle, Math.min(tNow, battle.t), dt * simRate()); sights.update({ on: state === 'play' && !mapOpen, battle, cams, scene, tank, volleys, now: Math.min(tNow, battle.t), hull: shown.h });
+  drawReplay(dt); drawSensors(); tankFate.update(battle, Math.min(tNow, battle.t), dt * simRate()); fateSounds(); sights.update({ on: state === 'play' && !mapOpen, battle, cams, scene, tank, volleys, now: Math.min(tNow, battle.t), hull: shown.h });
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   director.update(dt); xray.update();
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
