@@ -58,6 +58,10 @@ export const EVENTS = {
   ricochet: (s, i, d) => s.ricochet(d),
   smoke: (s, i, d) => s.smoke(d), obscurant: (s, i, d) => s.smoke(d),
   hatch: (s, i) => s.hatch(i.open !== false), load: s => s.load(), extinguisher: (s, i) => s.extinguisher(i.where || 'hull'),
+  air_inbound: (s, i, d) => s.whoosh(i.dur || 3.5, i.gain == null ? Math.min(0.5, 60 / (60 + d)) : i.gain, i),   // support.js: an aircraft running in (a long pass)
+  air_release: (s, i, d) => (i.kind === 'gun' ? s.autocannon(d, i.n || 14, i) : s.whoosh(1.2, Math.min(0.4, 60 / (60 + d)), i)),   // its guns open, or the bomb leaves
+  air_impact: (s, i, d) => s.explosion(d, i.size || (i.kind === 'gun' ? 0.8 : 2.6), { ...i, ground: true }),   // rounds or the bomb strike
+  air_off: (s, i, d) => (i.why === 'lost' ? s.explosion(d, 2, i) : s.whoosh(2.5, Math.min(0.35, 60 / (60 + d)), i)),   // it pulls away (or is shot down)
   blowout: (s, i, d) => s.blowout(d, i.seconds || 5),
   // what became of a tank (ours or another at distance d). fate (or kind): a word containing blow / panel (ammunition burning
   // off through the roof panels), cata / cook / brew / turret (it blows up), fire / burn, mobil / track (a thrown track), abandon / bail

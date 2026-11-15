@@ -35,9 +35,13 @@
     const s = b.summary(), threats = [];
     for (const v of b.volleys) for (const th of v.rec.threats) { const l = v.launches.find(q => q.u.id === th.uid) || {}; threats.push({ key: th.key, R: Math.round(l.R || th.R || 0), by: bucketOf(th), fired: !!(th.viz && th.viz.fired != null), tags: (th.tags || []).slice(0, 6), together: v.rec.threats.filter(q => q.impact != null && th.impact != null && Math.abs(q.impact - th.impact) < 3).length }); }   /* together: how many arrive within three seconds of this one, itself included */
     const crew = s.crew || {};
+    const sr = b.supReport ? b.supReport() : null;
     return { seed, survived: b.tank.alive && !(b.over && b.over.result === 'abandoned'),   /* a vehicle its crew has abandoned is out of the fight: counted as lost */ result: !b.tank.alive ? 'lost' : b.over ? b.over.result : 'time', t: Math.round(b.t), wave: s.wave, hits: s.hits, crewDown: Object.values(crew).filter(x => x !== 'ok').length,
       obsUsed: (cfg.gun ? cfg.gun.obscurant_rounds : 150) - (s.obs == null ? 0 : s.obs), heUsed: (cfg.gun ? cfg.gun.he_rounds : 150) - (s.he == null ? 0 : s.he), apsLeft: (s.apsL || 0) + (s.apsR || 0),
-      destroyed: (b.killedByTank || 0) + (b.killedByMg || 0), threats };
+      destroyed: (b.killedByTank || 0) + (b.killedByMg || 0), threats,
+      /* support.js, fate.js: what the wingman, the artillery, the scout and the bomber drones did, and how a lost tank ended (null without them) */
+      sup: sr && sr.on ? { wing: sr.wing ? { lost: !sr.wing.alive, hits: sr.wing.hits, firedAt: sr.wing.fired, kills: sr.wing.killedByTank + sr.wing.killedByMg } : null, artKills: sr.stat.artKills, artCalled: sr.stat.artCalled, scoutFound: sr.stat.scoutFound, assists: sr.stat.assistKills, bombers: sr.stat.bomberSorties, bombersDown: sr.stat.bomberDown, bombHits: sr.stat.bombHits } : null,
+      fate: b.tank.fate && !b.tank.alive ? b.tank.fate.kind : null };
   }
 
   // add up the rows of one setup
@@ -48,6 +52,10 @@
     for (const r of rows) { out.results[r.result] = (out.results[r.result] || 0) + 1; hits += r.hits; crew += r.crewDown; T += r.t; obs += r.obsUsed; he += r.heUsed; dest += r.destroyed;
       for (const th of r.threats) { out.threats++; out.chain[th.by] = (out.chain[th.by] || 0) + 1; const bt = out.byType[th.key] || (out.byType[th.key] = { n: 0 }); bt.n++; bt[th.by] = (bt[th.by] || 0) + 1;
         if (th.by === 'hit') { const w = !hk && !ap ? 'nothing to stop it' : th.together >= 3 ? 'three or more arriving within three seconds' : !hk ? (th.together >= 2 ? 'two arriving together: Trophy took one' : 'Trophy missed it or had no shot left on that side') : th.R < 700 ? 'launched inside 700 m: no time for HKOI' : !th.fired ? 'HKOI never fired at it' : th.tags.includes('cloud_thin') ? 'cloud too thin to cut the guidance' : th.tags.includes('no_time') || th.tags.includes('no_time_second') ? 'no time for another burst' : ap ? 'got past both defences' : 'got past HKOI'; out.why[w] = (out.why[w] || 0) + 1; } } }
+    /* support and endings, only when a battle had them */
+    { const sp = rows.filter(r => r.sup), w = sp.filter(r => r.sup.wing), add = k => sp.reduce((q, r) => q + (r.sup[k] || 0), 0);
+      if (sp.length) out.support = { battles: sp.length, wingmen: w.length, wingLost: w.filter(r => r.sup.wing.lost).length, wingHits: w.reduce((q, r) => q + r.sup.wing.hits, 0), wingKills: w.reduce((q, r) => q + r.sup.wing.kills, 0), artCalled: add('artCalled'), artKills: add('artKills'), scoutFound: add('scoutFound'), assists: add('assists'), bombers: add('bombers'), bombersDown: add('bombersDown'), bombHits: add('bombHits') };
+      out.fates = {}; for (const r of rows) if (r.fate) out.fates[r.fate] = (out.fates[r.fate] || 0) + 1; }
     out.hitsPerBattle = n ? hits / n : 0; out.crewPerBattle = n ? crew / n : 0; out.meanT = n ? T / n : 0; out.obsPerBattle = n ? obs / n : 0; out.hePerBattle = n ? he / n : 0; out.destroyedPerBattle = n ? dest / n : 0; out.threatsPerBattle = n ? out.threats / n : 0;
     return out;
   }
