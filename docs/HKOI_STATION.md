@@ -51,7 +51,7 @@ them: it lifts its gun over its own tank as it traverses (`TankView.aimStation`)
 
 - Hatches shut: level (0 degrees) everywhere except bearings 100 to 110 (the right rear aerial, a thin whip: +13) and 160 to 175
   (its own-side aerial, 0.65 m away: +42).
-- Below level: -10 is reached over 280 degrees of bearing; over the turret itself (bearings 0 to 75) the limit is -2.5 to -9.
+- Below level: the full -10 is reached over about 245 degrees of bearing; over the turret itself (bearings 10 to 75) the limit is -2.5 to -9.
 - Loader standing behind his M240: no further limit (his head top is 0.24 m under the bore line; his lid, upright, 0.25 m).
 - Commander head and shoulders out: bearings 45 to 70 need +5.5 or more.
 - Two weapons crossing: if the commander's .50 is raised and swung left-rear, or the loader's M240 raised above +10, the two guns'

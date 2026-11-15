@@ -211,7 +211,7 @@ async def main():
             for name, js in [('out_left', "outv(-9, 0.5, 3.4)"), ('out_right', "outv(9, 0.5, 3.4)"), ('out_front', "outv(0.5, 9, 3.6)"), ('out_rear', "outv(-0.5, -9, 4.2)"), ('out_above', "outv(-0.4, -2.2, 11, 2.2)"), ('out_left_rear_high', "outv(-6, -6, 6)"),
                              ('ldr_out_fwd', "lk('in_ldr', 0, 0, 1)"), ('ldr_out_back', "lk('in_ldr', 150, 0, 1)"), ('ldr_out_left', "lk('in_ldr', -90, 0, 1)"), ('cdr_out_fwd', "lk('in_cdr', 0, 44, 1)"), ('cdr_out_left', "lk('in_cdr', -90, 44, 1)"), ('cdr_out_left_rear', "lk('in_cdr', -140, 44, 1)"), ('cdr_out_rear', "lk('in_cdr', 180, 44, 1)"),
                              ('aim_right_front', "(aimAt(-300, 2, 300), outv(-6, -6, 6))"), ('aim_high_left', "(aimAt(300, 250, 60), outv(-7, 2, 4.5))"), ('aim_rear_over_aerial', "(aimAt(40, 2, -300), outv(-7, -5, 5))")]: await shot('station_' + name, js)
-        if which == 'sights':   # the three sight pictures: at rest, laid on a target, at the shot, thermal; the viewer; the HKOI sight on a track
+        if 'sights' in which:   # the three sight pictures: at rest, laid on a target, at the shot, thermal; the viewer; the HKOI sight on a track
             await pg.evaluate("void (window.hud = () => {}, document.getElementById('nohud') && (document.getElementById('nohud').textContent = ''))")
             async def frames(n=3):
                 n0 = await pg.evaluate('__beta.scene.frameN')
@@ -325,7 +325,7 @@ async def main():
             for name, js in [('out_left', "outv(-9, 0.5, 3.4)"), ('out_right', "outv(9, 0.5, 3.4)"), ('out_front', "outv(0.5, 9, 3.6)"), ('out_rear', "outv(-0.5, -9, 4.2)"), ('out_above', "outv(-0.4, -2.2, 11, 2.2)"), ('out_left_rear_high', "outv(-6, -6, 6)"),
                              ('ldr_out_fwd', "lk('in_ldr', 0, 0, 1)"), ('ldr_out_back', "lk('in_ldr', 150, 0, 1)"), ('ldr_out_left', "lk('in_ldr', -90, 0, 1)"), ('cdr_out_fwd', "lk('in_cdr', 0, 44, 1)"), ('cdr_out_left', "lk('in_cdr', -90, 44, 1)"), ('cdr_out_left_rear', "lk('in_cdr', -140, 44, 1)"), ('cdr_out_rear', "lk('in_cdr', 180, 44, 1)"),
                              ('aim_right_front', "(aimAt(-300, 2, 300), outv(-6, -6, 6))"), ('aim_high_left', "(aimAt(300, 250, 60), outv(-7, 2, 4.5))"), ('aim_rear_over_aerial', "(aimAt(40, 2, -300), outv(-7, -5, 5))")]: await shot('station_' + name, js)
-        if which == 'sights':   # the three sight pictures: at rest, laid on a target, at the shot, thermal; the viewer; the HKOI sight on a track
+        if 'sights' in which:   # the three sight pictures: at rest, laid on a target, at the shot, thermal; the viewer; the HKOI sight on a track
             await pg.evaluate("void (window.hud = () => {}, document.getElementById('nohud') && (document.getElementById('nohud').textContent = ''))")
             async def frames(n=3):
                 n0 = await pg.evaluate('__beta.scene.frameN')
@@ -349,7 +349,7 @@ async def main():
             trk = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(__beta.volleys.info || []).some(m => m.cued) && b.tank.alive && n++ < 6000) { __beta.runTo(b.t + 0.1); __beta.advance && 0; } return { t: b.t, cued: (__beta.volleys.info || []).filter(m => m.cued).length, alive: b.tank.alive }; })()")
             print('track', json.dumps(trk)); await snap('hkoi_track'); await pg.evaluate("void __beta.runTo(__beta.battle.t + 1.0)"); await snap('hkoi_track_1s_later')
             print('hkoi', await pg.evaluate("JSON.stringify(['ts-top','ts-bot','ts-side','ts-warn'].map(i => document.getElementById(i).textContent))"))
-        if which == 'fate':   # what kills the tank, drawn: STAGED ends (battle.tank.fate written by hand to the contract of src/battle/fate.js), played on the battle clock. Use speed=4 in the hash params.
+        if 'fate' in which:   # what kills the tank, drawn: STAGED ends (battle.tank.fate written by hand to the contract of src/battle/fate.js), played on the battle clock. Use speed=4 in the hash params.
             await pg.evaluate("""void (window.outv = (right, fwd, h, ty) => { const C = __beta.cams, T = __beta.battle.tank, s = __beta.scene, a = (T.h + (__beta.tank.turretYaw || 0)) * Math.PI / 180; C.set('orbit'); C.mode = 'free'; s.controls.enabled = false; const p = s.at(T.e + Math.cos(a) * right + Math.sin(a) * fwd, T.n - Math.sin(a) * right + Math.cos(a) * fwd, 0), q = s.at(T.e, T.n, 0); s.camera.fov = 40; s.camera.updateProjectionMatrix(); s.camera.position.set(p.x, q.y + h, p.z); s.camera.up.set(0, 1, 0); s.camera.lookAt(q.x, q.y + (ty == null ? 2.5 : ty), q.z); },
               window.stageFate = (kind, extra) => { const b = __beta.battle, t = b.t, man = t0 => ({ state: 'ok', out: t0 == null ? null : { t0: t + t0, t1: t + t0 + 4 } }); window.fateT = t; if (__beta.scene.fx.clear) __beta.scene.fx.clear();
                 b.tank.fate = Object.assign({ kind, t, cause: 'staged for a picture', zone: 'turret_rear', by: 'kornet', mobility: 'ok', firepower: 'ok', blowout: null, fire: null, crew: { cdr: man(3), ldr: man(4.5), gnr: man(6), drv: man(7.5) }, hits: [] }, extra ? extra(t) : {}); })""")
