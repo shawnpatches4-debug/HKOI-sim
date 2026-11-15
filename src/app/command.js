@@ -15,28 +15,30 @@
 import * as THREE from 'three';
 
 const CSS = `
-#cmd { position: fixed; left: 12px; right: 12px; bottom: 62px; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; font-size: 12.5px; }
+/* The order bar is one item of the bottom stack (#dock), directly above the control bar: it stacks with the ticker, the replay bar,
+   the caption and anything else docked there, and is never wider than the gap between the side panels (the ticker's own rule). */
+#cmd { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: min(1000px, max(300px, calc(100vw - 560px))); pointer-events: none; font-size: 12px; }
+body:not(.hud-eng) #cmd, body.in-seat #cmd { width: min(1000px, calc(100vw - 24px)); }
 #cmd[hidden] { display: none; }
-#cmd .c-say { pointer-events: none; padding: 3px 10px; border-radius: 6px; background: rgba(9, 13, 12, .72); color: #cfe9dc; text-shadow: 0 1px 2px #000; max-width: min(760px, calc(100vw - 32px)); text-align: center; }
+#cmd .c-say { pointer-events: none; padding: 2px 10px; border-radius: 6px; background: rgba(9, 13, 12, .72); color: #cfe9dc; text-shadow: 0 1px 2px #000; max-width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 18px; min-height: 18px; }
 #cmd .c-say b { color: var(--accent); font-weight: 600; letter-spacing: .08em; margin-right: 6px; } #cmd .c-say.bad { color: #ffb4a8; } #cmd .c-say.arm { color: #ffe08a; } #cmd .c-say i { color: var(--dim); font-style: normal; margin-left: 6px; }
-#cmd .c-row { pointer-events: auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 5px 6px; max-width: min(100%, 1000px); box-sizing: border-box; background: rgba(9, 13, 12, .82); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; }
-#cmd .c-grp { display: flex; gap: 4px; align-items: center; padding-right: 7px; margin-right: 3px; border-right: 1px solid rgba(255, 255, 255, .14); } #cmd .c-grp:last-child { border-right: 0; padding-right: 0; margin-right: 0; }
-#cmd .c-tag { font: 10px var(--mono); letter-spacing: .12em; color: var(--accent); margin: 0 2px; }
-#cmd .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; font-size: 12.5px; color: #c6d2cb; white-space: nowrap; } #cmd .btn:hover { color: var(--fg); } #cmd .btn.on { color: var(--accent); } #cmd .btn.warn { color: #ffcf6b; } #cmd .btn.bad { color: #ff9d8f; } #cmd .btn[disabled] { opacity: .45; cursor: default; }
+#cmd .c-row { pointer-events: auto; display: flex; flex-wrap: nowrap; justify-content: center; gap: 3px; padding: 4px 5px; max-width: 100%; box-sizing: border-box; background: rgba(9, 13, 12, .82); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; }
+#cmd .c-grp { display: flex; gap: 3px; align-items: center; padding-right: 5px; margin-right: 2px; border-right: 1px solid rgba(255, 255, 255, .14); } #cmd .c-grp:last-child { border-right: 0; padding-right: 0; margin-right: 0; }
+#cmd .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; font-size: 12px; color: #c6d2cb; white-space: nowrap; } #cmd .btn:hover { color: var(--fg); } #cmd .btn.on { color: var(--accent); } #cmd .btn.warn { color: #ffcf6b; } #cmd .btn.bad { color: #ff9d8f; } #cmd .btn[disabled] { opacity: .45; cursor: default; }
 #cmd kbd { font: 10px var(--mono); color: var(--dim); border: 1px solid rgba(255, 255, 255, .16); border-radius: 3px; padding: 0 3px; }
-#cmd .c-more { pointer-events: auto; width: min(1180px, 100%); box-sizing: border-box; padding: 8px 10px; background: rgba(9, 13, 12, .95); border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 5px 10px; align-items: center; max-height: calc(100vh - 250px); overflow: auto; }
-@media (max-width: 1150px) { #cmd .c-more { grid-template-columns: max-content 1fr; width: min(720px, 100%); } }
+/* "More": a pop-up above the bar */
+#cmd .c-more { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 6px); pointer-events: auto; width: min(700px, calc(100vw - 24px)); box-sizing: border-box; padding: 8px 10px; background: rgba(9, 13, 12, .96); border: 1px solid rgba(57, 217, 138, .4); border-radius: 8px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; align-items: center; max-height: calc(100vh - 190px); overflow: auto; z-index: 6; }
+#cmd .c-more[hidden] { display: none; } #cmd .c-more label { color: var(--dim); font-size: 12px; } #cmd .c-more .seg { display: flex; flex-wrap: wrap; gap: 3px; } #cmd .c-more small { grid-column: 1 / -1; color: var(--dim); font-size: 11.5px; line-height: 1.35; } #cmd .c-more .c-quick { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1px solid rgba(255, 255, 255, .12); }
 #cmd.onmap .c-row, #cmd.onmap .c-more { display: none; }
-#cmd .c-more[hidden] { display: none; } #cmd .c-more label { color: var(--dim); font-size: 12px; } #cmd .c-more .seg { display: flex; flex-wrap: wrap; gap: 4px; } #cmd .c-more small { grid-column: 1 / -1; color: var(--dim); font-size: 11.5px; line-height: 1.35; }
 #cmdmenu { position: fixed; z-index: 30; min-width: 190px; padding: 4px; background: rgba(9, 13, 12, .96); border: 1px solid rgba(57, 217, 138, .4); border-radius: 8px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 #cmdmenu[hidden] { display: none; } #cmdmenu .btn { text-align: left; padding: 6px 9px; } #cmdmenu small { color: var(--dim); padding: 2px 9px 4px; font-size: 11.5px; } #cmdmenu .btn.bad { color: #ff9d8f; }
-body.hud-eng #cmd { bottom: 128px; } body.in-seat #cmd { bottom: 62px; }
 body.in-seat #cmd .c-say { display: none; } body.hud-none #cmd, body.hud-none #cmdmenu { display: none; }
 #r-cmd { margin: 10px 0 2px; padding: 10px 12px; border: 1px solid rgba(57, 217, 138, .28); border-radius: 8px; } #r-cmd[hidden] { display: none; } #r-cmd h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: .08em; } #r-cmd h4 b { color: var(--accent); font-size: 16px; margin-left: 6px; }
 #r-cmd table { border-collapse: collapse; width: 100%; font-size: 12.5px; } #r-cmd td { padding: 2px 8px 2px 0; vertical-align: top; } #r-cmd td:last-child { text-align: right; white-space: nowrap; font-family: var(--mono); } #r-cmd small { display: block; color: var(--dim); font-size: 11.5px; margin-top: 6px; line-height: 1.4; }
 `;
 const KEYS = { KeyG: 'move', KeyX: 'halt', KeyB: 'reverse', KeyR: 'face', KeyP: 'smoke', KeyC: 'main', KeyN: 'mg', KeyK: 'hkoi', KeyU: 'hatch', KeyO: 'more' };
-const SHORT = { hkoi: { auto: 'HKOI: automatic', obs: 'HKOI: obscurant only', he: 'HKOI: airburst only', hold: 'HKOI: HOLD' }, main: { free: 'Main gun: at will', hold: 'Main gun: HOLD' }, mg: { free: 'MGs: free', hold: 'MGs: HOLD' } };
+const SHORT = { hkoi: { auto: 'HKOI: auto', obs: 'HKOI: obscurant', he: 'HKOI: airburst', hold: 'HKOI: HOLD' }, main: { free: 'Gun: free', hold: 'Gun: HOLD' }, mg: { free: 'MGs: free', hold: 'MGs: HOLD' } };
+const ROW_MIN = 700;   // px the one-row bar needs; in a narrower gap it collapses to a single "Orders" button
 const KNAME = { move: 'move', halt: 'halt', reverse: 'back to cover', withdraw: 'break contact', face: 'face the hull', smoke: 'smoke', engage: 'target' };
 const MAXP = 384;   // points along the ghost path
 
@@ -45,7 +47,7 @@ export class Command {
   constructor(o) {
     Object.assign(this, o); this.tape = []; this.mode = 'off'; this.armed = null; this.moreOpen = false; this.sig = ''; this.tDom = 0; this.tGhost = 0; this.ackI = 0; this.ackB = null; this.note = null; this.pick = null; this.down = null;
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
-    const el = this.el; this.box = el('div'); this.box.id = 'cmd'; this.box.hidden = true; this.say = el('div', 'c-say'); this.more = el('div', 'c-more'); this.more.hidden = true; this.row = el('div', 'c-row'); this.box.append(this.say, this.more, this.row); document.body.append(this.box);
+    const el = this.el; this.box = el('div'); this.box.id = 'cmd'; this.box.hidden = true; this.say = el('div', 'c-say'); this.more = el('div', 'c-more'); this.more.hidden = true; this.row = el('div', 'c-row'); this.box.append(this.say, this.more, this.row); { const dock = document.getElementById('dock'), bar = document.getElementById('bar'); if (dock && bar) dock.insertBefore(this.box, bar); else document.body.append(this.box); }   /* in the bottom stack, directly above the control bar */
     this.menu = el('div'); this.menu.id = 'cmdmenu'; this.menu.hidden = true; document.body.append(this.menu);
     this._ghost(); this._wire();
   }
@@ -68,7 +70,7 @@ export class Command {
   cycle(k) { const b = this.ctx.battle, O = window.HKOrders.OPTIONS[k], pend = b.cmd.q.find(it => it.o.k === k), cur = pend ? pend.o.v : b.cmd[k], i = O.findIndex(x => x[0] === cur); this.give({ k, v: O[(i + 1) % O.length][0] }); }
   act(name) {
     if (!this.live) return;
-    if (name === 'move' || name === 'face') { this.armed = this.armed === name ? null : name; this._menuOff(); this.sig = ''; this.tDom = 0; return; }
+    if (name === 'move' || name === 'face') { this.armed = this.armed === name ? null : name; this.moreOpen = false; this._menuOff(); this.sig = ''; this.tDom = 0; return; }
     this._disarm();
     if (name === 'more') { this.moreOpen = !this.moreOpen; this.sig = ''; this.tDom = 0; return; }
     if (name === 'halt' || name === 'reverse' || name === 'smoke' || name === 'withdraw') this.give({ k: name });
@@ -114,7 +116,8 @@ export class Command {
     window.addEventListener('keydown', e => { if (!this.live || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       if (e.code === 'Escape') { if (this.armed || !this.menu.hidden || this.moreOpen) { this._disarm(); this.moreOpen = false; this.sig = ''; this.tDom = 0; e.stopImmediatePropagation(); } return; }
       const k = KEYS[e.code]; if (!k || this.scene.camera && this.cams && this.cams.mode === 'fly') return; this.act(k); }, true);
-    window.addEventListener('pointerdown', e => { if (!this.menu.hidden && !(e.target.closest && e.target.closest('#cmdmenu')) && e.target !== cv && e.target !== this.mapv.cv) this._menuOff(); }, true);
+    window.addEventListener('pointerdown', e => { if (this.moreOpen && !(e.target.closest && e.target.closest('#cmd'))) { this.moreOpen = false; this.sig = ''; this.tDom = 0; }
+      if (!this.menu.hidden && !(e.target.closest && e.target.closest('#cmdmenu')) && e.target !== cv && e.target !== this.mapv.cv) this._menuOff(); }, true);
   }
 
   // ---------------------------------------------------------------- the ghost on the ground
@@ -174,7 +177,8 @@ export class Command {
     this._ghostUpdate(now);
     if (!live || now < this.tDom) return; this.tDom = now + 200;
     const S = b.orderState(), O = window.HKOrders, pend = S.pending, pk = k => { const p = pend.find(q => q.k === k); return p ? p : null; };
-    const sig = [this.armed, this.moreOpen, S.prio, S.main, S.round, S.mg, S.hkoi, S.warn, S.smokepol, S.hatch, S.face, S.target, S.smokes, S.smokeLeft > 0, !!S.move, pend.map(p => p.k).join(), S.inVolley].join('|');
+    this.narrow = this.box.clientWidth < ROW_MIN;
+    const sig = [this.narrow, this.armed, this.moreOpen, S.prio, S.main, S.round, S.mg, S.hkoi, S.warn, S.smokepol, S.hatch, S.face, S.target, S.smokes, S.smokeLeft > 0, !!S.move, pend.map(p => p.k).join(), S.inVolley].join('|');
     if (sig !== this.sig) { this.sig = sig; this._build(S, O, pend); }
     // the line above the bar: what is armed, the last refusal, the order on its way, or the crew's last answer
     let txt = '', cls = '', extra = '';
@@ -189,15 +193,18 @@ export class Command {
     const el = this.el, row = this.row; row.textContent = '';
     const btn = (name, label, key, tip, cls) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), label); if (key) b.append(el('kbd', null, key)); b.title = tip; b.onclick = e => { e.stopPropagation(); this.act(name); }; return b; };
     const wait = k => pend.some(p => p.k === k), grp = (tag, ...bs) => { const g = el('div', 'c-grp'); if (tag) g.append(el('span', 'c-tag', tag)); g.append(...bs); row.append(g); };
-    grp('', btn('move', 'Move', 'G', 'Then click the ground: the driver takes the most hidden way there', this.armed === 'move' ? 'on' : wait('move') ? 'warn' : ''),
-      btn('halt', 'Halt', 'X', 'Driver, stop', wait('halt') ? 'warn' : ''),
-      btn('reverse', 'Back to cover', 'B', 'Back to the nearest ground that hides the hull from the located enemy, front kept toward them where it is close enough to reverse', wait('reverse') ? 'warn' : ''),
-      btn('face', S.face == null ? 'Face' : `Facing ${String(Math.round(S.face)).padStart(3, '0')}`, 'R', 'Then click the ground: the hull front is turned that way when halted. Without this order the driver squares up to the main threat', this.armed === 'face' ? 'on' : wait('face') ? 'warn' : ''));
-    grp('', btn('main', SHORT.main[S.main], 'C', 'Main gun: fire at will, or hold fire', S.main === 'hold' ? 'bad' : wait('main') ? 'warn' : ''), btn('mg', SHORT.mg[S.mg], 'N', 'Machine guns (commander\'s .50, coax, loader\'s M240): free, or hold fire', S.mg === 'hold' ? 'bad' : wait('mg') ? 'warn' : ''));
-    grp('', btn('hkoi', SHORT.hkoi[S.hkoi], 'K', 'HKOI mode: automatic, obscurant only, airburst only, or hold (hold is your risk). It applies from the next enemy shot', S.hkoi === 'hold' ? 'bad' : S.hkoi !== 'auto' || wait('hkoi') ? 'warn' : ''),
-      (() => { const b = btn('smoke', S.smokeLeft > 0 ? `Smoke up ${Math.ceil(S.smokeLeft)} s` : `Smoke (${S.smokes})`, 'P', 'Fire a salvo of smoke grenades: the screen stands after 3 s for about 25 s. It does nothing against a missile already in the air', S.smokeLeft > 0 ? 'on' : ''); if (S.smokes <= 0 || S.smokeLeft > 0) b.disabled = true; return b; })());
-    grp('', btn('more', this.moreOpen ? 'Fewer orders' : 'More orders', 'O', 'Every standing order: target order, round, what to do on a missile warning, smoke, hatches, break contact', this.moreOpen ? 'on' : ''));
+    const quick = [
+      [btn('move', 'Move', 'G', 'Then click the ground: the driver takes the most hidden way there', this.armed === 'move' ? 'on' : wait('move') ? 'warn' : ''),
+        btn('halt', 'Halt', 'X', 'Driver, stop', wait('halt') ? 'warn' : ''),
+        btn('reverse', 'Cover', 'B', 'Back to cover: the nearest ground that hides the hull from the located enemy, front kept toward them where it is close enough to reverse', wait('reverse') ? 'warn' : ''),
+        btn('face', S.face == null ? 'Face' : `Face ${String(Math.round(S.face)).padStart(3, '0')}`, 'R', 'Then click the ground: the hull front is turned that way when halted. Without this order the driver squares up to the main threat', this.armed === 'face' ? 'on' : wait('face') ? 'warn' : '')],
+      [btn('main', SHORT.main[S.main], 'C', 'Main gun: fire at will, or hold fire', S.main === 'hold' ? 'bad' : wait('main') ? 'warn' : ''), btn('mg', SHORT.mg[S.mg], 'N', 'Machine guns (commander\'s .50, coax, loader\'s M240): free, or hold fire', S.mg === 'hold' ? 'bad' : wait('mg') ? 'warn' : '')],
+      [btn('hkoi', SHORT.hkoi[S.hkoi], 'K', 'HKOI mode: automatic, obscurant only, airburst only, or hold (hold is your risk). It applies from the next enemy shot', S.hkoi === 'hold' ? 'bad' : S.hkoi !== 'auto' || wait('hkoi') ? 'warn' : ''),
+        (() => { const b = btn('smoke', S.smokeLeft > 0 ? `Smoke ${Math.ceil(S.smokeLeft)} s` : `Smoke ${S.smokes}`, 'P', `Fire a salvo of smoke grenades (${S.smokes} left): the screen stands after 3 s for about 25 s. It does nothing against a missile already in the air`, S.smokeLeft > 0 ? 'on' : ''); if (S.smokes <= 0 || S.smokeLeft > 0) b.disabled = true; return b; })()]];
+    if (this.narrow) { const held = S.main === 'hold' || S.mg === 'hold' || S.hkoi === 'hold'; grp('', btn('more', this.armed ? 'Orders: click the ground' : held ? 'Orders (fire held)' : 'Orders', 'O', 'Every order: move, halt, back to cover, face, fire, HKOI, smoke and the standing orders', this.moreOpen || this.armed ? 'on' : held ? 'bad' : '')); }
+    else { for (const q of quick) grp('', ...q); grp('', btn('more', 'More', 'O', 'Every standing order: target order, round, what to do on a missile warning, smoke, hatches, break contact', this.moreOpen ? 'on' : '')); }
     const m = this.more; m.hidden = !this.moreOpen; if (!this.moreOpen) return; m.textContent = '';
+    if (this.narrow) { const qd = el('div', 'c-quick'); for (const q of quick) qd.append(...q); m.append(qd); }
     const TIP = { prio: 'Which located team the gunner and the machine guns take first', main: '', round: 'Matters when enemy vehicles are about; teams on foot always get multi-purpose', mg: 'Commander\'s .50, coax and the loader\'s M240', hkoi: 'Applies from the next enemy shot. Hold is your risk', warn: 'What the driver does when a missile warning comes. Decided before the shot: it cannot be changed while the missile is in the air', smokepol: `${S.smokes} salvo${S.smokes === 1 ? '' : 's'} left`, hatch: 'Shut: the loader stays inside and loads, the commander sees less' };
     for (const k of ['warn', 'hkoi', 'smokepol', 'prio', 'main', 'round', 'mg', 'hatch']) { const lab = el('label', null, O.LABEL[k]); lab.title = TIP[k]; const sg = el('div', 'seg'), p = pend.find(q => q.k === k); for (const [v, name] of O.OPTIONS[k]) { const bt = el('button', 'btn' + (S[k] === v ? ' on' : ''), name); bt.title = TIP[k]; bt.onclick = e => { e.stopPropagation(); if (S[k] !== v) this.give({ k, v }); }; sg.append(bt); } if (p) sg.append(el('small', null, 'changing...')); m.append(lab, sg); }
     { const lab = el('label', null, 'Target'), sg = el('div', 'seg'), b = this.ctx.battle, u = S.target != null ? b.units.find(q => q.id === S.target) : null; sg.append(el('span', null, u ? `${u.spec.name} #${u.id + 1} first` : 'Gunner\'s own choice. Right-click a located team to point it out.')); if (u) { const bt = el('button', 'btn', 'Gunner\'s own choice'); bt.onclick = e => { e.stopPropagation(); this.give({ k: 'engage', uid: null }); }; sg.append(bt); } m.append(lab, sg); }

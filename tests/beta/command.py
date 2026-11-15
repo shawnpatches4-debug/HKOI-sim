@@ -24,7 +24,7 @@ async def main():
         await ev('void document.getElementById("s-play").click()'); await pg.wait_for_timeout(1500); await ev('void __beta.setPlaying(false)'); await pg.wait_for_timeout(2500)
         st = json.loads(await ev('JSON.stringify({ state: __beta.state(), cmd: !!__beta.battle.cmd, bar: !document.getElementById("cmd").hidden, buttons: document.querySelectorAll("#cmd .c-row .btn").length, say: document.querySelector("#cmd .c-say").textContent })'))
         print('battle started', st)
-        if not st['cmd'] or not st['bar'] or st['buttons'] < 8: bad.append('the order bar is not up in a commanded battle')
+        if not st['cmd'] or not st['bar'] or st['buttons'] < 1: bad.append('the order bar is not up in a commanded battle')
         await shot('cmd_bar.png')
         # find a spot on the screen whose ground is 120 to 400 m from the vehicle, right-click it: the menu and the ghost of the route
         spot = json.loads(await ev('JSON.stringify((() => { const T = __beta.battle.tank; let best = null; for (let y = 0.2; y < 0.62; y += 0.03) for (let x = 0.3; x < 0.7; x += 0.04) { const g = __beta.cmd.ground(innerWidth * x, innerHeight * y); if (!g) continue; const d = Math.hypot(g[0] - T.e, g[1] - T.n); if (d > 120 && d < 400 && __beta.battle.orderRoute(Math.round(g[0]), Math.round(g[1])).ok && (!best || d < best.d)) best = { x: innerWidth * x, y: innerHeight * y, d }; } return best; })())'))
