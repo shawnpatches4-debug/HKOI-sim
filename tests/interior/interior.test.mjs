@@ -44,7 +44,7 @@ function boneTree(file) { const d = JSON.parse(fs.readFileSync(file, 'utf8')), N
 const haveCrew = ASSETS && ['gunner', 'loader', 'driver'].every(k => fs.existsSync(`${ASSETS}/crew/crew_${k}.json`));
 const { CrewFigures } = await import('./render/interior_crewfig.js');
 const crewOf = I => { const m = k => boneTree(`${ASSETS}/crew/crew_${k}.json`); const c = new CrewFigures(null, { tur: I.tur, hul: I.hul }, null, { gunner: m('gunner'), loader: m('loader'), driver: m('driver'), gunner2: m('gunner') }); c.measure = true; return c; };
-const SAMPLE = [9.5, 18.5, 26, 37.5, 47, 56.5], samples = {}, LSAMPLE = [42.3, 42.9, 43.4, 43.9, 44.4, 45, 45.8, 47, 48.3, 48.9, 49.6, 50.5], lsamp = {};
+const SAMPLE = [9.5, 18.5, 21.3, 26, 36.2, 36.9, 37.5, 40.3, 47, 55.2, 55.9, 56.5, 57.9]   /* incl. the moments after the staged hits: flinch, thrown, clutching the wound, the convulsion, lying still */, samples = {}, LSAMPLE = [42.3, 42.9, 43.4, 43.9, 44.4, 45, 45.8, 47, 48.3, 48.9, 49.6, 50.5], lsamp = {};
 let fails = 0; const finals = [];
 for (const fps of [30, 60, 144, 240]) {
   const R = rig(), { I, cams } = R, dt = 1 / fps, modes = ['in_gnr', 'in_cdr', 'in_ldr', 'in_drv', 'cut']; const crew = { jump: 0, hand: 0, bad: 0 }; let shakeMax = 0, smoke37 = null, smoke45 = null, crewBad = 0, crewInst = 0, bloodEnd = '', flick21 = null; let maxDoor = 0, maxRec = 0, maxHatch = 0, sawFire = 0, sawWarn = 0, nb = 0, sight = 0, at8 = null, maxThr = 0, maxSteer = 0, maxCup = 0, gearD = 0;
