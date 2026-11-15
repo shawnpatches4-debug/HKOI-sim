@@ -9,9 +9,9 @@ import * as THREE from 'three';
 import { ENV, atmosphere } from './env.js';
 import { ROAD_RANGE } from './terrain.js';
 
-const MAX = 72000, MAX_CLEAR = 16;
+const MAX = 110000, MAX_CLEAR = 16;
 // level: [number of tufts, radius of the patch in metres]
-const LEVELS = { 0: [0, 0], 1: [14000, 26], 2: [36000, 38], 3: [72000, 48] };
+const LEVELS = { 0: [0, 0], 1: [14000, 26], 2: [36000, 38], 3: [72000, 48], 4: [110000, 60] };   /* 4 = Ultra: the same thickness of growth, out to 60 m */
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -98,7 +98,11 @@ const VERT_BODY = /* glsl */`
     float sc = there * edge * smoothstep(1.0, 2.8, distance(wxz, hkEye)) * hkPatch.z *   /* nothing right against the lens */ (0.25 + 0.75 * trod) * (1.0 - 0.3 * uSnow * (1.0 - crop));
     h *= sc * mix(1.0, 0.18, 1.0 - trod) * (1.0 - 0.45 * uSnow * crop); w *= step(0.02, sc);
     float ang = aSeed.w * 39.0 + aSeed.z * 11.0, ca = cos(ang), sa = sin(ang);
-    vec3 lp = vec3(position.x * ca * w - position.z * sa * w, position.y * h, position.x * sa * w + position.z * ca * w);
+    /* grass and scrub splay outward from the foot (each of the two cards leans its own way), so that from above a tuft is a small
+       bushy patch and not a thin cross; crops stand straight in their rows */
+    float lean = (0.34 + 0.34 * aSeed.z) * (1.0 - crop) * position.y;
+    vec2 pl = position.xz + (position.z == 0.0 ? vec2(0.0, lean) : vec2(lean, 0.0));
+    vec3 lp = vec3(pl.x * ca * w - pl.y * sa * w, position.y * h, pl.x * sa * w + pl.y * ca * w);
     float gy = hkGround(wxz) - 0.04;
     // wind: tips lean and shiver, in waves that cross the field
     float ph = dot(wxz, vec2(0.21, 0.17)), sway = sin(hkTime * 1.9 + ph) * 0.6 + sin(hkTime * 3.3 + ph * 2.3) * 0.4;

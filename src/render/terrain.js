@@ -167,7 +167,13 @@ const BODY = /* glsl */`
     float w0 = max(0.0, 1.0 - w1 - w2 - w3 - w4);
     vec3 dcol = vec3(1.0); vec3 soilTex = vec3(1.0), stoneTex = vec3(1.0); float hgt = 0.5; hkTilt = vec2(0.0);
     #if HK_DETAIL > 0
-      vec2 pa = vWp.xz * (1.0 / 3.3), pb = (mat2(0.8, -0.6, 0.6, 0.8) * vWp.xz) * (1.0 / 31.0);
+      /* the close-up surface repeats every 3.3 m: bend where it is read by a metre or so over tens of metres, so the repeat never lines up into a grid the eye can follow */
+      #if HK_DETAIL > 1
+      vec2 bend = (vec2(n2, hk_n(vWp.zx * 0.043 + 3.7)) - 0.5) * 2.6 + (vec2(hk_n(vWp.xz * 0.011 + 1.3), hk_n(vWp.zx * 0.011 + 8.1)) - 0.5) * 7.0;
+      #else
+      vec2 bend = vec2(0.0);   /* (Low: as before) */
+      #endif
+      vec2 pa = (vWp.xz + bend) * (1.0 / 3.3), pb = (mat2(0.8, -0.6, 0.6, 0.8) * vWp.xz + bend) * (1.0 / 31.0);
       float fN = 1.0 - smoothstep(16.0, 85.0, dC);
       vec4 t0 = mix(mix(vec4(hkMean[0], 0.5), texture(hkDet, vec3(pb, 0.0)), 0.4), texture(hkDet, vec3(pa, 0.0)), fN);
       vec4 t1 = mix(mix(vec4(hkMean[1], 0.5), texture(hkDet, vec3(pb, 1.0)), 0.4), texture(hkDet, vec3(pa, 1.0)), fN);
@@ -189,6 +195,17 @@ const BODY = /* glsl */`
       dcol = vec3(0.82 + 0.36 * (n1 * 0.6 + n3 * 0.4));
     #endif
     vec3 base = mc.rgb * dcol * band;
+    /* no field is one even tone. Bare soil dries pale in drifts and stays dark where it holds water; weeds come up in patches;
+       straw and stones lie about. Grass and crops thin out and thicken. Three sizes of drift, strongest on bare earth. */
+    #if HK_DETAIL > 1
+    { float mv = hk_n(vWp.xz * 0.0085 + 3.0) * 0.5 + hk_n(vWp.xz * 0.037 + 11.0) * 0.32 + n1 * 0.18, earth = clamp(wSoil + wBuilt * 0.5, 0.0, 1.0);
+      base *= mix(0.9 + 0.2 * mv, 0.74 + 0.5 * mv, earth);
+      base = mix(base, base * vec3(1.34, 1.27, 1.14), earth * smoothstep(0.5, 0.78, mv) * 0.75);                       /* dried-out crust */
+      float weed = wSoil * smoothstep(0.6, 0.74, hk_n(vWp.xz * 0.027 + 40.0) * 0.7 + n3 * 0.3) * smoothstep(0.35, 0.6, hgt + (n1 - 0.5) * 0.3);
+      base = mix(base, mc.rgb * vec3(0.5, 0.78, 0.3) * (0.7 + 0.5 * n3), weed * 0.7);                                   /* weeds coming through */
+      float nearK = 1.0 - smoothstep(9.0, 30.0, dC);
+      if (nearK > 0.0) { vec2 g = vWp.xz * 17.0, cell = floor(g); float pick = step(0.972, hk_h(cell)), dot2 = 1.0 - smoothstep(0.12, 0.34, length(fract(g) - 0.5 - (vec2(hk_h(cell + 5.0), hk_h(cell + 9.0)) - 0.5) * 0.4)); base = mix(base, base * 1.5 + vec3(0.05, 0.045, 0.03) * hk_h(cell + 3.0), pick * dot2 * earth * nearK * 0.6); } }   /* small stones and bits of straw, close to: a few centimetres across, a shade paler than the soil */
+    #endif
     base = mix(base, hkSoil * soilTex * (0.8 + 0.4 * n2), clamp(gap * 0.8 * (wTall + 0.35 * wLow) / max(crop, 0.001) + tram * 0.5, 0.0, 1.0));
     base *= 1.0 - aF * 0.22 * (0.5 - 0.5 * sin(phF));
     base = mix(base, hkRock * mix(soilTex, stoneTex, 0.5) * (0.75 + 0.5 * n2), steep);

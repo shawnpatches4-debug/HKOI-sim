@@ -16,7 +16,7 @@ const MAXP = 96, LOBES_MAX = 5, STRIDE = 12, TAU = Math.PI * 2;
 // the optical depth is that product / (2 pi s2): with 75 g at 0.85 it is 2.5 when the puff forms (about 8% of the light gets through) and falls as it spreads.
 // That is what is drawn: one puff alone is NOT a wall. It takes several on the same line to blind a missile, as the engine says.
 const _hk = typeof window !== 'undefined' && window.HK && window.HK.defaultConfig ? window.HK.defaultConfig() : null, TAU_PUFF = (_hk ? _hk.obs.alpha_m2_per_g * _hk.rnd.payload_g : 0.85 * 75) / (2 * Math.PI * 4);
-const LOBES = { min: 2, low: 3, medium: 4, high: 5, auto: 4 };
+const LOBES = { min: 2, low: 3, medium: 4, high: 5, ultra: 5, auto: 4 };
 const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
 const VERT = /* glsl */`
@@ -32,7 +32,7 @@ void main() {
   vSoft = vec2(aA.y + viewMatrix[1][0] * off.x + viewMatrix[1][1] * off.y, aA.w);
 }`;
 const FRAG = /* glsl */`
-uniform sampler2D noise; uniform vec3 fogColor; uniform vec3 sunColor; uniform vec3 sunV; uniform float thermal; uniform float night; uniform vec3 tint;
+uniform sampler2D noise; uniform vec3 fogColor; uniform vec3 sunColor; uniform vec3 skyColor; uniform vec3 sunV; uniform vec3 upV; uniform float thermal; uniform float night; uniform vec3 tint; uniform float gain;
 varying vec2 vUv; varying vec4 vB; varying float vFog; varying vec2 vSoft; varying float vH;
 vec3 toneOut(vec3 c) { gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
@@ -48,14 +48,18 @@ void main() {
   vec3 N = normalize(vec3(vUv * 0.7 + (vec2(n.b, n2) - 0.5) * 1.5, sqrt(max(0.04, 1.0 - r * r))));
   float sun = dot(N, sunV) * 0.5 + 0.5, soft = smoothstep(vB.w - 0.05, vB.w + 0.3 * vSoft.y, vSoft.x);
   float a = vB.x * m * soft, edge = pow(m * (1.0 - m) * 4.0, 1.5);   /* edge: strongest in the soft fringe of the billow, 0 in the middle and outside */
-  float sunL = max(max(sunColor.r, sunColor.g), sunColor.b);
-  vec3 lit = vec3(0.86, 0.89, 0.92) * sunColor * (0.5 + 0.75 * sun) * (0.84 + 0.28 * n.a);
+  float sunL = max(max(sunColor.r, sunColor.g), sunColor.b) + max(max(skyColor.r, skyColor.g), skyColor.b);
+  /* lit as any cloud of fine particles is (the same sum as the smoke in fx.js): sun on the near side, its own shade in the thick middle of
+     the far side, sky from above, and a bright thin rim when the sun is behind it. The light it scatters is part of the "highlight". */
+  float direct = clamp(dot(N, sunV) * 0.62 + 0.38, 0.0, 1.0); direct *= mix(1.0, 0.55, m * (1.0 - direct));
+  float rim = pow(max(-sunV.z, 0.0), 3.0) * (1.0 - m) * (1.0 - m) * 2.6;
+  vec3 lit = vec3(0.86, 0.89, 0.92) * (skyColor * (0.72 + 0.28 * dot(N, upV)) + sunColor * (direct + rim) * (0.84 + 0.28 * n.a));
   lit = mix(lit, fogColor, vFog * 0.8);
   // the highlight: a cool tint in the soft fringe of each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
   // part of the cloud: it stays readable while the real cloud thins, and carries a little light of its own after dark.
   float hA = vH * (edge * 0.36 + m * 0.1) * soft;
-  vec3 hC = tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night;
-  if (thermal != 0.0) { lit = vec3(0.3 + 0.12 * sun); hC = vec3(0.6); }
+  vec3 hC = (tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night) * gain;
+  if (thermal != 0.0) { lit = vec3(0.3 + 0.12 * sun) * gain; hC = vec3(0.6) * gain; }
   vec3 L = toneOut(lit), H = toneOut(hC);
   gl_FragColor = vec4(L * a * (1.0 - hA) + H * hA, a + hA - a * hA);
 }`;
@@ -70,10 +74,10 @@ export class ObscurantCloud {
     const ib = this.ib = new THREE.InstancedInterleavedBuffer(this.data, STRIDE); ib.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aA', new THREE.InterleavedBufferAttribute(ib, 4, 0)); geo.setAttribute('aB', new THREE.InterleavedBufferAttribute(ib, 4, 4)); geo.setAttribute('aC', new THREE.InterleavedBufferAttribute(ib, 4, 8)); geo.instanceCount = 0;
     this.mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, premultipliedAlpha: true, vertexShader: VERT, fragmentShader: FRAG,
-      uniforms: { noise: { value: noiseTexture() }, fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 }, sunColor: { value: new THREE.Color(1, 1, 1) }, sunV: { value: new THREE.Vector3(0, 1, 0) }, thermal: { value: 0 }, night: { value: 0 }, tint: { value: new THREE.Color(0.22, 0.68, 0.96) } } });
+      uniforms: { noise: { value: noiseTexture() }, fogColor: { value: new THREE.Color() }, fogDensity: { value: 0 }, sunColor: { value: new THREE.Color(1, 1, 1) }, skyColor: { value: new THREE.Color(0.3, 0.34, 0.4) }, sunV: { value: new THREE.Vector3(0, 1, 0) }, upV: { value: new THREE.Vector3(0, 1, 0) }, gain: { value: 1 }, thermal: { value: 0 }, night: { value: 0 }, tint: { value: new THREE.Color(0.22, 0.68, 0.96) } } });
     this.mesh = new THREE.Mesh(geo, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = 9;
     this.sunW = new THREE.Vector3(0, 1, 0);
-    this.mesh.onBeforeRender = (r, s, camera) => { this.mat.uniforms.sunV.value.copy(this.sunW).transformDirection(camera.matrixWorldInverse); };
+    this.mesh.onBeforeRender = (r, s, camera) => { this.mat.uniforms.sunV.value.copy(this.sunW).transformDirection(camera.matrixWorldInverse); this.mat.uniforms.upV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse); };
   }
   // A puff as the engine has it. t0: battle time it has formed; tb: battle time of the burst (it swells from nothing between the
   // two); x, y, z: scene position of its centre when formed; vx, vz: drift in m/s; s0: starting width (1 sigma, m); K: spreading
@@ -91,7 +95,7 @@ export class ObscurantCloud {
   update(t, s) {
     const u = this.mat.uniforms, cam = s.camera.position, D = this.tmp, st = ObscurantCloud._st; let n = 0;
     this.lobes = LOBES[s.quality] || 4; u.thermal.value = s.thermal || 0; u.night.value = s.night ? 1 : 0; if (s.sunDir) this.sunW.copy(s.sunDir).normalize();
-    if (s.fx) { u.fogColor.value.copy(s.fx.mat.uniforms.fogColor.value); u.fogDensity.value = s.fx.mat.uniforms.fogDensity.value; u.sunColor.value.copy(s.fx.mat.uniforms.sunColor.value); }
+    if (s.fx) { u.fogColor.value.copy(s.fx.mat.uniforms.fogColor.value); u.fogDensity.value = s.fx.mat.uniforms.fogDensity.value; u.sunColor.value.copy(s.fx.mat.uniforms.sunColor.value); u.skyColor.value.copy(s.fx.mat.uniforms.skyColor.value); u.gain.value = s.fx.mat.uniforms.gain.value; }
     for (let i = 0; i < this.puffs.length; i++) {
       const p = this.puffs[i]; if (!p.on || t < p.tb) continue;
       ObscurantCloud.state(p, t, st); const op = 1 - Math.exp(-TAU_PUFF * st.dens), hl = Math.min(1, Math.sqrt(st.dens * 3)) * st.f;

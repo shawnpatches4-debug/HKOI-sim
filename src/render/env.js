@@ -100,16 +100,18 @@ export class Precipitation {
 
 // The last pass: contrast, colour balance, vignette and film grain for a filmed look. All mild; set per condition.
 export const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 }, px: { value: new THREE.Vector2(1 / 1280, 1 / 720) }, sharp: { value: 0 }, fringe: { value: 0 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
+  uniforms: { tDiffuse: { value: null }, time: ENV.time, tint: { value: new THREE.Color(1, 1, 1) }, shadowTint: { value: new THREE.Color(1, 1, 1) }, sat: { value: 1 }, contrast: { value: 1.06 }, vignette: { value: 0.35 }, grain: { value: 0.035 }, thermal: { value: 0 }, px: { value: new THREE.Vector2(1 / 1280, 1 / 720) }, sharp: { value: 0 }, fringe: { value: 0 }, olive: { value: 0.3 } },   /* thermal: 0 off, 1 white hot, -1 black hot */
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; uniform vec2 px; uniform float sharp; uniform float fringe; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform vec3 tint; uniform vec3 shadowTint; uniform float sat; uniform float contrast; uniform float vignette; uniform float grain; uniform float thermal; uniform vec2 px; uniform float sharp; uniform float fringe; uniform float olive; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb;
       /* a lens, not a perfect window: a touch of crispness on fine detail, and the faintest colour fringe towards the corners */
       if (sharp > 0.0) { vec3 around = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb; c = max(c + (c - around * 0.25) * sharp, 0.0); }
       if (fringe > 0.0 && thermal == 0.0) { vec2 off = (vUv - 0.5) * dot(vUv - 0.5, vUv - 0.5) * fringe; c.r = mix(c.r, texture2D(tDiffuse, vUv - off).r, 0.7); c.b = mix(c.b, texture2D(tDiffuse, vUv + off).b, 0.7); }
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      c = mix(vec3(l), c, sat); c = (c - 0.5) * contrast + 0.5; c *= mix(shadowTint, tint, smoothstep(0.0, 0.6, l));
+      /* film stock holds greens back: leaves and grass go towards olive instead of the bright yellow-green of a screen */
+      { float gn = clamp((c.g - max(c.r, c.b)) * 5.0, 0.0, 1.0); c = mix(c, vec3(l) * vec3(1.03, 1.0, 0.84), gn * olive); }
+      c = mix(vec3(l), c, mix(sat, max(sat, 1.0), smoothstep(0.55, 0.95, max(c.r, max(c.g, c.b)))));   /* a muted grade (night, rain) must not bleach what glows: flame stays orange, tracers keep their colour */ c = (c - 0.5) * contrast + 0.5; c *= mix(shadowTint, tint, smoothstep(0.0, 0.6, l));
       vec2 q = vUv - 0.5; c *= 1.0 - vignette * dot(q, q) * 1.6;
       // thermal imager: brightness only, stretched, with the coarse grain and faint line structure of an imager; white or black for hot
       if (thermal != 0.0) { float t = clamp(0.1 + l * 0.75 + smoothstep(0.5, 0.9, l) * 0.5, 0.0, 1.0);   /* the ground and trees stay grey; only what glows (crews, vehicles, fire) goes to white */ if (thermal < 0.0) t = 1.0 - t; t += (h(floor(vUv * vec2(640.0, 360.0)) + fract(time) * 19.0) - 0.5) * 0.07; t *= 0.96 + 0.04 * sin(vUv.y * 720.0 * 3.14159); c = vec3(t) * vec3(0.93, 1.0, 0.94); }

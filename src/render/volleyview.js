@@ -43,7 +43,7 @@ export class VolleyView {
     return { line, geo, pos: geo.attributes.instanceStart.data, col: geo.attributes.instanceColorStart.data, dist: dashed ? geo.attributes.instanceDistanceStart.data : null, n: 0 };
   }
   _seg(L, a, b, c0, c1, k0, k1) {
-    if (L.n >= MAXBEAM * 2) return; const o = L.n * 6, P = L.pos.array, C = L.col.array;
+    if (L.n >= MAXBEAM * 2) return; const o = L.n * 6, P = L.pos.array, C = L.col.array, g = this.s.gain || 1; k0 *= g; k1 *= g;   /* the lines keep their strength under the day's lower exposure */
     P[o] = a.x; P[o + 1] = a.y; P[o + 2] = a.z; P[o + 3] = b.x; P[o + 4] = b.y; P[o + 5] = b.z;
     C[o] = c0[0] * k0; C[o + 1] = c0[1] * k0; C[o + 2] = c0[2] * k0; C[o + 3] = c1[0] * k1; C[o + 4] = c1[1] * k1; C[o + 5] = c1[2] * k1;
     if (L.dist) { L.dist.array[L.n * 2] = 0; L.dist.array[L.n * 2 + 1] = a.distanceTo(b); }
