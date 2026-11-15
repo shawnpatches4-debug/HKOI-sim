@@ -31,8 +31,8 @@ const FORCES = {
   standoff: { name: 'Stand-off raid', note: 'The old simulator\'s kind of raid: three launchers from 2 km or more, firing over about 6 seconds', force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 1 }], raid: { minR: 2000, window: 6 } },
   heavy: { name: 'Prepared defence', note: 'Three Kornet, two Konkurs, a laser designator, two FPV crews, two RPG teams', force: [{ type: 'kornet', n: 3 }, { type: 'saclos', n: 2 }, { type: 'sal', n: 1 }, { type: 'fpv', n: 2 }, { type: 'rpg', n: 2 }] },
 };
-if (typeof HKEnemyVeh !== 'undefined') Object.assign(FORCES, HKEnemyVeh.FORCES);
-if (typeof HKSupport !== 'undefined') Object.assign(FORCES, HKSupport.FORCES);   /* platoon in the defence, section attack, with fire support, bomber drones */   /* enemy vehicles: mechanised ambush, armoured counter-attack, sprawling defence */
+if (typeof HKEnemyVeh !== 'undefined') Object.assign(FORCES, HKEnemyVeh.FORCES);   /* enemy vehicles: mechanised ambush, armoured counter-attack, sprawling defence */
+if (typeof HKSupport !== 'undefined') Object.assign(FORCES, HKSupport.FORCES);   /* platoon in the defence, section attack, with fire support, bomber drones */
 const MISSIONS = [['hold', 'Hold a position'], ['advance', 'Advance to an objective'], ['hunt', 'Hunt the ambush']];
 const LENGTHS = [[1, 'One ambush'], [3, 'Three waves'], [5, 'Long fight, five waves']];
 const SKILLS = [['green', 'Green'], ['trained', 'Trained'], ['expert', 'Expert'], ['veteran', 'Veteran']];
