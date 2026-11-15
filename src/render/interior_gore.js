@@ -45,11 +45,12 @@ function woundsOfHit(h, role) {
     const k = Math.min(1, dist / 0.12); _t[0] = sx / (dist || 1) * k - d[0] * (1 - k * 0.6); _t[1] = sy / (dist || 1) * k - d[1] * (1 - k * 0.6); _t[2] = sz / (dist || 1) * k - d[2] * (1 - k * 0.6); const l = Math.hypot(_t[0], _t[1], _t[2]) || 1; _t[0] /= l; _t[1] /= l; _t[2] /= l;
     near.push({ part, dist, side: toOwn(role, _t, [0, 0, 0]) }); }
   near.sort((a, b) => a.dist - b.dist);
+  { const ch = near.find(n => n.part === 'chest'); if (ch && Math.abs(ch.side[0]) > 0.3) { const far = ch.side[0] > 0 ? 'L' : 'R'; for (const n of near) if (n.part.endsWith(far) && n.dist > ch.dist) n.shield = true; } }   /* a limb on the far side of his own body from the line is shielded by it */
   const add = (n, kind, sev) => out.push({ part: n.part, kind, sev, side: n.side, T: h.T, idx: h.idx, dist: n.dist });
   if (killed) { const trunk = near.find(n => TRUNK[n.part]); add(trunk, 'trauma', 1);
     for (const n of near) { if (LIMB[n.part] && n.dist < LIMB_M + 0.04) add(n, 'sever', 1); else if (n !== trunk && n.dist < 0.3 && out.length < 5) add(n, 'frag', 0.8); } }
   else { let cut = false; const want = 2 + Math.floor(hsh(h.idx, role.charCodeAt(0)) * 3);
-    for (const n of near) { if (out.length >= want) break; if (LIMB[n.part] && n.dist < LIMB_M && !cut) { add(n, 'sever', 1); cut = true; continue; }
+    for (const n of near) { if (out.length >= want) break; if (n.shield) continue; if (LIMB[n.part] && n.dist < LIMB_M && !cut) { add(n, 'sever', 1); cut = true; continue; }
       if (n.part === 'head' && hsh(h.idx, 41) < 0.6) continue;   /* the helmet takes most of what comes at the head */
       add(n, 'frag', TRUNK[n.part] ? 0.45 : 0.7); } }
   if (near[0].dist < FLASH_M) { const n = near.find(q => q.part === 'head' || q.part === 'armL' || q.part === 'armR') || near[0]; out.push({ part: n.part, kind: 'burn', sev: 1 - near[0].dist / FLASH_M, side: n.side, T: h.T, idx: h.idx, dist: n.dist }); }

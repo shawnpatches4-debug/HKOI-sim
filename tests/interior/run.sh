@@ -11,5 +11,6 @@ cp -r "$ROOT/src/render" "$D/render"; cp -r "$ROOT/src/app" "$D/app"; cp "$ROOT"
 cd "$D"; rc=0; export HK_ASSETS="${HK_ASSETS:-$ROOT/assets}"
 if [ "$1" != "frames" ]; then node overlap.test.mjs || rc=1; fi
 if [ "$1" != "overlap" ]; then node interior.test.mjs || rc=1; fi
+if [ -z "$1" ] || [ "$1" = "inside" ]; then HK_ROOT="$ROOT" node inside.test.mjs || rc=1; fi   # what goes wrong inside and the crew's wounds: causes, agreement with the damage report, real battles (see the file's head)
 if [ -z "$1" ] || [ "$1" = "station" ]; then node station_clear.mjs > station.log; r=$?; tail -3 station.log; [ $r = 0 ] || rc=1; fi   # where the HKOI weapon station stands on the roof: clear of everything (see the file's head)
 exit $rc
