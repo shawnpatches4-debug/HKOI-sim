@@ -314,10 +314,10 @@ export class Particles {
     this.sparks(x, y, z, dx, dy, dz, 22 * k, 80, 0.22, 0.3, [1, 0.8, 0.5], 4);
     /* the cloud that rolls on after the flame: big, grey-brown, hanging for ten seconds and drifting off on the wind */
     for (let i = 0, n = this.cnt(16 * k); i < n; i++) { const s = 6 + this.R() * 26, j = 0.35, g = 0.42 + this.R() * 0.2;
-      this.spawn(KIND.SMOKE, x + dx * 2, y + dy * 2, z + dz * 2, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s + 0.6, (dz + (this.R() - 0.5) * j) * s, 7 + this.R() * 7, 2.2 * k, (8 + this.R() * 5) * k, g * 1.06, g, g * 0.9, 0.42, 2.4, 0.3, 0, 0.05 + this.R() * 0.15); }
+      this.spawn(KIND.SMOKE, x + dx * 2, y + dy * 2, z + dz * 2, (dx + (this.R() - 0.5) * j) * s, (dy + (this.R() - 0.5) * j) * s + 0.6, (dz + (this.R() - 0.5) * j) * s, 7 + this.R() * 7, 2.2 * k, (8 + this.R() * 5) * k, g * 1.06, g, g * 0.9, 0.34, 2.4, 0.3, 0, 0.05 + this.R() * 0.15); }
     /* the blast wave strips dust off the ground under the barrel and in a fan ahead of it */
-    if (this.ground) for (let i = 0, n = this.cnt(26 * k); i < n; i++) { const d = 1 + this.R() * 17, w = (this.R() - 0.5) * (2.5 + d * 0.7), gx = x + dx * d - dz * w, gz = z + dz * d + dx * w, out = w > 0 ? 1 : -1;
-      this.spawn(KIND.SMOKE, gx, this.ground(gx, gz) + 0.3, gz, dx * (3 + this.R() * 6) - dz * out * (1 + this.R() * 3), 0.6 + this.R() * 1.8, dz * (3 + this.R() * 6) + dx * out * (1 + this.R() * 3), 4 + this.R() * 5, 1.3 * k, (5 + this.R() * 3.5) * k, 0.6, 0.53, 0.42, 0.44, 1.6, 0.14, 0, 0.01 + d * 0.006); }
+    if (this.ground) for (let i = 0, n = this.cnt(17 * k); i < n; i++) { const d = 1 + this.R() * 17, w = (this.R() - 0.5) * (2.5 + d * 0.7), gx = x + dx * d - dz * w, gz = z + dz * d + dx * w, out = w > 0 ? 1 : -1;
+      this.spawn(KIND.SMOKE, gx, this.ground(gx, gz) + 0.3, gz, dx * (3 + this.R() * 6) - dz * out * (1 + this.R() * 3), 0.6 + this.R() * 1.8, dz * (3 + this.R() * 6) + dx * out * (1 + this.R() * 3), 4 + this.R() * 5, 1.3 * k, (5 + this.R() * 3.5) * k, 0.52, 0.45, 0.35, 0.3, 1.6, 0.14, 0, 0.01 + d * 0.006); }
   }
   // one 30 mm round leaving the weapon station: a small sharp flash, a wisp of smoke, the empty case thrown out to the side
   muzzle30(x, y, z, dx, dy, dz, sx, sz) {
