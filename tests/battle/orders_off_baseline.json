@@ -1,0 +1,903 @@
+[
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 2,
+   "fired": 5,
+   "hits": 0,
+   "by": {
+    "gunner_jitter": 2,
+    "unguided_miss": 1,
+    "aps": 2
+   },
+   "obs": 123,
+   "he": 150,
+   "apsL": 3,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 16,
+   "killedByTank": 0,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 384
+  },
+  "over": "won",
+  "log": 109,
+  "events": 55,
+  "logSum": "ded961a8",
+  "evSum": "e971935b",
+  "units": "b8131214"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 0,
+   "fired": 0,
+   "hits": 0,
+   "by": {},
+   "obs": 150,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 3,
+   "main": 17,
+   "killedByTank": 1,
+   "killedByMg": 3,
+   "coax": 2280,
+   "m2": 528
+  },
+  "over": null,
+  "log": 39,
+  "events": 19,
+  "logSum": "19104fbb",
+  "evSum": "2fa8b273",
+  "units": "4d7e34bf"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 6,
+   "fired": 13,
+   "hits": 0,
+   "by": {
+    "gunner_jitter": 4,
+    "aps": 4,
+    "unguided_miss": 2,
+    "hkoi_he": 2,
+    "hkoi_cut": 1
+   },
+   "obs": 96,
+   "he": 138,
+   "apsL": 2,
+   "apsR": 2,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 5,
+   "killedByTank": 2,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": "won",
+  "log": 217,
+  "events": 81,
+  "logSum": "facc66d4",
+  "evSum": "51f4d77d",
+  "units": "ff397879"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 2,
+   "fired": 9,
+   "hits": 0,
+   "by": {
+    "hkoi_cut": 2,
+    "gunner_jitter": 4,
+    "aps": 3
+   },
+   "obs": 101,
+   "he": 150,
+   "apsL": 3,
+   "apsR": 2,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 4,
+   "main": 0,
+   "killedByTank": 2,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": null,
+  "log": 168,
+  "events": 83,
+  "logSum": "2b3b3ffd",
+  "evSum": "5aade15e",
+  "units": "12188938"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 3,
+   "fired": 3,
+   "hits": 0,
+   "by": {
+    "aps": 1,
+    "hkoi_he": 2
+   },
+   "obs": 146,
+   "he": 134,
+   "apsL": 3,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 14,
+   "killedByTank": 0,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 456
+  },
+  "over": "won",
+  "log": 69,
+  "events": 27,
+  "logSum": "f553c9dc",
+  "evSum": "1cef31a",
+  "units": "19e7edb"
+ },
+ {
+  "summary": {
+   "t": 20.4,
+   "alive": false,
+   "volleys": 1,
+   "fired": 8,
+   "hits": 3,
+   "by": {
+    "hkoi_cut": 2,
+    "HIT": 3,
+    "aps": 3
+   },
+   "obs": 131,
+   "he": 146,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "wounded",
+    "gnr": "wounded",
+    "ldr": "wounded",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 2,
+   "teamsLeft": 10,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 0,
+   "coax": 2360,
+   "m2": 552
+  },
+  "over": null,
+  "log": 76,
+  "events": 48,
+  "logSum": "fd0ac04b",
+  "evSum": "1e10deb5",
+  "units": "ed8eafef"
+ },
+ {
+  "summary": {
+   "t": 13.8,
+   "alive": false,
+   "volleys": 1,
+   "fired": 4,
+   "hits": 2,
+   "by": {
+    "HIT": 2,
+    "aps": 2
+   },
+   "obs": 141,
+   "he": 150,
+   "apsL": 2,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 4,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": null,
+  "log": 51,
+  "events": 20,
+  "logSum": "dae6ed38",
+  "evSum": "b917661c",
+  "units": "49ceb51f"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 0,
+   "fired": 0,
+   "hits": 0,
+   "by": {},
+   "obs": 150,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 3,
+   "main": 17,
+   "killedByTank": 0,
+   "killedByMg": 1,
+   "coax": 2360,
+   "m2": 576
+  },
+  "over": null,
+  "log": 27,
+  "events": 14,
+  "logSum": "996ffb32",
+  "evSum": "e05a8671",
+  "units": "90536f1f"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 3,
+   "fired": 8,
+   "hits": 0,
+   "by": {
+    "gunner_jitter": 6,
+    "aps": 1,
+    "hkoi_he": 1
+   },
+   "obs": 134,
+   "he": 135,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 13,
+   "killedByTank": 1,
+   "killedByMg": 2,
+   "coax": 2320,
+   "m2": 552
+  },
+  "over": "won",
+  "log": 151,
+  "events": 102,
+  "logSum": "39bf804d",
+  "evSum": "c75429b8",
+  "units": "b58e094"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 4,
+   "fired": 10,
+   "hits": 1,
+   "by": {
+    "gunner_jitter": 4,
+    "aps": 4,
+    "HIT": 1,
+    "hkoi_cut": 1
+   },
+   "obs": 102,
+   "he": 150,
+   "apsL": 0,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "wounded",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 4,
+   "main": 10,
+   "killedByTank": 1,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": null,
+  "log": 180,
+  "events": 110,
+  "logSum": "380fca23",
+  "evSum": "e29890d6",
+  "units": "dfb68c2f"
+ },
+ {
+  "summary": {
+   "t": 24.7,
+   "alive": false,
+   "volleys": 1,
+   "fired": 1,
+   "hits": 1,
+   "by": {
+    "HIT": 1
+   },
+   "obs": 146,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "wounded",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 6,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 0,
+   "coax": 2400,
+   "m2": 600
+  },
+  "over": null,
+  "log": 23,
+  "events": 10,
+  "logSum": "d4846e6c",
+  "evSum": "54c0cb55",
+  "units": "a8b03c79"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 5,
+   "fired": 18,
+   "hits": 2,
+   "by": {
+    "HIT": 2,
+    "aps": 4,
+    "gunner_jitter": 6,
+    "hkoi_he": 2,
+    "hkoi_cut": 3,
+    "unguided_miss": 1
+   },
+   "obs": 82,
+   "he": 138,
+   "apsL": 3,
+   "apsR": 1,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 4,
+   "main": 0,
+   "killedByTank": 4,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": null,
+  "log": 275,
+  "events": 120,
+  "logSum": "7b01091d",
+  "evSum": "ef5d8642",
+  "units": "bd138d65"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 3,
+   "fired": 7,
+   "hits": 2,
+   "by": {
+    "HIT": 2,
+    "hkoi_cut": 3,
+    "aps": 2
+   },
+   "obs": 85,
+   "he": 150,
+   "apsL": 1,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 12,
+   "killedByTank": 1,
+   "killedByMg": 2,
+   "coax": 2120,
+   "m2": 336
+  },
+  "over": "won",
+  "log": 189,
+  "events": 86,
+  "logSum": "f74280de",
+  "evSum": "a345fd6e",
+  "units": "d1527173"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 0,
+   "fired": 0,
+   "hits": 0,
+   "by": {},
+   "obs": 150,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 2,
+   "teamsLeft": 1,
+   "main": 15,
+   "killedByTank": 1,
+   "killedByMg": 2,
+   "coax": 2360,
+   "m2": 576
+  },
+  "over": null,
+  "log": 33,
+  "events": 19,
+  "logSum": "894e4558",
+  "evSum": "ff3b5f82",
+  "units": "9833fc4d"
+ },
+ {
+  "summary": {
+   "t": 15.1,
+   "alive": false,
+   "volleys": 1,
+   "fired": 7,
+   "hits": 2,
+   "by": {
+    "unguided_miss": 2,
+    "hkoi_cut": 1,
+    "HIT": 2,
+    "aps": 2
+   },
+   "obs": 126,
+   "he": 148,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "wounded",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 8,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 528
+  },
+  "over": null,
+  "log": 70,
+  "events": 29,
+  "logSum": "80c450f4",
+  "evSum": "827971a",
+  "units": "f8ded4ad"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 2,
+   "fired": 6,
+   "hits": 1,
+   "by": {
+    "hkoi_cut": 4,
+    "aps": 1,
+    "HIT": 1
+   },
+   "obs": 126,
+   "he": 150,
+   "apsL": 3,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 4,
+   "main": 2,
+   "killedByTank": 3,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 528
+  },
+  "over": null,
+  "log": 130,
+  "events": 64,
+  "logSum": "32780c5",
+  "evSum": "534766ca",
+  "units": "2e83fe1c"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 3,
+   "fired": 3,
+   "hits": 0,
+   "by": {
+    "aps": 1,
+    "hkoi_he": 2
+   },
+   "obs": 141,
+   "he": 142,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 12,
+   "killedByTank": 1,
+   "killedByMg": 2,
+   "coax": 2360,
+   "m2": 504
+  },
+  "over": "won",
+  "log": 74,
+  "events": 35,
+  "logSum": "2ed82d39",
+  "evSum": "158b5f69",
+  "units": "bbc0bc4d"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 5,
+   "fired": 15,
+   "hits": 0,
+   "by": {
+    "aps": 3,
+    "gunner_jitter": 5,
+    "hkoi_cut": 6,
+    "hkoi_he": 1
+   },
+   "obs": 47,
+   "he": 138,
+   "apsL": 2,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 2,
+   "waves": 2,
+   "teamsLeft": 4,
+   "main": 8,
+   "killedByTank": 1,
+   "killedByMg": 4,
+   "coax": 2280,
+   "m2": 384
+  },
+  "over": null,
+  "log": 250,
+  "events": 136,
+  "logSum": "ce094cfe",
+  "evSum": "91081d54",
+  "units": "2f8979a6"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 2,
+   "fired": 5,
+   "hits": 0,
+   "by": {
+    "unguided_miss": 1,
+    "hkoi_cut": 4
+   },
+   "obs": 111,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 0,
+   "main": 12,
+   "killedByTank": 1,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 576
+  },
+  "over": "won",
+  "log": 96,
+  "events": 38,
+  "logSum": "4f8f979b",
+  "evSum": "8e811e9f",
+  "units": "d928ef57"
+ },
+ {
+  "summary": {
+   "t": 143.7,
+   "alive": false,
+   "volleys": 1,
+   "fired": 1,
+   "hits": 1,
+   "by": {
+    "HIT": 1
+   },
+   "obs": 150,
+   "he": 150,
+   "apsL": 3,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 2,
+   "teamsLeft": 7,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 0,
+   "coax": 2400,
+   "m2": 576
+  },
+  "over": null,
+  "log": 25,
+  "events": 12,
+  "logSum": "9157293d",
+  "evSum": "37ca192f",
+  "units": "29626c80"
+ },
+ {
+  "summary": {
+   "t": 19.6,
+   "alive": false,
+   "volleys": 1,
+   "fired": 8,
+   "hits": 5,
+   "by": {
+    "HIT": 5,
+    "hkoi_cut": 2,
+    "unguided_miss": 1
+   },
+   "obs": 130,
+   "he": 150,
+   "apsL": 4,
+   "apsR": 4,
+   "crew": {
+    "cdr": "wounded",
+    "gnr": "wounded",
+    "ldr": "wounded",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 7,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 2,
+   "coax": 2400,
+   "m2": 552
+  },
+  "over": null,
+  "log": 79,
+  "events": 52,
+  "logSum": "3d0e069",
+  "evSum": "8bd29e5b",
+  "units": "174cd4d7"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 3,
+   "fired": 7,
+   "hits": 0,
+   "by": {
+    "aps": 4,
+    "hkoi_cut": 2,
+    "unguided_miss": 1
+   },
+   "obs": 121,
+   "he": 150,
+   "apsL": 0,
+   "apsR": 4,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 2,
+   "teamsLeft": 3,
+   "main": 0,
+   "killedByTank": 2,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 576
+  },
+  "over": null,
+  "log": 165,
+  "events": 108,
+  "logSum": "e247ad33",
+  "evSum": "3ea801a4",
+  "units": "b77c8b79"
+ },
+ {
+  "summary": {
+   "t": 360,
+   "alive": true,
+   "volleys": 6,
+   "fired": 6,
+   "hits": 0,
+   "by": {
+    "aps": 1,
+    "hkoi_he": 4,
+    "unguided_miss": 1
+   },
+   "obs": 146,
+   "he": 110,
+   "apsL": 4,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 1,
+   "teamsLeft": 4,
+   "main": 12,
+   "killedByTank": 2,
+   "killedByMg": 1,
+   "coax": 2320,
+   "m2": 552
+  },
+  "over": null,
+  "log": 122,
+  "events": 43,
+  "logSum": "5aee831e",
+  "evSum": "548a37c6",
+  "units": "2c7136fa"
+ },
+ {
+  "summary": {
+   "t": 15.6,
+   "alive": false,
+   "volleys": 1,
+   "fired": 7,
+   "hits": 3,
+   "by": {
+    "unguided_miss": 1,
+    "HIT": 3,
+    "hkoi_cut": 1,
+    "aps": 2
+   },
+   "obs": 131,
+   "he": 146,
+   "apsL": 3,
+   "apsR": 3,
+   "crew": {
+    "cdr": "ok",
+    "gnr": "ok",
+    "ldr": "ok",
+    "drv": "ok"
+   },
+   "wave": 1,
+   "waves": 2,
+   "teamsLeft": 9,
+   "main": 18,
+   "killedByTank": 0,
+   "killedByMg": 1,
+   "coax": 2400,
+   "m2": 576
+  },
+  "over": null,
+  "log": 70,
+  "events": 31,
+  "logSum": "69879845",
+  "evSum": "6eb9d24b",
+  "units": "17e74272"
+ }
+]
