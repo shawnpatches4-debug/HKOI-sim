@@ -18,8 +18,10 @@ const CSS = `
 .sg-full { position: absolute; inset: 0; pointer-events: none; }
 .sg-round { -webkit-mask: radial-gradient(circle at 50% 50%, #000 min(41vh, 41vw), transparent calc(min(41vh, 41vw) + 1px)); mask: radial-gradient(circle at 50% 50%, #000 min(41vh, 41vw), transparent calc(min(41vh, 41vw) + 1px)); }
 #sg-tint { background: #63ff7c; mix-blend-mode: multiply; display: none; } #sight.tis #sg-tint { display: block; }
-.sg-lines { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px); display: none; } .tis .sg-lines, #tsight.th .sg-lines { display: block; }
-.sg-grain { width: 100%; height: 100%; image-rendering: pixelated; opacity: .10; mix-blend-mode: overlay; } .tis .sg-grain, #tsight.th .sg-grain { opacity: .34; }
+.sg-lines { background: repeating-linear-gradient(0deg, rgba(0,0,0,.10) 0 1px, transparent 1px 3px); display: none; } .tis .sg-lines, #tsight.th .sg-lines { display: block; }
+.sg-grain { width: 100%; height: 100%; opacity: .07; mix-blend-mode: overlay; } .tis .sg-grain { opacity: .16; } #tsight.th .sg-grain { opacity: .09; }
+body.sg-on #ticker, body.sg-on #marks, body.sg-on #log { visibility: hidden !important; }   /* a sight shows only its own symbols: no floating map labels, no log over the read-outs */
+#ts-hot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
 #sg-blast { background: radial-gradient(ellipse at 50% 62%, rgba(214,196,160,.98) 0, rgba(150,132,104,.96) 38%, rgba(96,84,68,.9) 75%); opacity: 0; } #sight.tis #sg-blast { background: radial-gradient(ellipse at 50% 62%, #fff 0, #dfe 45%, #9b9 85%); }
 #sg-edge { box-shadow: inset 0 0 0 100vmax transparent; } #sg-edge::after { content: ''; position: absolute; left: 50%; top: 50%; width: min(82vh, 82vw); height: min(82vh, 82vw); transform: translate(-50%, -50%); border-radius: 50%; box-shadow: inset 0 0 70px 26px rgba(0,0,0,.62), inset 0 0 6px 2px rgba(0,0,0,.9); }
 #sg-ret, #ts-ret { position: absolute; left: 50%; top: 50%; width: min(82vh, 82vw); height: min(82vh, 82vw); transform: translate(-50%, -50%); overflow: visible; filter: drop-shadow(0 0 1.5px rgba(0,0,0,.9)); }
@@ -62,7 +64,7 @@ export class Sights {
     mk(sg, 'div', 'sg-blast', 'sg-full sg-round'); this.gGrain = mk(mk(sg, 'div', null, 'sg-full sg-round'), 'canvas', null, 'sg-grain'); mk(sg, 'div', null, 'sg-full sg-round sg-lines'); mk(sg, 'div', 'sg-tint', 'sg-full sg-round');
     // sensor displays
     mk(ts, 'div', 'ts-warn'); mk(ts, 'div', 'ts-side'); mk(ts, 'svg', 'ts-tape'); $('ts-tape').setAttribute('viewBox', '-280 0 560 30'); mk(ts, 'svg', 'ts-ret'); mk(ts, 'div', 'ts-vig', 'sg-full'); mk(ts, 'div', 'ts-mask', 'sg-full');
-    this.tGrain = mk(mk(ts, 'div', null, 'sg-full ts-pic'), 'canvas', null, 'sg-grain'); mk(ts, 'div', null, 'sg-full ts-pic sg-lines');
+    this.tGrain = mk(mk(ts, 'div', null, 'sg-full ts-pic'), 'canvas', null, 'sg-grain'); this.hot = mk(mk(ts, 'div', null, 'sg-full ts-pic'), 'canvas', 'ts-hot'); this.hx = this.hot.getContext('2d'); this.bursts = []; mk(ts, 'div', null, 'sg-full ts-pic sg-lines');
     // four frames of grain, made once; one is drawn each 1/25 s at a shifted place
     this.noise = []; let seed = 12345; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
     for (let f = 0; f < 4; f++) { const c = document.createElement('canvas'); c.width = 256; c.height = 144; const x = c.getContext('2d'), im = x.createImageData(256, 144), d = im.data; for (let i = 0; i < d.length; i += 4) { const v = (rnd() + rnd()) * 127.5 | 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } x.putImageData(im, 0, 0); this.noise.push(c); }
@@ -82,7 +84,7 @@ export class Sights {
     // the last main gun round fired at or before `now` (the list only grows; after a rewind it is searched again)
     { const ev = B.events || []; if (this.shot.n !== ev.length || now < this.shot.t) { this.shot.n = ev.length; this.shot.t = -99; for (let i = ev.length - 1; i >= 0; i--) if (ev[i].type === 'gun' && ev[i].t <= now) { this.shot.t = ev[i].t; this.shot.R = ev[i].R; this.shot.tof = ev[i].tof; this.shot.hit = ev[i].hit; break; } } }
     const L = this.lay(B), age = now - this.shot.t; cams.lay = L; cams.shotAge = age; if (S.tank.hkoiSight) cams.hkoiEye = S.tank.hkoiSight(cams._hkEye || (cams._hkEye = S.scene.camera.position.clone()));
-    if (mode !== 'gnr' && mode !== 'citv' && mode !== 'hkoi') return;
+    { const inS = mode === 'gnr' || mode === 'citv' || mode === 'hkoi'; if (this.sig.body !== inS) { this.sig.body = inS; document.body.classList.toggle('sg-on', inS); } if (!inS) return; }
     const nf = Math.floor(performance.now() / 40); if (nf !== this.nf) { this.nf = nf; const x = mode === 'gnr' ? this.gx : this.tx; x.drawImage(this.noise[nf & 3], -((nf * 37) % 32), -((nf * 53) % 18)); }
     const fov = S.scene.camera.fov;
     if (mode === 'gnr') {
@@ -116,6 +118,13 @@ export class Sights {
         const fl = k.rwsY != null ? elevationFloor(k.rwsY, k.stationCrewUp) : -10, st = T.st || {}; let warn = '';
         if (m && m.p && cams.hkoiEye) { const e = cams.hkoiEye, dy = m.p.y - e.y, dh = Math.hypot(m.p.x - e.x, m.p.z - e.z), el = Math.atan2(dy, dh) / DEG; if (el < fl - 0.5) warn = 'MASKED BY OWN TANK: GUN HELD AT ' + fl.toFixed(0) + '°'; }
         this.set('ts-warn', warn);
+        // what a thermal camera shows of the engagement, drawn over the picture: each missile's motor as a hot point, the station's
+        // bursts as brief flashes where it lays them, and the obscurant blooming there as a warm patch that hangs for a few seconds
+        { const c = this.hot, x = this.hx, w = innerWidth, h = innerHeight, cam = S.scene.camera, v = this._hv || (this._hv = cam.position.clone()), hotC = th < 0 ? '0,0,0' : '255,255,255'; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } x.clearRect(0, 0, w, h);
+          const blob = (p, rpx, a) => { v.copy(p).project(cam); if (v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) return; const px = (v.x + 1) / 2 * w, py = (1 - v.y) / 2 * h, g = x.createRadialGradient(px, py, 0, px, py, rpx); g.addColorStop(0, `rgba(${hotC},${a})`); g.addColorStop(0.35, `rgba(${hotC},${a * 0.55})`); g.addColorStop(1, `rgba(${hotC},0)`); x.fillStyle = g; x.beginPath(); x.arc(px, py, rpx, 0, 6.2832); x.fill(); };
+          const zoom = 14 / Math.max(1, fov); if (vol && vol.info) for (const q of vol.info) if (q.p) blob(q.p, Math.max(5, Math.min(40, 2600 / Math.max(60, q.range || 1000))) * zoom, 1);
+          if (aim) { const B0 = this.bursts, lastB = B0[B0.length - 1]; if (!lastB || now - lastB.t > 0.25 || now < lastB.t) { if (B0.length >= 16) B0.shift(); B0.push({ t: now, p: aim.clone() }); } }
+          for (const b of this.bursts) { const a = now - b.t; if (a < 0 || a > 6) continue; if (a < 0.2) blob(b.p, 14 * zoom, 1); blob(b.p, (30 + 60 * Math.min(1, a / 2)) * zoom, 0.5 * Math.max(0, 1 - a / 6)); } }
         this.set('ts-side', `STN BRG ${k.rwsY == null ? '---' : pad(((k.rwsY % 360) + 360) % 360, 3)}\nGUN EL  ${k.rwsP == null ? '--' : (k.rwsP >= 0 ? '+' : '−') + pad(Math.abs(k.rwsP), 2)}\nLIMIT   ${(fl >= 0 ? '+' : '−') + pad(Math.abs(fl), 2)}\n${m ? 'TTG ' + (m.tti != null ? m.tti.toFixed(1) : m.speed ? (m.range / m.speed).toFixed(1) : '--') + ' s' : 'NO TRACK'}\n${aim ? 'FIRING' : m ? 'TRACKING' : 'SEARCH'}`);
         // where the gun points, against the camera's cross: the station's own bearing and elevation, projected
         if (k.muzzle && k.rwsPitch) { const v = this._v || (this._v = S.scene.camera.position.clone()), q = this._q || (this._q = S.scene.camera.position.clone()); k.rwsPitch.getWorldPosition(q); k.muzzle.getWorldPosition(v); v.sub(q).multiplyScalar(600).add(q).project(S.scene.camera); const vis = v.z < 1 && Math.abs(v.x) < 0.9 && Math.abs(v.y) < 0.9; this.sty('ts-gun', 'display', vis ? '' : 'none');

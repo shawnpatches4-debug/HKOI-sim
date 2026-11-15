@@ -219,21 +219,25 @@ async def main():
                     await pg.wait_for_timeout(500)
                     if await pg.evaluate('__beta.scene.frameN') >= n0 + n: break
             async def snap(name): await frames(); await pg.screenshot(path=os.path.join(out, f'{tag}_sight_{name}.png'), timeout=180000)
-            await pg.evaluate("void __beta.cams.set('gnr')"); await snap('gnr_rest_day')
+            await pg.set_viewport_size(FULL); state['big'] = True; await pg.wait_for_timeout(1500); await pg.evaluate("void __beta.cams.set('gnr')"); await snap('gnr_rest_day')
             got = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(b._rf || (b._vxs && b._vxs.rfv)) && b.tank.alive && n++ < 4000) __beta.runTo(b.t + 0.1); const L = b._rf || (b._vxs && b._vxs.rfv); return L ? { t: b.t, at: L.at, veh: !!(b._vxs && b._vxs.rfv) } : null; })()")
             print('lay', json.dumps(got))
             if got:
-                await pg.evaluate(f"void __beta.runTo({got['at']} - 1.2)"); await frames(6); await snap('gnr_laid_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-ammo','sg-rdy','sg-lead','sg-line'].map(i => document.getElementById(i).textContent))"))
+                await pg.evaluate(f"void __beta.runTo({got['at']} - 1.2)"); await frames(14); await snap('gnr_laid_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-ammo','sg-rdy','sg-lead','sg-line'].map(i => document.getElementById(i).textContent))"))
                 await pg.keyboard.press('t'); await snap('gnr_laid_thermal')
-                shot = await pg.evaluate("(() => { const b = __beta.battle, n0 = (b.events || []).filter(e => e.type === 'gun').length; let n = 0; while ((b.events || []).filter(e => e.type === 'gun').length === n0 && b.tank.alive && n++ < 600) __beta.runTo(b.t + 0.05); const e = (b.events || []).filter(e => e.type === 'gun').pop(); return e ? { t: e.t, now: b.t } : null; })()")
-                print('shot', json.dumps(shot))
-                if shot:
-                    for dt_, nm in [(0.12, 'gnr_shot_0.1s_thermal'), (0.6, 'gnr_shot_0.6s_thermal')]: await pg.evaluate(f"void __beta.runTo({shot['t']} + {dt_})"); await snap(nm)
-                    await pg.keyboard.press('t'); await pg.keyboard.press('t'); await pg.evaluate(f"void __beta.runTo({shot['t']} + 1.4)"); await snap('gnr_shot_1.4s_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-line'].map(i => document.getElementById(i).textContent))"))
+                gshot = await pg.evaluate("(() => { const b = __beta.battle, n0 = (b.events || []).filter(e => e.type === 'gun').length; let n = 0; while ((b.events || []).filter(e => e.type === 'gun').length === n0 && b.tank.alive && n++ < 600) __beta.runTo(b.t + 0.05); const e = (b.events || []).filter(e => e.type === 'gun').pop(); return e ? { t: e.t, now: b.t } : null; })()")
+                print('shot', json.dumps(gshot))
+                if gshot:
+                    for dt_, nm in [(0.12, 'gnr_shot_0.1s_thermal'), (0.6, 'gnr_shot_0.6s_thermal')]: await pg.evaluate(f"void __beta.runTo({gshot['t']} + {dt_})"); await snap(nm)
+                    await pg.keyboard.press('t'); await pg.keyboard.press('t'); await pg.evaluate(f"void __beta.runTo({gshot['t']} + 1.4)"); await snap('gnr_shot_1.4s_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-line'].map(i => document.getElementById(i).textContent))"))
             await pg.evaluate("void __beta.cams.set('citv')"); await snap('citv'); await pg.keyboard.press('t'); await snap('citv_black_hot')
             await pg.evaluate("void __beta.cams.set('hkoi')"); await snap('hkoi_rest')
             trk = await pg.evaluate("(() => { const b = __beta.battle, has = k => (b.events || []).filter(e => e.type === k && e.t >= b.t - 0.01).pop(); let n = 0; while (!has('hkoi_fire') && b.tank.alive && n++ < 6000) __beta.runTo(b.t + 0.1); const e = has('hkoi_fire'); return { t: b.t, fire: e ? e.t : null, alive: b.tank.alive }; })()")
-            print('track', json.dumps(trk)); await frames(4); await snap('hkoi_firing'); await pg.evaluate("void __beta.runTo(__beta.battle.t + 0.6)"); await snap('hkoi_firing_later')
+            print('track', json.dumps(trk)); await pg.evaluate("void (__beta.runTo(__beta.battle.t - 1.5), __beta.setPlaying(true))")
+            for i in range(60):   # play the real frame loop on until the station fires, so the missile and the bursts are in the picture
+                await pg.wait_for_timeout(700)
+                if await pg.evaluate("!!__beta.volleys.aimAt"): break
+            await pg.evaluate("void __beta.setPlaying(false)"); await frames(2); await snap('hkoi_firing'); await pg.evaluate("void __beta.runTo(__beta.battle.t + 0.6)"); await snap('hkoi_firing_later')
             print('hkoi', await pg.evaluate("JSON.stringify({hk: __beta.interior.hkState, warning: __beta.interior.warning, calls: __beta.scene.renderer.info.render.calls, tris: __beta.scene.renderer.info.render.triangles})"))
         if which == 'optics':   # every periscope and vision block: from the seat, then with the eye put to it
             opt = lambda seat, find, pre='0': f"({pre}, __beta.cams.mode !== '{seat}' && __beta.cams.set('{seat}'), __beta.interior.lookThrough(null), __beta.interior.lookThrough(__beta.interior.controls.find(c => c.optic && {find})))"
@@ -333,17 +337,17 @@ async def main():
                     await pg.wait_for_timeout(500)
                     if await pg.evaluate('__beta.scene.frameN') >= n0 + n: break
             async def snap(name): await frames(); await pg.screenshot(path=os.path.join(out, f'{tag}_sight_{name}.png'), timeout=180000)
-            await pg.evaluate("void __beta.cams.set('gnr')"); await snap('gnr_rest_day')
+            await pg.set_viewport_size(FULL); state['big'] = True; await pg.wait_for_timeout(1500); await pg.evaluate("void __beta.cams.set('gnr')"); await snap('gnr_rest_day')
             got = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(b._rf || (b._vxs && b._vxs.rfv)) && b.tank.alive && n++ < 4000) __beta.runTo(b.t + 0.1); const L = b._rf || (b._vxs && b._vxs.rfv); return L ? { t: b.t, at: L.at, veh: !!(b._vxs && b._vxs.rfv) } : null; })()")
             print('lay', json.dumps(got))
             if got:
-                await pg.evaluate(f"void __beta.runTo({got['at']} - 1.2)"); await frames(6); await snap('gnr_laid_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-ammo','sg-rdy','sg-lead','sg-line'].map(i => document.getElementById(i).textContent))"))
+                await pg.evaluate(f"void __beta.runTo({got['at']} - 1.2)"); await frames(14); await snap('gnr_laid_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-ammo','sg-rdy','sg-lead','sg-line'].map(i => document.getElementById(i).textContent))"))
                 await pg.keyboard.press('t'); await snap('gnr_laid_thermal')
-                shot = await pg.evaluate("(() => { const b = __beta.battle, n0 = (b.events || []).filter(e => e.type === 'gun').length; let n = 0; while ((b.events || []).filter(e => e.type === 'gun').length === n0 && b.tank.alive && n++ < 600) __beta.runTo(b.t + 0.05); const e = (b.events || []).filter(e => e.type === 'gun').pop(); return e ? { t: e.t, now: b.t } : null; })()")
-                print('shot', json.dumps(shot))
-                if shot:
-                    for dt_, nm in [(0.12, 'gnr_shot_0.1s_thermal'), (0.6, 'gnr_shot_0.6s_thermal')]: await pg.evaluate(f"void __beta.runTo({shot['t']} + {dt_})"); await snap(nm)
-                    await pg.keyboard.press('t'); await pg.keyboard.press('t'); await pg.evaluate(f"void __beta.runTo({shot['t']} + 1.4)"); await snap('gnr_shot_1.4s_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-line'].map(i => document.getElementById(i).textContent))"))
+                gshot = await pg.evaluate("(() => { const b = __beta.battle, n0 = (b.events || []).filter(e => e.type === 'gun').length; let n = 0; while ((b.events || []).filter(e => e.type === 'gun').length === n0 && b.tank.alive && n++ < 600) __beta.runTo(b.t + 0.05); const e = (b.events || []).filter(e => e.type === 'gun').pop(); return e ? { t: e.t, now: b.t } : null; })()")
+                print('shot', json.dumps(gshot))
+                if gshot:
+                    for dt_, nm in [(0.12, 'gnr_shot_0.1s_thermal'), (0.6, 'gnr_shot_0.6s_thermal')]: await pg.evaluate(f"void __beta.runTo({gshot['t']} + {dt_})"); await snap(nm)
+                    await pg.keyboard.press('t'); await pg.keyboard.press('t'); await pg.evaluate(f"void __beta.runTo({gshot['t']} + 1.4)"); await snap('gnr_shot_1.4s_day'); print('gnr', await pg.evaluate("JSON.stringify(['sg-top','sg-rng','sg-line'].map(i => document.getElementById(i).textContent))"))
             await pg.evaluate("void __beta.cams.set('citv')"); await snap('citv'); await pg.keyboard.press('t'); await snap('citv_black_hot')
             await pg.evaluate("void __beta.cams.set('hkoi')"); await snap('hkoi_rest')
             trk = await pg.evaluate("(() => { const b = __beta.battle; let n = 0; while (!(__beta.volleys.info || []).some(m => m.cued) && b.tank.alive && n++ < 6000) { __beta.runTo(b.t + 0.1); __beta.advance && 0; } return { t: b.t, cued: (__beta.volleys.info || []).filter(m => m.cued).length, alive: b.tank.alive }; })()")
