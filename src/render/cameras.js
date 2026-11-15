@@ -40,6 +40,9 @@ export class Cameras {
     const cv = scene3d.canvas; let drag = null; addEventListener('keydown', e => { this.keys[e.code] = true; }); addEventListener('keyup', e => { this.keys[e.code] = false; }); addEventListener('blur', () => { this.keys = {}; });
     cv.addEventListener('pointerdown', e => { if (this.mode === 'fly') { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); } }); cv.addEventListener('pointerup', () => { drag = null; });
     cv.addEventListener('pointermove', e => { if (!drag || this.mode !== 'fly') return; this.flyYaw += (e.clientX - drag[0]) * 0.004; this.flyPitch = Math.max(-1.5, Math.min(1.5, this.flyPitch - (e.clientY - drag[1]) * 0.004)); drag = [e.clientX, e.clientY]; }); this.cdrYaw = null; this.snap = true; }
+  // The jolt of the main gun in a sight picture: degrees of pitch (returned) and of yaw (this._ky) for the time since the last round
+  // (this.shotAge, battle seconds, set by app/sights.js). A decaying ring: the same at any frame rate and in a replay. ASSUMED size.
+  _kick(scale) { const t = this.shotAge; if (t == null || t < 0 || t > 1.6) { this._ky = 0; return 0; } this._ky = scale * 0.22 * Math.exp(-t * 4) * Math.sin(t * 29); return scale * (0.5 * Math.exp(-t * 5) * Math.cos(t * 42) + 0.12 * Math.exp(-t * 2.2) * Math.sin(t * 9)); }
   set(mode) { if (this._near0 != null && mode !== 'enemy') { const c = this.s.camera; c.near = this._near0; this._near0 = null; c.updateProjectionMatrix(); }   /* give the usual near limit back at once, before anything else reads it */
     if (mode === 'fly' && this.mode !== 'fly') { const c = this.s.camera, d = c.getWorldDirection(new THREE.Vector3()); this.flyYaw = Math.atan2(d.x, -d.z); this.flyPitch = Math.asin(Math.max(-1, Math.min(1, d.y))); } this.mode = mode; this.snap = true; this.s.controls.enabled = mode === 'orbit' || mode === 'troops' || mode === 'cut'; this.s.controls.minDistance = mode === 'troops' ? 1.5 : mode === 'cut' ? 3 : 4; if (mode !== 'enemy' && mode !== 'troops') this.unit = null; }
   // which enemy team the enemy views follow: the chosen one while it lives, otherwise the first team still alive
@@ -76,23 +79,27 @@ export class Cameras {
     this.lastTank = null; const h = T.h * DEG;
     if (this.mode === 'chase') { const b = 17, e = T.e - Math.sin(h) * b, n = T.n - Math.cos(h) * b; this.pos.set(e, Math.max(W.h(e, n) + 2.5, tp.y + 6), -n); this.look.copy(tp); this.look.y += 2.2; fov = 55; }
     else if (this.mode === 'cdr') { let yaw = ctx.threatBrg != null ? ctx.threatBrg : T.h; if (this.cdrYaw == null || this.snap) this.cdrYaw = yaw; const d = ((yaw - this.cdrYaw + 540) % 360) - 180; this.cdrYaw = (this.cdrYaw + d * Math.min(1, dt * 2.2) + 360) % 360; const a = this.cdrYaw * DEG; this.pos.copy(tp); this.pos.y += 3.9; this.pos.x += Math.sin(a) * 1.2; this.pos.z -= Math.cos(a) * 1.2; this.look.set(tp.x + Math.sin(a) * 200, tp.y + 6, tp.z - Math.cos(a) * 200); fov = 62; k = 1; }
-    else if (this.mode === 'gnr') {   // the sight follows what the gunner is laid on: the main-gun target, else the nearest threat, else straight ahead
-      const tgt = ctx.aim, want = tgt ? Math.atan2(tgt.e - T.e, tgt.n - T.n) / DEG : ctx.threatBrg != null ? ctx.threatBrg : T.h; if (this.gYaw == null || this.snap) this.gYaw = want;
-      const d = ((want - this.gYaw + 540) % 360) - 180; this.gYaw = (this.gYaw + Math.max(-40 * dt, Math.min(40 * dt, d)) + 360) % 360;   // turret traverse, 40 degrees a second
+    else if (this.mode === 'gnr') {   // the gunner's primary sight is slaved to the gun: it shows where the crew AI's turret really points (ctx.turret) and, once that is within 3 degrees of what he is laying on (this.lay, set each frame by app/sights.js from the AI's own lay; else the app's aim), his fine lay on it
+      const L = this.lay, tgt = L || ctx.aim, want = tgt ? Math.atan2(tgt.e - T.e, tgt.n - T.n) / DEG : null, tur = ctx.turret != null ? ctx.turret : want != null ? want : T.h; let goal = tur, off = 99;
+      if (want != null) { off = ((want - tur + 540) % 360) - 180; if (Math.abs(off) < 3) goal = want; }
+      if (this.gYaw == null || this.snap) { this.gYaw = goal; this.gEl = null; }
+      const d = ((goal - this.gYaw + 540) % 360) - 180; this.gYaw = (this.gYaw + Math.max(-60 * dt, Math.min(60 * dt, d)) + 360) % 360;
       const a = this.gYaw * DEG; this.pos.copy(tp); this.pos.y += 2.75; this.pos.x += Math.sin(a) * 1.6 + Math.cos(a) * 0.7; this.pos.z += -Math.cos(a) * 1.6 + Math.sin(a) * 0.7;
-      const R = tgt ? Math.hypot(tgt.e - T.e, tgt.n - T.n) : 1500, ty = tgt ? W.h(tgt.e, tgt.n) + 1 : this.pos.y - 8; this.look.set(tp.x + Math.sin(a) * R, ty, tp.z - Math.cos(a) * R);
-      this.onTarget = Math.abs(d) < 0.6; fov = tgt && Math.abs(d) < 8 ? 6.5 : 21; k = 1; }
+      const R = tgt ? Math.max(30, Math.hypot(tgt.e - T.e, tgt.n - T.n)) : 1500, near = tgt && Math.abs(off) < 8, wantEl = near ? Math.atan2(W.h(tgt.e, tgt.n) + (tgt.agl || 1) - this.pos.y, R) / DEG : -0.3;
+      if (this.gEl == null) this.gEl = wantEl; this.gEl += Math.max(-12 * dt, Math.min(12 * dt, wantEl - this.gEl));   /* elevation at 12 degrees a second */
+      this.onTarget = want != null && Math.abs(((want - this.gYaw + 540) % 360) - 180) < 0.35 && Math.abs(wantEl - this.gEl) < 0.25; fov = near ? 6.5 : 21; k = 1;
+      const kp = this._kick(1), b = a + this._ky * DEG; this.look.set(this.pos.x + Math.sin(b) * R, this.pos.y + Math.tan((this.gEl + kp) * DEG) * R, this.pos.z - Math.cos(b) * R); }
     else if (this.mode === 'citv') {   // the commander's viewer on the turret roof: sweeps all round on its own, and stops on a located team (ctx.cdrLook) when there is one
       const tgt = ctx.cdrLook; if (this.citvYaw == null || this.snap) this.citvYaw = ctx.threatBrg != null ? ctx.threatBrg : (ctx.turret != null ? ctx.turret : T.h);
       if (tgt) { const want = Math.atan2(tgt.e - T.e, tgt.n - T.n) / DEG, d = ((want - this.citvYaw + 540) % 360) - 180; this.citvYaw = (this.citvYaw + Math.max(-60 * dt, Math.min(60 * dt, d)) + 360) % 360; this.citvOn = Math.abs(d) < 1; }
       else { this.citvYaw = (this.citvYaw + 12 * dt + 360) % 360; this.citvOn = false; }   /* a slow sweep, twelve degrees a second */
       const a = this.citvYaw * DEG, R = tgt ? Math.hypot(tgt.e - T.e, tgt.n - T.n) : 1200; this.pos.copy(tp); this.pos.y += 3.35; this.pos.x += Math.sin(a) * 0.4; this.pos.z -= Math.cos(a) * 0.4;
-      this.look.set(tp.x + Math.sin(a) * R, tgt ? W.h(tgt.e, tgt.n) + 1 : this.pos.y - 14, tp.z - Math.cos(a) * R); fov = tgt && this.citvOn ? 3.4 : 13; k = 1; }
+      this.look.set(tp.x + Math.sin(a) * R, tgt ? W.h(tgt.e, tgt.n) + 1 : this.pos.y - 14, tp.z - Math.cos(a) * R); fov = tgt && this.citvOn ? 3.4 : 13; k = 1; { const kp = this._kick(0.5); this.look.y += Math.tan(kp * DEG) * R; } }
     else if (this.mode === 'hkoi') {   // the HKOI station's sensor: on the point it is laying on or the missile it tracks; otherwise it rests along the turret
       const m = ctx.missiles.filter(x => x.cued).sort((p, q) => p.range - q.range)[0], aim = ctx.hkoiAim || (m && m.p) || null; const rest = (ctx.turret != null ? ctx.turret : T.h) * DEG;
-      this.pos.copy(ctx.hkoiAt || tp); if (!ctx.hkoiAt) this.pos.y += 3.3; else this.pos.y += 0.35;
+      if (this.hkoiEye) this.pos.copy(this.hkoiEye); else { this.pos.copy(ctx.hkoiAt || tp); if (!ctx.hkoiAt) this.pos.y += 3.3; else this.pos.y += 0.35; }   /* from the station's own sight window (TankView.hkoiSight, handed over by app/sights.js) */
       if (aim) this.look.copy(aim); else this.look.set(this.pos.x + Math.sin(rest) * 800, this.pos.y - 6, this.pos.z - Math.cos(rest) * 800);
-      this.hkoiTrack = !!aim; fov = aim ? 4 : 14; k = 1; }
+      this.hkoiTrack = !!aim; fov = aim ? 4 : 14; k = 1; { const kp = this._kick(0.35), R = this.look.distanceTo(this.pos); this.look.y += Math.tan(kp * DEG) * R; } }
     else if (this.mode === 'drv') { this.pos.copy(tp); this.pos.y += 1.45; this.pos.x += Math.sin(h) * 2.6; this.pos.z -= Math.cos(h) * 2.6; this.look.set(tp.x + Math.sin(h) * 80, tp.y + 0.6, tp.z - Math.cos(h) * 80); fov = 62; k = 1; }
     else if (this.mode === 'ldr') {   // head out of the loader's hatch, left of the turret roof, looking where his gun looks or out over the left front
       const tb = (ctx.turret != null ? ctx.turret : T.h) * DEG, tgt = ctx.ldrLook; this.pos.copy(tp); this.pos.y += 3.25; this.pos.x += -Math.cos(tb) * 0.75 + Math.sin(tb) * 0.2; this.pos.z += -Math.sin(tb) * 0.75 - Math.cos(tb) * 0.2;

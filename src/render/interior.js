@@ -16,6 +16,7 @@ import { CrewFigures } from './interior_crewfig.js';
 import { drawMfd, MFD } from './interior_mfd.js';
 
 const DEG = Math.PI / 180, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), sm = x => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }, ease = (cur, to, rate, dt) => cur + (to - cur) * (1 - Math.exp(-rate * dt));
+const FATE_SRC = { door: new THREE.Vector3(0, 0.1, DIM.BZ - 0.05), rack: new THREE.Vector3(0.6, -0.8, -0.9), engine: new THREE.Vector3(0, -0.3, 1.9) };   /* where the fire is, interior frame: the bustle's blast door, the hull ammunition rack, the engine bulkhead */
 const LOAD_S = 6;                       // seconds for a reload with the loader at his station (the same number as in the battle's crew model)
 const DOME = [null, [2.3, 2.1, 1.75], [2.0, 0.16, 0.1], [0.25, 1.5, 1.25]];   // dome lamp settings: off, white, red, blue-green
 const DOME_NAME = ['off', 'white', 'red', 'blue-green'], HATCH_NAME = ['closed', 'open-protected', 'open'];
@@ -210,7 +211,7 @@ export class Interior {
     // the crew's own state (four times a second, also while no inside view is open): shown on the HKOI panel's crew page; the commander's
     // hatch follows whether the crew is closed down (closed) or not (open-protected) until the viewer moves its handle
     if (s && s.on && s.battle) { this.crewT = (this.crewT || 0) - dt; if (this.crewT <= 0) { this.crewT = 0.25; this.crewS = s.battle.crewState ? s.battle.crewState() : null; if (!this.cupUser && this.crewS && this.crewS.on) { const want = this.crewS.buttoned ? 0 : 1; if (want !== this.cupHatch) this.setCupolaHatch(want); } } }
-    const outside = !!(s && s.on && !seat && !cut && cm !== 'gnr' && cm !== 'citv' && cm !== 'hkoi' && cm !== 'drv' && this.tank.turret && (lu0 || this.cupHatch > 0 || (this.built && (this.st.ldrU > 0.004 || this.st.cup1 + this.st.cup2 > 0.01))));   /* from outside the commander's lid and the man in his hatch are seen whenever the hatch is not closed */
+    const outside = !!(s && s.on && !seat && !cut && cm !== 'gnr' && cm !== 'citv' && cm !== 'hkoi' && cm !== 'drv' && this.tank.turret && (lu0 || this.cupHatch > 0 || this._bailing(s.battle) || (this.built && (this.st.ldrU > 0.004 || this.st.cup1 + this.st.cup2 > 0.01))));   /* from outside the commander's lid and the man in his hatch are seen whenever the hatch is not closed */
     const mode = outside ? 'outside' : cm, on = !!(s && s.on && (seat || cut || outside));
     if (!on) { if (this.active) this._leave(); return; }
     if (!this.built) this._build();
@@ -257,9 +258,18 @@ export class Interior {
     P.yoke.rotation.z = -this.st.slew * 0.42; P.override.rotation.z = -this.st.slew * 0.12; P.tbar.rotation.set(-0.25, 0, -this.st.steer * 0.6);   /* the T-bar turns like handlebars, seen from his eye as a roll */
     this.st.thr = ease(this.st.thr, s.playing && T.alive ? clamp(Math.abs(v) / 14 + Math.max(0, acc * Math.sign(v || 1)) * 0.25, 0, 1) : 0, 6, dt); P.throttle.rotation.set(0, 0, -(Math.PI / 2 + 0.16)); P.throttle.rotateY(-this.st.thr * 1.3);   /* twist grip: more power, more twist */
     this.st.gear = ease(this.st.gear, v > 0.3 ? 1 : v < -0.3 ? -1 : 0, 8, dt); P.gear.rotation.z = -this.st.gear * 0.6;
-    this.st.cup1 = ease(this.st.cup1, this.cupHatch === 1 ? 1 : 0, 5, dt); this.st.cup2 = ease(this.st.cup2, this.cupHatch === 2 ? 1 : 0, 4, dt); this._cupPose(); this.tank.stationCrewUp = this.st.ldrU > 0.25 || this.st.hatch > 0.05 || this._cupK(1) > 0.02;   /* a man or a lid is up: the HKOI station keeps its gun above them (station.js second table) */
+    this.st.cup1 += clamp((this.cupHatch === 1 ? 1 : 0) - this.st.cup1, -dt / 0.9, dt / 0.9); this.st.cup2 += clamp((this.cupHatch === 2 ? 1 : 0) - this.st.cup2, -dt / 2.6, dt / 2.6);   /* at a steady pace: 0.9 s to lift the lid up its post, 2.6 s to open fully (lid up, swung aside, then head and shoulders out over the last 1.5 s). ASSUMED times; it was an exponential ease that was over in about half a second */ this._cupPose(); this.tank.stationCrewUp = this.st.ldrU > 0.25 || this.st.hatch > 0.05 || this._cupK(1) > 0.02;   /* a man or a lid is up: the HKOI station keeps its gun above them (station.js second table) */
     // ---- hits: everything from the battle's records and the battle clock
     this.simT = B.t; SHARED.uSimT.value = B.t; const FX = this.fxS = fxState(hitList(B), B.t); this.hitPulse = FX.pulse; this.alarm = FX.alarm; this.smoke = Math.max(FX.smoke, FX.dust);
+    // the vehicle's end, inside (battle.tank.fate from src/battle/fate.js; nothing without it): the bustle ammunition burning behind the
+    // shut blast door (red emergency lamps, a fire glow, a little smoke leaking in at the door), a knock-out (power gone, smoke from
+    // where the fire is), a catastrophic fire (flash, then flame light and smoke filling the turret)
+    { const F = T.fate; this._fateSrc = null; if (F && F.t != null && B.t >= F.t && F.kind !== 'ok') { const a = B.t - F.t, bo = F.blowout && B.t >= F.blowout.t0 && B.t <= F.blowout.t1, fr = F.fire && B.t >= F.fire.t0 && B.t <= F.fire.t1;
+        if (F.kind === 'catastrophic') { FX.fire = true; FX.lightsOut = true; FX.alarm = false; FX.smoke = Math.max(FX.smoke, Math.min(1, 0.5 + a * 0.25)); if (a < 0.3) FX.flash = Math.max(FX.flash, 1 - a / 0.3); this._fateSrc = FATE_SRC.rack; }
+        else if (bo) { FX.fire = true; FX.emergency = true; FX.alarm = true; FX.smoke = Math.max(FX.smoke, Math.min(0.3, 0.08 + a * 0.02)); this._fateSrc = FATE_SRC.door; }
+        else if (F.kind === 'knocked_out' || F.kind === 'ammo_vented') { FX.lightsOut = true; if (fr) FX.fire = true; FX.smoke = Math.max(FX.smoke, fr ? Math.min(0.85, 0.3 + a * 0.03) : 0.3 * Math.exp(-Math.max(0, B.t - (F.fire ? F.fire.t1 : F.t)) / 40)); this._fateSrc = F.fire && F.fire.where === 'engine' ? FATE_SRC.engine : FATE_SRC.door; }
+        else if (F.kind === 'abandoned') FX.lightsOut = true;
+        this.smoke = Math.max(this.smoke, FX.smoke); } }
     // head: leans against acceleration and jolts with the main gun
     { const H = this.head; let left = Math.min(dt, 0.1); while (left > 1e-5) { const h = Math.min(left, 1 / 120); H.vz += (-90 * H.z - 13 * H.vz + acc * 0.9) * h; H.z = clamp(H.z + H.vz * h, -0.06, 0.06); H.vx += (-90 * H.x - 13 * H.vx - this.st.steer * Math.abs(v) * 0.5) * h; H.x = clamp(H.x + H.vx * h, -0.04, 0.04); left -= h; } }
 
@@ -308,7 +318,7 @@ export class Interior {
     if (FX.flash > 0) { SHARED.uAmb.value.x += 3.2 * FX.flash; SHARED.uAmb.value.y += 2.1 * FX.flash; SHARED.uAmb.value.z += 1.0 * FX.flash; }
     const fireK = FX.fire ? 0.16 + 0.07 * Math.sin(B.t * 11) * Math.sin(B.t * 4.3) : 0; if (fireK) { SHARED.uAmb.value.x += fireK; SHARED.uAmb.value.y += fireK * 0.42; SHARED.uAmb.value.z += fireK * 0.1; }
     { const lit = SHARED.uAmb.value, k = 2.2 + (dome && !dead ? 2.5 : 0); SHARED.uSmoke.value = this.smoke; SHARED.uSmokeCol.value.set(Math.min(0.5, lit.x * k), Math.min(0.48, lit.y * k), Math.min(0.46, lit.z * k)); }
-    SHARED.uCabY.value = _v.set(0, 0, 0).applyMatrix4(this.tur.matrixWorld).y; { const h = FX.last, U = SHARED.uSmokeAt.value; if (h && h.pen) { _v.copy(h.e).addScaledVector(h.d, 0.4).applyMatrix4(this.hul.matrixWorld); U.set(_v.x, _v.y, _v.z, (FX.fire ? 1.4 : 1.3 * Math.exp(-FX.lastAge / 7))); } else U.w = 0; }
+    SHARED.uCabY.value = _v.set(0, 0, 0).applyMatrix4(this.tur.matrixWorld).y; { const h = FX.last, U = SHARED.uSmokeAt.value; if (h && h.pen) { _v.copy(h.e).addScaledVector(h.d, 0.4).applyMatrix4(this.hul.matrixWorld); U.set(_v.x, _v.y, _v.z, (FX.fire ? 1.4 : 1.3 * Math.exp(-FX.lastAge / 7))); } else U.w = 0; if (this._fateSrc) { _v.copy(this._fateSrc).applyMatrix4(this.tur.matrixWorld); U.set(_v.x, _v.y, _v.z, 1.5); } }   /* the smoke and the glow come from where the vehicle's end says the fire is */
     this.fx.update(mode === 'outside' ? fxState([], 0) : FX, this.graphic);
     this._crew(s, FX, info, seat, loading, sdt);
     const R = this.s.renderer; SHARED.uExpo.value = clamp(0.62 / Math.max(0.05, R.toneMappingExposure || 0.62), 0.3, 3) * (cut ? 1.5 : 1);   /* a little brighter in the cutaway, where daylight is all round it */
@@ -379,8 +389,28 @@ export class Interior {
         if (this.mgHandT) { const g = this.mgHandT[i]; x += (g.x - x) * c; y += (g.y + sh - y) * c; z += (g.z + sh - z) * c; }   /* the machine gun: left hand on the feed cover, right hand on the pistol grip */
         H[i][0] = x; H[i][1] = y; H[i][2] = z; } }
     if (gone) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); }   /* bailed out: hatches open, seats empty */
+    this._bailOut(s.battle, men);
     this.crewFig.update(men, s.battle.t, sdt); this.stats.crewTriangles = this.crewFig.triCount(); this.stats.crewReady = this.crewFig.ready; this.stats.crewFailed = this.crewFig.failed;
   }
+  // ---- Bailing out (battle.tank.fate, written by src/battle/fate.js when that is loaded; without it nothing here runs).
+  // fate.crew[role].out = { t0, t1 }: the man starts to climb out at t0 and is clear of the vehicle at t1. Each man's head follows a
+  // path on the battle clock (the same in a replay or a rewind): up through a hatch, across the roof, down the side, then to ground a
+  // few metres off, where he stays. Commander and gunner leave by the cupola to the right, the loader by his hatch to the left, the
+  // driver by his own hatch over the right front. Dead men have no `out` and stay in their seats. ASSUMED: level ground beside the
+  // vehicle (on a slope a man may stand a little high or low); the driver's lid is not a moving part of the outside model.
+  _bailing(B) { const F = B && B.tank && B.tank.fate, C = F && F.crew; if (!C) return false; for (const r in C) if (C[r].out && B.t >= C[r].out.t0) return true; return false; }
+  _bailOut(B, men) {
+    const F = B && B.tank && B.tank.fate, C = F && F.crew; if (!C) return; const GY = -(this.tank.turret ? this.tank.turret.position.y : 1.62) + 0.02, [CX, CZ] = DIM.CUP, [HX, HZ] = DIM.HAT; let any = false;
+    for (const r of ['cdr', 'gnr', 'ldr', 'drv']) { const o = C[r] && C[r].out; if (!o || B.t < o.t0) continue; any = true; const M = men[r], u = clamp((B.t - o.t0) / Math.max(0.5, o.t1 - o.t0), 0, 1), e = SEATS['in_' + r].eye;
+      // way points [x, y, z, rise]: seat, standing in the hatch, sitting on the edge, standing on the ground, gone to ground
+      const P = r === 'ldr' ? [[e[0], e[1], e[2], 0], [HX, DIM.RF + 0.8, HZ, 1], [HX - 0.75, 1.25, HZ + 0.25, 1], [-2.35, GY + 1.6, HZ + 0.5, 1], [-3.4, GY + 0.86, HZ + 1.7, 0]]
+        : r === 'drv' ? [[e[0], e[1], e[2], 0], [0, DIM.DRF + 0.85, DIM.DZ, 1], [0.9, DIM.DRF + 0.9, DIM.DZ - 0.2, 1], [2.35, GY + 1.6, DIM.DZ - 0.3, 1], [3.6, GY + 0.86, DIM.DZ + 1.4, 0]]
+        : [[e[0], e[1], e[2], 0], [CX, DIM.CUPTOP + 0.7, CZ, 1], [CX + 0.85, 1.3, CZ + 0.35, 1], [2.35, GY + 1.6, CZ + 0.6, 1], [r === 'gnr' ? 4.3 : 3.3, GY + 0.86, CZ + (r === 'gnr' ? 2.6 : 1.5), 0]];
+      const K = [0, 0.32, 0.55, 0.78, 1]; let i = 0; while (i < 3 && u > K[i + 1]) i++; const f = sm((u - K[i]) / (K[i + 1] - K[i])), a = P[i], b = P[i + 1], hop = i === 2 ? 0.25 * Math.sin(f * Math.PI) : 0;
+      const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f + hop, z = a[2] + (b[2] - a[2]) * f, face = u >= 1 ? Math.atan2(-(b[0]), b[2]) / DEG + 180 : Math.atan2(b[0] - a[0], -(b[2] - a[2])) / DEG;   /* walking: the way he goes; on the ground: looking back at the vehicle */
+      M.on = true; M.status = C[r].state === 'wounded' && u >= 1 ? 'wounded' : 'ok'; M.state = 'steady'; M.frozen = false; M.up = 0; M.load = -1; M.firing = false; M.bodyOnly = false; M.snap = false; M.rise = a[3] + (b[3] - a[3]) * f; M.face = face; M.head[0] = x; M.head[1] = y; M.head[2] = z;
+      const fs = Math.sin(face * DEG), fc = Math.cos(face * DEG), climb = i < 2 ? 1 - Math.abs(f - 0.5) * 0 : 0; for (let h = 0; h < 2; h++) { const sx = h ? 1 : -1, H = M.hands[h], up = i === 0 ? 0.25 * f : i === 1 ? 0.25 * (1 - f) : 0;   /* hands up to the rim on the way through the hatch, then at his sides */ H[0] = x + fc * sx * 0.24 + fs * 0.16; H[1] = y - 0.62 + up * 2.2; H[2] = z + fs * sx * 0.24 - fc * 0.16; } }
+    if (any) { this.st.hatch = Math.max(this.st.hatch, 1); if (this.cupHatch !== 2) this.setCupolaHatch(2); } }
   // where the loader's head is at each moment of his climb (interior frame): at his station, then up through the middle of the opening
   // with a little bob of effort, to standing behind his gun
   _ldrHead(U, out) { const e = SEATS.in_ldr.eye, k = sm((U - 0.4) / 0.36), g = this.mgEyeT; let tx = DIM.HAT[0] - 0.02, ty = DIM.RF + 0.62, tz = DIM.HAT[1] - 0.1;

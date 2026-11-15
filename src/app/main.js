@@ -14,6 +14,8 @@ import { MapView } from './mapview.js';
 import { Hud } from './hud.js';
 import { TitleShow } from './title.js';
 import { Faces } from './faces.js';
+import { Sights } from './sights.js';
+import { TankFate } from '../render/tankfate.js';
 import { Sound } from '../audio/sound.js';
 import { FINISH, setFinish } from '../render/env.js';
 
@@ -443,7 +445,7 @@ let simMs = 0, cpuMs = 0, last = performance.now(), frames = 0, fps = 0, fpsT = 
 const titleShow = new TitleShow(scene, cams);
 function ctx() { const T = shown, m = volleys.info; let brg = null; if (m.length) { const c = m.filter(x => x.cued); if (c.length) brg = c.sort((a, b) => a.range - b.range)[0].brg; } const rf = battle._rf, fl = landing[landing.length - 1], mg = battle._mg && battle.t < battle._mg.t + battle._mg.dur + 1.5 ? battle._mg : null, aim = rf ? rf.k : fl ? fl.to : mg ? mg : null; let cdrLook = null, hkoiAt = null; if (cams.mode === 'citv' && battle._targets) { const q = battle._targets().find(x => x.los); if (q) cdrLook = q.k; } if (cams.mode === 'hkoi') hkoiAt = tank.hkoiMuzzle(hkV);
   return { tank: T, units: battle.units, missiles: m, threatBrg: brg, aim, unitPos, turret: battle.tank.tur, hkoiAim: volleys.aimAt, hkoiAt, cdrLook, cropH: u => { const v = world && world.veg ? world.veg(u.e, u.n) : null; return v && (v.cls === 1 || v.cls === 2) ? v.h : 0; } }; }   /* cropH: a team in a crop holds its sight above the stalks */
-const hkV = new THREE.Vector3();
+const hkV = new THREE.Vector3(); const sights = new Sights(), tankFate = new TankFate(scene, tank);   /* the gunner's, commander's and HKOI sight pictures (app/sights.js) */
 const unitPos = u => (teams[battle.units.indexOf(u)] || teams[0]).group.position;   /* where the team is drawn this frame (smoothed between simulation steps) */
 const enemyViews = new EnemyViews(u => cams.choose(u));
 // the film director and the X-ray of a hit: what they may read here, and the one thing they may set (the speed)
@@ -469,7 +471,7 @@ function frameBody(now) {
   if (cams.mode !== lastMode && state === 'play') { buildBar(); show(); }   /* the view changed (a key, a button, or the camera falling back by itself): the bar and the boxes follow */
   hudBox.update(dt, { on: state === 'play' && !mapOpen, mode: hudMode, seat: !!SEATV[cams.mode], sight: !!SIGHTV[cams.mode], enemy: !!ENEMYV[cams.mode], battle, volleys, shown, now: Math.min(tNow, battle.t), playing: playing && state === 'play', graphic: q.get('graphic') !== '0', spectator: set.spectator, sound, frameMs: fps ? 1000 / fps : 0 });
   if (tickT && performance.now() - tickT > 9000) { tickT = 0; $('ticker').classList.add('old'); }   /* nothing new for a while: the ticker goes quiet */
-  drawReplay(dt); drawSensors();
+  drawReplay(dt); drawSensors(); tankFate.update(battle, Math.min(tNow, battle.t), dt * simRate()); sights.update({ on: state === 'play' && !mapOpen, battle, cams, scene, tank, volleys, now: Math.min(tNow, battle.t), hull: shown.h });
   interior.update(dt, { on: state === 'play' && !mapOpen, battle, shown, volleys, cond: set.cond, playing: state === 'play' && playing, speed });
   director.update(dt); xray.update();
   if (state === 'play') { cams.update(dt, ctx()); { const ev = !mapOpen && set.spectator; enemyViews.update({ sightOn: ev && cams.mode === 'enemy' && !!cams.unit, menuOn: ev && (cams.mode === 'enemy' || cams.mode === 'troops' || cams.mode === 'fpv'), fpvOn: ev && cams.mode === 'fpv', volleys, t: Math.min(tNow, battle.t), cams, battle, tank: shown, world, dt }); } drawLog(); checkEnd(); if (performance.now() - capT > 5200) $('caption').style.opacity = 0; }
