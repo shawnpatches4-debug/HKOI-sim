@@ -12,8 +12,8 @@ async def main():
             await pg.evaluate("void document.querySelector('#o-setup').click()"); await pg.wait_for_timeout(500)
             await pg.evaluate("(c) => { document.getElementById('o-code').value = c; document.getElementById('o-codebtn').click(); }", code)
             await pg.wait_for_timeout(4000)
-            await pg.evaluate("void __beta.runTo(700)")   # the replay starts at the beginning: play it to its end, unseen
-            r = await pg.evaluate("JSON.stringify((() => { const B = __beta.battle, s = B.summary(), cs = B.crewState ? B.crewState() : null; return { t: s.t, alive: s.alive, fired: s.fired, hits: s.hits, over: B.over && B.over.result, who: cs ? Object.fromEntries(Object.entries(cs.who).map(([k, v]) => [k, v.status])) : null, note: document.getElementById('o-note').textContent }; })())")
+            await pg.evaluate("void __beta.runTo(950)")   # the replay starts at the beginning: play it to its end, unseen
+            r = await pg.evaluate("JSON.stringify((() => { const B = __beta.battle, s = B.summary(), cs = B.crewState ? B.crewState() : null; return { t: s.t, alive: s.alive, fired: s.fired, hits: s.hits, by: s.by, kt: s.killedByTank, kmg: s.killedByMg, over: B.over && B.over.result, who: cs ? Object.fromEntries(Object.entries(cs.who).map(([k, v]) => [k, v.status])) : null, note: document.getElementById('o-note').textContent }; })())")
             print(code[:24], r)
         print('errors', errs[:4]); await b.close()
 asyncio.run(main())
