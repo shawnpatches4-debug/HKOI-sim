@@ -85,6 +85,9 @@ export const SHOTS = {
   // missile's own smoke trail hides everything.)
   tail: (S, side, age, o) => { const M = S.missile || S.pts.last || S.at(S.R * 0.6, 4);
     const P = add(add(add(M, S.p, 10 * side), S.b, -12), V(0, 1, 0), 2.4); return { pos: lift(S, P, 1.5), look: add(add(M, S.b, 15), V(0, 1, 0), 0.3), fov: 44 }; },
+  // beside a drone, close enough for its shape to read (o.dist metres), level with it
+  drone: (S, side, age, o) => { const M = S.missile || S.pts.last || S.at(300, 20), d = S.mdir || V(-S.b.x, 0, -S.b.z), r = (o && o.dist) || 10, q = norm(V(-d.z, 0, d.x));
+    const P = add(add(add(M, q, r * side), d, -r * 0.45), V(0, 1, 0), r * 0.18); return { pos: lift(S, P, 1.5), look: add(M, d, r * 0.15), fov: 40 }; },
   // two things on the ground at once (the tank and o.at): from the side, far enough for both
   pair: (S, side, age, o) => { const A = S.tank, Bp = S.pts[o.at] || S.launcher, C = mid(A, Bp, o.f == null ? 0.5 : o.f), span = len(sub(Bp, A)) + (o.pad || 30), fov = 38;
     const D = clamp(span * 0.5 / Math.tan(fov * DEG / 2) / (16 / 9) * 1.6 + 12, 25, 700), u = norm(sub(Bp, A)), q = V(-u.z, 0, u.x);

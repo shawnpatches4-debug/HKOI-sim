@@ -166,7 +166,7 @@ export const endPhrase = D => (D.end.type === 'ground' ? `fell ${m0(D.end.short)
 // the chain with their times, 'table' the fire control's planning table, 'bearing' the warning seen from above, 'light' how much of
 // the beam still reaches the missile's tail.
 export const GEO_W = 360, GEO_H = 340;
-export function geoSVG(D, tb, focus, TB) {
+export function geoSVG(D, tb, focus, TB, compact) {
   const t = tb - D.T0, X0 = 34, X1 = 326, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / D.R)), yG = 128, VZ = 4.2, hy = z => yG - 10 - z * VZ;
   const ex = Math.round(VZ / ((X1 - X0) / D.R)), st = aimStage(D, t), m = missileAt(D, t), F = D.frame; let o = '';
   o += T(14, 20, 'SIDE VIEW, TO SCALE', ' class="h"') + T(346, 21, secs(t - D.tL), ' class="n e w"');
@@ -200,6 +200,7 @@ export function geoSVG(D, tb, focus, TB) {
   else if (focus === 'bearing') o += bearingPart(D, t, y0);
   else if (focus === 'light') o += lightPart(D, t, y0);
   else o += chainPart(D, t, y0);
+  if (compact) return wrap(GEO_W, GEO_H - y0 + 14, `<g transform="translate(0,${14 - y0})">${o}</g>`).replace(T(14, 20, 'SIDE VIEW, TO SCALE', ' class="h"'), '');   /* a narrow window: the lower half only */
   return wrap(GEO_W, GEO_H, o);
 }
 // the six links, each with its time after launch; done links green, the current one amber
@@ -294,4 +295,21 @@ export function guideSVG(which) {
   panel(1, 'radio', 'Radio command (Konkurs)', 'launcher watches its flare, radios fixes', 'HKOI: cloud hides flare');
   panel(2, 'laser', 'Laser homing', 'eye in its nose sees a laser spot on you', 'HKOI: airburst rounds');
   return wrap(GUIDE_W, GUIDE_H, o);
+}
+
+// A drone and HKOI's airburst: the drone's run in to the tank, the high-explosive rounds going out to meet it, where it fell (to scale
+// along the ground), and the model's two kill chances (assumed figures, from the settings)
+export const DRONE_W = 360, DRONE_H = 230;
+export function droneSVG(M, tb, cfg) {
+  const X0 = 30, X1 = 330, R = M.R, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / R)), y = 92; let o = T(14, 22, 'THE DRONE RUN, SEEN FROM THE SIDE, TO SCALE', ' class="h"');
+  o += LN(X0 - 10, y + 14, X1 + 10, y + 14, C.ground, ' stroke-width="2"') + tankSide(X0, y + 14, 1.15);
+  for (let k = 0; k * 250 <= R; k++) { const x = xs(k * 250); o += LN(x, y + 14, x, y + 19, C.dim) + (k % 2 === 0 ? T(x, y + 33, k ? m0(k * 250) : '0', ' class="s m"') : ''); }
+  const down = tb >= M.tK, dd = down ? M.d : Math.max(0, R - M.speed * (tb - M.t0th));
+  if (tb >= M.t0th) o += down ? T(xs(M.d), y + 4, '✕', ' class="big g m"') + T(xs(M.d), y - 16, `down at ${m0(M.d)}`, ' class="n g m"') : `<g transform="translate(${xs(dd).toFixed(1)},${y - 6})"><rect x="-6" y="-2" width="12" height="4" fill="${C.bad}"/><line x1="-9" y1="-4" x2="9" y2="-4" stroke="${C.bad}" stroke-width="1.5"/></g>` + T(xs(dd), y - 16, 'drone', ' class="s m b" style="fill:#ff6b5e"');
+  for (const r of M.rds) { if (tb < r.tf || tb > r.tp) continue; const u = (tb - r.tf) / Math.max(1e-6, r.tp - r.tf); o += CI(xs(r.d * u), y - 6 + 14 * (1 - u) * 0, 3, ` fill="#fff" stroke="#ff9a6b" stroke-width="1.5"`); }
+  let yy = y + 64; const line = (s2, cls) => { o += T(14, yy, s2, ` class="${cls}"`); yy += 21; };
+  line(`${M.first} airburst rounds, fired ${f2(M.tF - M.t0th)} s after it appeared ${m0(R)} out`, 's');
+  if (cfg && cfg.hePk != null) line(`One burst brings a drone down ${r0(100 * cfg.hePk)}% of the time (assumed)`, 's b');
+  if (cfg && cfg.apsDrone != null) line(`Trophy against a drone: ${r0(100 * cfg.apsDrone)}% a shot (assumed)`, 's d');
+  return wrap(DRONE_W, DRONE_H, o);
 }

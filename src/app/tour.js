@@ -18,7 +18,7 @@
 // Frame rate: the simulation is advanced by the page as always; this file only reads battle time. The camera and the labels are
 // functions of where things are this frame and of battle time, so they look the same at any frame rate.
 import { ScenarioPage, SCENARIOS } from './scenarios.js';
-import { AIM_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, endPhrase } from './targeting.js';
+import { AIM_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, droneSVG, endPhrase } from './targeting.js';
 import { SHOTS, chooseSide, frameOf, clearArea } from './briefcam.js';
 
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
@@ -40,7 +40,7 @@ const ident = (v, th) => ({ v: v.i, idx: th.idx, uid: th.uid, brg: th.brg, R: th
 // the engine settings the text quotes, read from the battle's own configuration (never typed in here)
 function settings(B) {
   const c = (B.volleys[0] && B.volleys[0].cfg) || B.cfg0 || {}, g = c.gun || {}, r = c.rnd || {}, a = c.aps || {}, o = c.obs || {};
-  return { payload: r.payload_g, form: o.form_s, obs0: g.obscurant_rounds, he0: g.he_rounds, gap: g.rof_rpm ? 60 / g.rof_rpm : null, hePk: r.he_pk_drone, saclos: o.saclos_effect, aps0: a.mag_per_side, apsR: a.radar_range_m };
+  return { payload: r.payload_g, form: o.form_s, obs0: g.obscurant_rounds, he0: g.he_rounds, gap: g.rof_rpm ? 60 / g.rof_rpm : null, hePk: r.he_pk_drone, saclos: o.saclos_effect, aps0: a.mag_per_side, apsR: a.radar_range_m, apsDrone: a.pk_drone };
 }
 // what ended the threats of a whole battle, in four heaps
 function tally(B) {
@@ -59,7 +59,7 @@ function endWords(e) {
 }
 // the calm moment before the targeting chapter's launch, and the settings the one-minute overview quotes
 function findDrones(B) {
-  const mk = (v, th) => { const bs = bursts(v, th, false), end = th.viz.end; return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tF: v.t0 + bs[0].rounds[0].t_fire, tK: v.t0 + end.t, d: end.d, n: bs.length, rounds: bs.reduce((k, b) => k + b.rounds.length, 0), first: bs[0].rounds.length, speed: th.v, name: NAME[th.key] || th.key, fibre: th.key === 'fpv_fiber' }; };
+  const mk = (v, th) => { const bs = bursts(v, th, false), end = th.viz.end; return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tF: v.t0 + bs[0].rounds[0].t_fire, tK: v.t0 + end.t, d: end.d, n: bs.length, rounds: bs.reduce((k, b) => k + b.rounds.length, 0), first: bs[0].rounds.length, speed: th.v, name: NAME[th.key] || th.key, fibre: th.key === 'fpv_fiber', R: th.R, t0th: v.t0 + th.t0, rds: bs[0].rounds.map(r => ({ tf: v.t0 + r.t_fire, tp: v.t0 + r.t_pass, d: r.d })) }; };
   const ok = (v, th) => /^fpv/.test(th.key) && th.defeated_by === 'hkoi_he' && th.viz.end.type === 'he_kill' && bursts(v, th, false).length > 0;
   const one = each(B, (v, th) => (ok(v, th) && bursts(v, th, false).length === 1 ? mk(v, th) : null)), multi = each(B, (v, th) => (ok(v, th) && bursts(v, th, false).length >= 2 ? mk(v, th) : null));
   if (!one) return null;
@@ -198,10 +198,10 @@ export const CHAPTERS = [
     return steps; } },
   { key: 'drones', name: 'Drones', setup: DRONES, find: findDrones, steps: M => { const o = M.one, kmh = Math.round(o.speed * 3.6 / 10) * 10; return [
     { key: 'drone', head: 'A drone has no beam to cut', from: Math.max(o.tL + 0.4, o.tF - 3), to: o.tF - 0.2, rates: [[0, 0.5]], freeze: 'before firing', id: o.id, pts: { kill: [o.d, 30] },
-      shot: { kind: 'chase', o: { back: 16 }, subj: 'missile', size: 0.5, min: 0 }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
+      shot: { kind: 'drone', o: { dist: 9 }, subj: 'missile', size: 0.5, min: 0.04 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
       text: () => `An FPV drone: a small racing aircraft with an anti-tank charge, flown by a pilot through a video link at about ${kmh} km/h. It has no guidance beam to cut, so HKOI uses its other magazine: airburst rounds that explode beside it.` },
     { key: 'airburst', head: 'Airburst', from: o.tF - 0.2, to: o.tK + 0.5, rates: [[o.tF - 0.2, 0.25]], freeze: 'shot down', id: o.id, pts: { kill: [o.d, 30] },
-      shot: { kind: 'chase', o: { back: 26 }, subj: 'missile', size: 0.5, min: 0 }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
+      shot: { kind: 'drone', o: { dist: 24 }, subj: 'missile', size: 0.5, min: 0.012 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
       facts: [['Rounds', String(o.first)], ['Down at', m0(o.d)], ['After firing', `${f2(o.tK - o.tF)} s`]],
       text: () => `The gun fires ${word(o.first)} airburst rounds set to explode beside the drone. It falls ${m0(o.d)} from the tank, ${f2(o.tK - o.tF)} s after the first round left the gun. In the model one full burst brings a drone down ${pct(M.cfg.hePk)} of the time before it can dodge (assumed).` },
   ]; } },
@@ -494,9 +494,9 @@ class Briefing {
   _diagram(st, t) {
     const dg = st && st.diagram; if (!dg || this.fault) { if (!this.diag.hidden) this.diag.hidden = true; return; }
     if (this.diag.hidden) this.diag.hidden = false;
-    const live = dg.kind === 'geo' || dg.kind === 'queue', key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
+    const live = dg.kind === 'geo' || dg.kind === 'queue' || dg.kind === 'drone', key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
     if (key === this.diagKey && (!live || tq === this.diagT)) return; this.diagKey = key; this.diagT = tq; const M = this.M; let html = '';
-    if (dg.kind === 'geo') html = geoSVG(M.D, t, dg.focus, M.TB); else if (dg.kind === 'queue') html = queueSVG(M.O, t); else if (dg.kind === 'layers') html = layerSVG(M.L, dg.focus); else if (dg.kind === 'guide') html = guideSVG(dg.focus);
+    if (dg.kind === 'geo') html = geoSVG(M.D, t, dg.focus, M.TB, this.W < 1150);   /* a narrow window: the panel shows only the lower diagram, large enough to read */ else if (dg.kind === 'queue') html = queueSVG(M.O, t); else if (dg.kind === 'layers') html = layerSVG(M.L, dg.focus); else if (dg.kind === 'guide') html = guideSVG(dg.focus); else if (dg.kind === 'drone') html = droneSVG(M.one, t, M.cfg);
     this.diag.innerHTML = html;
   }
   // where the step's subject is on the screen now, through the real camera (tests/beta/tour.py reads this; the node test does the same
