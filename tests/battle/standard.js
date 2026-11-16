@@ -7,6 +7,8 @@
 const { HK, Battle } = require('./load.js');
 const args = process.argv.slice(2), N = +(args.find(a => /^\d+$/.test(a)) || 200), SKILLS = (args.find(a => /^[a-z,]+$/.test(a) && !/^(off|auto)$/.test(a)) || 'trained,veteran').split(','), CDR = args.includes('auto') ? 'auto' : false;
 const cfg = HK.defaultConfig();
+/* engine settings for before/after comparisons (16 Nov 2026): sched=classic|smart, spin=0|1, relock=0|1 (Kornet re-lock with the real correction) */
+for (const a of args) { const m = a.match(/^(sched|spin|relock)=(\w+)$/); if (!m) continue; if (m[1] === 'sched') cfg.fc.scheduler = m[2]; else if (m[1] === 'spin') cfg.blind_spin = m[2] === '1'; else cfg.drift.relock_kornet = m[2] === '1'; }
 const FORCES = {
   light: { force: [{ type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },
   ambush: { force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },

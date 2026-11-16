@@ -214,8 +214,21 @@ cut when tau >= tau_need                           tested every 0.02 s against t
 transmission = exp(-tau)                           tau 4.6 is 1%
 ```
 Clear air: `tau_need` is about 4.5 at 1 km. Dust (beta 2.5) lowers it to about 2.1 at 1 km.
-A cut is permanent (`drift.relock = false`, Shawn's direction; optimistic). If re-lock is switched on, the missile gets
-its beam back when the line has been clear for 0.3 s, it is within 4 m of the beam and more than 200 m out.
+MODEL since 16 Nov 2026 (Shawn's order): the **Kornet can re-lock and must fly the correction** (`drift.relock_kornet = true`,
+`THREATS.kornet.relock_fly`). While blind it is tested every 0.02 s; it gets its beam back when all three hold:
+```
+line missile tail -> launcher clear (tau < tau_need) for reacquire_s = 0.3 s       ASSUMED: time to decode the coded beam again
+|missile - beam centre| <= beam_field_m = 4 m (beam centre includes the gunner's wander)   ASSUMED: the sight's zoom keeps the
+                                                                                    laser field a few metres across at every range
+missile still >= recapture_min_m = 200 m from the vehicle                          ASSUMED
+```
+Guidance then resumes **from the blind state** (position, velocity and fin acceleration where the missile really is) with the same
+autopilot as 3.10 (wn 2.5 rad/s, zeta 0.7, 0.12 s lag, 15 g). Whether it still hits comes out of that flight; the cloud can cut it
+again. The fire control sees it steering back and may fire again (the new burst starts from the missile's true state). If nothing
+stops it, its own corrected flight decides hit or miss (it already contains the gunner's wander). Record: `th.viz.relock =
+{ t, d, off_m, outcome: 'hit'|'miss'|'ground', t_end, miss_m, n }` (outcome 'hit' = back on target; Trophy may still stop it).
+Other kinds: a cut is still permanent. The old rule (`drift.relock = true`: back on the beam as if never cut, any beam-rider) is kept
+selectable for comparison only.
 SACLOS: when blocked, the cloud breaks the launcher's tracker with probability 0.6.
 
 **Rule of thumb for rounds needed (ESTIMATE, derived from 3.5 and 3.7, not from the engine):** N rounds placed with
@@ -253,7 +266,7 @@ lateral accel  = N(0, 1 m/s^2)
 vertical accel = -g*(1 - lift) + N(0, 1 m/s^2)       lift uniform 0..1 (default "drift")
                                                       lift = 0 "free fall" (spec sheet), lift = 1 "hold course"
 ```
-Kornet option `cfg.blind_spin` (Shawn, 16 Nov 2026; OFF by default): heading error of size uniform 15.7 to 31.4 mrad in a random direction round the spiral, lift 0 (pure drop), same trim noise.
+Kornet `cfg.blind_spin` (Shawn's figures 15 Nov, made the MODEL by his order of 16 Nov 2026; `blind_spin: false` gives the old draw): heading error of size uniform 15.7 to 31.4 mrad in a random direction round the spiral, lift 0 (pure drop), same trim noise.
 Blind position after time t: `y = y0 + v*t*hy + 0.5*ay*t^2`, same form for z.
 Outcome: ground short of the tank (z reaches 0), miss, or hit if at the vehicle plane
 `|y - tank| <= half width and |z - centre| <= half height` (half width 1.85 m front, 3.95 m flank; half height 1.2 m,
@@ -298,7 +311,7 @@ with 120 g: 56.3% (72% cut).
 | Payload | about 40 g | 40 g | as much as fits: 50 to 65 g estimate |
 | Envelope | 800 to 3,500 m | meet 400 to 2,500 m, best 900 m for Kornet | open |
 | Blind missile | free fall | drift with random lift | open (unknown real behaviour) |
-| Re-lock | not covered | off | off |
+| Re-lock | not covered | Kornet: re-lock with the real correction (16 Nov); others: off | as MODEL |
 | Magazine | 80 + 40 | 150 + 150 | open |
 
 ## 6. Open design questions
