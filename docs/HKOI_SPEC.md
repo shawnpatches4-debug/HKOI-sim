@@ -253,6 +253,7 @@ lateral accel  = N(0, 1 m/s^2)
 vertical accel = -g*(1 - lift) + N(0, 1 m/s^2)       lift uniform 0..1 (default "drift")
                                                       lift = 0 "free fall" (spec sheet), lift = 1 "hold course"
 ```
+Kornet option `cfg.blind_spin` (Shawn, 16 Nov 2026; OFF by default): heading error of size uniform 15.7 to 31.4 mrad in a random direction round the spiral, lift 0 (pure drop), same trim noise.
 Blind position after time t: `y = y0 + v*t*hy + 0.5*ay*t^2`, same form for z.
 Outcome: ground short of the tank (z reaches 0), miss, or hit if at the vehicle plane
 `|y - tank| <= half width and |z - centre| <= half height` (half width 1.85 m front, 3.95 m flank; half height 1.2 m,

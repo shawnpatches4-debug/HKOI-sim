@@ -7,7 +7,7 @@ const OBS_G = { beam_rider: 1, radio_saclos: 1 };
 // FPV operator skill (assumed, not measured): jink = multiplier on the unpredictable manoeuvre while rounds are in flight; feint = chance a burst is drawn by a break-away and wasted
 const DRONE_SKILL = { novice: { jink: 0.4, feint: 0 }, trained: { jink: 1, feint: 0 }, expert: { jink: 1.7, feint: 0.25 } };
 const THREATS = {
-  kornet:    { name: 'Kornet-class ATGM', short: 'Kornet', guidance: 'beam_rider', speed: 250, range_min: 300, range_max: 5500, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.5, weave: 0, launch_h: 1.2, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
+  kornet:    { blind_spin: { cone_mrad_lo: 15.7, cone_mrad_hi: 31.4, lift: 0 }, name: 'Kornet-class ATGM', short: 'Kornet', guidance: 'beam_rider', speed: 250, range_min: 300, range_max: 5500, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.5, weave: 0, launch_h: 1.2, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   vikhr:     { name: 'Vikhr-class (helicopter)', short: 'Vikhr', guidance: 'beam_rider', speed: 610, range_min: 1500, range_max: 8000, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.0, weave: 7.0, launch_h: 140, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   saclos:    { name: 'Radio-command SACLOS', short: 'SACLOS', guidance: 'radio_saclos', speed: 400, range_min: 400, range_max: 6000, rcs: 0.02, laser: false, strength: 0, los_off: 2.0, weave: 0, launch_h: 30, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   sal:       { name: 'Semi-active laser missile', short: 'SAL', guidance: 'sal', speed: 300, range_min: 500, range_max: 8000, rcs: 0.02, laser: true, strength: 1.0, los_off: 0, weave: 0, launch_h: 60, kill: 0.55, loss: 'drift', sd_s: 2, rf: true },
@@ -130,9 +130,17 @@ function blockWindow(puffs, alpha, K, wash, wc, need, tmax, ownTau, reacq_s) {
   const win = i0 < 0 ? null : [i0 * dt, i1 < 0 ? Infinity : i1 * dt];
   return { win, own_s: n > 1 ? own * dt : 0 };
 }
-function drawDrift(rng, d, loss) {
-  const lift = loss === 'hold_last' ? 1 : loss === 'free_fall' ? 0 : rng.uniform(d.lift_lo, d.lift_hi);
-  return { hy: rng.normal(0, d.heading_mrad * 1e-3), hz: rng.normal(0, d.heading_mrad * 1e-3), ay: rng.normal(0, d.trim_acc), az: -G * (1 - lift) + rng.normal(0, d.trim_acc) };
+function drawDrift(rng, d, loss, tt) {
+  /* A rolling-airframe beam-rider (tt.blind_spin, the Kornet): when the beam is lost its fins go neutral, the roll keeps it from
+     tumbling, and it leaves its corkscrew along the tangent it was on, then drops with no fin lift. Figures from Shawn (15 Nov 2026):
+     spiral radius 0.5 to 1.5 m gives a nose 0.9 to 1.8 degrees off the line (15.7 to 31.4 mrad), in a random direction round the
+     spiral; lift 0 (pure ballistic drop). His assumption, not a measured value. */
+  /* the same random draws, in the same order, as without it, so every other outcome of a battle stays exactly as before */
+  const bs = tt && tt.blind_spin, lift = loss === 'hold_last' ? 1 : loss === 'free_fall' ? 0 : rng.uniform(d.lift_lo, d.lift_hi);
+  const n1 = rng.normal(0, 1), n2 = rng.normal(0, 1), ay = rng.normal(0, d.trim_acc), nz = rng.normal(0, d.trim_acc);
+  if (bs) { const u = Math.exp(-(n1 * n1 + n2 * n2) / 2), m = (bs.cone_mrad_lo + (bs.cone_mrad_hi - bs.cone_mrad_lo) * u) * 1e-3, a = Math.atan2(n2, n1);   /* u uniform 0..1 and the angle uniform round the spiral */
+    return { hy: m * Math.cos(a), hz: m * Math.sin(a), ay, az: -G * (1 - bs.lift) + nz }; }
+  return { hy: n1 * d.heading_mrad * 1e-3, hz: n2 * d.heading_mrad * 1e-3, ay, az: -G * (1 - lift) + nz };
 }
 const driftPos = (p, y0, z0, v, tau) => [y0 + v * tau * p.hy + 0.5 * p.ay * tau * tau, z0 + v * tau * p.hz + 0.5 * p.az * tau * tau];
 function blindFlight(p, y0, z0, v, D, hw, hh, slope, vlat) {
@@ -493,7 +501,7 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
           if (b === M && tt.guidance === 'radio_saclos' && b.saclos == null) b.saclos = rng.random() > ob.saclos_effect;
           if (!b.saclos) {
             b.mode = 'blind'; b.tLoss = tn; b.clear = 0; b.lossX = b.x;
-            b.drift = drawDrift(rng, dr, loss); b.vy += v * b.drift.hy; b.vz += v * b.drift.hz;
+            b.drift = drawDrift(rng, dr, loss, cfg.blind_spin === true ? tt : null);   /* off by default until Shawn chooses: see docs/WORKLOG.md 16 Nov */ b.vy += v * b.drift.hy; b.vz += v * b.drift.hz;
             if (b === M && win0 == null) win0 = tn;
           }
         } else if (b.mode === 'blind') {
