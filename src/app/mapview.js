@@ -46,10 +46,30 @@ export class MapView {
     if (this.shed) { const s = this.shed, [a, b] = this.toScreen(s.e - s.R, s.n + s.R); x.imageSmoothingEnabled = true; x.drawImage(s.c, a, b, 2 * s.R * k, 2 * s.R * k); }
     const dot = (e, n, col, rad, label, ring) => { const [a, b] = this.toScreen(e, n); x.beginPath(); x.arc(a, b, rad * dpr, 0, 6.283); if (ring) { x.strokeStyle = col; x.lineWidth = 2 * dpr; x.setLineDash([4 * dpr, 3 * dpr]); x.stroke(); x.setLineDash([]); } else { x.fillStyle = col; x.fill(); x.strokeStyle = '#000'; x.lineWidth = 1.2 * dpr; x.stroke(); } if (label) { x.font = `${600} ${11 * dpr}px ui-monospace, Menlo, monospace`; const tw = x.measureText(label).width; x.fillStyle = 'rgba(0,0,0,.7)'; x.fillRect(a + 9 * dpr, b - 8 * dpr, tw + 8 * dpr, 16 * dpr); x.fillStyle = col; x.fillText(label, a + 13 * dpr, b + 4 * dpr); } };
     for (const u of st.units || []) { if (!u.alive) continue; if (u.known) dot(u.e, u.n, '#ff5a4d', 6, u.name); else if (st.showAll) dot(u.e, u.n, '#ff9d8f', 6, `${u.name} · ${u.state}`, true); }
+    this._cuts(x, st, dpr);   /* where HKOI's cloud cut a missile's guidance: its track ends in a cut marker */
     for (const m of st.missiles || []) dot(m.e, m.n, '#ffb347', 3.5);
     if (this.overlay) this.overlay(x, dpr, st);   /* command.js: the player's order and its route */
     if (st.tank) { const T = st.tank, [a, b] = this.toScreen(T.e, T.n), h = T.h * Math.PI / 180; x.save(); x.translate(a, b); x.rotate(h); x.fillStyle = '#39d98a'; x.strokeStyle = '#03130b'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(7 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-7 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore(); }
     this._scale(x, k, dpr);
+  }
+  // The latest engagement's cuts, from the record: each cut missile's track from its launcher to the point of the cut (a solid line)
+  // and on to where it ended (dotted), a cross in HKOI blue at the cut with its distance. Shown from the cut until 20 s after the engagement.
+  _cuts(x, st, dpr) {
+    const B = st.battle; if (!B || !B.volleys || !B.volleys.length || st.t == null) return; const v = B.volleys[B.volleys.length - 1], tv = st.t - v.t0;
+    if (tv < 0 || st.t > (v.tEnd || v.t0) + 20) return;
+    for (let i = 0; i < v.rec.threats.length; i++) {
+      const th = v.rec.threats[i], sv = th.viz && th.viz.sever; if (!sv || sv.smoke || tv < sv.t) continue;
+      const l = v.launches.find(q => q.u.id === th.uid) || v.launches[i]; if (!l) continue; const L = l.u0 || l.u;
+      const Tc = B.tankAt(v.t0 + sv.t), at = (T, d) => { const f = Math.min(1, d / Math.max(1, th.R)); return [T.e + (L.e - T.e) * f, T.n + (L.n - T.n) * f]; };
+      const [ce, cn] = at(Tc, sv.d), [a0, b0] = this.toScreen(L.e, L.n), [a1, b1] = this.toScreen(ce, cn), e = th.viz.end || {};
+      x.lineCap = 'round'; x.strokeStyle = 'rgba(255, 120, 90, .9)'; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(a0, b0); x.lineTo(a1, b1); x.stroke();
+      if (tv >= e.t) { const Te = B.tankAt(v.t0 + Math.min(e.t, (v.tEnd || 1e9) - v.t0)), d = e.type === 'ground' && e.d != null ? e.d : 0, [ee, en] = at(Te, d), [a2, b2] = this.toScreen(ee, en);
+        x.strokeStyle = 'rgba(143, 220, 255, .85)'; x.setLineDash([2 * dpr, 4 * dpr]); x.beginPath(); x.moveTo(a1, b1); x.lineTo(a2, b2); x.stroke(); x.setLineDash([]); }
+      const r = 6 * dpr; x.strokeStyle = '#061018'; x.lineWidth = 5 * dpr; x.beginPath(); x.moveTo(a1 - r, b1 - r); x.lineTo(a1 + r, b1 + r); x.moveTo(a1 + r, b1 - r); x.lineTo(a1 - r, b1 + r); x.stroke();
+      x.strokeStyle = '#8fdcff'; x.lineWidth = 2.6 * dpr; x.stroke();
+      x.font = `700 ${11 * dpr}px ui-monospace, monospace`; const txt = `CUT ${Math.round(sv.d).toLocaleString('en-US')} m`, w = x.measureText(txt).width;
+      x.fillStyle = 'rgba(4, 10, 14, .78)'; x.fillRect(a1 + 9 * dpr, b1 - 8 * dpr, w + 8 * dpr, 16 * dpr); x.fillStyle = '#8fdcff'; x.fillText(txt, a1 + 13 * dpr, b1 + 4 * dpr);
+    }
   }
   // scale bar
   _scale(x, k, dpr) { const cv = this.cv;

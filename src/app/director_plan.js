@@ -22,6 +22,7 @@ export const ordinal = n => (n > 0 && n < ORDINALS.length ? ORDINALS[n] : n + 't
 export const compass = brg => POINTS[Math.round((((brg % 360) + 360) % 360) / 45) % 8];
 export const range = m => (m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.max(10, Math.round(m / 10) * 10) + ' m');
 const metres = m => (m < 1 ? 'less than a metre' : Math.round(m) + ' m');
+const exact = m => Math.round(m).toLocaleString('en-US') + ' m';   /* the cut distance as the headline and the label give it */
 const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
 const tick = t => Math.floor(t * 10 + 1e-6);
 
@@ -148,10 +149,14 @@ export class Plan {
         if (b.kind !== 'obs' || !b.puffs || !b.puffs.length) return;
         let x0 = 1e9, x1 = -1e9, xs = 0; for (const p of b.puffs) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); xs += p.x; }
         const tB = t0 + (b.t_ref != null ? b.t_ref : b.rounds[0].t_pass), tCut = res.cut && res.t_cut != null ? t0 + res.t_cut : null, tLast = t0 + (res.t_last != null ? res.t_last : b.rounds[b.rounds.length - 1].t_pass);
-        this._cand(Object.assign({ a: tB - 0.3, b: Math.min(tE - 0.9, (tCut != null ? tCut : tLast) + 1.3, tB + 7), known: K, pri: (tCut != null ? 7.5 : 6) + bonus * 0.4, min: 1.5, rig: 'cloud', x: xs / b.puffs.length, span: x1 - x0, label: 'the cloud across the guidance line' }, id));
+        // the cloud across the line; with a cut it holds on the cut for 2.6 s (the line breaking, the ring, the label) unless the flight ends sooner
+        this._cand(Object.assign({ a: tB - 0.3, b: tCut != null ? Math.min(tCut + 2.6, Math.max(tE - 0.4, tCut + 1.6), tB + 9) : Math.min(tE - 0.9, tLast + 1.3, tB + 7), known: K, pri: (tCut != null ? 8 : 6) + bonus * 0.4, min: 1.5, rig: 'cloud', x: xs / b.puffs.length, span: x1 - x0, cut: tCut, label: tCut != null ? 'the cut: the guidance line breaks at the cloud' : 'the cloud across the guidance line' }, id));
         if (tCut != null && res.outcome === 'drift_hit') this._cap(tCut, K, 5, `The cloud cuts its guidance only ${range(res.sever || 0)} out: too late to throw it off`, v.i, th.idx);
         else if (tCut != null) {
-          this._cap(tCut, K, 8, guide === 'radio_saclos' ? 'The cloud hides the missile from its launcher: it is blind' : 'The cloud cuts the guidance beam: the missile is blind', v.i, th.idx);
+          const at = `CUT at ${exact(res.sever || 0)}: `;
+          this._cap(tCut, K, 8, at + (guide === 'radio_saclos' ? 'the cloud hides the missile from its launcher, it is blind' : 'the cloud breaks the guidance beam, the missile is blind'), v.i, th.idx);
+          const rl = th.viz.relock == null ? null : typeof th.viz.relock === 'number' ? th.viz.relock : th.viz.relock.t;
+          if (rl != null) this._cap(t0 + rl, K, 7, 'The cloud clears: the missile finds its beam again', v.i, th.idx);
           if (th === star && !slowed) { slowed = true; this.slows.push([tCut - 0.2, tCut + 0.3, K]); }
           if (!again || again.w < 2) again = { w: 2, from: tCut - 2.4, to: Math.min(tE + 1.2, tCut + 5), shot: Object.assign({ rig: 'cloud', high: true, x: xs / b.puffs.length, span: x1 - x0, label: 'the cut again, from the other side' }, id) };
         } else if (j === bursts.length - 1 && by !== 'hkoi_he') {
@@ -174,7 +179,7 @@ export class Plan {
       }
       else if (by === 'aps') text = null;   /* told with the Trophy shot below */
       else if (by === 'hkoi_he') { text = `HKOI shoots the ${name} down`; pri = 7; }
-      else if (hkoi) { pri = 7; text = end.type === 'ground' && end.d != null ? `Blind, it flies into the ground ${range(end.d)} short of the vehicle` : end.miss != null ? `It flies wide by ${metres(end.miss)}` : 'Blind, it misses'; }
+      else if (hkoi) { pri = 7; text = end.type === 'ground' && end.d != null ? `Blind, it flies into the ground ${range(end.d)} short of the vehicle` : end.miss != null ? `Blind, it misses by ${end.miss < 10 ? end.miss.toFixed(1) + ' m' : metres(end.miss)}` : 'Blind, it misses'; }
       else if (by === 'gunner_jitter') text = end.short != null ? `The enemy gunner's aim wanders: it falls ${metres(end.short)} short` : end.miss != null ? `The enemy gunner's aim wanders: it misses by ${metres(Math.abs(end.miss))}` : 'The enemy gunner misses';
       else if (by === 'suppressed_aim') text = 'Machine-gun fire shakes the enemy gunner: his missile misses';
       else if (by === 'counter_fire') text = 'Machine-gun fire drives the gunner off his sight: his missile flies on unguided';

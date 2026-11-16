@@ -155,6 +155,17 @@ export class VolleyView {
     this.pos(v, th, l, Math.min(tv, end.t), this.tmp);   /* put the working values back for the missile's own drawing */
   }
 
+  // For the enemy gunner's sight (src/app/enemyviews.js): what his sight shows of his own missile once HKOI's cloud has cut it.
+  // A Kornet or Konkurs sight tracks the missile's tracer flare; behind the cloud the flare is gone and the missile is no longer steered.
+  sightNote(u, t) {
+    const B = this.b, v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null; if (!v || !u) return null; const tv = t - v.t0;
+    for (const th of v.rec.threats) { if (th.uid !== u.id) continue; const cs = cutState(th, tv); if (!cs) continue;
+      if (cs.phase === 'blind') return 'TRACER LOST IN THE CLOUD   ·   NO GUIDANCE';
+      if (cs.phase === 'relock') return tv < th.viz.end.t ? 'TRACER REACQUIRED   ·   GUIDING' : null;
+      if (tv < th.viz.end.t + 3) return 'MISSILE LOST   ·   NO HIT'; }
+    return null;
+  }
+
   dispose() {
     this.s.scene.remove(this.group); this.transit.clear(); this.live.clear(); this.fly.length = 0; this.later.length = 0;
     this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut]) { L.geo.dispose(); L.line.material.dispose(); } this.marks.dispose(); this.labels.dispose();

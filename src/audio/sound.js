@@ -74,6 +74,7 @@ export const EVENTS = {
     else if (/abandon|bail/.test(f)) { s.hatch(true); }
     else s.explosion(d, 1.6, i);
   },
+  cut: s => s.cutCue(),                                                                         // HKOI's cloud has cut a missile's guidance: a short bright two-note chime
   order: s => s.blip('order'),                                                                  // the player gave an order: a short tone in the headset
 };
 

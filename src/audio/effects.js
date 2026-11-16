@@ -391,6 +391,14 @@ export const Effects = {
     this.explosion(d, size, { ground: true, delay: flight });
   },
   // a hatch: opening (hinge, the lid against its stop) or closing (the heavy lid dropping, the latch). Heard from the seats.
+  // HKOI's cloud has cut a missile's guidance: a crisp click and two rising notes, short and clean, heard in every seat and outside
+  // (it is the simulator's own signal of success, like the cloud's highlight, not a sound the battlefield makes). About 0.25 s.
+  cutCue() {
+    if (!this._live()) return; const M = this.mix, v = M.voice('ui', { direct: true });
+    M.noise(v.in, v.t, { dur: 0.012, attack: 0.0005, type: 'bandpass', f0: 3200, q: 1.5, gain: 0.12 });
+    M.tone(v.in, v.t + 0.01, { f0: 1175, dur: 0.07, gain: 0.07, attack: 0.002, type: 'triangle' });
+    M.tone(v.in, v.t + 0.09, { f0: 1760, dur: 0.14, gain: 0.07, attack: 0.002, type: 'triangle' });
+  },
   hatch(open = true) {
     if (!this._live() || this.lite || this.seat === 'out') return; const M = this.mix, v = M.voice('vehicle', { direct: true, cabin: 0.4 }); if (M.sample('hatch', v)) return;
     if (open) M.tone(v.in, v.t, { f0: 760, f1: 1150, dur: 0.22, gain: 0.03, attack: 0.05, type: 'triangle' });   /* hinge */

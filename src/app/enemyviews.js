@@ -102,7 +102,7 @@ export class EnemyViews {
         const top = up ? `${S.name}   ${S.mag}×   field ${S.fov}°` : 'NOT AT THE SIGHT';
         const txt = `${u.spec.name.toUpperCase()} #${u.id + 1}   RNG ${String(Math.round(R / 10) * 10).padStart(4, '0')} m   ${u.spec.indirect ? 'DRONES' : 'ROUNDS'} ${u.ammo}\n${(o.battle.intentOf ? o.battle.intentOf(u) : unitDoing(u)).toUpperCase()}${up ? (this.los ? '' : '   ·   NO LINE OF SIGHT TO THE VEHICLE') : ''}`;
         if ($('esight-sym').textContent !== top) $('esight-sym').textContent = top;
-        if ($('esight-data').textContent !== txt) $('esight-data').textContent = txt;
+        { const lost = o.volleys && o.volleys.sightNote ? o.volleys.sightNote(u, o.t) : null, d = $('esight-data'), tx = lost ? txt + '\n' + lost : txt, c = lost ? '#ffd27a' : ''; if (d.textContent !== tx) d.textContent = tx; if (d.style.color !== c) d.style.color = c; }   /* cutfx: the sight loses its own missile in HKOI's cloud (volleyview.sightNote) */
       }
     }
     if (o.menuOn && slow) this.menu(o, u);

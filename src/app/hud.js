@@ -22,6 +22,12 @@ const clock = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStar
 const brg3 = d => String(Math.round(((d % 360) + 360) % 360) % 360).padStart(3, '0');
 const SK = t => t.length > 14 ? t.replace(/[\d.]+/g, '#') : t;
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+const km = m => Math.round(m).toLocaleString('en-US') + ' m';
+// how a cut missile's flight ended, from the record (the same words as the label over it, src/render/cutfx.js)
+const ENDS = e => e.type === 'miss' ? (e.miss != null ? `missed by ${e.miss < 10 ? e.miss.toFixed(1) : Math.round(e.miss)} m` : 'missed') : e.type === 'ground' ? 'into the ground' : e.type === 'self_destruct' ? 'self-destructed' : e.type === 'aps_kill' ? 'Trophy destroyed it' : e.type === 'he_kill' ? 'shot down' : e.type === 'hit' ? 'hit the vehicle' : 'lost';
+// the headline's own style for a cut: HKOI blue, bold, a cross for a bullet, and a short glow when it appears
+const CUT_CSS = `#threats .do.cut { color: #8fdcff; font-weight: 700; } #threats .do.cut::before { content: '\u2715'; } #threats .t.cutrow { background: rgba(143, 220, 255, .26); box-shadow: 0 0 12px rgba(143, 220, 255, .55); border-radius: 4px; }
+  #threats .t.done { opacity: .9; } #threats .t.done b { color: #cfeeff; }`;
 
 export class Hud {
   // $: element by id, el: element maker (tag, class, text), store: { get, set } for the folded panels
@@ -38,6 +44,7 @@ export class Hud {
     this.crewWas = {}; this.crewLast = null;   // each man's last state, and who changed most recently
     this.n = {};                 // the panels' elements, by name
     this.build();
+    if (typeof document !== 'undefined' && !document.getElementById('cut-css')) document.head.append(Object.assign(document.createElement('style'), { id: 'cut-css', textContent: CUT_CSS }));
   }
 
   // ---- the four panels are built once; later only their texts and bar widths change
@@ -142,10 +149,14 @@ export class Hud {
       if (!r) { r = { R: m.range, t: now, v: 0 }; this.rate.set(m.th, r); }
       else if (now - r.t > 0.25) { r.v = (r.R - m.range) / (now - r.t); r.R = m.range; r.t = now; }
       if (r.v > 5) tti = m.range / r.v;
-      const [doing, kind] = this.response(m, tv);
-      out.push({ name: (m.th && WEAPON[m.th.key]) || (m.tt && (m.tt.short || m.tt.name)) || (m.drone ? 'Drone' : 'Missile'), range: m.range, brg, hour: Math.round(rel / 30) % 12 || 12, cued: m.cued, tracked: m.tracked, drone: m.drone, tti, doing, kind });
+      const [doing, kind, flash] = this.response(m, tv);
+      out.push({ name: (m.th && WEAPON[m.th.key]) || (m.tt && (m.tt.short || m.tt.name)) || (m.drone ? 'Drone' : 'Missile'), range: m.range, brg, hour: Math.round(rel / 30) % 12 || 12, cued: m.cued, tracked: m.tracked, drone: m.drone, tti, doing, kind, flash: !!flash });
     }
-    return out.sort((a, b) => a.range - b.range);
+    out.sort((a, b) => a.range - b.range);
+    // a missile HKOI's cloud has cut stays in the headline for 4 s after its flight ends, with how it ended (from the record)
+    if (v && tv > 0) for (const th of v.rec.threats) { const sv = th.viz.sever, e = th.viz.end; if (!sv || sv.smoke || !e || tv < e.t || tv > e.t + 4 || tv < sv.t) continue;
+      out.push({ name: WEAPON[th.key] || th.key, range: null, brg: th.brg, hour: null, cued: true, tracked: false, done: true, tti: null, doing: `CUT at ${km(sv.d)} · ${ENDS(e)}`, kind: 'cut' }); }
+    return out;
   }
   // What the defences are doing about one threat right now, in plain words, from the engine's own record of the engagement.
   // Only what has already happened by this moment is read: when HKOI opened fire, where its rounds meet the missile, where
@@ -156,7 +167,8 @@ export class Hud {
     if (viz.aps && tv >= viz.aps.t) return ['Trophy has fired', 'aps'];
     if (viz.fired != null && tv >= viz.fired) {
       if (m.drone) return ['HKOI firing airburst', 'hk'];
-      if (th.sever_m != null && /^hkoi/.test(th.defeated_by || '') && m.range <= th.sever_m) return ['cloud placed, guidance cut', 'hk'];
+      const sv = viz.sever, rl = viz.relock == null ? null : typeof viz.relock === 'number' ? viz.relock : viz.relock.t;
+      if (sv && !sv.smoke && tv >= sv.t) return rl != null && tv >= rl ? [`cut at ${km(sv.d)}, but it re-locked`, 'hk'] : [`CUT at ${km(sv.d)}: blind`, 'cut', tv - sv.t < 1.5];   /* the engine's own cut, the moment it happens */
       if (th.meet != null && m.range <= th.meet) return ['HKOI cloud placed in its path', 'hk'];
       return ['HKOI firing obscurant', 'hk'];
     }
@@ -167,15 +179,16 @@ export class Hud {
 
   // ---- engineer display: the headline
   headline(list) {
-    const sig = list.map(x => `${x.name},${Math.round(x.range / 10)},${Math.round(x.brg)},${x.doing},${x.tti == null ? '' : x.tti.toFixed(1)}`).join('|') || 'none';
+    const sig = list.map(x => `${x.name},${Math.round(x.range / 10)},${Math.round(x.brg)},${x.doing},${x.tti == null ? '' : x.tti.toFixed(1)},${x.flash ? 1 : 0}`).join('|') || 'none';
     this._put('threats', sig, box => {
       const el = this.el;
       if (!list.length) { box.className = 'quiet'; box.append(el('span', null, 'No threats in the air')); return; }
+      const air = list.filter(x => !x.done).length;
       box.className = list.some(x => x.tracked) ? 'hot' : 'warm';
-      box.append(el('h3', null, list.length === 1 ? 'Inbound' : `Inbound: ${list.length}`));
+      box.append(el('h3', null, air === 0 ? 'Defeated' : air === 1 ? 'Inbound' : `Inbound: ${air}`));
       for (const x of list.slice(0, 3)) {
-        const d = el('div', 't' + (x.cued ? '' : ' unk'));
-        d.append(el('b', null, x.name), el('span', 'num', `${(x.range / 1000).toFixed(2)} km`), el('span', 'num', `${x.hour} o'clock · ${brg3(x.brg)}°`), el('span', 'num', x.tti != null ? `${x.tti.toFixed(1)} s` : ''), el('span', 'do ' + x.kind, x.doing));
+        const d = el('div', 't' + (x.cued ? '' : ' unk') + (x.flash ? ' cutrow' : '') + (x.done ? ' done' : ''));   /* the row of a cut missile is lit for the first 1.5 s after the cut */
+        d.append(el('b', null, x.name), el('span', 'num', x.range == null ? '' : `${(x.range / 1000).toFixed(2)} km`), el('span', 'num', x.hour == null ? '' : `${x.hour} o'clock · ${brg3(x.brg)}°`), el('span', 'num', x.tti != null && !x.done ? `${x.tti.toFixed(1)} s` : ''), el('span', 'do ' + x.kind, x.doing));
         box.append(d);
       }
       if (list.length > 3) box.append(el('div', 'more', `and ${list.length - 3} more`));
@@ -260,7 +273,7 @@ export class Hud {
 
   // ---- simple display
   warning(list) {
-    const known = list.filter(x => x.cued), w = this.$('warn'); this._show('warn', known.length > 0); if (!known.length) return;
+    const known = list.filter(x => x.cued && !x.done), w = this.$('warn'); this._show('warn', known.length > 0); if (!known.length) return;
     const x = known[0], head = `${x.name.toUpperCase()} INBOUND`, more = known.length > 1 ? `   +${known.length - 1} more` : '';
     const sub = `${x.hour} o'clock · bearing ${brg3(x.brg)} · ${(x.range / 1000).toFixed(1)} km${more}`, cls = x.tracked ? 'trk' : '';
     if (w.className !== cls) w.className = cls;

@@ -19,6 +19,7 @@ const CSS = `
   #dir-tag span { padding: 5px 8px; border-radius: 5px; background: rgba(4, 8, 7, .8); border: 1px solid var(--line, #2a5); color: var(--accent, #39d98a); }
   #dir-tag span.slow { color: #05130c; background: var(--warn, #ffb347); border-color: var(--warn, #ffb347); }
   #dir-tag span.idle { color: var(--dim, #93a39a); }
+  #rp-ticks i.c { background: #8fdcff; height: 12px; width: 3px; box-shadow: 0 0 5px rgba(143, 220, 255, .8); }   /* a cut by HKOI's cloud on the replay bar */
 `;
 
 export class Director {
