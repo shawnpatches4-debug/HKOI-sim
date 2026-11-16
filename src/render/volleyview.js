@@ -38,11 +38,12 @@ export class VolleyView {
     this.cloud = new ObscurantCloud(); this.group.add(this.cloud.mesh);
     // guidance lines: one object for whole lines, one (dashed) for the part that is cut
     this.beamOn = this._lines(false); this.beamCut = this._lines(true);
+    this.blindLine = this._lines(false, 5.5);   /* the path a cut missile flies blind: wider than the guidance line, so it reads at a distance */
     this.marks = new CutMarks(); this.group.add(this.marks.mesh); this.labels = new CutLabels(); this._q0 = new THREE.Vector3(); this._q1 = new THREE.Vector3(); this._qc = new THREE.Vector3();   /* the cut highlight (cutfx.js) */
   }
-  _lines(dashed) {
+  _lines(dashed, wide) {
     const geo = new LineSegmentsGeometry(); geo.setPositions(new Float32Array(MAXBEAM * 2 * 6)); geo.setColors(new Float32Array(MAXBEAM * 2 * 6));
-    const mat = new LineMaterial({ linewidth: dashed ? 2.0 : 3.2   /* pixels: at 2.2 the line all but vanished on a 960 x 540 picture */, vertexColors: true, transparent: true, opacity: dashed ? 0.6 : 0.9, dashed, dashSize: 7, gapSize: 9, depthWrite: false, fog: false });
+    const mat = new LineMaterial({ linewidth: wide || (dashed ? 2.0 : 3.2)   /* pixels: at 2.2 the line all but vanished on a 960 x 540 picture */, vertexColors: true, transparent: true, opacity: dashed ? 0.6 : 0.9, dashed, dashSize: 7, gapSize: 9, depthWrite: false, fog: false });
     const line = new LineSegments2(geo, mat); if (dashed) line.computeLineDistances(); line.frustumCulled = false; line.renderOrder = 8;   /* drawn before the cloud, so the cloud lies over the line where it covers it */ geo.instanceCount = 0; this.group.add(line);
     return { line, geo, pos: geo.attributes.instanceStart.data, col: geo.attributes.instanceColorStart.data, dist: dashed ? geo.attributes.instanceDistanceStart.data : null, n: 0 };
   }
@@ -143,7 +144,7 @@ export class VolleyView {
     const fade = cs.phase === 'end' ? Math.max(0, 1 - (tv - end.t) / 1.5) : 1, fromSight = cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600;
     if (fade > 0 && te > tc) {   /* the blind path, cut point to the missile (or to where it ended), brighter toward the missile */
       const N = 8, A = this._q0, B = this._q1; this.pos(v, th, l, tc, A);
-      for (let k = 1; k <= N; k++) { const tk = tc + (tr - tc) * k / N; this.pos(v, th, l, tk, B); const w = (0.35 + 0.65 * k / N) * fade; this._seg(this.beamOn, A, B, BLIND, BLIND, w * 0.9, w); A.copy(B); }
+      for (let k = 1; k <= N; k++) { const tk = tc + (tr - tc) * k / N; this.pos(v, th, l, tk, B); const w = (0.35 + 0.65 * k / N) * fade; this._seg(this.blindLine, A, B, BLIND, BLIND, w * 0.9, w); A.copy(B); }
     }
     const P = this.pos(v, th, l, tc, this._qc);   /* where the missile was when it went blind */
     if (cs.ring > 0) { const d = cam.position.distanceTo(P), px = Math.max(0.6, d * pixA), f = cs.ring; this.marks.add(P, px * (10 + 46 * f * (2 - f)), BLIND, 1.4 * (1 - f), true); if (f < 0.3) this.marks.add(P, px * 18, [1, 1, 1], 1.3 * (1 - f / 0.3), false); }
@@ -168,7 +169,7 @@ export class VolleyView {
 
   dispose() {
     this.s.scene.remove(this.group); this.transit.clear(); this.live.clear(); this.fly.length = 0; this.later.length = 0;
-    this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut]) { L.geo.dispose(); L.line.material.dispose(); } this.marks.dispose(); this.labels.dispose();
+    this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut, this.blindLine]) { L.geo.dispose(); L.line.material.dispose(); } this.marks.dispose(); this.labels.dispose();
   }
   // After a jump in time (replay): everything that has already happened in the current engagement is taken as seen, so old
   // explosions and muzzle flashes do not all go off at once. Lingering smoke is dropped; the cloud is rebuilt as old as it should be.
@@ -217,7 +218,7 @@ export class VolleyView {
     for (let i = this.later.length - 1; i >= 0; i--) if (t >= this.later[i].t) { const e = this.later[i]; this.later.splice(i, 1); e.fn(); }
     this._transit(t); this._flyers(t);
     const v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null;
-    if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.marks.flush(); this.labels.flush(); return; }
+    if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this._flush(this.blindLine); this.marks.flush(); this.labels.flush(); return; }
     const tv = t - v.t0, rec = v.rec; this._first(v); this.aimAt = null;
     this._sight = false; for (const l of v.launches) if (l.u0 && Math.hypot(s.camera.position.x - l.u0.e, s.camera.position.z + l.u0.n) < 40) this._sight = true;   /* looking through an enemy sight: only that sight's own label is shown */
     if (this.curV !== v.i) { this.curV = v.i; for (const [k, st] of this.live) if (!k.startsWith(v.i + ':')) { this.group.remove(st.mesh); this.live.delete(k); } }   /* nothing of an earlier engagement is left hanging in the air */
@@ -332,7 +333,7 @@ export class VolleyView {
       if (!a.kill) fx.airburst(tgt.x, tgt.y, tgt.z, 0.5);
       this.emit('aps', tgt, {}); s.blast(port, 0.5, false);
     }
-    this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.marks.flush(); this.labels.flush(); this.lastT = t;
+    this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this._flush(this.blindLine); this.marks.flush(); this.labels.flush(); this.lastT = t;
   }
 
   // the vehicle is destroyed: fire that stays, a black column, and ammunition going up over the next few seconds

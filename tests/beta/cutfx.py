@@ -26,7 +26,8 @@ CAM = r'''(([tv, side, up]) => { const B = __beta, C = window.__cut, v = B.battl
   const V = B.scene.camera.position.constructor, P = B.volleys.pos(v, th, l, Math.min(tv, th.viz.end.t), new V()), T = B.battle.tankAt(v.t0 + tv), L = l.u0 || l.u;
   const dE = L.e - T.e, dN = L.n - T.n, d = Math.hypot(dE, dN), pe = dN / d, pn = -dE / d;   /* to the right of the line */
   B.cams.set('orbit'); B.cams.mode = 'free'; B.scene.controls.enabled = false; const cam = B.scene.camera; cam.up.set(0, 1, 0);
-  cam.position.set(P.x + pe * side - dE / d * side * 0.35, P.y + up, P.z - pn * side + dN / d * side * 0.35); cam.lookAt(P); if (cam.fov !== 40) { cam.fov = 40; cam.updateProjectionMatrix(); }
+  const F = P.clone(); F.x += dE / d * side * 0.45; F.z -= dN / d * side * 0.45;   /* look a little up the line from the point, so the cloud and the break are in the picture with it */
+  cam.position.set(P.x + pe * side - dE / d * side * 0.2, P.y + up, P.z - pn * side + dN / d * side * 0.2); cam.lookAt(F); if (cam.fov !== 40) { cam.fov = 40; cam.updateProjectionMatrix(); }
   return [+P.x.toFixed(1), +P.y.toFixed(1), +P.z.toFixed(1)]; })'''
 
 INFO = r'''(() => { const B = __beta, m = document.getElementById('marks'), lab = [...m.children].filter(x => !x.hidden && !x.classList.contains('mk')).map(x => x.textContent);

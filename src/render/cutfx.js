@@ -11,7 +11,7 @@
 //                     no draw call. Placed in the page's own marker layer (#marks), so the clean-screen setting hides them with the rest.
 import * as THREE from 'three';
 
-export const BLIND = [0.55, 0.88, 1.0];          /* the "blind" colour: HKOI's own cool blue (the cloud's tint, the headline's HKOI colour) */
+export const BLIND = [0.3, 0.78, 1.0];          /* the "blind" colour: HKOI's own cool blue (the cloud's tint, the headline's HKOI colour) */
 export const T_RING = 0.7, T_FLICK = 0.6, T_LABEL_END = 4.0, T_PULSE = 0.6;   /* seconds; chosen for readability, not physics */
 const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 const num = m => Math.round(m).toLocaleString('en-US');
