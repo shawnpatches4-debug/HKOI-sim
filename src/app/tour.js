@@ -203,7 +203,7 @@ export const CHAPTERS = [
       shot: { kind: 'drone', o: { dist: 6 }, subj: 'missile', size: 0.5, min: 0.06 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
       text: () => `An FPV drone: a small racing aircraft with an anti-tank charge, flown by a pilot through a video link at about ${kmh} km/h. It has no guidance beam to cut, so HKOI uses its other magazine: airburst rounds that explode beside it.` },
     { key: 'airburst', head: 'Airburst', from: o.tF - 0.2, to: o.tK + 0.5, rates: [[o.tF - 0.2, 0.25]], freeze: 'shot down', id: o.id, pts: { kill: [o.d, 30] },
-      shot: { kind: 'drone', o: { dist: 16 }, subj: 'missile', size: 0.5, min: 0.02 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
+      shot: { kind: 'drone', o: { dist: 16 }, subj: 'missile', size: 0.5, min: 0.02 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],   /* once it is down the explosion is the mark; the panel gives the distance */
       facts: [['Rounds', String(o.first)], ['Down at', m0(o.d)], ['After firing', `${f2(o.tK - o.tF)} s`]],
       text: () => `The gun fires ${word(o.first)} airburst rounds set to explode beside the drone. It falls ${m0(o.d)} from the tank, ${f2(o.tK - o.tF)} s after the first round left the gun. In the model one full burst brings a drone down ${pct(M.cfg.hePk)} of the time before it can dodge (assumed).` },
   ]; } },

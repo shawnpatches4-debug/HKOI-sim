@@ -191,9 +191,9 @@ export function geoSVG(D, tb, focus, TB, compact) {
   for (const p of D.puffs) { const q = puffAt(D, p, t); if (!q) continue; o += `<ellipse cx="${xs(q.x).toFixed(1)}" cy="${hy(q.z).toFixed(1)}" rx="${Math.max(2.6, Math.min(7, q.s * (X1 - X0) / D.R * 3)).toFixed(1)}" ry="${Math.max(2.6, Math.min(7, q.s * VZ * 0.5)).toFixed(1)}" fill="${C.hk}" fill-opacity="${q.forming ? 0.3 : 0.55}"/>`; }
   for (const r of D.rounds) { const q = roundAt(D, r, t); if (!q) continue; const z = 2.2 + ((r.bz != null ? r.bz : F.los_off + 1) - 2.2) * q.u; o += CI(xs(q.x), hy(z), 2.6, ` fill="#fff" stroke="${C.hk}" stroke-width="1.5"`); }
   // the missile, the cut, the end
-  if (t >= D.tL && t < D.end.t) { const blind = st >= 6, col = blind ? C.blind : C.bad, x = xs(m.x), y = hy(m.z); o += arrowHead(x, y, -1, 0, 8, col) + T(x, y - 12, blind ? 'blind' : D.name, ` class="s m b" fill="${col}" style="fill:${col}"`); }
+  if (t >= D.tL && t < D.end.t) { const blind = st >= 6, col = blind ? C.blind : C.bad, x = xs(m.x), y = hy(m.z); o += arrowHead(x, y, -1, 0, 8, col) + T(x, Math.min(y + 18, yG - 4), blind ? 'blind' : D.name, ` class="s m b" fill="${col}" style="fill:${col}"`); }
   if (st >= 6) { const x = xs(D.cut.d); o += LN(x, yG - 4, x, 60, C.hk, ' stroke-width="1.5"') + T(x + 4, 64, `CUT at ${m0(D.cut.d)}`, ' class="n k"'); }
-  if (st >= 7) { const x = xs(D.end.type === 'ground' ? D.end.short : 0); o += T(x, yG + 5, '✕', ' class="big w m"') + T(Math.max(x + 8, 64), yG + 36, endPhrase(D), ' class="s w b"'); }
+  if (st >= 7) { const x = xs(D.end.type === 'ground' ? D.end.short : 0); o += T(x, yG + 5, '✕', ' class="big w m"') + T(Math.max(x + 12, 64), yG - 30, endPhrase(D), ' class="s w b"'); }
   // the bottom half
   const y0 = 174;
   if (focus === 'table' && TB) o += tablePart(D, TB, y0);
@@ -317,7 +317,7 @@ export function droneSVG(M, tb, cfg) {
 // A threat Trophy had to take (too close for a cloud, or unguided): its flight to scale, and the record's own times
 export const CLOSE_W = 360, CLOSE_H = 250;
 export function closeSVG(c, tb) {
-  if (!c) return ''; const X0 = 30, X1 = 330, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / c.R)), y = 84, t = tb - c.tL; let o = T(14, 22, 'ITS FLIGHT, SEEN FROM THE SIDE, TO SCALE', ' class="h"') + T(346, 22, secs(t), ' class="n e w"');
+  if (!c) return ''; const X0 = 30, X1 = 330, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / c.R)), y = 84, t = tb - c.tL; let o = T(14, 22, 'ITS FLIGHT, TO SCALE', ' class="h"') + T(346, 22, secs(t), ' class="n e w"');
   o += LN(X0 - 10, y + 14, X1 + 10, y + 14, C.ground, ' stroke-width="2"') + tankSide(X0, y + 14, 1.15) + teamIcon(X1, y + 14, 1.2) + T(X1, y + 33, m0(c.R), ' class="s m"') + T(X0, y + 33, '0', ' class="s m"');
   if (t >= 0 && tb < c.tA) { const x = xs(c.R * (1 - Math.min(1, t / c.flight))); o += arrowHead(x, y, -1, 0, 8, C.bad); }
   if (tb >= c.tA) o += T(xs(c.d), y + 6, '✕', ' class="big g m"') + T(xs(c.d) + 8, y - 12, `Trophy: ${m0(c.d)} out`, ' class="n g"');
