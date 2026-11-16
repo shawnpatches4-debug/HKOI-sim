@@ -16,6 +16,12 @@ const clock = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStar
 const w = n => (n >= 0 && n < n2.length ? n2[n] : String(n)), W = n => w(n).charAt(0).toUpperCase() + w(n).slice(1), pl = (n, one, many) => (n === 1 ? one : many || one + 's');
 
 export const SCENARIOS = [
+  // the battle the targeting page ("How HKOI aims", src/app/targeting.js) is built on; its card also opens that page
+  { key: 'aim', group: 'How HKOI aims', name: 'Targeting', aim: true, setup: S('forest', 3, 'ambush', 'trained', 1, 2),
+    expect: { alive: true, result: 'won', fired: 5, hits: 0, cut: 3, trophy: 0 },
+    lines: x => [`${W(x.fired)} missiles from Kornet and Konkurs teams at the forest edge, in one ambush.`,
+      `HKOI's cloud cuts the guidance of ${w(x.cut)}, the rest miss by themselves, and Trophy never has to fire. No hits.`],
+    watch: 'the lone Kornet after the first volley: the targeting page takes that one shot apart, step by step, from the record.' },
   { key: 'ambush', group: 'HKOI at work', name: 'Missile ambush', setup: S('town', 6, 'ambush', 'trained', 3, 2),
     expect: { alive: true, fired: 21, hits: 0, cut: 12, trophy: 3, mins: 12, result: 'won' },
     lines: x => [`Kornet and Konkurs teams with RPGs, three groups one after another: ${x.fired} missiles and rockets in about ${w(x.mins)} minutes.`,
@@ -155,6 +161,7 @@ export class ScenarioPage {
       const live = el('button', 'btn go', 'Play it'), rp = el('button', 'btn', 'Watch the replay');
       live.title = 'Start this battle as a live battle'; rp.title = 'Watch this battle as a replay: time bar, jump from event to event, every enemy team shown';
       live.onclick = () => { this.close(); this.app.play(u); }; rp.onclick = () => { this.close(); this.app.replay(u); };
+      if (sc.aim && this.app.aim) { const ab = el('button', 'btn go', 'How HKOI aims'); ab.title = 'The targeting page: this battle\'s lone Kornet, step by step, with a diagram drawn from the record'; ab.onclick = () => this.app.aim(); row.append(ab); }
       row.append(live, rp);
       x.append(el('b', null, sc.name), el('p', null, t.lines[0]), el('p', null, t.lines[1]), el('div', 'sc-watch', t.watch),
         el('div', 'sc-meta', `${names.biome(u.biome)} · map ${u.map} · ${names.force(u.force)} · ${names.skill(u.skill)} enemy · ${WAVES[u.waves] || u.waves + ' waves'}`), row);
