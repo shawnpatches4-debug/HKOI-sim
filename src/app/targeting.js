@@ -169,15 +169,15 @@ export function aimSVG(D, tb, opt) {
   const px0 = 46, px1 = 524, py = 100, sc = (px1 - px0) / (D.R * 1.03), X = x => px0 + x * sc, Y = y => py - y * sc;
   s += head(14, 20, 'FROM ABOVE: TANK TO LAUNCHER, TRUE SCALE');
   s += T(546, 20, `bearing ${r0(D.brg)}°`, ' class="s e"');
-  for (let k = 500; k <= D.R; k += 500) s += LN(X(k), py - 3, X(k), py + 3, C.line) + (k % 1000 === 0 ? T(X(k), py - 8, `${k / 1000} km`, ' class="s m"') : '');
+  for (let k = 500; k <= D.R; k += 500) s += LN(X(k), py - 3, X(k), py + 3, C.line) + (k % 1000 === 0 ? T(X(k), py + 16, `${k / 1000} km`, ' class="s m"') : '');
   s += LN(X(0), py, X(D.R), py, C.line);
   if (st >= 1) { const a = D.warn.sigma * Math.PI / 180, L = D.R * 1.02; s += `<path d="M${X(0)},${py} L${(X(0) + L * sc * Math.cos(a)).toFixed(1)},${(py - L * sc * Math.sin(a)).toFixed(1)} L${(X(0) + L * sc * Math.cos(a)).toFixed(1)},${(py + L * sc * Math.sin(a)).toFixed(1)} Z" fill="${C.warn}" fill-opacity="${focus === 'warn' || focus === 'radar' ? 0.16 : 0.08}" stroke="${C.warn}" stroke-opacity=".5" stroke-dasharray="4 3"/>`;
     s += T(X(D.R * 0.62), py - D.R * 0.62 * sc * Math.tan(a) - 5, `warning bearing ±${D.warn.sigma}° (setting)`, ' class="s a m"'); }
   const M = missileAt(D, t);
   if (st >= 2 && st < 7) s += LN(X(0), py, X(M.x), Y(M.y), C.warn, ` stroke-width="${focus === 'radar' ? 2.2 : 1.2}"`) + (focus === 'radar' ? T(X(M.x * 0.5), py - 6, 'radar track', ' class="s a m"') : '');
   // planned and actual meeting point
-  if (st >= 3) { const xw = X(D.plan.want); s += `<path d="M${xw},${py - 7} l6,7 l-6,7 l-6,-7 Z" fill="none" stroke="${C.good}" stroke-width="1.5"/>` + T(xw, py + 24, `meet ${m0(D.plan.want)}`, ' class="s g m"');
-    if (st === 3 && focus === 'plan') { const xf = X(D.plan.dFireIdeal); s += LN(xw, py + 12, xf, py + 12, C.bad, ' stroke-dasharray="3 3"') + T((xw + xf) / 2, py + 44, `missile flies ${m0(D.speed * D.plan.tof)} while the round flies ${m0(D.plan.want)}`, ' class="s m"'); } }
+  if (st >= 3) { const xw = X(D.plan.want); s += `<path d="M${xw},${py - 7} l6,7 l-6,7 l-6,-7 Z" fill="none" stroke="${C.good}" stroke-width="1.5"/>` + T(xw, py - 13, `meet ${m0(D.plan.want)}`, ' class="s g m"');
+    if (st === 3 && focus === 'plan') { const xf = X(D.plan.dFireIdeal); s += LN(xw, py + 12, xf, py + 12, C.bad, ' stroke-dasharray="3 3"') + T((xw + xf) / 2, py + 36, `missile flies ${m0(D.speed * D.plan.tof)} while the round flies ${m0(D.plan.want)}`, ' class="s m"'); } }
   for (const r of D.rounds) { const q = roundAt(D, r, t); if (q) s += CI(X(q.x), py, 2.2, ` fill="${C.good}"`); }
   for (const p of D.puffs) { const q = puffAt(D, p, t); if (q) s += CI(X(q.x), Y(q.y), Math.max(2.5, q.s * sc * 4), ` fill="${C.puff}" fill-opacity="${q.forming ? 0.25 : 0.55}"`); }
   s += tankIcon(X(0), py, 1.1) + teamIcon(X(D.R), py) + T(X(D.R) - 4, py - 22, `${D.name} team`, ' class="s r e"');
