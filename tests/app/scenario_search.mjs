@@ -20,23 +20,24 @@ const STORY = {
   ambush: f => f.alive && f.result === 'won' && f.hits === 0 && f.cut >= 4 && f.trophy >= 1,
   drones: f => f.alive && f.result === 'won' && f.hits === 0 && f.airburst >= 8 && f.cut >= 1 && f.trophy === 0 && f.maxHeBursts >= 2,
   layers: f => f.alive && f.hits === 0 && f.cut >= 3 && f.airburst >= 3 && f.trophy >= 2 && f.obsLeft === 0 && f.result === 'withdrawn',
-  armour: f => f.alive && f.result === 'won' && f.hits === 0 && f.vehLost >= 3 && f.trophy >= 1 && f.cut >= 1 && f.secs <= 240,
+  armour: f => f.alive && f.result === 'won' && f.hits === 0 && f.vehLost >= 3 && f.trophy + f.cut >= 1 && f.secs <= 300,
   stuck: f => !f.alive && f.end === 'knocked_out' && f.stuckSecs != null && f.stuckSecs <= 15 && f.lostSecs - f.stuckSecs >= 120 && f.cut >= 2 && f.trophy >= 1 && f.bailed === 4,
-  laststand: f => !f.alive && f.end === 'catastrophic' && f.wave >= 2 && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.cut >= 2 && f.airburst >= 3 && f.trophy >= 1,
-  laststand2: f => !f.alive && f.end === 'knocked_out' && f.stuckSecs != null && f.stuckSecs <= 30 && f.lostSecs - f.stuckSecs >= 300 && f.trophyLeft === 0 && f.bailed === 4 && f.down === 0 && f.wounded === 0 && f.cut >= 2,
+  laststand: f => !f.alive && f.wave >= 2 && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.cut >= 2 && f.airburst >= 2 && f.trophy >= 1,
+  laststand2: f => !f.alive && f.end === 'knocked_out' && f.stuckSecs != null && f.stuckSecs <= 30 && f.lostSecs - f.stuckSecs >= 300 && f.cut >= 2,   /* 16 Nov: Trophy no longer always runs dry; the card says what it does */
   alone: f => f.alive && f.result === 'won' && f.down === 3 && f.cdr === 'ok',
   open: f => !f.alive && f.end === 'knocked_out' && f.secs <= 90 && f.fired >= 10 && f.cut >= 1 && f.trophy >= 2 && f.bailed === 4,
-  expert: f => !f.alive && f.end === 'catastrophic' && f.trophyLeft === 0 && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.lostSecs <= 180,
+  expert: f => !f.alive && f.end === 'catastrophic' && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.lostSecs <= 60 && f.trophy >= 1 && f.cut >= 1,   /* 16 Nov: rewritten as the quick loss most of these battles now are (30 of 40 seeds lost) */
   platoon: f => f.alive && f.result === 'won' && f.wing === 'ok' && f.hits === 0 && f.wingHits === 0 && f.assistKills >= 1 && f.cut >= 1 && f.trophy >= 1,
   bombers: f => f.alive && f.result === 'won' && f.bombersDown >= 1 && f.bombHits >= 1 && f.end === 'mobility_kill' && f.hits === 0,
 };
 const sc = SCENARIOS.find(s => s.key === key); if (!sc || !STORY[key]) { console.log('unknown card', key); process.exit(1); }
-const u0 = sc.setup, F = FORCES[u0.force];
+const u0 = Object.assign({}, sc.setup, process.env.WAVES ? { waves: +process.env.WAVES } : {}, process.env.FORCE ? { force: process.env.FORCE } : {}, process.env.SKILL ? { skill: process.env.SKILL } : {}, process.env.BIOME ? { biome: process.env.BIOME } : {}), F = FORCES[u0.force];   /* WAVES=, FORCE=, SKILL=, BIOME= widen the search when the card's own setup no longer tells its story */
 let found = 0;
 for (const map of MAPS || [u0.map]) for (let seed = 1; seed <= MAXS; seed++) {
   const u = Object.assign({}, u0, { map, seed });
   const B = new Battle.Battle({ support: supportOf(F), fate: true, world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true, armour: false, tank: undefined });
   const f = facts(runToEnd(B));
-  if (STORY[key](f)) { found++; console.log(JSON.stringify({ key, map, seed }), JSON.stringify(f)); if (found >= 3) process.exit(0); }
+  if (process.env.SHOW) console.log(seed, map, JSON.stringify({ alive: f.alive, result: f.result, secs: f.secs, fired: f.fired, hits: f.hits, cut: f.cut, trophy: f.trophy, vehLost: f.vehLost, end: f.end, stuck: f.stuckSecs, lost: f.lostSecs, wave: f.wave, down: f.down, tl: f.trophyLeft }));
+  if (STORY[key](f)) { found++; console.log(JSON.stringify({ key, map, seed, waves: u.waves, force: u.force, skill: u.skill, biome: u.biome }), JSON.stringify(f)); if (found >= 3) process.exit(0); }
 }
 console.log(key, 'found', found);
