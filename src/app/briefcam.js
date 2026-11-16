@@ -60,7 +60,7 @@ export const SHOTS = {
     return { pos: P, look: C, fov: 44 }; },
   // the whole tank from three quarters, close enough to fill the picture
   tank: (S, side, age) => { const T = S.tank, a = (side * 120 + age * 1.5) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
-    return { pos: lift(S, add(add(T, dir, 15.5), V(0, 1, 0), 4.8), 3), look: add(T, V(0, 1, 0), 0.9), fov: 38 }; },
+    return { pos: lift(S, add(add(T, dir, 15), V(0, 1, 0), 8), 3), look: add(T, V(0, 1, 0), 0.6), fov: 40 }; },   /* 8 m up: looking down over the bushes beside the tank (the trees drawn on the map are not in the sight-line grid) */
   // a Trophy launcher: low, beside the turret on the launcher's side
   trophy: (S, side) => { const T = S.trophy || S.tank, P = add(add(add(T, S.p, 7.5 * side), S.b, 3.5), V(0, 1, 0), 0.8);
     return { pos: lift(S, P, 2.2), look: add(T, V(0, 1, 0), -0.4), fov: 40 }; },

@@ -183,7 +183,7 @@ export const CHAPTERS = [
     const hits = O.rows.filter(r => r.endType === 'hit'), skimCut = skim && skim.cutT != null ? Math.max(0, skim.R - skim.speed * (skim.cutT - skim.t0)) : 0;
     const steps = [
     { key: 'many', head: `${Word(O.n)} at once`, from: A(-0.3), to: A(Math.min(2.4, O.lastTrack + 0.4)), rates: [[A(-0.3), 0.4]], freeze: 'all tracked', id: idOf(first),
-      shot: { kind: 'overhead', o: { h: 170, fov: 50 }, subj: 'tank', size: 3, min: 0.012 }, lines: ['tracks'], diagram: { kind: 'queue' }, marks: [mk('tank', 'The tank', { tone: 'good' })],
+      shot: { kind: 'overhead', o: { h: 130, fov: 50 }, subj: 'tank', size: 3, min: 0.015 }, lines: ['tracks'], diagram: { kind: 'queue' }, marks: [mk('tank', 'The tank', { tone: 'good' })].concat(O.rows.map(r => mk('missile', r.label, { tone: 'bad', id: idOf(r) }))),
       text: () => `${Math.round(O.T0)} s into the same battle, ${list(kl)} were fired within ${(Math.round(O.spread * 10) / 10).toFixed(1)} s from different directions. The radar tracks them all within ${(Math.round(O.lastTrack * 10) / 10).toFixed(1)} s. But there is one gun: the fire control has to choose.` },
     { key: 'queue', head: 'Who gets the gun', from: A(first.bursts[0].tf - 0.3), to: A(first.bursts[0].tf + 0.6), rates: [[A(first.bursts[0].tf - 0.3), 0.25]], freeze: 'first burst', id: idOf(first),
       shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, diagram: { kind: 'queue' }, marks: [mk('station', `Firing at ${first.label}`, { tone: 'good' })],
@@ -217,7 +217,7 @@ export const CHAPTERS = [
       text: X => { const m = mags(X.b); return `A tank's armour-piercing round flies at ${M.keSpeed ? M.keSpeed.toLocaleString('en-GB') + ' m/s' : 'well over 1,000 m/s'}: nothing in this simulator stops it. And many missiles at once can use up both Trophy's shots and the gun's time.${m.L != null ? ` Trophy shots left here: ${m.L} left side, ${m.R} right.` : ''}` } },
   ].filter(Boolean) },
   { key: 'numbers', name: 'What it adds', setup: MAIN, find: findMain, steps: M => [
-    { key: 'table', head: 'One battle proves nothing', from: M.calm, to: M.calm, freeze: '', id: M.D.id, shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 }, panel: 'ref', marks: [],
+    { key: 'table', head: 'One battle proves nothing', from: M.calm, to: M.calm, freeze: '', id: M.D.id, shot: { kind: 'overhead', o: { h: 45 }, subj: 'tank', size: 3, min: 0.06 }, panel: 'ref', marks: [],
       text: () => `Each chapter showed one picked battle. To learn what HKOI is worth, the simulator fights the same raid a thousand times under four setups, on the same dice. ${gain()}` },
     { key: 'next', head: 'Try it yourself', from: M.calm, to: M.calm, freeze: '', id: M.D.id, shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, panel: 'numbers', marks: [],
       text: () => `Below, a small run of ${600} raids starts now in your browser, so you can see the spread for yourself. Run the numbers on the title screen fights thousands, map by map. Scenarios has ${String(NUM[SCENARIOS.length] || SCENARIOS.length).toLowerCase()} battles picked to show one thing each.` },
@@ -521,6 +521,7 @@ class Briefing {
     if (mk.at === 'launcher') { out.copy(S.launcher); return true; }
     if (mk.at === 'pt') { const p = S.pts[mk.pt]; if (!p) return false; out.copy(p); return true; }
     if (mk.at === 'bearing') { const p = S.at(60, 3); out.copy(p); return true; }
+    if (mk.at === 'missile' && mk.id) { const m = this._missile(mk.id); if (!m) return false; out.copy(m.p); return true; }   /* one of several in the air */
     if (mk.at === 'missile' || mk.at === 'beamtag') { mk._gone = false;
       if (S.missile) { out.copy(S.missile); if (!mk._last) mk._last = S.missile.clone(); mk._last.copy(S.missile); mk._seen = true; if (mk.at === 'beamtag') { out.x += S.b.x * 14; out.z += S.b.z * 14; out.y += 0.6; } return true; }
       if (mk.gone && mk._seen && mk._last) { mk._gone = true; out.copy(mk.goneAt && S.pts[mk.goneAt] ? S.pts[mk.goneAt] : mk._last); return true; }
