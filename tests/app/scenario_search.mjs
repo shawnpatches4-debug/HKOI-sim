@@ -24,7 +24,7 @@ const STORY = {
   stuck: f => !f.alive && f.end === 'knocked_out' && f.stuckSecs != null && f.stuckSecs <= 15 && f.lostSecs - f.stuckSecs >= 120 && f.cut >= 2 && f.trophy >= 1 && f.bailed === 4,
   laststand: f => !f.alive && f.wave >= 2 && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.cut >= 2 && f.airburst >= 2 && f.trophy >= 1,
   laststand2: f => !f.alive && f.end === 'knocked_out' && f.stuckSecs != null && f.stuckSecs <= 30 && f.lostSecs - f.stuckSecs >= 300 && f.cut >= 2,   /* 16 Nov: Trophy no longer always runs dry; the card says what it does */
-  alone: f => f.alive && f.result === 'won' && f.down === 3 && f.cdr === 'ok',
+  alone: f => f.alive && f.result === 'won' && f.down >= 1 && f.cdr === 'ok',   /* 16 Nov: three crew down with the vehicle still fighting no longer happens in about 600 battles searched; the card now shows one crewman down */
   open: f => !f.alive && f.end === 'knocked_out' && f.secs <= 90 && f.fired >= 10 && f.cut >= 1 && f.trophy >= 2 && f.bailed === 4,
   expert: f => !f.alive && f.end === 'catastrophic' && f.stuckSecs != null && f.lostSecs > f.stuckSecs && f.lostSecs <= 60 && f.trophy >= 1 && f.cut >= 1,   /* 16 Nov: rewritten as the quick loss most of these battles now are (30 of 40 seeds lost) */
   platoon: f => f.alive && f.result === 'won' && f.wing === 'ok' && f.hits === 0 && f.wingHits === 0 && f.assistKills >= 1 && f.cut >= 1 && f.trophy >= 1,
