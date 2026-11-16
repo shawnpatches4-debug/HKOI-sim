@@ -292,6 +292,31 @@ P_survive = 1 - mean(killed)          P_no_hits = share of raids with no hit at 
 margin (95%) = 1.96 * sqrt(p*(1-p)/N)
 ```
 
+### 3.13 Ordering the gun's work (scheduler), MODEL
+
+Candidates: every tracked threat that is guided (beam-rider and radio SACLOS get obscurant; drones and SAL missiles get HE), not in the
+masked arc, not too high, with time to fire before its minimum range (obscurant 350 m, HE arming + 40 m). Each has `ready` (track +
+fire-control latency), `ideal` (fire time to meet it at the table's best range, or 800/700 m for HE), `latest`, bearing and elevation.
+Gun time per burst `BD = (burst-1)*60/rof + 0.1`, slew as in 3.4. A burst is fired early if waiting would make the next one late.
+
+**'classic'** (`fc.scheduler = 'classic'`): with AI on, it starts from most-urgent-first (`latest`) and drops or swaps neighbours while that
+raises `sum p` (each threat's table value at its planned range, no Trophy, no meet range change), planning once at the start with every
+threat of the volley, even those not yet launched (it knows the future). Follow-up bursts are fitted later into gaps.
+
+**'smart'** (`fc.scheduler = 'smart'`, Shawn's order of 16 Nov 2026): plans only with what the fire control has at the moment it decides
+(threats already tracked, gun position and free time, magazines, Trophy shots left per side, its trial table). At each decision it
+searches the orders of the known candidates (every ordered subset up to 6, else a local search with remove / insert / move) and minimises
+```
+E = sum over known inbound threats, in order of impact, of  lethality_k * q * (1 - pk_T * avail)   + 0.0001 * bursts
+q      = 1 - p(meeting range of its planned burst)       p from the trial table at the range the burst would really meet it (0 if not engaged)
+avail  = min(1, expected Trophy shots left that side) * (1 - expected shot of the previous threat on that side if within 0.6 s)
+pk_T   = 0.9 cued, 0.85 uncued, 0.3 drone;  lethality_k = kill chance of that kind (table 2.4)
+```
+It commits only the first burst, then plans again after each burst and whenever a new track arrives before the gun must swing.
+Follow-up bursts (failed cut, re-lock, HE miss) become candidates in the same plan. It does not know the enemy gunner's wander,
+which missiles will miss by themselves, or false cues to come. The trial table is optimistic (no wander, still tank; see HKOI_NUMBERS.md),
+and the scheduler inherits that. Record: `rec.sched = [{ t, known, order: [{ idx, kind, tf, p, second }], left }]` per decision.
+
 ---
 
 ## 4. Measured performance of the model (see HKOI_NUMBERS.md for method)
