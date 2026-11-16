@@ -26,7 +26,7 @@ run('crew does not move the tank', c => { base(c); c.crew.enabled = false; });
 run('50 g round', c => { base(c); c.rnd.payload_g = 50; });
 run('65 g round', c => { base(c); c.rnd.payload_g = 65; });
 run('120 g round', c => { base(c); c.rnd.payload_g = 120; });
-run('Kornet re-lock off (cut is permanent)', c => { base(c); c.drift.relock_kornet = false; });
+run('Kornet re-lock on (tried and dropped by Shawn, 16 Nov)', c => { base(c); c.drift.relock_kornet = true; });
 run('Kornet spin off (old drift draw)', c => { base(c); c.blind_spin = false; });
 { const other = (HK.defaultConfig().fc.scheduler || 'classic') === 'smart' ? 'classic' : 'smart'; run(other + ' scheduler (not the default)', c => { base(c); c.fc.scheduler = other; }); }
 run('old re-lock rule (any beam-rider back on the beam as if never cut)', c => { base(c); c.drift.relock_kornet = false; c.drift.relock = true; });
