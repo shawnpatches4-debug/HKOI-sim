@@ -177,7 +177,7 @@ export function geoSVG(D, tb, focus, TB) {
   o += tankSide(X0, yG, 1.15) + teamIcon(X1, yG, 1.3);
   // the planned meeting point and, before the gun fires, where the missile will be when it does
   if (st >= 3 || focus === 'table') { const x = xs(D.plan.want); o += `<path d="M${x},${hy(F.los_off + 1.5) - 7} l6,7 l-6,7 l-6,-7 Z" fill="${C.good}"/>`; if (st < 6) o += T(x, 64, `meet ${m0(D.plan.want)}`, ' class="n g m"'); }
-  if (st === 3 && focus === 'table') { const x = xs(D.plan.dFire); o += LN(x, hy(4) - 14, x, hy(4) + 6, C.warn, ' stroke-dasharray="3 3"') + T(x, hy(4) - 18, 'fire here', ' class="s w m"'); }
+  if (st === 3 && focus === 'table') { const x = xs(D.plan.dFire); o += LN(x, hy(4) - 6, x, yG - 2, C.warn, ' stroke-dasharray="3 3"') + T(x, yG - 6, 'fire here', ' class="s w m b"'); }
   // the guidance beam: from the launcher to the missile while guided; once cut, it stops at the cloud
   const lx = xs(D.R), ly = hy(F.LH + F.los_off);
   if (m.flying || t >= D.tL && t < D.end.t) {
@@ -204,7 +204,7 @@ export function geoSVG(D, tb, focus, TB) {
 }
 // the six links, each with its time after launch; done links green, the current one amber
 function chainPart(D, t, y0) {
-  const L = [['Laser warning', D.warn.t], ['Radar track', D.radar.tTrack], ['Gun fires', D.plan.tF], ['Cloud forms', D.tFirstPuff], ['Beam cut', D.cut.t], [endPhrase(D).replace(/^./, c => c.toUpperCase()), D.end.t]];
+  const L = [['Laser warning', D.warn.t], ['Radar track', D.radar.tTrack], ['Gun fires', D.plan.tF], ['Cloud forms', D.tFirstPuff], ['Beam cut', D.cut.t], ['Flight ends', D.end.t]];
   let o = T(14, y0 + 4, 'THE CHAIN, TIMES AFTER LAUNCH', ' class="h"'), cur = -1; for (let i = 0; i < L.length; i++) if (t >= L[i][1] - 1e-6) cur = i;
   L.forEach(([name, tt], i) => { const col = i % 3, row = Math.floor(i / 3), x = 12 + col * 114, y = y0 + 14 + row * 74, done = i < cur, now = i === cur;
     o += RC(x, y, 108, 64, ` rx="7" fill="${now ? 'rgba(255,179,71,.18)' : 'rgba(255,255,255,.04)'}" stroke="${now ? C.warn : done ? C.good : C.line}" stroke-width="${now ? 2 : 1.2}"`);
@@ -219,7 +219,7 @@ function tablePart(D, TB, y0) {
     if (g % 500 === 0) o += T(x0 + i * bw + bw / 2, yb + 15, (g / 1000).toFixed(1) + ' km', ' class="s m" style="font-size:11px"'); });
   const bi = TB.grid.findIndex(g => Math.abs(g - D.plan.want) < 1); if (bi >= 0) o += T(Math.min(x0 + w - 4, Math.max(x0 + 60, x0 + bi * bw + bw / 2)), yb - h * TB.p[bi] - 6, `${r0(100 * TB.p[bi])}%: chosen`, ' class="n g m"');
   o += T(14, yb + 34, 'meeting distance; bar: share of trials cut', ' class="s d"');
-  if (TB.honest) o += T(14, yb + 52, `trials include gunner wander ${TB.wander ? TB.wander.join(' to ') + ' mrad' : ''} and own movement (assumed)`.slice(0, 64), ' class="s d" style="font-size:11px"');
+  if (TB.honest) o += T(14, yb + 52, `trials: gunner wander ${TB.wander ? TB.wander.join(' to ') + ' mrad' : ''}, tank moving (assumed)`, ' class="s d" style="font-size:11px"');
   return o;
 }
 // the warning from above: the bearing it reports, the bearing error the setting describes (not used by the engine), the radar's look
@@ -230,11 +230,11 @@ function bearingPart(D, t, y0) {
   if (t >= D.warn.t) o += LN(cx, cy, cx + ux * R, cy + uy * R, C.warn, ' stroke-width="2.5"') + arrowHead(cx + ux * R, cy + uy * R, ux, uy, 7, C.warn);
   if (t >= D.radar.tAcq) { const m = missileAt(D, t), k = Math.min(1, m.x / D.R); o += CI(cx + ux * R * k, cy + uy * R * k, 5, ` fill="${C.bad}"`); if (t >= D.radar.tTrack) o += CI(cx + ux * R * k, cy + uy * R * k, 10, ` fill="none" stroke="${C.good}" stroke-width="2"`); }
   o += tankSide(cx, cy + 4, 0.8);
-  const tx = 178; let y = y0 + 32;
+  const tx = 176; let y = y0 + 30;
   const line = (s, cls) => { o += T(tx, y, s, ` class="${cls || 's'}"`); y += 19; };
-  line(`Warning: bearing ${r0(D.brg)}°`, 'n w'); line(`${secs(D.warn.dt)} after launch`, 's');
-  y += 6; line(`Radar finds it ${secs(D.radar.tAcq - D.warn.t)} later`, 'n g'); line(`track ${secs(D.radar.tTrack - D.tL)}, ${km2(D.radar.dTrack)} out`, 's');
-  y += 6; if (sg) { line(`dashed: ${D.warn.sigma}° bearing error`, 's d'); line('a setting the engine does not use', 's d'); }
+  line(`Warning: ${r0(D.brg)}°`, 'n w'); line(`${secs(D.warn.dt)} after launch`, 's');
+  y += 6; line(`Radar: found ${secs(D.radar.tAcq - D.warn.t)}`, 'n g'); line('after the warning', 's'); line(`track at ${km2(D.radar.dTrack)}`, 's');
+  y += 6; if (sg) { line(`dashed: ${D.warn.sigma}° error setting,`, 's d'); line('not used by the engine', 's d'); }
   return o;
 }
 // how much of the beam's light still reaches the missile's tail, from the record's optical depth on that line
@@ -281,15 +281,15 @@ export function layerSVG(L, focus) {
 }
 
 // How three kinds of guided weapon are steered, and what HKOI does about each (which: the one the text is about)
-export const GUIDE_W = 360, GUIDE_H = 330;
+export const GUIDE_W = 360, GUIDE_H = 356;
 export function guideSVG(which) {
   let o = T(14, 22, 'THREE WAYS TO STEER A MISSILE', ' class="h"');
-  const panel = (i, key, title, how, hk) => { const y = 34 + i * 98, on = !which || which === key; o += RC(10, y, 340, 90, ` rx="8" fill="${on ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.02)'}" stroke="${on ? C.warn : C.line}"`);
+  const panel = (i, key, title, how, hk) => { const y = 34 + i * 106, on = !which || which === key; o += RC(10, y, 340, 98, ` rx="8" fill="${on ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.02)'}" stroke="${on ? C.warn : C.line}"`);
     o += `<g opacity="${on ? 1 : 0.5}">` + teamIcon(30, y + 50, 1.1) + tankSide(326, y + 54, 0.9);
     if (key === 'beam') o += `<path d="M34,${y + 44} L322,${y + 40} L322,${y + 52} Z" fill="${C.bad}" fill-opacity=".25"/>` + arrowHead(170, y + 46, 1, 0, 8, C.bad) + CI(160, y + 46, 3, ` fill="none" stroke="#fff"`);
     if (key === 'radio') o += LN(34, y + 44, 170, y + 46, C.bad, ' stroke-dasharray="2 5" stroke-width="2"') + arrowHead(170, y + 46, 1, 0, 8, C.bad) + CI(162, y + 46, 3.5, ` fill="${C.warn}"`);
     if (key === 'laser') o += LN(34, y + 44, 320, y + 48, C.bad, ' stroke-width="1.4"') + CI(320, y + 48, 4, ` fill="${C.bad}"`) + arrowHead(220, y + 30, 1, 0.12, 8, C.bad) + CI(228, y + 31, 2.4, ` fill="#fff"`);
-    o += '</g>' + T(22, y + 20, title, ` class="b"${on ? '' : ' style="opacity:.7"'}`) + T(22, y + 74, how, ' class="s"') + T(22, y + 87 - 0, '', '') + T(342, y + 20, hk, ` class="s e b" style="fill:${C.hk}"`); };
+    o += '</g>' + T(22, y + 20, title, ` class="b"${on ? '' : ' style="opacity:.7"'}`) + T(22, y + 74, how, ' class="s"') + T(22, y + 91, hk, ` class="s b" style="fill:${C.hk}"`); };
   panel(0, 'beam', 'Laser beam-rider (Kornet)', 'eye in its tail looks back at the beam', 'HKOI: cloud on the beam');
   panel(1, 'radio', 'Radio command (Konkurs)', 'launcher watches its flare, radios fixes', 'HKOI: cloud hides flare');
   panel(2, 'laser', 'Laser homing', 'eye in its nose sees a laser spot on you', 'HKOI: airburst rounds');

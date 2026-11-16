@@ -110,7 +110,7 @@ const lineH = 4;   /* metres above the ground for a point on a missile's line: a
 
 export const CHAPTERS = [
   { key: 'problem', name: 'The problem', setup: MAIN, find: findMain, steps: M => { const D = M.D, A = u => D.T0 + D.tL + u, id = D.id; return [
-    { key: 'team', head: 'A missile team, 3 km away', from: A(-1.8), to: A(0.9), rates: [[A(-1.8), 1], [A(-0.3), 0.2], [A(0.25), 0.5]], freeze: 'just after launch', id,
+    { key: 'team', head: 'A missile team, 3 km away', from: A(-2.2), to: A(0.06), rates: [[A(-2.2), 1], [A(-0.5), 0.2]], freeze: 'at launch', id,
       shot: { kind: 'team', subj: 'launcher', size: 1.8, min: 0.07 }, marks: [mk('launcher', `${D.name} team`, { tone: 'bad' }), mk('missile', `${D.name} missile`, { tone: 'bad' })],
       facts: [['Range', km2(D.R)], ['Speed', `${Math.round(D.speed)} m/s`], ['Flight', `${f2(D.flight)} s`]],
       text: () => `This is a real battle from the simulator, played back. A ${D.name} anti-tank missile team fires at the tank from ${km2(D.R)}. The missile needs ${f2(D.flight)} s to get there.${M.kill != null ? ` In the model one hit knocks the tank out ${pct(M.kill)} of the time (assumed).` : ''}` },
@@ -140,9 +140,9 @@ export const CHAPTERS = [
   ]; } },
   { key: 'aim', name: 'One shot, start to finish', setup: MAIN, find: findMain, steps: M => { const D = M.D, A = u => D.T0 + u, id = D.id, geo = focus => ({ kind: 'geo', focus });
     const far = Math.max(...D.puffs.map(p => p.x)), r1 = D.rounds[0], fates = [D.nBloom ? `${D.nBloom} burst` : '', D.nDown ? `${D.nDown} flew on without bursting` : '', D.nCo ? `${D.nCo} were timed to burst` : ''].filter(Boolean).join(', ');
-    const pts = { meet: [D.plan.want, lineH], fire: [D.plan.dFire, lineH], cut: [D.cut.d, lineH], end: [D.end.type === 'ground' ? D.end.short : 4, 0.5] };
+    const pts = { meet: [D.plan.want, lineH], k1: [1000, 0], k2: [2000, 0], fire: [D.plan.dFire, lineH], cut: [D.cut.d, lineH], end: [D.end.type === 'ground' ? D.end.short : 4, 0.5] };
     return [
-    { key: 'launch', head: '1. Launch', from: A(D.tL - 1.2), to: A(D.warn.t), rates: [[A(D.tL - 1.2), 0.5], [A(D.tL - 0.2), 0.1]], freeze: 'at the warning', id, pts,
+    { key: 'launch', head: '1. Launch', from: A(D.tL - 1.2), to: A(D.tL + 0.05), rates: [[A(D.tL - 1.2), 0.5], [A(D.tL - 0.3), 0.1]], freeze: 'at launch', id, pts,
       shot: { kind: 'team', subj: 'launcher', size: 1.8, min: 0.07 }, diagram: geo('chain'), marks: [mk('launcher', `${D.name} team, ${km2(D.R)}`, { tone: 'bad' })],
       facts: [['Range', km2(D.R)], ['Bearing', `${Math.round(D.brg)}°`], ['Speed', `${Math.round(D.speed)} m/s`]],
       text: () => `The same shot, now step by step. The clock starts at launch. The team fires from ${km2(D.R)} away, from bearing ${Math.round(D.brg)}° (the compass direction seen from the tank). Every number on these pages comes from the simulator's record of this one shot.` },
@@ -154,7 +154,8 @@ export const CHAPTERS = [
       facts: [['Found', `${f2(D.radar.tAcq - D.warn.t)} s after warning`], ['Track at', km2(D.radar.dTrack)], ['To impact', `${f2(D.radar.tti)} s`]],
       text: () => `The radar looks down that bearing and finds the missile ${f2(D.radar.tAcq - D.warn.t)} s after the warning. ${f2(D.radar.init)} s later it holds a track: ${km2(D.radar.dTrack)} out, closing at ${Math.round(D.radar.closing)} m/s. Shawn's "firing corridor" is, in this model, simply that bearing.` },
     { key: 'plan', head: '4. Planning where to meet it', from: A(D.plan.tF - 0.6), to: A(D.plan.tF - 0.6), freeze: 'before firing', id, pts,
-      shot: { kind: 'overgun', subj: 'station', size: 1, min: 0.08 }, diagram: geo('table'), marks: [mk('station', 'HKOI gun', { tone: 'good' }), mk('pt', `Meeting point, ${m0(D.plan.want)}`, { tone: 'good', pt: 'meet' }), mk('missile', D.name, { tone: 'bad' })],
+      shot: { kind: 'plan', subj: 'meet', also: ['tank', 'launcher'], size: 0, min: 0 }, lines: ['path', 'round', 'ticks'], diagram: geo('table'),
+      marks: [mk('tank', 'Tank', { tone: 'good' }), mk('pt', `Meet here: ${m0(D.plan.want)}`, { tone: 'good', pt: 'meet' }), mk('missile', `${D.name} now`, { tone: 'bad' }), mk('launcher', `Launcher, ${km2(D.R)}`, { tone: 'bad' })],
       facts: [['Meet at', m0(D.plan.want)], ['Table says', pct(D.plan.p)], ['Round flies', `${f2(D.plan.tof)} s`]],
       text: () => `The fire control looks up its table, made beforehand from many trial engagements (gunner's wander and the tank's own movement included, assumed figures). A cloud ${m0(D.plan.want)} out cut a ${D.name} in ${pct(D.plan.p)} of trials, the best distance. A round takes ${f2(D.plan.tof)} s to get there, so the gun waits ${f2(D.plan.wait)} s.` },
     { key: 'fire', head: '5. Fire', from: A(D.plan.tF - 0.35), to: A(D.plan.tF + (D.nFirst - 1) * D.plan.gap + 0.25), rates: [[A(D.plan.tF - 0.35), 0.25]], freeze: 'burst fired', id, pts,
@@ -162,7 +163,7 @@ export const CHAPTERS = [
       facts: [['Fired at', `${f2(D.plan.tF - D.tL)} s`], ['Missile then', m0(D.plan.dFire)], ['Muzzle speed', `${Math.round(D.plan.v0)} m/s`]],
       text: () => `${f2(D.plan.tF - D.tL)} s after launch, with the missile ${m0(D.plan.dFire)} out, the gun fires ${word(D.nFirst)} obscurant rounds, ${f2(D.plan.gap)} s apart. They are not aimed to hit the missile. They are timed to arrive beside its path and burst just behind it.` },
     { key: 'meet', head: '6. Overtake and bloom', from: A(r1.tPass - 0.45), to: A(D.tFirstPuff + 0.1), rates: [[A(r1.tPass - 0.45), 0.12]], freeze: 'first puff', id, pts,
-      shot: { kind: 'line', o: { track: true, span: 70, back: -0.25, up: 0.1 }, subj: 'missile', size: 1.2, min: 0 }, diagram: geo('chain'),
+      shot: { kind: 'tail', subj: 'missile', size: 1.2, min: 0 }, diagram: geo('chain'),
       marks: [mk('missile', D.name, { tone: 'bad' })],
       text: () => `${f2(r1.tPass - r1.tFire)} s later the first round reaches the missile, ${m0(r1.d)} out. The rounds pass it and burst just behind it, on the line back to the launcher: overtake and bloom. Of ${D.n} rounds, ${fates}. The radar saw it still guiding after the first ${D.nFirst}, so ${D.nExtra} more followed.` },
     { key: 'cloud', head: '7. The cloud on the line', from: A(D.tFirstPuff), to: A(D.cut.t - 0.05), rates: [[A(D.tFirstPuff), 0.25]], freeze: 'just before the cut', id, pts,
@@ -542,6 +543,9 @@ class Briefing {
     for (const kind of st.lines || []) {
       if (kind === 'bearing') { const l = this._line(nl); P.copy(S.tank); P.y += 1.4; Q.copy(S.at(Math.min(S.R, 1500), 3)); if (!this._segment(P, Q, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,179,71,.9)'); l.setAttribute('stroke-width', (3 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(10 * k).toFixed(0)} ${(7 * k).toFixed(0)}`); }
       else if (kind === 'track') { if (!S.missile || t < (this.M && this.M.D ? this.M.D.T0 + this.M.D.radar.tTrack : 0)) continue; const l = this._line(nl); if (!this._segment(S.station, S.missile, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(57,217,138,.9)'); l.setAttribute('stroke-width', (2.2 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(3 * k).toFixed(0)} ${(5 * k).toFixed(0)}`); }
+      else if (kind === 'path') { const l = this._line(nl); P.copy(S.launcher); P.y += 2; Q.copy(S.tank); Q.y += 2; if (!this._segment(P, Q, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,107,94,.85)'); l.setAttribute('stroke-width', (2.4 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(8 * k).toFixed(0)} ${(6 * k).toFixed(0)}`); }
+      else if (kind === 'round') { if (!S.pts.meet) continue; const l = this._line(nl); if (!this._segment(S.station, S.pts.meet, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(111,211,255,.95)'); l.setAttribute('stroke-width', (3 * k).toFixed(1)); l.setAttribute('stroke-dasharray', ''); }
+      else if (kind === 'ticks') { for (const key of ['k1', 'k2']) { const c = S.pts[key]; if (!c) continue; const l = this._line(nl); P.set(c.x + S.p.x * 60, c.y + 1, c.z + S.p.z * 60); Q.set(c.x - S.p.x * 60, c.y + 1, c.z - S.p.z * 60); if (!this._segment(P, Q, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,255,255,.75)'); l.setAttribute('stroke-width', (2 * k).toFixed(1)); l.setAttribute('stroke-dasharray', ''); } }
       else if (kind === 'tracks' && A.volleys) { for (const m of A.volleys.info) { if (m.tracked === false && !m.drone) continue; const l = this._line(nl); if (!this._segment(S.tank, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(57,217,138,.85)'); l.setAttribute('stroke-width', (2 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(3 * k).toFixed(0)} ${(5 * k).toFixed(0)}`); } }
     }
     for (let i = nl; i < this.lines.length; i++) this.lines[i].style.display = 'none';

@@ -18,7 +18,7 @@ const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVe
 const supportOf = F => { const S = F.support || {}, o = {}; if (S.wingman) o.wingman = S.wingman; if (S.artillery) o.artillery = S.artillery; if (S.scout) o.scout = true; if (S.air) o.air = S.air; return Object.keys(o).length ? o : undefined; };
 const cfg = HK.defaultConfig(), lookup = HK.meetLookup(cfg);
 let bad = 0, nSteps = 0, nFrames = 0; const fail = (...a) => { bad++; console.log('FAIL', ...a); };
-const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'pt', 'bearing', 'beamtag'], LINES = ['bearing', 'track', 'tracks'], DIAG = ['geo', 'queue', 'layers', 'guide'];
+const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'pt', 'bearing', 'beamtag'], LINES = ['bearing', 'track', 'tracks', 'path', 'round', 'ticks'], DIAG = ['geo', 'queue', 'layers', 'guide'];
 // the battle as the page fights it (scenarios.js runToEnd), keeping where the tank was at every step
 function fight(u) {
   const F = FORCES[u.force], B = new Battle.Battle({ support: supportOf(F), fate: true, world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true });
@@ -79,7 +79,8 @@ for (const ch of CHAPTERS) {
         const size = (st.shot.size || 0) * q.px / Hd; if (st.shot.min && size < st.shot.min) fail(tag, `${st.shot.subj} too small: ${(100 * size).toFixed(1)}% of the screen height, wants ${(100 * st.shot.min).toFixed(0)}%`);
         if (Wd === 960) fr.push(`${f}: ${Math.round(q.x)},${Math.round(q.y)} ${(100 * size).toFixed(0)}%`);
       }
-      const L = sightClear(B.world, cam, st.shot.kind === 'tail' ? cam.look : subj); if (!L.clear) fail(tag, `the view of the ${st.shot.subj} is blocked by ${L.kind} at ${Math.round(L.d)} m, t ${t.toFixed(2)}`);
+      for (const extra of st.shot.also || []) { const e = S[extra] || S.pts[extra], q = e && project(cam, e, 960, 540), C = clearArea(960, 540); if (!q || q.x < C.x0 || q.x > C.x1 || q.y < C.y0 || q.y > C.y1) fail(tag, `${extra} outside the clear picture`, q && Math.round(q.x), q && Math.round(q.y)); }
+      const L = sightClear(B.world, cam, st.shot.kind === 'tail' ? cam.look : subj); if (!L.clear && st.shot.kind !== 'plan') fail(tag, `the view of the ${st.shot.subj} is blocked by ${L.kind} at ${Math.round(L.d)} m, t ${t.toFixed(2)}`);
       { const gc = B.world.h(cam.pos.x, -cam.pos.z); if (cam.pos.y < gc + 0.7) fail(tag, 'camera under or at the ground'); }
     }
     if (show) console.log(`\n[${i + 1}] ${st.head}   (${st.from.toFixed(1)} to ${st.to.toFixed(1)} s, ${watch.toFixed(1)} s to watch, ${st.shot.kind} on ${st.shot.subj}: ${fr.join(' | ')})\n    ${text}\n    labels: ${st.marks.map(m => m.text).join(' | ')}${st.facts ? '\n    facts: ' + st.facts.map(f => f[0] + ' ' + f[1]).join(' | ') : ''}`);

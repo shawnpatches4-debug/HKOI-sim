@@ -73,7 +73,7 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
       for (const u of [st.from, (st.from + st.to) / 2, st.to]) { const svg = geoSVG(D, u, st.diagram.focus, TB); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2)); }
       save(`aim_${i + 1}_${st.key}`, geoSVG(D, st.to, st.diagram.focus, TB)); });
     // the stage the diagram shows at the end of each step
-    const want = { launch: 1, warn: 1, radar: 3, plan: 3, fire: 4, meet: 5, cloud: 5, cut: 6, blind: 7 };
+    const want = { launch: 0, warn: 1, radar: 3, plan: 3, fire: 4, meet: 5, cloud: 5, cut: 6, blind: 7 };
     steps.forEach(st => { nChk++; const g = aimStage(D, st.to - D.T0); if (want[st.key] != null && g !== want[st.key]) fail(`aim step ${st.key}`, 'diagram stage at its end', g, 'expected', want[st.key]); });
     for (let u = D.T0 + D.tL - 0.5; u < D.T0 + D.end.t + 0.8; u += 0.05) for (const f of ['chain', 'table', 'bearing', 'light']) if (hole(geoSVG(D, u, f, TB))) { fail('aim diagram hole at', u, f); break; }
     // the steps' wording against the record (the words that carry a number)

@@ -52,9 +52,12 @@ export const SHOTS = {
   // over the weapon station's shoulder, looking out along the threat's bearing: the gun in the foreground, the distance it reaches beyond
   overgun: (S, side) => { const st = S.station, P = add(add(add(st, S.b, -6), S.p, 1.5 * side), V(0, 1, 0), 1.3);
     const look = add(st, S.b, 220); look.y = st.y + 1; return { pos: lift(S, P, 2.5), look, fov: 40 }; },
-  // the weapon station on the turret roof, close, from the side, the gun pointing across the picture towards the threat
-  station: (S, side, age) => { const st = S.station, a = (side * 62 + 8 * Math.sin(age * 0.25)) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a) * 1);
-    const P = add(add(st, dir, 6.2), V(0, 1, 0), 1.6); return { pos: lift(S, P, 2), look: add(add(st, S.b, 1.2), V(0, 1, 0), -0.35), fov: 38 }; },
+  // the weapon station on the turret roof, close, from the side and a little behind, the gun pointing across the picture
+  station: (S, side, age) => { const body = add(S.station, S.b, -1.1), a = (side * 100 + 6 * Math.sin(age * 0.25)) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
+    const P = add(add(body, dir, 7.5), V(0, 1, 0), 2.2); return { pos: lift(S, P, 2.5), look: add(add(body, S.b, 0.6), V(0, 1, 0), -0.2), fov: 38 }; },
+  // the whole engagement from high to one side: the tank, the line to the launcher, and the points along it (planning)
+  plan: (S, side) => { const C = S.at(S.R * 0.5, 0), D = S.R * 1.0, P = add(add(add(C, S.p, D * side), S.b, -D * 0.05), V(0, 1, 0), D * 0.5);
+    return { pos: P, look: C, fov: 44 }; },
   // the whole tank from three quarters, close enough to fill the picture
   tank: (S, side, age) => { const T = S.tank, a = (side * 120 + age * 1.5) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
     return { pos: lift(S, add(add(T, dir, 15.5), V(0, 1, 0), 4.8), 3), look: add(T, V(0, 1, 0), 0.9), fov: 38 }; },
