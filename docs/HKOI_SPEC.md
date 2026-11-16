@@ -310,7 +310,7 @@ Gun time per burst `BD = (burst-1)*60/rof + 0.1`, slew as in 3.4. A burst is fir
 raises `sum p` (each threat's table value at its planned range, no Trophy, no meet range change), planning once at the start with every
 threat of the volley, even those not yet launched (it knows the future). Follow-up bursts are fitted later into gaps.
 
-**'smart'** (`fc.scheduler = 'smart'`, Shawn's order of 16 Nov 2026): plans only with what the fire control has at the moment it decides
+**'smart'** (`fc.scheduler = 'smart'`, Shawn's order of 16 Nov 2026; THE DEFAULT since the 200-battle comparison the same day): plans only with what the fire control has at the moment it decides
 (threats already tracked, gun position and free time, magazines, Trophy shots left per side, its trial table). At each decision it
 searches the orders of the known candidates (every ordered subset up to 6, else a local search with remove / insert / move) and minimises
 ```
