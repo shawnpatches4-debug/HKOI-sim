@@ -4,19 +4,23 @@
 //   spin    + Kornet blind flight along the spiral tangent (THREATS.kornet.blind_spin)
 //   relock  + Kornet re-lock with the real correction flown by the autopilot (drift.relock_kornet)
 //   smart   + the smart scheduler (fc.scheduler = 'smart')
-//   all     all three (the new default)
+//   all     all three, old table
+//   table / spin_table / spin_table_smart: the honest planning table (fc.table = 'honest'), alone, with spin, with spin and smart
 // For each: survival with no protection / Trophy / HKOI / both at 3 mrad and 0.5 mrad enemy gunner, hits a raid, beams cut per missile engaged
 // with obscurant, Trophy shots a raid, hits by cause (why HKOI did not stop it), and what happened to cut Kornets.
 // The fire-control table is rebuilt for every setting. Margin of a survival figure at 3,000 raids: about +-1.4 points at 85%.
 const { HK } = require('../battle/load.js');
 const N = +process.argv[2] || 3000;
-const VAR = {
-  old: c => { c.blind_spin = false; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; },
-  spin: c => { c.blind_spin = true; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; },
-  relock: c => { c.blind_spin = false; c.drift.relock_kornet = true; c.fc.scheduler = 'classic'; },
-  spin_relock: c => { c.blind_spin = true; c.drift.relock_kornet = true; c.fc.scheduler = 'classic'; },
-  smart: c => { c.blind_spin = false; c.drift.relock_kornet = false; c.fc.scheduler = 'smart'; },
-  all: c => { c.blind_spin = true; c.drift.relock_kornet = true; c.fc.scheduler = 'smart'; },
+const VAR = {   // fc.table: 'still' = the old planning table (no wander, still tank), 'honest' = with assumed wander and the crew's movement (16 Nov)
+  old: c => { c.blind_spin = false; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; c.fc.table = 'still'; },
+  spin: c => { c.blind_spin = true; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; c.fc.table = 'still'; },
+  relock: c => { c.blind_spin = false; c.drift.relock_kornet = true; c.fc.scheduler = 'classic'; c.fc.table = 'still'; },
+  spin_relock: c => { c.blind_spin = true; c.drift.relock_kornet = true; c.fc.scheduler = 'classic'; c.fc.table = 'still'; },
+  smart: c => { c.blind_spin = false; c.drift.relock_kornet = false; c.fc.scheduler = 'smart'; c.fc.table = 'still'; },
+  table: c => { c.blind_spin = false; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; c.fc.table = 'honest'; },
+  spin_table: c => { c.blind_spin = true; c.drift.relock_kornet = false; c.fc.scheduler = 'classic'; c.fc.table = 'honest'; },
+  spin_table_smart: c => { c.blind_spin = true; c.drift.relock_kornet = false; c.fc.scheduler = 'smart'; c.fc.table = 'honest'; },
+  all: c => { c.blind_spin = true; c.drift.relock_kornet = true; c.fc.scheduler = 'smart'; c.fc.table = 'still'; },
 };
 const pick = (process.argv[3] || 'old,spin,relock,spin_relock,smart,all').split(',');
 const SETUPS = [['none', c => { c.hkoi_enabled = false; c.aps.enabled = false; }], ['Trophy', c => { c.hkoi_enabled = false; }], ['HKOI', c => { c.aps.enabled = false; }], ['both', c => { }]];

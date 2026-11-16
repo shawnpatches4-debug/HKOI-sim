@@ -1,4 +1,4 @@
-// node tests/study/cut_pass.js [raids|battles] [N] [spin=0|1] [relock=0|1] [jit=3] [sched=classic|smart]
+// node tests/study/cut_pass.js [raids|battles] [N] [spin=0|1] [relock=0|1] [jit=3] [sched=classic|smart] [table=still|honest] [detail] [list]
 // How close does a missile whose beam was CUT pass the tank? (Shawn, 16 Nov 2026: "you'll often see a missile fly like 1 metre above the tank".)
 // For every cut missile (HKOI cloud, not crew smoke) it reads the engine's own record: where it crosses the vehicle plane (sideways after the
 // crew's own move, and height relative to the hull centre), or how far short it hits the ground. Distance is measured to the hull box
@@ -7,20 +7,22 @@
 const { HK, Battle } = require('../battle/load.js');
 const A = process.argv.slice(2), MODE = A.find(a => a === 'raids' || a === 'battles') || 'raids', N = +(A.find(a => /^\d+$/.test(a)) || 500);
 const opt = k => { const a = A.find(x => x.startsWith(k + '=')); return a ? a.slice(k.length + 1) : null; };
-const SPIN = opt('spin'), RELOCK = opt('relock'), JIT = opt('jit'), SCHED = opt('sched');
+const SPIN = opt('spin'), RELOCK = opt('relock'), JIT = opt('jit'), SCHED = opt('sched'), TABLE = opt('table');
 function tune(c) {
   if (SPIN != null) c.blind_spin = SPIN === '1';
   if (RELOCK != null) { if (c.drift.relock_kornet !== undefined) c.drift.relock_kornet = RELOCK === '1'; else c.drift.relock = RELOCK === '1'; }
   if (JIT != null) c.enemy.gunner_jitter_mrad = +JIT;
   if (SCHED != null) c.fc.scheduler = SCHED;
+  if (TABLE != null) c.fc.table = TABLE;   // 'still' (old planning table) or 'honest'
   return c;
 }
 const KIND = k => (k === 'kornet' || k === 'saclos' || k === 'sal' || k === 'vikhr') ? k : 'other';
 const RB = d => d < 300 ? '<300' : d < 600 ? '300-600' : d < 1000 ? '600-1000' : d < 1500 ? '1000-1500' : '>=1500';
 const BINS = ['hit', '<1', '1-2', '2-5', '5-10', '10-30', '>=30', 'ground'];
 const tab = {}, addRow = (key, b) => { const r = tab[key] || (tab[key] = { n: 0 }); r.n++; r[b] = (r[b] || 0) + 1; };
-const over = []; let relocks = 0, relockHit = 0, cutK = 0;
+const over = []; let relocks = 0, relockHit = 0, cutK = 0; const meets = [], cuts = [];
 function take(rec, veh) {
+  for (const b of rec.bursts) if (b.kind === 'obs' && b.res && b.res.meet != null && rec.threats[b.idx] && rec.threats[b.idx].key === 'kornet') { meets.push(b.res.meet); if (b.res.cut) cuts.push(b.res.sever); }
   for (const th of rec.threats) {
     const sv = th.viz.sever; if (!sv || sv.smoke) continue;
     const e = th.viz.end || {}, k = KIND(th.key), d = sv.d;
@@ -60,5 +62,7 @@ console.log('group'.padEnd(16) + '   n ' + BINS.map(b => b.padStart(6)).join('')
 const order = ['all', 'kind kornet', 'kind vikhr', 'kind saclos', 'kind sal', 'kind other', 'cut at <300', 'cut at 300-600', 'cut at 600-1000', 'cut at 1000-1500', 'cut at >=1500'];
 const ranges = ['<300', '300-600', '600-1000', '1000-1500', '>=1500']; if (A.includes('detail')) for (const k of ['kornet', 'vikhr', 'saclos', 'sal', 'other']) for (const r of ranges) order.push(' ' + k + ' ' + r);
 for (const k of order) { const r = tab[k]; if (!r) continue; console.log(k.padEnd(16) + String(r.n).padStart(5) + ' ' + BINS.map(b => pc(r[b], r.n).padStart(6)).join('')); }
+const med = a => { const q = a.slice().sort((x, y) => x - y); return q.length ? Math.round(q[q.length >> 1]) : '-'; };
+console.log(`Kornet bursts ${meets.length}: median meeting range ${med(meets)} m; Kornet cuts ${cuts.length}: median range at the cut ${med(cuts)} m`);
 console.log(`Kornets cut ${cutK}, re-locked ${relocks}, of those hit ${relockHit}`);
 if (A.includes('list')) console.log(JSON.stringify(over.slice(0, 40)));

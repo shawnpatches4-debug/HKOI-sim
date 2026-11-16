@@ -137,8 +137,14 @@ To meet a Kornet (250 m/s) at d = 900 m the gun fires when the missile is at 900
 Closing speed at the meet is about 649 + 250 = 900 m/s.
 
 Meeting range choice: before the fight the fire control builds a table `p(d)` for d = 400 ... 2,500 m by trial
-engagements and picks `argmax [ p(d) - 0.003 * rounds(d) ]`. Known flaw: the trials use a still tank and a steady
-gunner, so `p` is optimistic (see HKOI_NUMBERS.md).
+engagements (160 per range, one missile, fixed seed 99) and picks `argmax [ p(d) - 0.003 * rounds(d) ]`. `p` = share of trials
+in which the missile is cut and then misses.
+MODEL since 16 Nov 2026 (Shawn's go-ahead), `fc.table = 'honest'`: each trial draws an enemy gunner wander, 1-sigma uniform
+0.5 to 3 mrad (`fc.table_wander_mrad`, ASSUMED: the fire control does not know this gunner; these are the simulator's expert and
+default figures), and, when the crew reacts, moves the tank at the steady speed the driver holds while HKOI fires (`crew.steady_speed`,
+4 m/s, the mission's own rule) in a uniformly random direction (ASSUMED), which also enters the tracking and stabiliser error.
+`fc.table = 'still'` is the old table (still tank, steady gunner), which overrated short meets: with the Kornet spin model on it chose
+600 m (p 0.99); the honest table chooses 1,000 m (p 0.88). Still a planning estimate: no volley, no terrain, 160 trials per range.
 
 ### 3.4 Warning, track and time line
 
@@ -214,8 +220,9 @@ cut when tau >= tau_need                           tested every 0.02 s against t
 transmission = exp(-tau)                           tau 4.6 is 1%
 ```
 Clear air: `tau_need` is about 4.5 at 1 km. Dust (beta 2.5) lowers it to about 2.1 at 1 km.
-MODEL since 16 Nov 2026 (Shawn's order): the **Kornet can re-lock and must fly the correction** (`drift.relock_kornet = true`,
-`THREATS.kornet.relock_fly`). While blind it is tested every 0.02 s; it gets its beam back when all three hold:
+MODEL: **a cut is permanent** for every kind. Shawn ordered a Kornet re-lock on 16 Nov 2026 and, after seeing its measurement the same day,
+ordered it dropped ("just drop the re lock mechanic"): `drift.relock_kornet = false` by default. The code stays as an option, OFF, so the
+comparison can be repeated. What the option does (`drift.relock_kornet = true`, `THREATS.kornet.relock_fly`): While blind it is tested every 0.02 s; it gets its beam back when all three hold:
 ```
 line missile tail -> launcher clear (tau < tau_need) for reacquire_s = 0.3 s       ASSUMED: time to decode the coded beam again
 |missile - beam centre| <= beam_field_m = 4 m (beam centre includes the gunner's wander)   ASSUMED: the sight's zoom keeps the
@@ -336,7 +343,7 @@ with 120 g: 56.3% (72% cut).
 | Payload | about 40 g | 40 g | as much as fits: 50 to 65 g estimate |
 | Envelope | 800 to 3,500 m | meet 400 to 2,500 m, best 900 m for Kornet | open |
 | Blind missile | free fall | drift with random lift | open (unknown real behaviour) |
-| Re-lock | not covered | Kornet: re-lock with the real correction (16 Nov); others: off | as MODEL |
+| Re-lock | not covered | off (a Kornet re-lock was tried on 16 Nov and dropped by Shawn's order; option drift.relock_kornet) | off |
 | Magazine | 80 + 40 | 150 + 150 | open |
 
 ## 6. Open design questions
@@ -345,7 +352,7 @@ with 120 g: 56.3% (72% cut).
 2. Real cavity volume and fuze mass for a 30 x 113 mm carrier shell (ask Northrop Grumman; XM1211 body is the nearest).
 3. Fuze setter for the M230LF.
 4. Does holding the tank still for the burst help more than moving? (model study, not yet run)
-5. Make the planning table include gunner wander and own movement.
+5. Make the planning table include gunner wander and own movement: DONE 16 Nov 2026 (fc.table = 'honest', see 3.3); the wander range and the steady-speed movement are assumptions.
 6. Is 3 mrad the right default gunner wander? It lets 80% of unprotected tanks survive, against the 80 to 90% hit rate
    usually credited to Kornet.
 7. Larger calibre (30 x 173 mm, 40 mm) as the route to a 100 g class payload.
