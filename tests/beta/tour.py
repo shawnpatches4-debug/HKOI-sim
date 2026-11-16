@@ -61,7 +61,7 @@ async def main():
             ci, si = [int(x) for x in s.lstrip('a').split('.')]
             if fresh or not await pg.evaluate("!!(window.__beta && __beta.guide)"): fresh = False; await ready('gfx=%s&demo=0&%s=%d.%d' % (GFX, 'aim' if aimp else 'tour', ci, si))
             elif aimp: await pg.evaluate("void (() => { const g = __beta.guide, b = g.brief, i = g.chapterIndex(%d ? 'order' : 'aim'); if (b.on) b.go(i, %d); else b.start(i, %d, ['aim', 'order']); })()" % (ci, si, si))
-            else: await pg.evaluate("void __beta.guide.brief[__beta.guide.brief.on ? 'go' : 'start'](%d, %d)" % (ci, si))
+            else: await pg.evaluate("void (() => { const b = __beta.guide.brief; if (b.on && b.only) b.stop(); b[b.on ? 'go' : 'start'](%d, %d); })()" % (ci, si))
             if aimp: ci = await pg.evaluate("__beta.guide.chapterIndex(%s)" % ("'order'" if ci else "'aim'"))
             st = None; t1 = time.time()
             while left() > 25:

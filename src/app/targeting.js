@@ -366,8 +366,8 @@ export function orderSteps(O) {
       marks: [mk('trophy', `Trophy shots used here: ${O.apsUsed} of ${2 * O.aps0}`, idOf(handed[0]), { tone: 'good', side: 'L' })],
       text: () => `Trophy, the inner layer, takes what HKOI cannot: ${list(handed.map(r => `${r.label} (${orderWhy(r)})`))}. It fired ${O.apsUsed} of its ${2 * O.aps0} shots in this volley.` },
   ];
-  if (cutR) steps.push({ key: 'after', head: 'The other side, after the miss', from: A(cutR.endT + 0.3), to: A(cutR.endT + 2.3), rate: 1, shot: shotOf({ cam: 'troops' }, idOf(cutR)), diagram: dg('after', true),
-    marks: [mk('launcher', `${cutR.name} team`, idOf(cutR), { tone: 'bad' })],
-    text: () => `The ${cutR.name} team whose beam was cut, ${f1(cutR.endT - cutR.t0)} s after it fired. Its missile ${cutR.miss != null && cutR.endType === 'ground' ? `hit the ground ${m0(cutR.miss)} short` : cutR.miss != null ? `missed by ${f1(cutR.miss)} m` : 'missed'}. ${cutR.label} is the only one the gun stopped by itself in this volley: one gun cannot hold ${word(O.n)} at once.` });
+  if (cutR) steps.push({ key: 'after', head: 'The other side, after the miss', from: A(cutR.endT + 0.3), to: A(cutR.endT + 2.3), rate: 1, shot: shotOf({ cam: 'enemy' }, idOf(cutR)), diagram: dg('after', true),
+    marks: [mk('tank', 'The tank, unhurt', null, { tone: 'good' })],
+    text: () => `Through the sight of the ${cutR.name} team whose beam was cut, ${f1(cutR.endT - cutR.t0)} s after it fired: the tank is still there. Its missile ${cutR.miss != null && cutR.endType === 'ground' ? `hit the ground ${m0(cutR.miss)} short` : cutR.miss != null ? `missed by ${f1(cutR.miss)} m` : 'missed'}. ${cutR.label} is the only one the gun stopped by itself in this volley: one gun cannot hold ${word(O.n)} at once.` });
   return steps;
 }
