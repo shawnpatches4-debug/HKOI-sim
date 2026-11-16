@@ -169,20 +169,20 @@ export function aimSVG(D, tb, opt) {
   const px0 = 46, px1 = 524, py = 100, sc = (px1 - px0) / (D.R * 1.03), X = x => px0 + x * sc, Y = y => py - y * sc;
   s += head(14, 20, 'FROM ABOVE: TANK TO LAUNCHER, TRUE SCALE');
   s += T(546, 20, `bearing ${r0(D.brg)}°`, ' class="s e"');
-  for (let k = 500; k <= D.R; k += 500) s += LN(X(k), py - 3, X(k), py + 3, C.line) + (k % 1000 === 0 ? T(X(k), py + 16, `${k / 1000} km`, ' class="s m"') : '');
+  for (let k = 500; k <= D.R; k += 500) s += LN(X(k), py - 3, X(k), py + 3, C.line) + (k % 1000 === 0 ? T(X(k), py - 8, `${k / 1000} km`, ' class="s m"') : '');
   s += LN(X(0), py, X(D.R), py, C.line);
   if (st >= 1) { const a = D.warn.sigma * Math.PI / 180, L = D.R * 1.02; s += `<path d="M${X(0)},${py} L${(X(0) + L * sc * Math.cos(a)).toFixed(1)},${(py - L * sc * Math.sin(a)).toFixed(1)} L${(X(0) + L * sc * Math.cos(a)).toFixed(1)},${(py + L * sc * Math.sin(a)).toFixed(1)} Z" fill="${C.warn}" fill-opacity="${focus === 'warn' || focus === 'radar' ? 0.16 : 0.08}" stroke="${C.warn}" stroke-opacity=".5" stroke-dasharray="4 3"/>`;
     s += T(X(D.R * 0.62), py - D.R * 0.62 * sc * Math.tan(a) - 5, `warning bearing ±${D.warn.sigma}° (setting)`, ' class="s a m"'); }
   const M = missileAt(D, t);
   if (st >= 2 && st < 7) s += LN(X(0), py, X(M.x), Y(M.y), C.warn, ` stroke-width="${focus === 'radar' ? 2.2 : 1.2}"`) + (focus === 'radar' ? T(X(M.x * 0.5), py - 6, 'radar track', ' class="s a m"') : '');
   // planned and actual meeting point
-  if (st >= 3) { const xw = X(D.plan.want); s += `<path d="M${xw},${py - 7} l6,7 l-6,7 l-6,-7 Z" fill="none" stroke="${C.good}" stroke-width="1.5"/>` + T(xw, py + 30, `meet ${m0(D.plan.want)}`, ' class="s g m"');
-    if (st === 3 && focus === 'plan') { const xf = X(D.plan.dFireIdeal); s += LN(xw, py + 12, xf, py + 12, C.bad, ' stroke-dasharray="3 3"') + T((xw + xf) / 2, py + 38, `missile flies ${m0(D.speed * D.plan.tof)} while the round flies ${m0(D.plan.want)}`, ' class="s m"'); } }
+  if (st >= 3) { const xw = X(D.plan.want); s += `<path d="M${xw},${py - 7} l6,7 l-6,7 l-6,-7 Z" fill="none" stroke="${C.good}" stroke-width="1.5"/>` + T(xw, py + 24, `meet ${m0(D.plan.want)}`, ' class="s g m"');
+    if (st === 3 && focus === 'plan') { const xf = X(D.plan.dFireIdeal); s += LN(xw, py + 12, xf, py + 12, C.bad, ' stroke-dasharray="3 3"') + T((xw + xf) / 2, py + 44, `missile flies ${m0(D.speed * D.plan.tof)} while the round flies ${m0(D.plan.want)}`, ' class="s m"'); } }
   for (const r of D.rounds) { const q = roundAt(D, r, t); if (q) s += CI(X(q.x), py, 2.2, ` fill="${C.good}"`); }
   for (const p of D.puffs) { const q = puffAt(D, p, t); if (q) s += CI(X(q.x), Y(q.y), Math.max(2.5, q.s * sc * 4), ` fill="${C.puff}" fill-opacity="${q.forming ? 0.25 : 0.55}"`); }
-  s += tankIcon(X(0), py, 1.1) + teamIcon(X(D.R), py) + T(X(D.R), py - 12, `${D.name} team`, ' class="s r m"');
+  s += tankIcon(X(0), py, 1.1) + teamIcon(X(D.R), py) + T(X(D.R) - 4, py - 22, `${D.name} team`, ' class="s r e"');
   if (M.flying || st < 7) s += CI(X(M.x), Y(M.y), 3.6, ` fill="${M.blind ? C.blind : C.bad}" stroke="#000" stroke-width=".6"`);
-  if (st >= 7) s += T(X(Math.max(M.x, 0)) + 8, py - 10, D.end.type === 'ground' ? `blind: into the ground ${m0(D.end.short)} short` : `blind: passed ${f1(D.end.miss)} m wide`, ' class="s"');
+  if (st >= 7) s += T(X(0) + 4, py - 24, D.end.type === 'ground' ? `blind: into the ground ${m0(D.end.short)} short` : `blind: passed ${f1(D.end.miss)} m wide`, ' class="s"');
   // ---- close-up of the meeting zone, seen from the side
   const xs = D.puffs.map(p => p.x).concat([D.cut.d]), xa = Math.max(0, Math.min(...xs) - 160), xb = Math.max(...xs) + 220, cy0 = 200, cy1 = 318, cx0 = 46, cx1 = 524;
   const zMax = Math.max(10, ...D.puffs.map(p => p.z + 4)), sx = (cx1 - cx0) / (xb - xa), sz = (cy1 - cy0 - 14) / zMax, CX = x => cx0 + (x - xa) * sx, CZ = z => cy1 - 6 - z * sz;
@@ -246,18 +246,18 @@ export function orderSVG(O, tb, opt) {
     if (fly) s += CI(cx + Math.sin(a) * rad(d), cy - Math.cos(a) * rad(d), 3.4, ` fill="${col}" stroke="#000"`);
     s += T(ex + (Math.sin(a) >= 0 ? 7 : -7), ey + 4, `#${r.idx + 1}`, ` class="s b${Math.sin(a) >= 0 ? '' : ' e'}"`); }
   s += tankIcon(cx, cy, 1);
-  s += T(cx, cy + 112, 'north up; range on a square-root scale', ' class="s m"');
+  s += T(cx, cy + 104, 'north up; range on a square-root scale', ' class="s m"');
   // the gun's order and the outcome list
-  s += head(244, 20, "THE GUN'S ORDER (SECONDS AFTER FIRST LAUNCH)");
-  O.gunOrder.forEach((r, i) => { const on = t >= r.bursts[0].tf; s += T(244, 42 + i * 17, `${i + 1}. ${r.label}`, ` class="n${on ? ' g' : ''}"`) + T(352, 42 + i * 17, `fires at ${f1(r.bursts[0].tf)}, due at ${f1(r.impact)}`, ' class="s"'); });
+  s += head(244, 20, "THE GUN'S ORDER");
+  O.gunOrder.forEach((r, i) => { const on = t >= r.bursts[0].tf; s += T(244, 42 + i * 17, `${i + 1}. ${r.label}`, ` class="n${on ? ' g' : ''}"`) + T(352, 42 + i * 17, `fires at ${f1(r.bursts[0].tf)} s, due ${f1(r.impact)} s`, ' class="s"'); });
   const ly = 52 + O.gunOrder.length * 17; s += head(244, ly, 'WHO DEALS WITH EACH');
-  O.rows.forEach((r, i) => { const done = t >= r.endT - 0.01; s += T(244, ly + 18 + i * 16, `#${r.idx + 1} ${r.name}`, ` class="b" fill="${KIND_C[r.key] || C.bad}" style="fill:${KIND_C[r.key] || C.bad}"`) + T(330, ly + 18 + i * 16, done || o.all ? orderWhy(r) : '…', ' class="s"'); });
+  O.rows.forEach((r, i) => { const done = t >= r.endT - 0.01; s += T(244, ly + 18 + i * 16, `#${r.idx + 1} ${r.name}`, ` class="b" fill="${KIND_C[r.key] || C.bad}" style="fill:${KIND_C[r.key] || C.bad}"`) + T(330, ly + 18 + i * 16, orderWhy(r), ` class="s"${done || o.all ? '' : ' opacity=".45"'}`); });
   // rows in time: flight bar, warning, track, the gun's bursts, Trophy's shot, the end
-  const gy = 268, rh = Math.min(36, 196 / O.rows.length), gx0 = 120, gx1 = 540, tmax = Math.ceil(O.tEnd + 0.5), GX = u => gx0 + u / tmax * (gx1 - gx0);
+  const gy = 284, rh = Math.min(36, 196 / O.rows.length), gx0 = 170, gx1 = 540, tmax = Math.ceil(O.tEnd + 0.5), GX = u => gx0 + u / tmax * (gx1 - gx0);
   s += head(14, gy - 10, 'SECONDS AFTER THE FIRST LAUNCH');
   for (let k = 0; k <= tmax; k++) s += LN(GX(k), gy, GX(k), gy + rh * O.rows.length, k % 5 === 0 ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.05)') + (k % 2 === 0 ? T(GX(k), gy + rh * O.rows.length + 12, String(k), ' class="s m"') : '');
   O.rows.forEach((r, i) => { const y = gy + i * rh + rh / 2, col = KIND_C[r.key] || C.bad, e = Math.min(t, r.endT);
-    s += T(14, y + 4, `#${r.idx + 1} ${r.name}`, ` style="fill:${col}" class="b"`) + T(gx0 - 6, y + 4, km2(r.R), ' class="s e"');
+    s += T(14, y + 4, `#${r.idx + 1} ${r.name}`, ` style="fill:${col}" class="b"`) + T(gx0 - 8, y + 4, km2(r.R), ' class="s e"');
     s += `<rect x="${GX(r.t0).toFixed(1)}" y="${(y - 3).toFixed(1)}" width="${Math.max(0, GX(r.endT) - GX(r.t0)).toFixed(1)}" height="6" fill="${col}" fill-opacity=".18"/>`;
     if (e > r.t0) s += `<rect x="${GX(r.t0).toFixed(1)}" y="${(y - 3).toFixed(1)}" width="${Math.max(0, GX(e) - GX(r.t0)).toFixed(1)}" height="6" fill="${col}" fill-opacity=".7"/>`;
     if (r.cue != null && t >= r.cue) s += `<path d="M${GX(r.cue).toFixed(1)},${(y - 8).toFixed(1)} l3,-5 h-6 Z" fill="${C.warn}"/>`;
@@ -267,7 +267,7 @@ export function orderSVG(O, tb, opt) {
     for (const q of r.aps) if (t >= q.t) s += `<path d="M${GX(q.t).toFixed(1)},${(y - 7).toFixed(1)} l2,5 5,0 -4,3 2,5 -5,-3 -5,3 2,-5 -4,-3 5,0 Z" fill="${q.kill ? '#7fd1ff' : C.dim}"/>`;
     if (r.cutT != null && t >= r.cutT) s += CI(GX(r.cutT), y, 4, ` fill="none" stroke="${C.good}" stroke-width="2"`);
   });
-  const ky = gy + rh * O.rows.length + 28; s += `<path d="M14,${ky - 4} l3,-5 h-6 Z" fill="${C.warn}"/>` + T(22, ky, 'warning', ' class="s"') + LN(76, ky - 9, 76, ky + 1, C.warn, ' stroke-width="1.6"') + T(81, ky, 'radar track', ' class="s"') + `<rect x="150" y="${ky - 6}" width="14" height="5" fill="${C.good}"/>` + T(168, ky, 'HKOI firing (order number)', ' class="s"') + `<path d="M318,${ky - 9} l2,5 5,0 -4,3 2,5 -5,-3 -5,3 2,-5 -4,-3 5,0 Z" fill="#7fd1ff"/>` + T(330, ky, 'Trophy shot', ' class="s"') + CI(405, ky - 4, 4, ` fill="none" stroke="${C.good}" stroke-width="2"`) + T(413, ky, 'beam cut', ' class="s"');
+  const ky = gy + rh * O.rows.length + 28; s += `<path d="M14,${ky - 4} l3,-5 h-6 Z" fill="${C.warn}"/>` + T(22, ky, 'warning', ' class="s"') + LN(84, ky - 9, 84, ky + 1, C.warn, ' stroke-width="1.6"') + T(90, ky, 'radar track', ' class="s"') + `<rect x="172" y="${ky - 6}" width="14" height="5" fill="${C.good}"/>` + T(190, ky, 'HKOI firing, in order', ' class="s"') + `<path d="M330,${ky - 9} l2,5 5,0 -4,3 2,5 -5,-3 -5,3 2,-5 -4,-3 5,0 Z" fill="#7fd1ff"/>` + T(342, ky, 'Trophy shot', ' class="s"') + CI(428, ky - 4, 4, ` fill="none" stroke="${C.good}" stroke-width="2"`) + T(437, ky, 'beam cut', ' class="s"');
   const cxT = GX(Math.max(0, Math.min(tmax, t))); s += LN(cxT, gy - 4, cxT, gy + rh * O.rows.length, C.text, ' stroke-width="1.2"');
   return wrap(ORDER_W, ORDER_H, s);
 }
@@ -342,12 +342,12 @@ export function aimSteps(D) {
     { key: 'bloom', head: 'Bloom: the cloud on his line of sight', from: A(D.tFirstPuff - 0.4), to: A(D.cut.t - 0.05), rate: 0.5, shot: shotOf({ cam: 'enemy' }, id), diagram: Object.assign(dg('bloom'), { compact: true }),
       marks: [mk('cloud', 'Obscurant puffs', id, { tone: 'good', x: (D.puffs.reduce((a, p) => a + p.x, 0) / Math.max(1, D.puffs.length)), r: 400 }), mk('missile', 'His missile', id, { tone: 'bad' })],
       text: () => `Through the enemy gunner's sight. Each round lets go ${D.payload} g of obscurant (assumed: no such round exists yet), a puff about ${r0(2 * D.s0)} m across that grows as it drifts. The missile's tail receiver looks back at the launcher through them. The record's optical depth on that line climbs toward ${f2(D.need)}.` },
-    { key: 'cut', head: 'The cut, riding the missile', from: A(D.cut.t - 1.2), to: A(Math.min(D.end.t - 0.2, D.cut.t + 0.8)), rate: 0.25, shot: shotOf({ rig: 'ride' }, id), diagram: dg('cut'),
-      marks: [mk('missile', () => `${D.name}: guidance lost`, id, { tone: 'warn', after: A(D.cut.t) }), mk('cloud', 'Obscurant', id, { tone: 'good', x: D.cut.d + 60, r: 260 })],
-      text: () => `Riding behind the missile. ${f2(D.cut.dt)} s after launch the depth on the line passes ${f2(D.need)}: less than ${(100 * Math.exp(-D.need)).toFixed(1)}% of the beam gets through, and the missile, ${m0(D.cut.d)} out, loses it. With no beam it gets no more steering.` },
-    { key: 'blind', head: 'Blind, and wide', from: A(Math.max(D.cut.t + 0.8, D.end.t - 2)), to: A(D.end.t + 0.5), rate: 0.5, shot: shotOf({ rig: 'tank' }, id), diagram: dg('cut'),
-      marks: [mk('missile', D.name + ': blind', id, { tone: 'warn', gone: D.end.type === 'ground' ? `Hit the ground ${m0(D.end.short)} short` : `Passed ${f1(D.end.miss)} m wide`, goneTone: 'good' })],
-      text: () => `It holds whatever course it had when the beam went, and the enemy gunner can no longer correct it. This one ${D.end.type === 'ground' ? `hit the ground ${m0(D.end.short)} short of the tank` : `passed ${f1(D.end.miss)} m wide of the tank`}, ${f1(D.end.gone)} s after the cut. From launch to cut: ${f2(D.cut.dt)} s.` },
+    { key: 'cut', head: 'The cut', from: A(D.cut.t - 1.2), to: A(Math.min(D.end.t - 0.2, D.cut.t + 0.4)), rate: 0.25, shot: shotOf({ rig: 'cloud', x: (D.cut.d + Math.max(...D.puffs.map(p => p.x))) / 2, span: Math.max(160, Math.max(...D.puffs.map(p => p.x)) - D.cut.d + 140) }, id), lines: ['beam'], diagram: dg('cut'),
+      marks: [mk('missile', () => `${D.name}`, id, { tone: 'warn' }), mk('cloud', 'Obscurant puffs', id, { tone: 'good', x: (D.cut.d + Math.max(...D.puffs.map(p => p.x))) / 2, r: 260 }), mk('beam', 'Line back to the launcher', id, { tone: 'bad' })],
+      text: () => `From the side: the puffs lie behind the missile, on the line from its tail back to the launcher. ${f2(D.cut.dt)} s after launch the depth on that line passes ${f2(D.need)}: less than ${(100 * Math.exp(-D.need)).toFixed(1)}% of the beam gets through, and the missile, ${m0(D.cut.d)} out, loses it.` },
+    { key: 'blind', head: 'Riding the blind missile', from: A(D.cut.t + 0.3), to: A(Math.min(D.end.t - 0.3, D.cut.t + 3.3)), rate: 0.5, shot: shotOf({ rig: 'ride' }, id), diagram: dg('cut'),
+      marks: [mk('missile', D.name + ': blind', id, { tone: 'warn' }), mk('tank', 'The tank', null, { tone: 'good' })],
+      text: () => `Riding behind the missile after the cut. With no beam it gets no more steering: it holds whatever course it had, and the enemy gunner can no longer correct it. This one ${D.end.type === 'ground' ? `hit the ground ${m0(D.end.short)} short of the tank` : `passed ${f1(D.end.miss)} m wide of the tank`}, ${f1(D.end.gone)} s after the cut.` },
   ];
 }
 export function orderSteps(O) {

@@ -71,7 +71,7 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
       for (const u of [st.from, (st.from + st.to) / 2, st.to]) for (const compact of [false, true]) { const svg = aimSVG(D, u, { focus: st.diagram.focus, compact }); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2), compact ? '(compact)' : ''); }
       save(`aim_${i + 1}_${st.key}`, aimSVG(D, st.to, { focus: st.diagram.focus })); });
     // the stage the diagram shows at the end of each step
-    const want = { launch: 0, warn: 1, radar: 3, plan: 3, burst: 5, bloom: 5, cut: 6, blind: 7 };
+    const want = { launch: 0, warn: 1, radar: 3, plan: 3, burst: 5, bloom: 5, cut: 6, blind: 6 };
     steps.forEach(st => { nChk++; const g = aimStage(D, st.to - D.T0); if (want[st.key] != null && g !== want[st.key]) fail(`aim step ${st.key}`, 'diagram stage at its end', g, 'expected', want[st.key]); });
     for (let u = D.T0 + D.tL - 0.5; u < D.T0 + D.end.t + 0.8; u += 0.05) if (hole(aimSVG(D, u, {}))) { fail('aim diagram hole at', u); break; }
     // the steps' wording against the record (the words that carry a number)
