@@ -260,9 +260,9 @@ export function queueSVG(O, tb) {
   rows.forEach((r, i) => { const y = 38 + i * 58, live = t >= r.t0, over = t >= r.endT, col = KIND_C[r.key] || C.bad, gun = O.gunOrder.indexOf(r);
     o += RC(10, y, 340, 52, ` rx="7" fill="${live && !over ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.03)'}" stroke="${C.line}"`) + CI(26, y + 18, 6, ` fill="${col}"${live ? '' : ' fill-opacity=".35"'}`);
     o += T(40, y + 23, r.label, ' class="b"') + T(40, y + 42, `${km2(r.R)}, ${GUIDE[r.guidance] || ''}`, ' class="s d"');
-    const plan = gun >= 0 ? `gun ${['1st', '2nd', '3rd', '4th', '5th', '6th'][gun] || gun + 1}` : '';
+    const plan = gun >= 0 ? `gun, ${['1st', '2nd', '3rd', '4th', '5th', '6th'][gun] || gun + 1}` : '';
     const now = !live ? 'not yet fired' : !over ? (r.cutT != null && t >= r.cutT ? 'cut: flying blind' : 'in flight') : r.by === 'hkoi_cut' ? (r.endType === 'ground' ? `cut: fell ${m0(r.miss || 0)} short` : r.miss != null ? `cut: missed by ${f1(r.miss)} m` : 'cut') : r.by === 'aps' ? 'destroyed by Trophy' : r.endType === 'hit' ? 'HIT the tank' : 'missed';
-    o += T(342, y + 23, gun >= 0 ? `${plan}: ${r.by === 'hkoi_cut' ? 'cut' : orderWhy(r)}`.slice(0, 30) : orderWhy(r).slice(0, 30), ` class="s e b" style="fill:${gun >= 0 ? C.hk : C.good}"`) + T(342, y + 42, now, ` class="s e" style="fill:${over ? (r.endType === 'hit' ? C.bad : C.good) : C.text}"`); });
+    o += T(342, y + 23, gun >= 0 ? `HKOI ${plan}` : orderWhy(r).slice(0, 30), ` class="s e b" style="fill:${gun >= 0 ? C.hk : C.good}"`) + T(342, y + 42, now, ` class="s e" style="fill:${over ? (r.endType === 'hit' ? C.bad : C.good) : C.text}"`); });
   return wrap(QUEUE_W, h, o);
 }
 
