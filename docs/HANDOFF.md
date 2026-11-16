@@ -1,4 +1,6 @@
 # STATE 15 Nov 2026, about 14:45 UTC: VERSION 1.0 PUBLISHED (artifact version 36)
+
+**16 Nov 2026: 1.1 published (artifact version 38).** Kornet spin blind flight, honest planning table, smart scheduler, cut made obvious. See WORKLOG.
 All seven 1.0 workstreams are merged on claude/loving-newton-czylil (see the WORKLOG entry of 14:00 UTC for what each did and the known faults). Next: release page checks, publish to "HKOI Battlefield Beta", Notion entry. Open questions for Shawn: the HKOI station position (left rear corner, tall) vs "beside the CROWS"; a study of the obscurant's burst spacing; the cloud look; veterans' timed arrival; rocket teams in plain view; stand-off raid spread.
 
 # STATE 15 Nov 2026, about 02:45 UTC: VERSION 1.0 IN PROGRESS
