@@ -13,7 +13,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { missileMesh } from './units.js';
 import { MARK } from './fx.js';
 import { ObscurantCloud } from './obscurant.js';
-import { cutState, CutMarks, CutLabels, BLIND, T_LABEL_END } from './cutfx.js';
+import { cutState, relockT, CutMarks, CutLabels, BLIND, T_LABEL_END } from './cutfx.js';
 export { cutState };
 
 const DEG = Math.PI / 180, lerp = (a, b, t) => a + (b - a) * t, clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
@@ -42,7 +42,7 @@ export class VolleyView {
   }
   _lines(dashed) {
     const geo = new LineSegmentsGeometry(); geo.setPositions(new Float32Array(MAXBEAM * 2 * 6)); geo.setColors(new Float32Array(MAXBEAM * 2 * 6));
-    const mat = new LineMaterial({ linewidth: dashed ? 1.6 : 2.2, vertexColors: true, transparent: true, opacity: dashed ? 0.55 : 0.8, dashed, dashSize: 7, gapSize: 9, depthWrite: false, fog: false });
+    const mat = new LineMaterial({ linewidth: dashed ? 2.0 : 3.2   /* pixels: at 2.2 the line all but vanished on a 960 x 540 picture */, vertexColors: true, transparent: true, opacity: dashed ? 0.6 : 0.9, dashed, dashSize: 7, gapSize: 9, depthWrite: false, fog: false });
     const line = new LineSegments2(geo, mat); if (dashed) line.computeLineDistances(); line.frustumCulled = false; line.renderOrder = 8;   /* drawn before the cloud, so the cloud lies over the line where it covers it */ geo.instanceCount = 0; this.group.add(line);
     return { line, geo, pos: geo.attributes.instanceStart.data, col: geo.attributes.instanceColorStart.data, dist: dashed ? geo.attributes.instanceDistanceStart.data : null, n: 0 };
   }
@@ -53,7 +53,7 @@ export class VolleyView {
     if (L.dist) { L.dist.array[L.n * 2] = 0; L.dist.array[L.n * 2 + 1] = a.distanceTo(b); }
     L.n++;
   }
-  _flush(L) { L.geo.instanceCount = L.n; L.line.visible = L.n > 0; if (L.n) { L.pos.needsUpdate = true; L.col.needsUpdate = true; if (L.dist) L.dist.needsUpdate = true; } L.n = 0; }
+  _flush(L) { L.geo.instanceCount = L.n; L.line.visible = L.n > 0; const R = this.s.renderer; if (L.n && R && R.getDrawingBufferSize) { const r = L.line.material.resolution, v = R.getDrawingBufferSize(_res); if (r.x !== v.x || r.y !== v.y) r.set(v.x, v.y); }   /* three r170 does not set a line's pixel size by itself: left at 1 x 1 the guidance lines were never drawn as lines */ if (L.n) { L.pos.needsUpdate = true; L.col.needsUpdate = true; if (L.dist) L.dist.needsUpdate = true; } L.n = 0; }
 
   // ---- where things are --------------------------------------------------------------------------------------------------
   // the nominal flight line of threat th at x metres from the vehicle, with the vehicle where it is at volley time tv
@@ -139,7 +139,7 @@ export class VolleyView {
   // opening around it at that instant, a label that follows it and then sits where it ended, and the cue for the sound. All from the
   // record and battle time; nothing here moves the missile.
   _cut(v, th, l, tv, cs, key, cam, pixA, play) {
-    const end = th.viz.end, tc = cs.tCut, te = Math.min(tv, end.t), tr = cs.phase === 'relock' ? Math.min(te, tv) : te;
+    const end = th.viz.end, tc = cs.tCut, te = Math.min(tv, end.t), tr = cs.phase === 'relock' ? Math.min(te, relockT(th)) : te;   /* after a re-lock the blind part of the path ends where it found its beam */
     const fade = cs.phase === 'end' ? Math.max(0, 1 - (tv - end.t) / 1.5) : 1, fromSight = cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600;
     if (fade > 0 && te > tc) {   /* the blind path, cut point to the missile (or to where it ended), brighter toward the missile */
       const N = 8, A = this._q0, B = this._q1; this.pos(v, th, l, tc, A);
@@ -148,10 +148,10 @@ export class VolleyView {
     const P = this.pos(v, th, l, tc, this._qc);   /* where the missile was when it went blind */
     if (cs.ring > 0) { const d = cam.position.distanceTo(P), px = Math.max(0.6, d * pixA), f = cs.ring; this.marks.add(P, px * (10 + 46 * f * (2 - f)), BLIND, 1.4 * (1 - f), true); if (f < 0.3) this.marks.add(P, px * 18, [1, 1, 1], 1.3 * (1 - f / 0.3), false); }
     if (!this.seen.has(key + 'c')) { this.seen.add(key + 'c'); if (cs.age < 0.6) this.emit('cut', P.clone(), { key: th.key, d: cs.d }); }
-    if (!play || fromSight) { this.pos(v, th, l, Math.min(tv, end.t), this.tmp); return; }
+    if (!play || fromSight || this._sight) { this.pos(v, th, l, Math.min(tv, end.t), this.tmp); return; }
     const sub = `cut at ${Math.round(cs.d).toLocaleString('en-US')} m`;
     if (cs.phase === 'end') { const a = tv - end.t; if (a < T_LABEL_END) this.labels.add(cam, this.pos(v, th, l, end.t, this._q0), cs.text, sub, 'end', a > T_LABEL_END - 1 ? T_LABEL_END - a : 1); }
-    else this.labels.add(cam, this.pos(v, th, l, tv, this._q0), cs.text, cs.phase === 'relock' ? sub : sub, 'cut', 1);
+    else this.labels.add(cam, this.pos(v, th, l, tv, this._q0), cs.text, sub, 'cut', 1);
     this.pos(v, th, l, Math.min(tv, end.t), this.tmp);   /* put the working values back for the missile's own drawing */
   }
 
@@ -219,6 +219,7 @@ export class VolleyView {
     const v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null;
     if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.marks.flush(); this.labels.flush(); return; }
     const tv = t - v.t0, rec = v.rec; this._first(v); this.aimAt = null;
+    this._sight = false; for (const l of v.launches) if (l.u0 && Math.hypot(s.camera.position.x - l.u0.e, s.camera.position.z + l.u0.n) < 40) this._sight = true;   /* looking through an enemy sight: only that sight's own label is shown */
     if (this.curV !== v.i) { this.curV = v.i; for (const [k, st] of this.live) if (!k.startsWith(v.i + ':')) { this.group.remove(st.mesh); this.live.delete(k); } }   /* nothing of an earlier engagement is left hanging in the air */
     const cam = s.camera, pixA = 2 * Math.tan((cam.fov || 50) * Math.PI / 360) / (s.canvas ? s.canvas.clientHeight || 720 : 720), bt = typeof window !== 'undefined' && window.__beta, play = !(bt && bt.state) || bt.state() === 'play';   /* labels only in a battle being played, not behind the title */
 
@@ -365,3 +366,4 @@ export class VolleyView {
   }
 }
 const GREY = [0.72, 0.76, 0.8];
+const _res = new THREE.Vector2();
