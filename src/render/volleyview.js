@@ -102,7 +102,7 @@ export class VolleyView {
     const e = th.viz.end; if (!e || e.type !== 'miss') return; const f = clamp01(1 - x / th.R), hh = MISS_HH();
     const lat = e.lat || 0, up = e.over != null ? e.over : th.blind && Math.abs(Math.hypot(lat, th.blind.z) - (e.miss || 0)) < 0.3 ? th.blind.z : Math.sqrt(Math.max(0, (e.miss || 0) * (e.miss || 0) - lat * lat));
     if (!this._ot) { this._oy += lat * f; this._oz += up * f; }
-    else { const t1 = th.blind ? th.blind.tCut : this._tl;
+    else { const t1 = Math.min(th.blind ? th.blind.tCut : this._tl, e.t - 0.4);   /* a path that runs to the end but disagrees with the verdict (a gunner's-aim miss) hands over in the last 0.4 s */
       if (t1 < e.t - 0.05 && tc > t1) { const oy = this._oy, oz = this._oz, tl = this._tl; this._stray(th, e.t); this._own(v, th, 0, e.t); const ey = this._oy, ez = this._oz, g = clamp01((tc - t1) / (e.t - t1));
         this._oy = oy + (lat - ey) * g; this._oz = oz + (up - ez) * g; this._tl = tl; this._ot = true; } }
     this._oz -= (2.0 - hh) * f;

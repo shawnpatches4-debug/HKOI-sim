@@ -151,7 +151,7 @@ export class Plan {
         const tB = t0 + (b.t_ref != null ? b.t_ref : b.rounds[0].t_pass), tCut = res.cut && res.t_cut != null ? t0 + res.t_cut : null, tLast = t0 + (res.t_last != null ? res.t_last : b.rounds[b.rounds.length - 1].t_pass);
         // the cloud across the line; with a cut it holds on the cut for 2.6 s (the line breaking, the ring, the label) unless the flight ends sooner
         this._cand(Object.assign({ a: tB - 0.3, b: tCut != null ? Math.min(tCut + 2.6, Math.max(tE - 0.4, tCut + 1.6), tB + 9) : Math.min(tE - 0.9, tLast + 1.3, tB + 7), known: K, pri: (tCut != null ? 8 : 6) + bonus * 0.4, min: 1.5, rig: 'cloud', x: xs / b.puffs.length, span: x1 - x0, cut: tCut, label: tCut != null ? 'the cut: the guidance line breaks at the cloud' : 'the cloud across the guidance line' }, id));
-        if (tCut != null && res.outcome === 'drift_hit') this._cap(tCut, K, 5, `The cloud cuts its guidance only ${range(res.sever || 0)} out: too late to throw it off`, v.i, th.idx);
+        if (tCut != null && res.outcome === 'drift_hit' && !(th.viz.end && /^(miss|ground)$/.test(th.viz.end.type))) this._cap(tCut, K, 5, `The cloud cuts its guidance only ${range(res.sever || 0)} out: too late to throw it off`, v.i, th.idx);
         else if (tCut != null) {
           const at = `CUT at ${exact(res.sever || 0)}: `;
           this._cap(tCut, K, 8, at + (guide === 'radio_saclos' ? 'the cloud hides the missile from its launcher, it is blind' : 'the cloud breaks the guidance beam, the missile is blind'), v.i, th.idx);
