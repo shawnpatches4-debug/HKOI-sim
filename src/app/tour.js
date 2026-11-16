@@ -413,7 +413,7 @@ class Briefing {
     A.seek(from); this._free(); this.side = null;   /* chosen on the first frame, once the page has placed everything at the new time */
     A.speed = this._rateAt(st, from); A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
     this.seen.add(this.ci + ':' + this.si); this.diagKey = ''; this._paint();
-    if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.panel, 600); } catch (e) { console.error(e); } }
+    if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.qbox || this.panel, 600); }   /* the run's table goes above the buttons, which stay */ catch (e) { console.error(e); } }
   }
   _quickStop() { if (this.quick) { try { this.quick.stop(); } catch (e) { /* already over */ } this.quick = null; } }
   _rateAt(st, t) { let r = 1; for (const q of st.rates || []) if (q[0] <= t + 1e-6) r = q[1]; return r; }
@@ -461,7 +461,7 @@ class Briefing {
     if (st && st.panel === 'ref' && !this.fault) { const R = REFERENCE, tbl = el('table'), hr = el('tr'); for (const h of R.head) hr.append(el('th', null, h)); tbl.append(hr);
       for (const r of R.rows) { const tr = el('tr', /HKOI/.test(r[0]) ? 'hk' : ''); tr.append(el('td', null, r[0]), el('td', null, r[1].toFixed(1) + '%'), el('td', null, r[2].toFixed(1) + '%')); tbl.append(tr); }
       p.append(el('div', 'tp-cap', 'Share of raids the tank survives'), tbl, el('div', 'tp-note', R.cut), el('div', 'tp-note', R.src)); }
-    if (st && st.panel === 'numbers' && !this.fault) { const row = el('div', 'tp-row'), b = (t, fn) => { const x = el('button', 'btn on', t); x.onclick = fn; return x; };
+    if (st && st.panel === 'numbers' && !this.fault) { this.qbox = el('div'); p.append(this.qbox); const row = el('div', 'tp-row'), b = (t, fn) => { const x = el('button', 'btn on', t); x.onclick = fn; return x; };
       row.append(b('Open Run the numbers', () => this.stop(() => { const n = document.getElementById('o-numbers'); if (n) n.click(); })), b('Open Scenarios', () => this.stop(() => this.guide.openScenarios())), b('Start over', () => this.go(this.only ? this.only[0] : 0, 0))); p.append(row); }
     this._rate();
   }
