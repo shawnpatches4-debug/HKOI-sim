@@ -140,7 +140,7 @@ export const CHAPTERS = [
   ]; } },
   { key: 'aim', name: 'One shot, start to finish', setup: MAIN, find: findMain, steps: M => { const D = M.D, A = u => D.T0 + u, id = D.id, geo = focus => ({ kind: 'geo', focus });
     const far = Math.max(...D.puffs.map(p => p.x)), r1 = D.rounds[0], fates = [D.nBloom ? `${D.nBloom} burst` : '', D.nDown ? `${D.nDown} flew on without bursting` : '', D.nCo ? `${D.nCo} were timed to burst` : ''].filter(Boolean).join(', ');
-    const pts = { meet: [D.plan.want, lineH], k1: [1000, 0], k2: [2000, 0], fire: [D.plan.dFire, lineH], cut: [D.cut.d, lineH], end: [D.end.type === 'ground' ? D.end.short : 4, 0.5] };
+    const pts = { meet: [D.plan.want, lineH], k1: [1000, 0], k2: [2000, 0], fire: [D.plan.dFire, lineH], cut: [D.cut.d, lineH], end: [D.end.type === 'ground' ? D.end.short : 4, 2] };
     return [
     { key: 'launch', head: '1. Launch', from: A(D.tL - 1.2), to: A(D.tL + 0.05), rates: [[A(D.tL - 1.2), 0.5], [A(D.tL - 0.3), 0.1]], freeze: 'at launch', id, pts,
       shot: { kind: 'team', subj: 'launcher', size: 1.8, min: 0.07 }, diagram: geo('chain'), marks: [mk('launcher', `${D.name} team, ${km2(D.R)}`, { tone: 'bad' })],

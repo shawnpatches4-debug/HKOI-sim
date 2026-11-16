@@ -53,16 +53,16 @@ export const SHOTS = {
   overgun: (S, side) => { const st = S.station, P = add(add(add(st, S.b, -6), S.p, 1.5 * side), V(0, 1, 0), 1.3);
     const look = add(st, S.b, 220); look.y = st.y + 1; return { pos: lift(S, P, 2.5), look, fov: 40 }; },
   // the weapon station on the turret roof, close, from the side and a little behind, the gun pointing across the picture
-  station: (S, side, age) => { const body = add(S.station, S.b, -1.1), a = (side * 100 + 6 * Math.sin(age * 0.25)) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
+  station: (S, side, age) => { const body = add(S.station, S.b, -1.1), a = (Math.sign(side) * (Math.abs(side) > 1 ? 150 : 100) + 6 * Math.sin(age * 0.25)) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
     const P = add(add(body, dir, 7.5), V(0, 1, 0), 2.2); return { pos: lift(S, P, 2.5), look: add(add(body, S.b, 0.6), V(0, 1, 0), -0.2), fov: 38 }; },
   // the whole engagement from high to one side: the tank, the line to the launcher, and the points along it (planning)
   plan: (S, side) => { const C = S.at(S.R * 0.5, 0), D = S.R * 1.0, P = add(add(add(C, S.p, D * side), S.b, -D * 0.05), V(0, 1, 0), D * 0.5);
     return { pos: P, look: C, fov: 44 }; },
   // the whole tank from three quarters, close enough to fill the picture
-  tank: (S, side, age) => { const T = S.tank, a = (side * 120 + age * 1.5) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
+  tank: (S, side, age) => { const T = S.tank, a = (Math.sign(side) * (Math.abs(side) > 1 ? 60 : 120) + age * 1.5) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
     return { pos: lift(S, add(add(T, dir, 15), V(0, 1, 0), 8), 3), look: add(T, V(0, 1, 0), 0.6), fov: 40 }; },   /* 8 m up: looking down over the bushes beside the tank (the trees drawn on the map are not in the sight-line grid) */
   // a Trophy launcher: low, beside the turret on the launcher's side
-  trophy: (S, side) => { const T = S.trophy || S.tank, P = add(add(add(T, S.p, 7.5 * side), S.b, 3.5), V(0, 1, 0), 0.8);
+  trophy: (S, side) => { const T = S.trophy || S.tank, sd = Math.sign(side), P = add(add(add(T, S.p, 7.5 * sd), S.b, Math.abs(side) > 1 ? -3.5 : 3.5), V(0, 1, 0), 0.8);
     return { pos: lift(S, P, 2.2), look: add(T, V(0, 1, 0), -0.4), fov: 40 }; },
   // from behind the tank, looking out along the threat's bearing: the tank low in the picture, the bearing running away to the horizon
   bearing: (S, side) => { const T = S.tank, P = add(add(add(T, S.b, -17), S.p, 4.5 * side), V(0, 1, 0), 5.5);
@@ -79,7 +79,7 @@ export const SHOTS = {
     return { pos: lift(S, P, 2.5), look: C, fov }; },
   // behind and beside a missile or drone, keeping it low in the picture with the way ahead clear
   chase: (S, side, age, o) => { const M = S.missile || S.pts.last || S.tank, d = S.mdir || V(-S.b.x, 0, -S.b.z), back = (o && o.back) || 20;
-    const P = add(add(add(M, d, -back), S.p, back * 0.35 * side), V(0, 1, 0), back * 0.22); return { pos: lift(S, P, 2), look: add(M, d, back * 1.4), fov: 46 }; },
+    const P = add(add(add(M, d, -back), S.p, back * 0.35 * side), V(0, 1, 0), back * 0.32); return { pos: lift(S, P, 2), look: add(M, d, back * 1.4), fov: 46 }; },
   // beside the missile and a little ahead of it, looking back along the guidance line behind it (towards the launcher): the missile in
   // the foreground, the stretch of line its tail receiver looks along, and the puffs that land on it. (Straight down the line, the
   // missile's own smoke trail hides everything.)
@@ -93,12 +93,24 @@ export const SHOTS = {
 
 // which side of the line to stand: the one with a clear sight line to the subject over the ground and through the trees
 // (world.los, vegetation counted to within 2 m of each end), and not standing inside tall vegetation. Falls back to +1.
+// The trees drawn on the map stand in the sight-line grid's scrub, wood and tree-line cells (src/render/scenery.js; an acacia in scrub
+// up to 1.6 times the cell's height). A strict test: any such cell on the line from the camera to within 4 m of the subject, with the
+// line below its trees' height, counts as blocking (world.los lets a sight line through some vegetation; a camera must not).
+export function treesClear(world, cam, q) {
+  const D = len(sub(q, cam.pos)), n = Math.ceil(D / 2);
+  for (let i = 0; i <= n; i++) { const f = i / n; if (D * (1 - f) < 4 || D * f > 80) break;   /* a tree further than 80 m from the camera hides only a small part of the picture */ const x = cam.pos.x + (q.x - cam.pos.x) * f, y = cam.pos.y + (q.y - cam.pos.y) * f, z = cam.pos.z + (q.z - cam.pos.z) * f, v = world.veg(x, -z);
+    if (v.cls >= 3 && v.cls <= 5 && y < world.h(x, -z) + v.h * (v.cls === 3 ? 1.6 : 1) + 0.5) return false; }
+  return true;
+}
+// which side of the line to stand: the first with a clear sight line to the subject over the ground (world.los) and past the trees
+// (treesClear). Shots that circle the tank (station, tank, trophy) also have a second angle each side (side +2 / -2). Falls back to +1.
+const TURNS = { station: 1, tank: 1, trophy: 1 };
 export function chooseSide(kind, S, o, subject, world) {
   if (!world) return 1; let best = 1, bestScore = -1;
-  for (const side of [1, -1]) { const c = SHOTS[kind](S, side, 0, o || {}), q = subject || c.look; let score = 0;
+  for (const side of TURNS[kind] ? [1, -1, 2, -2] : [1, -1]) { const c = SHOTS[kind](S, side, 0, o || {}), q = subject || c.look; let score = 0;
     try { const ge = c.pos.x, gn = -c.pos.z, h1 = c.pos.y - world.h(ge, gn), h2 = q.y - world.h(q.x, -q.z);
       const L = world.los(ge, gn, h1, q.x, -q.z, Math.max(0.3, h2), { endPad: 2 }); if (L.clear) score += 2; else if (L.d > len(sub(q, c.pos)) * 0.8) score += 1;
-      const v = world.veg(ge, gn); if (!(v.cls >= 3 && v.cls <= 5 && v.h > h1 - 0.5)) score += 1; } catch (e) { score = 0; }
+      if (treesClear(world, c, q)) score += 3; } catch (e) { score = 0; }
     if (score > bestScore) { bestScore = score; best = side; } }
   return best;
 }

@@ -9,7 +9,7 @@
 import { createRequire } from 'module';
 import fs from 'fs';
 import { CHAPTERS, sameSetup, REFERENCE } from '../../src/app/tour.js';
-import { SHOTS, chooseSide, frameOf, clearArea, project, sightClear, vec } from '../../src/app/briefcam.js';
+import { SHOTS, chooseSide, frameOf, clearArea, project, sightClear, treesClear, vec } from '../../src/app/briefcam.js';
 const require = createRequire(import.meta.url);
 const { HK, World, Battle, EnemyVeh, Support } = require('../battle/load.js');
 const show = process.argv[2] === 'show';
@@ -81,6 +81,7 @@ for (const ch of CHAPTERS) {
       }
       for (const extra of st.shot.also || []) { const e = S[extra] || S.pts[extra], q = e && project(cam, e, 960, 540), C = clearArea(960, 540); if (!q || q.x < C.x0 || q.x > C.x1 || q.y < C.y0 || q.y > C.y1) fail(tag, `${extra} outside the clear picture`, q && Math.round(q.x), q && Math.round(q.y)); }
       const L = sightClear(B.world, cam, st.shot.kind === 'tail' ? cam.look : subj); if (!L.clear && st.shot.kind !== 'plan') fail(tag, `the view of the ${st.shot.subj} is blocked by ${L.kind} at ${Math.round(L.d)} m, t ${t.toFixed(2)}`);
+      if (st.shot.kind !== 'plan' && st.shot.kind !== 'overhead' && !treesClear(B.world, cam, st.shot.kind === 'tail' ? cam.look : subj)) fail(tag, `trees between the camera and the ${st.shot.subj}, t ${t.toFixed(2)}`);
       { const gc = B.world.h(cam.pos.x, -cam.pos.z); if (cam.pos.y < gc + 0.7) fail(tag, 'camera under or at the ground'); }
     }
     if (show) console.log(`\n[${i + 1}] ${st.head}   (${st.from.toFixed(1)} to ${st.to.toFixed(1)} s, ${watch.toFixed(1)} s to watch, ${st.shot.kind} on ${st.shot.subj}: ${fr.join(' | ')})\n    ${text}\n    labels: ${st.marks.map(m => m.text).join(' | ')}${st.facts ? '\n    facts: ' + st.facts.map(f => f[0] + ' ' + f[1]).join(' | ') : ''}`);
