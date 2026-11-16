@@ -169,14 +169,14 @@ export const GEO_W = 360, GEO_H = 318;
 export function geoSVG(D, tb, focus, TB) {
   const t = tb - D.T0, X0 = 34, X1 = 326, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / D.R)), yG = 128, VZ = 4.2, hy = z => yG - 10 - z * VZ;
   const ex = Math.round(VZ / ((X1 - X0) / D.R)), st = aimStage(D, t), m = missileAt(D, t), F = D.frame; let o = '';
-  o += T(14, 20, 'FIRING GEOMETRY, FROM THE RECORD', ' class="h"') + T(346, 20, secs(t - D.tL) + ' after launch', ' class="h e"');
+  o += T(14, 20, 'SIDE VIEW, TO SCALE', ' class="h"') + T(346, 21, secs(t - D.tL), ' class="n e w"');
   // ground, distances
   o += LN(X0 - 16, yG, X1 + 16, yG, C.ground, ' stroke-width="2"');
   for (let k = 0; k * 1000 < D.R - 250; k++) { const x = xs(k * 1000); o += LN(x, yG, x, yG + 5, C.dim) + T(x, yG + 19, k ? k + ' km' : '0', ' class="s m"'); }
-  o += T(X1, yG + 19, km2(D.R), ' class="s m"') + T(X0 + 2, 46, `heights stretched ${ex}×`, ' class="s d"');
+  o += T(X1, yG + 19, km2(D.R), ' class="s m"') + T(14, 40, `heights stretched ${ex}×`, ' class="s d" style="font-size:11px"');
   o += tankSide(X0, yG, 1.15) + teamIcon(X1, yG, 1.3);
   // the planned meeting point and, before the gun fires, where the missile will be when it does
-  if (st >= 3 || focus === 'table') { const x = xs(D.plan.want); o += `<path d="M${x},${hy(F.los_off + 1.5) - 7} l6,7 l-6,7 l-6,-7 Z" fill="${C.good}"/>` + T(x, yG - 54, `meet ${m0(D.plan.want)}`, ' class="n g m"'); }
+  if (st >= 3 || focus === 'table') { const x = xs(D.plan.want); o += `<path d="M${x},${hy(F.los_off + 1.5) - 7} l6,7 l-6,7 l-6,-7 Z" fill="${C.good}"/>`; if (st < 6) o += T(x, 64, `meet ${m0(D.plan.want)}`, ' class="n g m"'); }
   if (st === 3 && focus === 'table') { const x = xs(D.plan.dFire); o += LN(x, hy(4) - 14, x, hy(4) + 6, C.warn, ' stroke-dasharray="3 3"') + T(x, hy(4) - 18, 'fire here', ' class="s w m"'); }
   // the guidance beam: from the launcher to the missile while guided; once cut, it stops at the cloud
   const lx = xs(D.R), ly = hy(F.LH + F.los_off);
@@ -188,12 +188,12 @@ export function geoSVG(D, tb, focus, TB) {
   if (st >= 2 && st < 7 && m.flying) o += LN(X0 + 4, yG - 14, xs(m.x), hy(m.z), C.warn, ' stroke-width="1.3" stroke-dasharray="2 4"');
   if (st >= 1 && t < D.warn.t + 1.2) o += CI(X0, yG - 8, 13 + 10 * Math.max(0, Math.min(1, (t - D.warn.t) / 1.2)), ` fill="none" stroke="${C.warn}" stroke-width="2"`);
   // puffs, rounds
-  for (const p of D.puffs) { const q = puffAt(D, p, t); if (!q) continue; o += `<ellipse cx="${xs(q.x).toFixed(1)}" cy="${hy(q.z).toFixed(1)}" rx="${Math.max(2.4, q.s * (X1 - X0) / D.R * 3).toFixed(1)}" ry="${Math.max(2.4, q.s * VZ).toFixed(1)}" fill="${C.hk}" fill-opacity="${q.forming ? 0.3 : 0.55}"/>`; }
+  for (const p of D.puffs) { const q = puffAt(D, p, t); if (!q) continue; o += `<ellipse cx="${xs(q.x).toFixed(1)}" cy="${hy(q.z).toFixed(1)}" rx="${Math.max(2.6, Math.min(7, q.s * (X1 - X0) / D.R * 3)).toFixed(1)}" ry="${Math.max(2.6, Math.min(7, q.s * VZ * 0.5)).toFixed(1)}" fill="${C.hk}" fill-opacity="${q.forming ? 0.3 : 0.55}"/>`; }
   for (const r of D.rounds) { const q = roundAt(D, r, t); if (!q) continue; const z = 2.2 + ((r.bz != null ? r.bz : F.los_off + 1) - 2.2) * q.u; o += CI(xs(q.x), hy(z), 2.6, ` fill="#fff" stroke="${C.hk}" stroke-width="1.5"`); }
   // the missile, the cut, the end
   if (t >= D.tL && t < D.end.t) { const blind = st >= 6, col = blind ? C.blind : C.bad, x = xs(m.x), y = hy(m.z); o += arrowHead(x, y, -1, 0, 8, col) + T(x, y - 12, blind ? 'blind' : D.name, ` class="s m b" fill="${col}" style="fill:${col}"`); }
-  if (st >= 6) { const x = xs(D.cut.d); o += LN(x, yG - 4, x, yG - 70, C.hk, ' stroke-width="1.5"') + T(x + 4, yG - 72, `CUT at ${m0(D.cut.d)}`, ' class="n k"'); }
-  if (st >= 7) { const x = xs(D.end.type === 'ground' ? D.end.short : 0); o += T(x, yG - 2, '✕', ' class="big w m"') + T(Math.max(x, 64), yG - 20, endPhrase(D), ' class="s w"'); }
+  if (st >= 6) { const x = xs(D.cut.d); o += LN(x, yG - 4, x, 60, C.hk, ' stroke-width="1.5"') + T(x + 4, 64, `CUT at ${m0(D.cut.d)}`, ' class="n k"'); }
+  if (st >= 7) { const x = xs(D.end.type === 'ground' ? D.end.short : 0); o += T(x, yG + 5, '✕', ' class="big w m"') + T(Math.max(x + 8, 64), yG + 36, endPhrase(D), ' class="s w b"'); }
   // the bottom half
   const y0 = 152;
   if (focus === 'table' && TB) o += tablePart(D, TB, y0);

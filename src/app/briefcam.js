@@ -47,8 +47,11 @@ export function frameOf(tank, launcher, g) {
 const lift = (S, P, h) => { const gy = S.g(P.x, P.z); if (P.y < gy + h) P.y = gy + h; return P; };
 export const SHOTS = {
   // behind and beside the launching team, low, looking down its line of fire towards the tank: the team large in the foreground
-  team: (S, side) => { const L = S.launcher, P = lift(S, add(add(L, S.b, 7.5), S.p, 3.4 * side), 1.9); P.y = Math.max(P.y, L.y + 1.2);
-    const look = add(L, S.b, -26); look.y = L.y + 0.2; return { pos: P, look, fov: 40 }; },
+  team: (S, side) => { const L = S.launcher, P = lift(S, add(add(L, S.b, 10), S.p, 4.2 * side), 2.6); P.y = Math.max(P.y, L.y + 1.8);
+    const look = add(add(L, S.b, -9), S.p, 1.2 * side); look.y = L.y - 0.2; return { pos: P, look, fov: 42 }; },
+  // over the weapon station's shoulder, looking out along the threat's bearing: the gun in the foreground, the distance it reaches beyond
+  overgun: (S, side) => { const st = S.station, P = add(add(add(st, S.b, -6), S.p, 1.5 * side), V(0, 1, 0), 1.3);
+    const look = add(st, S.b, 220); look.y = st.y + 1; return { pos: lift(S, P, 2.5), look, fov: 40 }; },
   // the weapon station on the turret roof, close, from the side, the gun pointing across the picture towards the threat
   station: (S, side, age) => { const st = S.station, a = (side * 62 + 8 * Math.sin(age * 0.25)) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a) * 1);
     const P = add(add(st, dir, 6.2), V(0, 1, 0), 1.6); return { pos: lift(S, P, 2), look: add(add(st, S.b, 1.2), V(0, 1, 0), -0.35), fov: 38 }; },
@@ -74,10 +77,11 @@ export const SHOTS = {
   // behind and beside a missile or drone, keeping it low in the picture with the way ahead clear
   chase: (S, side, age, o) => { const M = S.missile || S.pts.last || S.tank, d = S.mdir || V(-S.b.x, 0, -S.b.z), back = (o && o.back) || 20;
     const P = add(add(add(M, d, -back), S.p, back * 0.35 * side), V(0, 1, 0), back * 0.22); return { pos: lift(S, P, 2), look: add(M, d, back * 1.4), fov: 46 }; },
-  // the missile's own view backwards: just behind its tail, looking along the guidance line at the launcher, narrow, so the puffs
-  // that land on that line fill the picture (what the missile's receiver must see through)
-  tail: (S, side, age, o) => { const M = S.missile || S.pts.last || S.at(S.R * 0.6, 4), back = (o && o.back) || 10;
-    const P = add(add(add(M, S.b, -back), V(0, 1, 0), 3.0), S.p, 0.9 * side); return { pos: lift(S, P, 0.8), look: add(S.launcher, V(0, 1, 0), 3.0), fov: (o && o.fov) || 15 }; },
+  // beside the missile and a little ahead of it, looking back along the guidance line behind it (towards the launcher): the missile in
+  // the foreground, the stretch of line its tail receiver looks along, and the puffs that land on it. (Straight down the line, the
+  // missile's own smoke trail hides everything.)
+  tail: (S, side, age, o) => { const M = S.missile || S.pts.last || S.at(S.R * 0.6, 4);
+    const P = add(add(add(M, S.p, 10 * side), S.b, -12), V(0, 1, 0), 2.4); return { pos: lift(S, P, 1.5), look: add(add(M, S.b, 15), V(0, 1, 0), 0.3), fov: 44 }; },
   // two things on the ground at once (the tank and o.at): from the side, far enough for both
   pair: (S, side, age, o) => { const A = S.tank, Bp = S.pts[o.at] || S.launcher, C = mid(A, Bp, o.f == null ? 0.5 : o.f), span = len(sub(Bp, A)) + (o.pad || 30), fov = 38;
     const D = clamp(span * 0.5 / Math.tan(fov * DEG / 2) / (16 / 9) * 1.6 + 12, 25, 700), u = norm(sub(Bp, A)), q = V(-u.z, 0, u.x);

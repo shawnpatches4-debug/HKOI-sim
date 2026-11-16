@@ -119,9 +119,9 @@ export const CHAPTERS = [
       marks: [mk('missile', 'Missile', { tone: 'bad' }), mk('beamtag', 'Laser beam from the launcher', { tone: 'bad' })],
       text: () => `The missile has no eyes at the front. The team's sight shines a laser beam at the tank. A receiver in the missile's tail looks back at that beam and steers to stay in its middle. As long as the gunner keeps his sight on the tank, the missile follows it.` },
     { key: 'weak', head: 'Its weak point: the tail looks back', from: A(4.6), to: A(5.6), rates: [[A(4.6), 0.4]], freeze: 'in flight', id,
-      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: { kind: 'guide', focus: 'beam' },
-      marks: [mk('missile', 'Its receiver looks back from here', { tone: 'bad' }), mk('launcher', 'The laser comes from here', { tone: 'bad' })],
-      text: () => `This is the missile's own view backwards, towards the launcher. Put a cloud anywhere on this line and the beam no longer reaches the receiver. With nothing to steer by, the missile flies on blind and misses. That is HKOI's whole idea: blind the missile, do not try to hit it.` },
+      shot: { kind: 'tail', subj: 'missile', size: 1.2, min: 0 }, diagram: { kind: 'guide', focus: 'beam' },
+      marks: [mk('missile', 'Receiver in its tail', { tone: 'bad' }), mk('beamtag', 'It looks back along the beam', { tone: 'bad' })],
+      text: () => `The receiver in the missile's tail looks back along the beam towards the launcher. Put a cloud anywhere on that line and the beam no longer reaches the receiver. With nothing to steer by, the missile flies on blind and misses. That is HKOI's whole idea: blind the missile, do not try to hit it.` },
     { key: 'trophy', head: 'Trophy: the last line, few shots', from: M.calm, to: M.calm, freeze: 'before the shot', id,
       shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.1 }, marks: [mk('trophy', 'Trophy launcher', { tone: 'good', side: 'L' })],
       facts: [['Shots a side', String(M.cfg.aps0)], ['Reaches out', m0(M.cfg.apsR)]],
@@ -154,7 +154,7 @@ export const CHAPTERS = [
       facts: [['Found', `${f2(D.radar.tAcq - D.warn.t)} s after warning`], ['Track at', km2(D.radar.dTrack)], ['To impact', `${f2(D.radar.tti)} s`]],
       text: () => `The radar looks down that bearing and finds the missile ${f2(D.radar.tAcq - D.warn.t)} s after the warning. ${f2(D.radar.init)} s later it holds a track: ${km2(D.radar.dTrack)} out, closing at ${Math.round(D.radar.closing)} m/s. Shawn's "firing corridor" is, in this model, simply that bearing.` },
     { key: 'plan', head: '4. Planning where to meet it', from: A(D.plan.tF - 0.6), to: A(D.plan.tF - 0.6), freeze: 'before firing', id, pts,
-      shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, diagram: geo('table'), marks: [mk('station', 'Gun laid on the bearing', { tone: 'good' }), mk('pt', `Meeting point, ${m0(D.plan.want)}`, { tone: 'good', pt: 'meet' })],
+      shot: { kind: 'overgun', subj: 'station', size: 1, min: 0.08 }, diagram: geo('table'), marks: [mk('station', 'HKOI gun', { tone: 'good' }), mk('pt', `Meeting point, ${m0(D.plan.want)}`, { tone: 'good', pt: 'meet' }), mk('missile', D.name, { tone: 'bad' })],
       facts: [['Meet at', m0(D.plan.want)], ['Table says', pct(D.plan.p)], ['Round flies', `${f2(D.plan.tof)} s`]],
       text: () => `The fire control looks up its table, made beforehand from many trial engagements (gunner's wander and the tank's own movement included, assumed figures). A cloud ${m0(D.plan.want)} out cut a ${D.name} in ${pct(D.plan.p)} of trials, the best distance. A round takes ${f2(D.plan.tof)} s to get there, so the gun waits ${f2(D.plan.wait)} s.` },
     { key: 'fire', head: '5. Fire', from: A(D.plan.tF - 0.35), to: A(D.plan.tF + (D.nFirst - 1) * D.plan.gap + 0.25), rates: [[A(D.plan.tF - 0.35), 0.25]], freeze: 'burst fired', id, pts,
@@ -165,15 +165,15 @@ export const CHAPTERS = [
       shot: { kind: 'line', o: { track: true, span: 70, back: -0.25, up: 0.1 }, subj: 'missile', size: 1.2, min: 0 }, diagram: geo('chain'),
       marks: [mk('missile', D.name, { tone: 'bad' })],
       text: () => `${f2(r1.tPass - r1.tFire)} s later the first round reaches the missile, ${m0(r1.d)} out. The rounds pass it and burst just behind it, on the line back to the launcher: overtake and bloom. Of ${D.n} rounds, ${fates}. The radar saw it still guiding after the first ${D.nFirst}, so ${D.nExtra} more followed.` },
-    { key: 'cloud', head: "7. The missile's view: the cloud", from: A(D.tFirstPuff), to: A(D.cut.t - 0.05), rates: [[A(D.tFirstPuff), 0.25]], freeze: 'just before the cut', id, pts,
-      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: geo('light'), marks: [mk('launcher', 'Laser source', { tone: 'bad' })],
-      text: () => `Looking back from just behind the missile's tail towards the launcher. Each round leaves a puff about ${Math.round(2 * D.s0)} m across (${D.payload} g of obscurant, an assumed round). Puffs between the missile and the launcher dim the beam. The panel shows how much light still gets through.` },
+    { key: 'cloud', head: '7. The cloud on the line', from: A(D.tFirstPuff), to: A(D.cut.t - 0.05), rates: [[A(D.tFirstPuff), 0.25]], freeze: 'just before the cut', id, pts,
+      shot: { kind: 'tail', subj: 'missile', size: 1.2, min: 0 }, diagram: geo('light'), marks: [mk('missile', D.name, { tone: 'bad' }), mk('beamtag', 'Beam back to the launcher', { tone: 'bad' })],
+      text: () => `Beside the missile, looking back along its beam. Each round leaves a puff about ${Math.round(2 * D.s0)} m across (${D.payload} g of obscurant, an assumed round). Puffs between the missile and the launcher dim the beam. The panel shows how much light still gets through.` },
     { key: 'cut', head: '8. Cut', from: A(D.cut.t - 0.35), to: A(D.cut.t + 0.04), rates: [[A(D.cut.t - 0.35), 0.1]], freeze: 'frozen at the cut', id, pts,
-      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: geo('light'), marks: [mk('missile', 'CUT: blind', { tone: 'hk' })],
+      shot: { kind: 'tail', subj: 'missile', size: 1.2, min: 0 }, diagram: geo('light'), marks: [mk('missile', 'CUT: blind', { tone: 'hk' })],
       facts: [['Cut at', m0(D.cut.d)], ['After launch', `${f2(D.cut.dt)} s`], ['Light left', `under ${(100 * Math.exp(-D.need)).toFixed(1)}%`]],
       text: () => `${f2(D.cut.dt)} s after launch the light reaching the tail drops below ${(100 * Math.exp(-D.need)).toFixed(1)}%, the level the model says the receiver needs. The missile, ${m0(D.cut.d)} from the tank, has lost its guidance. ${f2(D.cut.t - D.tFirstPuff)} s from the first puff to the cut.` },
     { key: 'blind', head: '9. Blind flight', from: A(D.cut.t + 0.04), to: A(D.end.t + 0.35), rates: [[A(D.cut.t + 0.04), 0.4]], freeze: 'where it ended', id, pts,
-      shot: { kind: 'chase', o: { back: 22 }, subj: 'end', size: 0, min: 0 }, diagram: geo('chain'), marks: [mk('missile', 'Blind', { tone: 'hk', gone: endPhrase(D), goneTone: 'warn' }), mk('tank', 'The tank', { tone: 'good' })],
+      shot: { kind: 'chase', o: { back: 22 }, subj: 'end', size: 0, min: 0 }, diagram: geo('chain'), marks: [mk('missile', 'Blind', { tone: 'hk', gone: endPhrase(D), goneTone: 'warn', goneAt: 'end' }), mk('tank', 'The tank', { tone: 'good' })],
       text: () => `With no beam, the ${D.name} keeps rolling but gets no more corrections. In the model it leaves its corkscrew along a straight line and, with no steering lift, sinks: this one ${endPhrase(D)} of the tank, ${f2(D.end.gone)} s after the cut. Trophy never had to fire.` },
   ]; } },
   { key: 'many', name: 'Several at once', setup: MAIN, find: findMain, steps: M => { const O = M.O, A = u => O.T0 + u, idOf = r => ({ v: O.id.v, idx: r.idx, uid: r.uid, brg: r.brg, R: r.R });
@@ -233,7 +233,7 @@ export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map ==
 // The page
 // The panel's width and the top bar's height are briefcam.js PANEL (the camera framing and the node test use the same figures).
 const CSS = `
-  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(14px, 1.02vw, 20px); }   /* everything is sized in em from this */
+  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(13px, 1vw, 20px); }   /* everything is sized in em from this */
   #tour > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   #tour .tl { position: absolute; left: 0; top: 0; padding: .3em .65em .34em; border-radius: 6px; background: rgba(5, 9, 8, .88); border: 2px solid rgba(255, 255, 255, .55); color: #fff; font-weight: 700; font-size: 1.02em; line-height: 1.2; white-space: nowrap; will-change: transform; }
   #tour .tl.good { border-color: #39d98a; color: #d2ffe8; } #tour .tl.bad { border-color: #ff6b5e; color: #ffe0dc; } #tour .tl.warn { border-color: #ffb347; color: #ffecc9; } #tour .tl.hk { border-color: #6fd3ff; color: #d9f4ff; } #tour .tl.off { opacity: .85; }
@@ -241,7 +241,7 @@ const CSS = `
   #tour-top button { pointer-events: auto; cursor: pointer; font-size: .8em; padding: .3em .75em; border-radius: 99px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(5, 9, 8, .8); color: #c6d2cb; white-space: nowrap; }
   #tour-top button:hover { border-color: var(--accent); color: #fff; } #tour-top button.on { background: var(--accent); border-color: var(--accent); color: #05130c; font-weight: 700; } #tour-top button.done { color: var(--accent); border-color: var(--line); }
   #tour-card { position: absolute; left: 0; top: 44px; bottom: 0; width: clamp(330px, 33vw, 640px); box-sizing: border-box; display: flex; flex-direction: column; pointer-events: auto; background: rgba(6, 11, 9, .95); border-right: 1px solid var(--line); box-shadow: 6px 0 30px rgba(0, 0, 0, .35); }
-  #tour-card .tp-body { flex: 1; min-height: 0; overflow-y: auto; padding: .8em 1.05em .4em; }
+  #tour-card .tp-body { flex: 1; min-height: 0; overflow-y: auto; padding: .8em 1.05em .4em; display: flex; flex-direction: column; } #tour-card .tp-body > * { flex: none; }
   #tour-card .tp-tag { font: 700 .74em/1.2 var(--mono); letter-spacing: .1em; color: var(--accent); text-transform: uppercase; }
   #tour-card .tp-dots { display: flex; align-items: center; gap: .32em; margin: .45em 0 .2em; flex-wrap: wrap; }
   #tour-card .tp-dots button { width: .8em; height: .8em; padding: 0; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .35); background: transparent; cursor: pointer; }
@@ -252,7 +252,7 @@ const CSS = `
   #tour-card .tp-facts { display: flex; gap: .5em; margin: 0 0 .7em; flex-wrap: wrap; } #tour-card .tp-facts[hidden] { display: none; }
   #tour-card .tp-facts div { flex: 1 1 0; min-width: 6.5em; padding: .35em .55em .4em; border-radius: 7px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .1); }
   #tour-card .tp-facts b { display: block; font: 700 1.12em/1.15 var(--mono); color: #fff; } #tour-card .tp-facts span { display: block; font-size: .78em; color: var(--dim); margin-top: .1em; }
-  #tour-diag svg { display: block; width: 100%; max-width: 560px; height: auto; } #tour-diag[hidden] { display: none; }
+  #tour-card .tp-body > #tour-diag { flex: 1 1 auto; min-height: 9em; max-height: 34em; display: flex; } #tour-diag svg { display: block; width: 100%; height: 100%; } #tour-diag[hidden] { display: none !important; }
   #tour-panel table { width: 100%; border-collapse: collapse; font-size: .9em; margin: .2em 0 .4em; } #tour-panel th, #tour-panel td { padding: .3em .4em; border-bottom: 1px solid rgba(255, 255, 255, .1); text-align: right; } #tour-panel th:first-child, #tour-panel td:first-child { text-align: left; }
   #tour-panel th { font-size: .82em; color: var(--dim); font-weight: 600; } #tour-panel tr.hk td { color: #9fe3ff; font-weight: 700; } #tour-panel .tp-cap { font-weight: 700; } #tour-panel .tp-note { font-size: .8em; color: var(--dim); margin: .3em 0; }
   #tour-panel .pg-tbl { font-size: .82em; } #tour-panel .pg-take { font-size: .95em; margin: .35em 0; } #tour-panel .pg-note { font-size: .8em; margin: .35em 0; } #tour-panel .tp-row { display: flex; gap: .4em; flex-wrap: wrap; margin-top: .6em; }
@@ -407,7 +407,7 @@ class Briefing {
     if (!st) { this.fault = 'This chapter\'s battle no longer contains the moment the chapter was built on.'; this.phase = 'hold'; A.playing = false; this._paint(); return; }
     const T = A.replay ? A.replay.T : 1e9, from = Math.max(0, Math.min(T - 0.2, st.from)), to = Math.max(from, Math.min(T - 0.1, st.to));
     this.from = from; this.to = to; this.hurry = false; for (const m of st.marks) { m._seen = false; m._last = null; }
-    A.seek(from); this._free(); this.side = 1; this.side = this._side(st, from);
+    A.seek(from); this._free(); this.side = null;   /* chosen on the first frame, once the page has placed everything at the new time */
     A.speed = this._rateAt(st, from); A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
     this.seen.add(this.ci + ':' + this.si); this.diagKey = ''; this._paint();
     if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.panel, 600); } catch (e) { console.error(e); } }
@@ -452,7 +452,7 @@ class Briefing {
     if (this.steps.length) this.dots.append(el('span', null, `step ${this.si + 1} of ${this.steps.length}`));
     let text = ''; if (this.fault) text = `This step could not be shown (${this.fault}). Next carries on.`; else if (st) { try { text = st.text(this._ctx()); } catch (e) { console.error(e); text = 'The text for this step could not be worked out from this battle.'; } }
     this.head.textContent = this.fault ? 'Something went wrong here' : st ? st.head : ch.name; this.text.textContent = text;
-    this.facts.textContent = ''; this.facts.hidden = !(st && st.facts && !this.fault); if (!this.facts.hidden) for (const [k, v] of st.facts) { const f = el('div'); f.append(el('b', null, v), el('span', null, k)); this.facts.append(f); }
+    this.facts.textContent = ''; this.facts.hidden = !(st && st.facts && !st.diagram && !this.fault);   /* with a diagram the numbers are in it, and the room is its */ if (!this.facts.hidden) for (const [k, v] of st.facts) { const f = el('div'); f.append(el('b', null, v), el('span', null, k)); this.facts.append(f); }
     this.bBack.disabled = this._nextCh(this.ci, -1) < 0 && this.si === 0; this.bNext.textContent = last ? 'Finish' : 'Next'; this.bAgain.hidden = !st || !(st.to > st.from);
     const p = this.panel; p.textContent = ''; p.hidden = !(st && st.panel) || !!this.fault;
     if (st && st.panel === 'ref' && !this.fault) { const R = REFERENCE, tbl = el('table'), hr = el('tr'); for (const h of R.head) hr.append(el('th', null, h)); tbl.append(hr);
@@ -478,7 +478,7 @@ class Briefing {
       }
       this.frames++;
       const W = A.scene.canvas.clientWidth || innerWidth, H = A.scene.canvas.clientHeight || innerHeight, C = clearArea(W, H); this.W = W; this.H = H; this.C = C;
-      const S = this._camera(st, t); this._lift(C.sx, C.sy);
+      if (this.side == null) this.side = this._side(st, t); const S = this._camera(st, t); this._lift(C.sx, C.sy);
       this._diagram(st, t);
       this._draw(st, t, S);
     } catch (e) { this._fail(e); }
@@ -522,7 +522,7 @@ class Briefing {
     if (mk.at === 'bearing') { const p = S.at(60, 3); out.copy(p); return true; }
     if (mk.at === 'missile' || mk.at === 'beamtag') { mk._gone = false;
       if (S.missile) { out.copy(S.missile); if (!mk._last) mk._last = S.missile.clone(); mk._last.copy(S.missile); mk._seen = true; if (mk.at === 'beamtag') { out.x += S.b.x * 14; out.z += S.b.z * 14; out.y += 0.6; } return true; }
-      if (mk.gone && mk._seen && mk._last) { mk._gone = true; out.copy(mk._last); return true; }
+      if (mk.gone && mk._seen && mk._last) { mk._gone = true; out.copy(mk.goneAt && S.pts[mk.goneAt] ? S.pts[mk.goneAt] : mk._last); return true; }
       return false; }
     return false;
   }
