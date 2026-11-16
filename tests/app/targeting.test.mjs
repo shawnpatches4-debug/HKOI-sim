@@ -68,10 +68,10 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
     steps.forEach((st, i) => { const tag = `aim step ${i + 1} (${st.key})`; textCheck(tag, st, B);
       nChk++; if (!(st.from <= st.to && st.from >= 0)) fail(tag, 'times', st.from, st.to);
       nChk++; if (st.from < prev - 3) fail(tag, 'goes back in time', st.from, prev); prev = st.from;
-      for (const u of [st.from, (st.from + st.to) / 2, st.to]) { const svg = aimSVG(D, u, { focus: st.diagram.focus }); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2)); }
+      for (const u of [st.from, (st.from + st.to) / 2, st.to]) for (const compact of [false, true]) { const svg = aimSVG(D, u, { focus: st.diagram.focus, compact }); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2), compact ? '(compact)' : ''); }
       save(`aim_${i + 1}_${st.key}`, aimSVG(D, st.to, { focus: st.diagram.focus })); });
     // the stage the diagram shows at the end of each step
-    const want = { launch: 0, warn: 1, radar: 3, plan: 3, burst: 5, bloom: 5, cut: 7 };
+    const want = { launch: 0, warn: 1, radar: 3, plan: 3, burst: 5, bloom: 5, cut: 6, blind: 7 };
     steps.forEach(st => { nChk++; const g = aimStage(D, st.to - D.T0); if (want[st.key] != null && g !== want[st.key]) fail(`aim step ${st.key}`, 'diagram stage at its end', g, 'expected', want[st.key]); });
     for (let u = D.T0 + D.tL - 0.5; u < D.T0 + D.end.t + 0.8; u += 0.05) if (hole(aimSVG(D, u, {}))) { fail('aim diagram hole at', u); break; }
     // the steps' wording against the record (the words that carry a number)
@@ -81,7 +81,7 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
     has('radar', ((th.R - th.v * (th.track - th.t0)) / 1000).toFixed(2) + ' km'); has('radar', (Math.round((th.impact - th.track) * 10) / 10).toFixed(1) + ' s to impact');
     has('plan', Math.round(cand.want).toLocaleString('en-GB') + ' m'); has('plan', (Math.round(tof * 100) / 100).toFixed(2) + ' s');
     has('burst', `${b.rounds.filter(r => r.extra).length} more`); has('cut', Math.round(b.res.sever).toLocaleString('en-GB') + ' m');
-    has('cut', D.end.type === 'ground' ? Math.round(b.res.short).toLocaleString('en-GB') + ' m short' : (Math.round(b.res.miss_m * 10) / 10).toFixed(1) + ' m wide');
+    has('blind', D.end.type === 'ground' ? Math.round(b.res.short).toLocaleString('en-GB') + ' m short' : (Math.round(b.res.miss_m * 10) / 10).toFixed(1) + ' m wide');
     console.log(`ok   aim: ${D.name} from ${(D.R / 1000).toFixed(2)} km, volley at ${D.T0.toFixed(1)} s; warning +${D.warn.dt.toFixed(2)} s, track +${(D.radar.tTrack - D.tL).toFixed(2)} s, fire +${(D.plan.tF - D.tL).toFixed(2)} s, meet ${Math.round(D.plan.meet)} m, ${D.n} rounds, cut +${D.cut.dt.toFixed(2)} s at ${Math.round(D.cut.d)} m, ${D.end.type === 'ground' ? 'ground ' + Math.round(D.end.short) + ' m short' : 'missed by ' + D.end.miss.toFixed(1) + ' m'}`);
     // the overview and the commander's picture from the same battle
     const L = layerFacts(B, HK); for (const [k, x] of Object.entries(L)) { nChk++; if (x == null || Number.isNaN(x)) fail('layers', k, 'is missing'); }

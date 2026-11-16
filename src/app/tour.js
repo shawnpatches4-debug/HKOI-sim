@@ -135,8 +135,8 @@ export const CHAPTERS = [
       marks: [mk('tank', 'The tank', null, { tone: 'good' })],
       text: () => `The enemy gunner's sight. The flight takes ${s1(M.flight)} s, and for all of it two things must stay true: he can see the tank, and his missile can see the beam. HKOI goes after the second.` },
   ].filter(Boolean) },
-  { key: 'aim', name: 'How HKOI aims', setup: AIM_SETUP, find: (B, HK) => findAim(B, HK), steps: D => aimSteps(D), span: D => [D.T0 + D.tL - 0.5, D.T0 + D.end.t + 0.8] },
-  { key: 'order', name: 'Many at once', setup: ORDER_SETUP, find: (B, HK) => findOrder(B, HK), steps: O => orderSteps(O), span: O => [O.T0 - 0.3, O.T0 + O.tEnd + 0.5] },
+  { key: 'aim', name: 'How HKOI aims', setup: AIM_SETUP, find: (B, HK) => findAim(B, HK), steps: D => aimSteps(D), span: D => [D.T0 + D.tL - 0.5, D.T0 + D.end.t + 0.8], zero: D => D.T0 + D.tL },
+  { key: 'order', name: 'Many at once', setup: ORDER_SETUP, find: (B, HK) => findOrder(B, HK), steps: O => orderSteps(O), span: O => [O.T0 - 0.3, O.T0 + O.tEnd + 0.5], zero: O => O.T0 },
   { key: 'drones', name: 'Drones', setup: FARM, find: findDrones, steps: M => [
     { head: 'A threat with no beam to cut', from: Math.max(0, M.one.t0 - 2.5), to: Math.max(M.one.t0 + 0.2, M.one.tF - 0.4), rate: 1, shot: shotOf({ rig: 'gun' }, M.one.id), lines: ['track'],
       marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad' }), mk('station', 'HKOI weapon station', null, { tone: 'good' })],
@@ -352,7 +352,7 @@ class Briefing {
     this.scrWait = setTimeout(go, 0);
   }
   _diagClick(e) {
-    const st = this.step; if (!st || !st.diagram || st.diagram.kind !== 'aim') return; const svgE = this.diag.querySelector('svg'); if (!svgE) return;
+    const st = this.step; if (!st || !st.diagram || st.diagram.kind !== 'aim' || st.diagram.compact) return; const svgE = this.diag.querySelector('svg'); if (!svgE) return;
     const r = svgE.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * AIM_W, y = (e.clientY - r.top) / r.height * AIM_H;
     if (y < 470) return; const t = aimTimeAt(st.diagram.D, x); if (t != null) { e.preventDefault(); this.scrub(t); }
   }
@@ -434,17 +434,17 @@ class Briefing {
   _diagram(st, t) {
     const dg = st && st.diagram; if (!dg || this.fault) { if (!this.diag.hidden) this.diag.hidden = true; this.lx = 6; return 0; }
     const A = this.app, W = this.app.scene.canvas.clientWidth || innerWidth, H = this.app.scene.canvas.clientHeight || innerHeight, ch = this.cardH || 150;
-    const ratio = dg.kind === 'cdr' ? 440 / 560 : dg.kind === 'aim' ? 540 / 560 : 520 / 560, sight = A.cams.mode !== 'free', roomH = H - ch - 66;
+    const ratio = dg.kind === 'cdr' ? 440 / 560 : dg.kind === 'aim' ? (dg.compact ? 230 / 560 : 540 / 560) : 520 / 560, sight = A.cams.mode !== 'free', roomH = H - ch - 66;
     const w = Math.round(Math.max(220, Math.min(sight ? W * 0.27 : W * 0.43, roomH / ratio, 760)));
     if (this.diag.hidden) this.diag.hidden = false; if (this.diagW !== w) { this.diagW = w; this.diag.style.width = w + 'px'; }
     const key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
     if (key !== this.diagKey || (dg.kind === 'aim' || dg.kind === 'order') && tq !== this.diagT) {
       this.diagKey = key; this.diagT = tq; let html = '';
-      if (dg.kind === 'aim') html = aimSVG(dg.D, t, { focus: dg.focus }); else if (dg.kind === 'order') html = orderSVG(dg.O, t, { all: dg.all });
+      if (dg.kind === 'aim') html = aimSVG(dg.D, t, { focus: dg.focus, compact: dg.compact }); else if (dg.kind === 'order') html = orderSVG(dg.O, t, { all: dg.all });
       else if (dg.kind === 'layers') html = layerSVG(dg.L, dg.focus); else if (dg.kind === 'cdr') html = cdrSVG(dg.K, { tank: { e: A.battle.tank.e, n: A.battle.tank.n }, units: A.battle.units });
       this.diag.innerHTML = html;
     }
-    { const sp = this.span; if (sp && !this.scr.hidden) { const v = Math.round(1000 * Math.max(0, Math.min(1, (t - sp[0]) / (sp[1] - sp[0])))); if (+this.scrIn.value !== v && document.activeElement !== this.scrIn) this.scrIn.value = v; const lab = `${Math.max(0, t - sp[0]).toFixed(1)} s`; if (this.scrLab.textContent !== lab) this.scrLab.textContent = lab; } }
+    { const sp = this.span; if (sp && !this.scr.hidden) { const v = Math.round(1000 * Math.max(0, Math.min(1, (t - sp[0]) / (sp[1] - sp[0])))); if (+this.scrIn.value !== v && document.activeElement !== this.scrIn) this.scrIn.value = v; const z = CHAPTERS[this.ci].zero ? CHAPTERS[this.ci].zero(this.M) : sp[0], lab = `${(t - z).toFixed(1)} s after ${CHAPTERS[this.ci].key === 'order' ? 'the first launch' : 'launch'}`; if (this.scrLab.textContent !== lab) this.scrLab.textContent = lab; } }
     this.lx = 12 + w + 10; return w + 12;
   }
   // ---- labels and lines over the picture ----------------------------------------------------------------------------------------
