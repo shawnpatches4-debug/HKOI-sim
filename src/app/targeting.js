@@ -308,8 +308,8 @@ export function droneSVG(M, tb, cfg) {
   if (tb >= M.t0th) o += down ? T(xs(M.d), y + 4, '✕', ' class="big g m"') + T(xs(M.d), y - 16, `down at ${m0(M.d)}`, ' class="n g m"') : `<g transform="translate(${xs(dd).toFixed(1)},${y - 6})"><rect x="-6" y="-2" width="12" height="4" fill="${C.bad}"/><line x1="-9" y1="-4" x2="9" y2="-4" stroke="${C.bad}" stroke-width="1.5"/></g>` + T(xs(dd), y - 16, 'drone', ' class="s m b" style="fill:#ff6b5e"');
   for (const r of M.rds) { if (tb < r.tf || tb > r.tp) continue; const u = (tb - r.tf) / Math.max(1e-6, r.tp - r.tf); o += CI(xs(r.d * u), y - 6 + 14 * (1 - u) * 0, 3, ` fill="#fff" stroke="#ff9a6b" stroke-width="1.5"`); }
   let yy = y + 64; const line = (s2, cls) => { o += T(14, yy, s2, ` class="${cls}"`); yy += 21; };
-  line(`${M.first} airburst rounds, fired ${f2(M.tF - M.t0th)} s after it appeared ${m0(R)} out`, 's');
-  if (cfg && cfg.hePk != null) line(`One burst brings a drone down ${r0(100 * cfg.hePk)}% of the time (assumed)`, 's b');
-  if (cfg && cfg.apsDrone != null) line(`Trophy against a drone: ${r0(100 * cfg.apsDrone)}% a shot (assumed)`, 's d');
+  line(`${M.first} rounds, fired ${f2(M.tF - M.t0th)} s after it was ${m0(R)} out`, 's');
+  if (cfg && cfg.hePk != null) line(`One burst downs it ${r0(100 * cfg.hePk)}% of the time (assumed)`, 's b');
+  if (cfg && cfg.apsDrone != null) line(`Trophy, a drone: ${r0(100 * cfg.apsDrone)}% a shot (assumed)`, 's d');
   return wrap(DRONE_W, DRONE_H, o);
 }
