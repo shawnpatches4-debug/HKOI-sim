@@ -13,10 +13,13 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { missileMesh } from './units.js';
 import { MARK } from './fx.js';
 import { ObscurantCloud } from './obscurant.js';
+import { cutState, CutMarks, CutLabels, BLIND, T_LABEL_END } from './cutfx.js';
+export { cutState };
 
 const DEG = Math.PI / 180, lerp = (a, b, t) => a + (b - a) * t, clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
 const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
-const MAXBEAM = 8;
+const MAXBEAM = 40;
+let _hh = null; const MISS_HH = () => _hh != null ? _hh : (_hh = (typeof window !== 'undefined' && window.HK && window.HK.defaultConfig && (window.HK.defaultConfig().vehicle || {}).half_h) || 1.2);   /* the engine's hull half height: its miss figures are measured from there */
 // missiles that are steered along a line from their launcher (the only ones a cloud can blind, and the only ones that get a line drawn)
 const LINKED = { beam_rider: [1.0, 0.16, 0.12], radio_saclos: [1.0, 0.62, 0.12] };
 // tracer colours (assumed for readability): obscurant rounds pale blue-white, high-explosive rounds orange-red
@@ -35,6 +38,7 @@ export class VolleyView {
     this.cloud = new ObscurantCloud(); this.group.add(this.cloud.mesh);
     // guidance lines: one object for whole lines, one (dashed) for the part that is cut
     this.beamOn = this._lines(false); this.beamCut = this._lines(true);
+    this.marks = new CutMarks(); this.group.add(this.marks.mesh); this.labels = new CutLabels(); this._q0 = new THREE.Vector3(); this._q1 = new THREE.Vector3(); this._qc = new THREE.Vector3();   /* the cut highlight (cutfx.js) */
   }
   _lines(dashed) {
     const geo = new LineSegmentsGeometry(); geo.setPositions(new Float32Array(MAXBEAM * 2 * 6)); geo.setColors(new Float32Array(MAXBEAM * 2 * 6));
@@ -72,7 +76,34 @@ export class VolleyView {
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (P[m][0] <= t) lo = m; else hi = m; }
     const a = P[lo], b = P[hi], f = b[0] > a[0] ? clamp01((t - a[0]) / (b[0] - a[0])) : 0, x = lerp(a[1], b[1], f), y = lerp(a[2], b[2], f), z = lerp(a[3], b[3], f);
     const R = F.R || th.R, hh = F.hh == null ? 1.2 : F.hh, LH = F.LH == null ? hh : F.LH, lo2 = F.los_off || 0, zc = hh + (LH - hh) * x / R + (x > 300 ? lo2 : lo2 * Math.max(x, 0) / 300);
-    const w = clamp01((tv - P[0][0]) / 0.25); this._oy = y * w; this._oz = (z - zc) * w; this._ot = true;
+    const w = clamp01((tv - P[0][0]) / 0.25); this._oy = y * w; this._oz = (z - zc) * w; this._ot = true; this._tl = P[P.length - 1][0];   /* _tl: where the recorded path ends */
+  }
+  // The recorded path is in the engine's frame, fixed to the ground at the start of the engagement; the line drawn here runs to where the
+  // vehicle is NOW, so a vehicle that moves sideways would drag the drawn missile with it (and a blind missile does not follow the
+  // vehicle). The vehicle's sideways move since the start of the engagement, as the line carries it at this range, is taken back out.
+  _own(v, th, x, tv) {
+    const B = this.b, T0 = B.tankAt(v.t0), T = B.tankAt(v.t0 + tv), l = this._l(v, th, v.rec.threats.indexOf(th)); if (!l || !l.u0) return;
+    const dE = l.u0.e - T.e, dN = l.u0.n - T.n, d = Math.hypot(dE, dN) || 1, side = (T.e - T0.e) * dN / d - (T.n - T0.n) * dE / d;
+    this._oy -= side * clamp01(1 - x / th.R);
+  }
+  // A missile the record says flies past: where it passes the vehicle is the record's own verdict (viz.end: lat to the right, `over`
+  // or the blind path's height or the rest of `miss` upward, from the hull centre), so that the picture never shows a miss closer
+  // than the referee scored it (Shawn, 16 Nov: missiles seen passing about 1 m over the tank).
+  //  - The nominal line here ends at the turret (2.0 m up), the engine's frame at the hull centre (half_h): the difference is taken
+  //    out over the flight (0 at the launcher, all of it at the vehicle).
+  //  - With no recorded path (an unguided rocket, a gunner's wandering aim) the record's offset grows from 0 at the launcher like an
+  //    aiming error, instead of the missile being drawn straight through the turret.
+  //  - With a recorded path whose end differs from the verdict (the crew's own move after the cut is in the record's figure but not in
+  //    the path; the path stops before the vehicle while the missile is still guided) the drawing hands over from the path to the
+  //    verdict between the cut (or the end of the path) and the vehicle.
+  _missBy(v, th, x, tc) {
+    const e = th.viz.end; if (!e || e.type !== 'miss') return; const f = clamp01(1 - x / th.R), hh = MISS_HH();
+    const lat = e.lat || 0, up = e.over != null ? e.over : th.blind && Math.abs(Math.hypot(lat, th.blind.z) - (e.miss || 0)) < 0.3 ? th.blind.z : Math.sqrt(Math.max(0, (e.miss || 0) * (e.miss || 0) - lat * lat));
+    if (!this._ot) { this._oy += lat * f; this._oz += up * f; }
+    else { const t1 = th.blind ? th.blind.tCut : this._tl;
+      if (t1 < e.t - 0.05 && tc > t1) { const oy = this._oy, oz = this._oz, tl = this._tl; this._stray(th, e.t); this._own(v, th, 0, e.t); const ey = this._oy, ez = this._oz, g = clamp01((tc - t1) / (e.t - t1));
+        this._oy = oy + (lat - ey) * g; this._oz = oz + (up - ez) * g; this._tl = tl; this._ot = true; } }
+    this._oz -= (2.0 - hh) * f;
   }
   // an evasive drone: a steady wobble, a sidestep while HE rounds are in the air (the engine's jink, in g), a break-away on a feint
   _dodge(v, th, tv) {
@@ -87,7 +118,7 @@ export class VolleyView {
   // where a missile or drone of volley v is at volley time tv
   pos(v, th, l, tv, out) {
     const HKe = window.HK, W = this.b.world, end = th.viz.end, tc = Math.min(tv, end.t), x = Math.max(0, HKe.distAt(th, tc)), drone = HKe.THREATS[th.key].guidance === 'drone';
-    this._stray(th, tc); if (drone) this._dodge(v, th, tc);
+    this._stray(th, tc); if (this._ot) this._own(v, th, x, tv); if (drone) this._dodge(v, th, tc); else this._missBy(v, th, x, tc);
     this._pt(v, th, l, x, this._oy, this._oz, tv, out);
     const g = W.h(out.x, -out.z);
     if (end.type === 'ground' && tv >= end.t - 0.6 && !this._ot) out.y = lerp(out.y, g, Math.min(1, (tv - (end.t - 0.6)) / 0.6));
@@ -104,9 +135,29 @@ export class VolleyView {
   _surf(x, z) { const W = this.b.world; if (W.buildingAt && W.buildingAt(x, -z, 2)) return 'wall'; const g = W.veg ? W.veg(x, -z) : null; return g && (g.cls === 4 || g.cls === 5) ? 'trees' : null; }   /* 4 forest, 5 tree line */
   _mode(th, tv) { let md = 'guided'; for (const p of th.viz.phases || []) if (p.t <= tv) md = p.mode; return md; }
 
+  // The cut highlight of one missile (cutfx.js): the path it flies blind drawn in the blind colour from the point of the cut, a ring
+  // opening around it at that instant, a label that follows it and then sits where it ended, and the cue for the sound. All from the
+  // record and battle time; nothing here moves the missile.
+  _cut(v, th, l, tv, cs, key, cam, pixA, play) {
+    const end = th.viz.end, tc = cs.tCut, te = Math.min(tv, end.t), tr = cs.phase === 'relock' ? Math.min(te, tv) : te;
+    const fade = cs.phase === 'end' ? Math.max(0, 1 - (tv - end.t) / 1.5) : 1, fromSight = cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600;
+    if (fade > 0 && te > tc) {   /* the blind path, cut point to the missile (or to where it ended), brighter toward the missile */
+      const N = 8, A = this._q0, B = this._q1; this.pos(v, th, l, tc, A);
+      for (let k = 1; k <= N; k++) { const tk = tc + (tr - tc) * k / N; this.pos(v, th, l, tk, B); const w = (0.35 + 0.65 * k / N) * fade; this._seg(this.beamOn, A, B, BLIND, BLIND, w * 0.9, w); A.copy(B); }
+    }
+    const P = this.pos(v, th, l, tc, this._qc);   /* where the missile was when it went blind */
+    if (cs.ring > 0) { const d = cam.position.distanceTo(P), px = Math.max(0.6, d * pixA), f = cs.ring; this.marks.add(P, px * (10 + 46 * f * (2 - f)), BLIND, 1.4 * (1 - f), true); if (f < 0.3) this.marks.add(P, px * 18, [1, 1, 1], 1.3 * (1 - f / 0.3), false); }
+    if (!this.seen.has(key + 'c')) { this.seen.add(key + 'c'); if (cs.age < 0.6) this.emit('cut', P.clone(), { key: th.key, d: cs.d }); }
+    if (!play || fromSight) { this.pos(v, th, l, Math.min(tv, end.t), this.tmp); return; }
+    const sub = `cut at ${Math.round(cs.d).toLocaleString('en-US')} m`;
+    if (cs.phase === 'end') { const a = tv - end.t; if (a < T_LABEL_END) this.labels.add(cam, this.pos(v, th, l, end.t, this._q0), cs.text, sub, 'end', a > T_LABEL_END - 1 ? T_LABEL_END - a : 1); }
+    else this.labels.add(cam, this.pos(v, th, l, tv, this._q0), cs.text, cs.phase === 'relock' ? sub : sub, 'cut', 1);
+    this.pos(v, th, l, Math.min(tv, end.t), this.tmp);   /* put the working values back for the missile's own drawing */
+  }
+
   dispose() {
     this.s.scene.remove(this.group); this.transit.clear(); this.live.clear(); this.fly.length = 0; this.later.length = 0;
-    this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut]) { L.geo.dispose(); L.line.material.dispose(); }
+    this.cloud.geo.dispose(); this.cloud.mat.dispose(); for (const L of [this.beamOn, this.beamCut]) { L.geo.dispose(); L.line.material.dispose(); } this.marks.dispose(); this.labels.dispose();
   }
   // After a jump in time (replay): everything that has already happened in the current engagement is taken as seen, so old
   // explosions and muzzle flashes do not all go off at once. Lingering smoke is dropped; the cloud is rebuilt as old as it should be.
@@ -117,7 +168,7 @@ export class VolleyView {
     for (const d of this.transit.values()) this.group.remove(d.mesh); this.transit.clear();
     this.fx.clear(); this.cloud.clear(); this.lastT = t; if (!v) return;
     const tv = t - v.t0, rec = v.rec; this._first(v);
-    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); if (!B.tank.fate) this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
+    rec.threats.forEach((th, i) => { const l = this._l(v, th, i); if (!l) return; if (th.viz.sever && tv >= th.viz.sever.t) this.seen.add(v.i + ':' + th.idx + 'c'); if (tv >= th.viz.end.t) { this.seen.add(v.i + ':' + th.idx); if (th.viz.end.type === 'hit' && th.viz.end.killing) { const T = B.tankAt(v.t0 + th.viz.end.t), p = this.s.at(T.e, T.n, 2, this.tmp); if (!B.tank.fate) this.fx.fire(p.x, p.y, p.z, 1e9, 1.2); } } });
     for (const b of rec.bursts) { if (b.idx < 0) continue; const th = rec.threats[b.idx], l = this._l(v, th, b.idx); if (!l) continue;
       for (const r of b.rounds || []) { const tb = r.t_burst != null ? r.t_burst : r.t_pass, rk = v.i + ':' + b.idx + ':' + r.t_fire; if (tv >= r.t_fire) this.seen.add(rk + 'm'); if (tv >= tb) { this.seen.add(rk); if (b.kind === 'obs') this._bloom(v, b, th, l, r, true); } } }
     for (const a of rec.aps || []) if (tv >= a.t) this.seen.add(v.i + ':aps:' + a.t);
@@ -137,7 +188,7 @@ export class VolleyView {
     if (!quiet) { this.fx.seed(v.i * 97 + b.idx * 13 + r.t_fire); this.fx.cloudPop(pt.x, pt.y, pt.z); }
     if (!p) return;   /* a fuze that went off with no puff in the engine's list: the pop only */
     const wa = p.wa || 0, wc = b.wind_cross || 0, ve = this._ae * wa + this._an * wc, vn = this._an * wa - this._ae * wc;
-    this.cloud.add({ id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, m: p.m, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });   /* m: the round's payload as the engine used it (g) */
+    const sv = th.viz.sever; this.cloud.add({ cut: sv && !sv.smoke ? v.t0 + sv.t : null   /* its puffs light up for a moment when the engine says the line is cut */, id: v.i * 131 + b.idx * 17 + j * 3 + r.t_fire, t0: v.t0 + tform, tb: v.t0 + tb, x: pt.x, y: pt.y, z: pt.z, vx: ve, vz: -vn, s0: p.s0 || 2, m: p.m, K: b.phys ? b.phys.K : 2, wash: b.phys ? b.phys.wash : 0, gy });   /* m: the round's payload as the engine used it (g) */
   }
   // the engine's own measure of how much of the line the cloud is blocking for threat th at volley time tv: 0 clear, 1 = lock lost
   _block(rec, th, tv) {
@@ -155,13 +206,14 @@ export class VolleyView {
     for (let i = this.later.length - 1; i >= 0; i--) if (t >= this.later[i].t) { const e = this.later[i]; this.later.splice(i, 1); e.fn(); }
     this._transit(t); this._flyers(t);
     const v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null;
-    if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); return; }
+    if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.marks.flush(); this.labels.flush(); return; }
     const tv = t - v.t0, rec = v.rec; this._first(v); this.aimAt = null;
     if (this.curV !== v.i) { this.curV = v.i; for (const [k, st] of this.live) if (!k.startsWith(v.i + ':')) { this.group.remove(st.mesh); this.live.delete(k); } }   /* nothing of an earlier engagement is left hanging in the air */
-    const cam = s.camera, pixA = 2 * Math.tan((cam.fov || 50) * Math.PI / 360) / (s.canvas ? s.canvas.clientHeight || 720 : 720);
+    const cam = s.camera, pixA = 2 * Math.tan((cam.fov || 50) * Math.PI / 360) / (s.canvas ? s.canvas.clientHeight || 720 : 720), bt = typeof window !== 'undefined' && window.__beta, play = !(bt && bt.state) || bt.state() === 'play';   /* labels only in a battle being played, not behind the title */
 
     rec.threats.forEach((th, i) => {
       const l = this._l(v, th, i), key = v.i + ':' + th.idx, tt = HKe.THREATS[th.key], drone = tt.guidance === 'drone', rpg = tt.guidance === 'unguided', end = th.viz.end; if (!l) return;
+      const cs = LINKED[tt.guidance] ? cutState(th, tv) : null; if (cs) this._cut(v, th, l, tv, cs, key, cam, pixA, play);
       if (tv >= th.t0 && tv < end.t) {
         let st = this.live.get(key);
         if (!st) {
@@ -177,7 +229,9 @@ export class VolleyView {
         const burning = !rpg || tv - th.t0 < 0.7, U = m.userData;
         if (drone) m.rotateZ(Math.sin(tv * 4.3 + th.idx) * 0.14);
         if (U.flame) { U.flame.visible = burning; if (burning) { const fl = 0.8 + 0.4 * hash(Math.floor(t * 60) + th.idx); U.flame.scale.set(1, 1, fl); } }
-        if (U.glow) { U.glow.visible = burning; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
+        const lost = cs && cs.phase === 'blind' && cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600;   /* looking from the launcher (enemy sight): the cloud hides the tracer flare, as the engine says it hides the line */
+        if (U.flame && lost) U.flame.visible = false;
+        if (U.glow) { U.glow.visible = burning && !lost; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
           const spacing = (drone ? 7 : rpg ? 1.4 : th.v > 320 ? 2.1 : 1.6) / Math.max(0.35, fx.q)   /* close enough that the puffs join into one trail instead of a string of beads */, step = spacing / Math.max(10, th.v); let guard = 0;
@@ -196,7 +250,14 @@ export class VolleyView {
         if (col && tv - th.t0 > 0.15) {
           const L = this._launcher(v, th, l, this.tmp2), blind = this._mode(th, tv) === 'blind', blk = this._block(rec, th, tv), xm = Math.max(0, HKe.distAt(th, tv));
           const fc = this._bx != null && this._bx > xm ? clamp01((th.R - this._bx) / Math.max(1, th.R - xm)) : null;
-          if (fc == null) { if (blind) this._seg(this.beamCut, L, p, GREY, GREY, 1, 1); else this._seg(this.beamOn, L, p, col, col, 1, 1); }
+          if (cs && cs.phase === 'blind') {   /* cut: the line is drawn up to where it enters the cloud and breaks there; beyond, it flickers out */
+            const C = fc != null ? this.tmp3.lerpVectors(L, p, fc) : null, B = this.tmp4;
+            if (C) { this._seg(this.beamOn, L, C, col, col, 1, 1); if (cs.beam > 0) this._seg(this.beamOn, C, p, col, col, cs.beam * 0.8, cs.beam * 0.8);
+              const d = cam.position.distanceTo(C), px = Math.max(0.6, d * pixA); this.marks.add(C, px * 15, [1, 0.96, 0.88], cs.mark, false); this.marks.add(C, px * 9, BLIND, cs.mark * 0.7, true);
+              if (play && cs.age < 3 && cam.position.distanceToSquared(L) < 1600) this.labels.add(cam, B.copy(C), 'TRACER LOST', 'in the cloud: no guidance', 'sight', 1); }
+            else if (cs.beam > 0) this._seg(this.beamOn, L, p, col, col, cs.beam * 0.8, cs.beam * 0.8);
+          }
+          else if (fc == null) { if (blind) this._seg(this.beamCut, L, p, GREY, GREY, 1, 1); else this._seg(this.beamOn, L, p, col, col, 1, 1); }
           else { const C = this.tmp3.lerpVectors(L, p, fc); this._seg(this.beamOn, L, C, col, col, 1, 1);
             if (blind) this._seg(this.beamCut, C, p, GREY, GREY, 1, 1); else this._seg(this.beamOn, C, p, col, col, 1 - 0.75 * blk, 1 - 0.75 * blk); }
         }
@@ -259,7 +320,7 @@ export class VolleyView {
       if (!a.kill) fx.airburst(tgt.x, tgt.y, tgt.z, 0.5);
       this.emit('aps', tgt, {}); s.blast(port, 0.5, false);
     }
-    this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.lastT = t;
+    this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this.marks.flush(); this.labels.flush(); this.lastT = t;
   }
 
   // the vehicle is destroyed: fire that stays, a black column, and ammunition going up over the next few seconds

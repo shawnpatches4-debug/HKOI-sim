@@ -22,9 +22,9 @@ const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s
 const VERT = /* glsl */`
 attribute vec4 aA; attribute vec4 aB; attribute vec4 aC;   /* aA: centre, half size.  aB: opacity, seed, age, ground height.  aC: strength of the highlight */
 uniform float fogDensity;
-varying vec2 vUv; varying vec4 vB; varying float vFog; varying vec2 vSoft; varying float vH;
+varying vec2 vUv; varying vec4 vB; varying float vFog; varying vec2 vSoft; varying float vH; varying float vPulse;
 void main() {
-  vUv = position.xy; vB = aB;
+  vUv = position.xy; vB = aB; vPulse = aC.y;
   vec4 mv = viewMatrix * vec4(aA.xyz, 1.0); float dist = length(mv.xyz);
   vec2 off = position.xy * aA.w; mv.xy += off; gl_Position = projectionMatrix * mv;
   float nearFade = smoothstep(aA.w * 0.15, aA.w * 1.1 + 2.0, dist); vB.x *= nearFade; vH = aC.x * nearFade;
@@ -33,7 +33,7 @@ void main() {
 }`;
 const FRAG = /* glsl */`
 uniform sampler2D noise; uniform vec3 fogColor; uniform vec3 sunColor; uniform vec3 skyColor; uniform vec3 sunV; uniform vec3 upV; uniform float thermal; uniform float night; uniform vec3 tint; uniform float gain;
-varying vec2 vUv; varying vec4 vB; varying float vFog; varying vec2 vSoft; varying float vH;
+varying vec2 vUv; varying vec4 vB; varying float vFog; varying vec2 vSoft; varying float vH; varying float vPulse;
 vec3 toneOut(vec3 c) { gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -59,8 +59,8 @@ void main() {
   lit = mix(lit, fogColor, vFog * 0.8);
   // the highlight: a cool tint in the soft fringe of each billow and a faint wash of the same colour inside it. It is an aid to the eye, not
   // part of the cloud: it stays readable while the real cloud thins, and carries a little light of its own after dark.
-  float hA = vH * (edge * 0.36 + m * 0.1) * soft;
-  vec3 hC = (tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night) * gain;
+  float hA = min(0.9, (vH * (edge * 0.36 + m * 0.1) + vPulse * (edge * 0.9 + m * 0.3)) * soft);   /* vPulse: the puffs of a cloud that has just cut a missile's line light up for a moment (highlight only) */
+  vec3 hC = (tint * (0.3 + 0.7 * min(1.0, sunL)) + tint * 0.5 * night) * gain; hC = mix(hC, (tint * 1.4 + 0.3) * gain, min(1.0, vPulse));
   if (thermal != 0.0) { lit = vec3(0.3 + 0.12 * sun) * gain; hC = vec3(0.6) * gain; }
   vec3 L = toneOut(lit), H = toneOut(hC);
   gl_FragColor = vec4(L * a * (1.0 - hA) + H * hA, a + hA - a * hA);
@@ -102,13 +102,14 @@ export class ObscurantCloud {
       const p = this.puffs[i]; if (!p.on || t < p.tb) continue;
       ObscurantCloud.state(p, t, st); const tau0 = p.m ? ALPHA * p.m / (2 * Math.PI * p.s0 * p.s0) : TAU_PUFF, op = 1 - Math.exp(-tau0 * st.dens), hl = Math.min(1, Math.sqrt(st.dens * 3)) * st.f;
       if (st.dens < 0.035 || st.age > 90) { p.on = false; continue; }
+      const pl = p.cut != null && t >= p.cut ? Math.exp(-(t - p.cut) / 0.6) * st.f : 0;   /* the cut pulse: 0.6 s, as T_PULSE in cutfx.js */
       const age = Math.max(0, t - p.t0), cx = p.x + p.vx * age, cz = p.z + p.vz * age, L = this.lobes, each = 1 - Math.pow(1 - op * st.f, 1 / Math.sqrt(L));
       for (let k = 0; k < L; k++) {
         const o = n * STRIDE, h1 = hash(p.id * 3.1 + k * 17.3), h2 = hash(p.id * 5.7 + k * 29.9), h3 = hash(p.id * 9.3 + k * 7.1);
         const off = k === 0 ? 0 : st.sigma * (0.9 + 0.8 * h3), a = h1 * TAU, e = (h2 - 0.5) * 1.6;
         const x = cx + Math.cos(a) * Math.cos(e) * off, y = Math.max(p.y + Math.sin(e) * off * 0.7, p.gy + st.sigma * 0.6), z = cz + Math.sin(a) * Math.cos(e) * off;
         D[o] = x; D[o + 1] = y; D[o + 2] = z; D[o + 3] = st.sigma * (k === 0 ? 2.4 : 1.5 + h3 * 0.7);
-        D[o + 4] = each; D[o + 5] = h3; D[o + 6] = st.age; D[o + 7] = p.gy; D[o + 8] = hl; D[o + 9] = 0; D[o + 10] = 0; D[o + 11] = 0;
+        D[o + 4] = each; D[o + 5] = h3; D[o + 6] = st.age; D[o + 7] = p.gy; D[o + 8] = hl; D[o + 9] = pl; D[o + 10] = 0; D[o + 11] = 0;
         const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z; this.key[n] = dx * dx + dy * dy + dz * dz; n++;
       }
     }
