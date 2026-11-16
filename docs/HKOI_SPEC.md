@@ -17,6 +17,8 @@ Units: metres, seconds, grams, milliradians (mrad), degrees. `ln` is the natural
 
 ---
 
+> **Settings changed on 14 Nov 2026 by Shawn (MODEL now):** obscurant payload 75 g per round (was 40 g), radar in continuous mode with a 15 km pick-up reference (was EMCON, 3 km), up to 64 tracks (was 8), Trophy 4 a side with 85% uncued. The formulas below are unchanged; where a figure below says 40 g, 3 km or 8 tracks, read the new value. The "How HKOI aims" page (src/app/targeting.js) reads the live settings.
+
 ## 1. What the system is
 
 A 30 mm M230LF weapon station on the turret roof of an M1A2 SEPv3, with a fire-control radar, a camera tracker, a laser
