@@ -51,7 +51,7 @@ else for (const r of cuts.slice(0, 20)) console.log(`  ${r.tag.padEnd(34)} recor
 // 2. the cut highlight against battle time only: sample cutState at the same battle times reached by 30, 60, 144 and 240 fps stepping
 if (fps && cutState) {
   const { v, th } = fps, t0 = th.viz.sever.t - 0.5, t1 = th.viz.end.t + 4, sig = {};
-  for (const hz of [30, 60, 144, 240]) { const out = []; for (let n = 0; t0 + n / hz <= t1; n++) { const t = t0 + n / hz, c = cutState(th, t); if ((n * 6) % hz === 0) out.push(c ? [c.phase, c.text, +c.ring.toFixed(4), +c.beam.toFixed(4), +c.mark.toFixed(4), +c.pulse.toFixed(4)] : null); } sig[hz] = JSON.stringify(out); }   /* common instants of all four rates: every 1/6 s */
+  for (const hz of [30, 60, 144, 240]) { const out = []; for (let n = 0; t0 + n / hz <= t1; n++) { const t = t0 + n / hz, c = cutState(th, t); if ((n * 6) % hz === 0) out.push(c ? [c.phase, c.text, +c.ring.toFixed(4), +c.beam.toFixed(4), +c.mark.toFixed(4), +c.pulse.toFixed(4), +Math.max(0, 1 - c.age / 0.4).toFixed(4)   /* the tracer flare fading into the cloud in the enemy sight (volleyview fadeK) */] : null); } sig[hz] = JSON.stringify(out); }   /* common instants of all four rates: every 1/6 s */
   if (new Set(Object.values(sig)).size !== 1) fail('cut highlight differs between frame rates'); else console.log(`cut highlight: identical at 30, 60, 144 and 240 fps (${JSON.parse(sig[30]).length} samples)`);
 } else if (!fps) fail('no long blind flight found for the frame-rate check');
 console.log(bad ? `${bad} FAILED` : 'PASS'); process.exit(bad ? 1 : 0);
