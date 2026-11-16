@@ -18,7 +18,7 @@
 // Frame rate: the simulation is advanced by the page as always; this file only reads battle time. The camera and the labels are
 // functions of where things are this frame and of battle time, so they look the same at any frame rate.
 import { ScenarioPage, SCENARIOS } from './scenarios.js';
-import { AIM_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, droneSVG, endPhrase } from './targeting.js';
+import { AIM_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, droneSVG, closeSVG, endPhrase } from './targeting.js';
 import { SHOTS, chooseSide, frameOf, clearArea } from './briefcam.js';
 
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
@@ -69,7 +69,9 @@ function findDrones(B) {
 function findLimits(B) {
   const mk = (v, th) => { const a = (v.rec.aps || []).find(q => q.idx === th.idx && q.kill) || {}, tags = th.tags || [];
     const why = th.skip && th.skip.why === 'min_range' ? 'min' : tags.includes('handed_to_aps') ? 'handed' : tags.includes('saclos_unaffected') ? 'saclos' : tags.includes('cloud_thin') ? 'thin' : th.key === 'rpg' ? 'rpg' : 'other';
-    return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tA: v.t0 + (a.t != null ? a.t : th.viz.end.t), side: a.side || 'R', d: th.viz.end.d, flight: th.viz.end.t - th.t0, R: th.R, why, name: NAME[th.key] || th.key }; };
+    const c = v.cfg || {}, k = v.rec.ctx && v.rec.ctx.k, v0 = c.rnd && c.rnd.muzzle_v, L = (B.lookup || {})[th.key], g0 = L ? L.grid[0] : null;
+    return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tA: v.t0 + (a.t != null ? a.t : th.viz.end.t), side: a.side || 'R', d: th.viz.end.d, flight: th.viz.end.t - th.t0, R: th.R, why, name: NAME[th.key] || th.key,
+      track: th.track != null ? v.t0 + th.track : null, g0, tof: g0 && k && v0 ? Math.expm1(k * g0) / (k * v0) : null, form: c.obs ? c.obs.form_s : null }; };
   const guided = w => each(B, (v, th) => (th.defeated_by === 'aps' && (th.key === 'saclos' || th.key === 'kornet') && mk(v, th).why === w ? mk(v, th) : null));
   const close = guided('handed') || guided('min') || guided('saclos') || guided('thin') || guided('other');
   const rpg = each(B, (v, th) => (th.defeated_by === 'aps' && th.key === 'rpg' ? mk(v, th) : null));
@@ -198,19 +200,19 @@ export const CHAPTERS = [
     return steps; } },
   { key: 'drones', name: 'Drones', setup: DRONES, find: findDrones, steps: M => { const o = M.one, kmh = Math.round(o.speed * 3.6 / 10) * 10; return [
     { key: 'drone', head: 'A drone has no beam to cut', from: Math.max(o.tL + 0.4, o.tF - 3), to: o.tF - 0.2, rates: [[0, 0.5]], freeze: 'before firing', id: o.id, pts: { kill: [o.d, 30] },
-      shot: { kind: 'drone', o: { dist: 9 }, subj: 'missile', size: 0.5, min: 0.04 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
+      shot: { kind: 'drone', o: { dist: 6 }, subj: 'missile', size: 0.5, min: 0.06 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
       text: () => `An FPV drone: a small racing aircraft with an anti-tank charge, flown by a pilot through a video link at about ${kmh} km/h. It has no guidance beam to cut, so HKOI uses its other magazine: airburst rounds that explode beside it.` },
     { key: 'airburst', head: 'Airburst', from: o.tF - 0.2, to: o.tK + 0.5, rates: [[o.tF - 0.2, 0.25]], freeze: 'shot down', id: o.id, pts: { kill: [o.d, 30] },
-      shot: { kind: 'drone', o: { dist: 24 }, subj: 'missile', size: 0.5, min: 0.012 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
+      shot: { kind: 'drone', o: { dist: 16 }, subj: 'missile', size: 0.5, min: 0.02 }, diagram: { kind: 'drone' }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
       facts: [['Rounds', String(o.first)], ['Down at', m0(o.d)], ['After firing', `${f2(o.tK - o.tF)} s`]],
       text: () => `The gun fires ${word(o.first)} airburst rounds set to explode beside the drone. It falls ${m0(o.d)} from the tank, ${f2(o.tK - o.tF)} s after the first round left the gun. In the model one full burst brings a drone down ${pct(M.cfg.hePk)} of the time before it can dodge (assumed).` },
   ]; } },
   { key: 'limits', name: 'What HKOI cannot do', setup: LIMITS, find: (B, HK) => { const r = findLimits(B); if (r) r.keSpeed = HK && HK.THREATS && HK.THREATS.ke ? HK.THREATS.ke.speed : null; return r; }, steps: M => [
-    !M.rpg ? null : { key: 'rpg', head: 'Unguided: nothing to blind', from: Math.max(0, M.rpg.tL - 0.8), to: M.rpg.tA + 0.3, rates: [[Math.max(0, M.rpg.tL - 0.8), 0.25]], freeze: 'Trophy fired', id: M.rpg.id, pts: { site: [M.rpg.R, 1] },
-      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.08 }, marks: [mk('missile', 'RPG rocket', { tone: 'bad' }), mk('trophy', 'Trophy', { tone: 'good', side: M.rpg.side, after: M.rpg.tA })],
+    !M.rpg ? null : { key: 'rpg', head: 'Unguided: nothing to blind', from: Math.max(0, M.rpg.tL - 0.8), to: M.rpg.tA + 0.08, rates: [[Math.max(0, M.rpg.tL - 0.8), 0.25]], freeze: 'Trophy fired', id: M.rpg.id, pts: { site: [M.rpg.R, 1], kill: [M.rpg.d + 2, 1.8] },
+      shot: { kind: 'line', o: { at: 'kill', span: 34, back: 0.35, up: 0.22 }, subj: 'kill', size: 0, min: 0, also: ['tank'] }, diagram: { kind: 'close', which: 'rpg' }, marks: [mk('missile', 'RPG rocket', { tone: 'bad' }), mk('pt', `Trophy hit it here, ${m0(M.rpg.d)} out`, { tone: 'good', pt: 'kill', after: M.rpg.tA })],
       text: () => `An RPG is an unguided rocket: once it is fired there is nothing to blind. This one came from ${m0(M.rpg.R)} and arrived in ${f2(M.rpg.flight)} s. HKOI holds its fire on rockets. Trophy destroyed it ${m0(M.rpg.d)} from the armour.` },
-    !M.close ? null : { key: 'close', head: 'Too close for a cloud', from: Math.max(0, M.close.tL - 0.5), to: M.close.tA + 0.3, rates: [[Math.max(0, M.close.tL - 0.5), 0.5], [M.close.tA - 0.8, 0.2]], freeze: 'Trophy fired', id: M.close.id, pts: { site: [M.close.R, 1] },
-      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.08 }, marks: [mk('missile', cap(M.close.name), { tone: 'bad' }), mk('trophy', 'Trophy', { tone: 'good', side: M.close.side })],
+    !M.close ? null : { key: 'close', head: 'Too close for a cloud', from: Math.max(0, M.close.tL - 0.5), to: M.close.tA + 0.08, rates: [[Math.max(0, M.close.tL - 0.5), 0.5], [M.close.tA - 0.8, 0.2]], freeze: 'Trophy fired', id: M.close.id, pts: { site: [M.close.R, 1], kill: [M.close.d + 2, 2.5] },
+      shot: { kind: 'line', o: { at: 'kill', span: 34, back: 0.35, up: 0.22 }, subj: 'kill', size: 0, min: 0, also: ['tank'] }, diagram: { kind: 'close', which: 'close' }, marks: [mk('missile', cap(M.close.name), { tone: 'bad' }), mk('pt', `Trophy hit it here, ${m0(M.close.d)} out`, { tone: 'good', pt: 'kill', after: M.close.tA })],
       text: () => `This ${M.close.name} came from ${km2(M.close.R)}: ${f2(M.close.flight)} s of flight. A cloud needs time: the rounds must fly out, burst, and the puffs must form on the line. The fire control judged there was not enough and left it to Trophy, which destroyed it ${m0(M.close.d)} from the armour.` },
     { key: 'none', head: 'What nothing here stops', from: (M.rpg || M.close).tA + 2, to: (M.rpg || M.close).tA + 2, freeze: 'after', id: (M.rpg || M.close).id, shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 },
       marks: [mk('tank', 'M1A2 SEPv3', { tone: 'warn' })],
@@ -494,9 +496,9 @@ class Briefing {
   _diagram(st, t) {
     const dg = st && st.diagram; if (!dg || this.fault) { if (!this.diag.hidden) this.diag.hidden = true; return; }
     if (this.diag.hidden) this.diag.hidden = false;
-    const live = dg.kind === 'geo' || dg.kind === 'queue' || dg.kind === 'drone', key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
+    const live = dg.kind === 'geo' || dg.kind === 'queue' || dg.kind === 'drone' || dg.kind === 'close', key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
     if (key === this.diagKey && (!live || tq === this.diagT)) return; this.diagKey = key; this.diagT = tq; const M = this.M; let html = '';
-    if (dg.kind === 'geo') html = geoSVG(M.D, t, dg.focus, M.TB, this.W < 1150);   /* a narrow window: the panel shows only the lower diagram, large enough to read */ else if (dg.kind === 'queue') html = queueSVG(M.O, t); else if (dg.kind === 'layers') html = layerSVG(M.L, dg.focus); else if (dg.kind === 'guide') html = guideSVG(dg.focus); else if (dg.kind === 'drone') html = droneSVG(M.one, t, M.cfg);
+    if (dg.kind === 'geo') html = geoSVG(M.D, t, dg.focus, M.TB, this.W < 1150);   /* a narrow window: the panel shows only the lower diagram, large enough to read */ else if (dg.kind === 'queue') html = queueSVG(M.O, t); else if (dg.kind === 'layers') html = layerSVG(M.L, dg.focus); else if (dg.kind === 'guide') html = guideSVG(dg.focus); else if (dg.kind === 'drone') html = droneSVG(M.one, t, M.cfg); else if (dg.kind === 'close') html = closeSVG(M[dg.which], t);
     this.diag.innerHTML = html;
   }
   // where the step's subject is on the screen now, through the real camera (tests/beta/tour.py reads this; the node test does the same

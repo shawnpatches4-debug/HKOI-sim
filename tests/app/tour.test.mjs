@@ -9,7 +9,7 @@
 import { createRequire } from 'module';
 import fs from 'fs';
 import { CHAPTERS, sameSetup, REFERENCE } from '../../src/app/tour.js';
-import { droneSVG, geoSVG } from '../../src/app/targeting.js';
+import { droneSVG, geoSVG, closeSVG } from '../../src/app/targeting.js';
 import { SHOTS, chooseSide, frameOf, clearArea, project, sightClear, treesClear, vec } from '../../src/app/briefcam.js';
 const require = createRequire(import.meta.url);
 const { HK, World, Battle, EnemyVeh, Support } = require('../battle/load.js');
@@ -19,7 +19,7 @@ const FORCES = Object.assign(new Function(fm[0] + '; return FORCES;')(), EnemyVe
 const supportOf = F => { const S = F.support || {}, o = {}; if (S.wingman) o.wingman = S.wingman; if (S.artillery) o.artillery = S.artillery; if (S.scout) o.scout = true; if (S.air) o.air = S.air; return Object.keys(o).length ? o : undefined; };
 const cfg = HK.defaultConfig(), lookup = HK.meetLookup(cfg);
 let bad = 0, nSteps = 0, nFrames = 0; const fail = (...a) => { bad++; console.log('FAIL', ...a); };
-const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'pt', 'bearing', 'beamtag'], LINES = ['bearing', 'track', 'tracks', 'path', 'round', 'ticks'], DIAG = ['geo', 'queue', 'layers', 'guide', 'drone'];
+const AT = ['missile', 'launcher', 'tank', 'station', 'trophy', 'pt', 'bearing', 'beamtag'], LINES = ['bearing', 'track', 'tracks', 'path', 'round', 'ticks'], DIAG = ['geo', 'queue', 'layers', 'guide', 'drone', 'close'];
 // the battle as the page fights it (scenarios.js runToEnd), keeping where the tank was at every step
 function fight(u) {
   const F = FORCES[u.force], B = new Battle.Battle({ support: supportOf(F), fate: true, world: new World.World({ seed: u.map, biome: u.biome }), seed: u.seed, cfg, lookup, skill: u.skill, cond: 'day', mission: 'hold', waves: u.waves, commander: 'auto', raid: F.raid, force: F.force, crewQuality: 'trained', crewStress: true });
@@ -66,7 +66,7 @@ for (const ch of CHAPTERS) {
     if ((text.match(/[.!?](\s|$)/g) || []).length > 5) fail(tag, 'more than five sentences');
     for (const f of st.facts || []) if (!f[1] || /undefined|NaN|null/.test(f[1])) fail(tag, 'fact has a hole', f);
     if (!st.head || st.head.length > 40) fail(tag, 'heading', st.head);
-    if (st.diagram) for (const t of [st.from, (st.from + st.to) / 2, st.to]) { const svg = st.diagram.kind === 'drone' ? droneSVG(M.one, t, M.cfg) : st.diagram.kind === 'geo' ? geoSVG(M.D, t, st.diagram.focus, M.TB, true) : ''; if (/NaN|undefined|Infinity/.test(svg)) fail(tag, 'diagram has a hole at', t.toFixed(2)); }
+    if (st.diagram) for (const t of [st.from, (st.from + st.to) / 2, st.to]) { const svg = st.diagram.kind === 'drone' ? droneSVG(M.one, t, M.cfg) : st.diagram.kind === 'geo' ? geoSVG(M.D, t, st.diagram.focus, M.TB, true) : st.diagram.kind === 'close' ? closeSVG(M[st.diagram.which], t) : ''; if (/NaN|undefined|Infinity/.test(svg)) fail(tag, 'diagram has a hole at', t.toFixed(2)); }
     // the framing, at three moments of the step, on two window sizes
     const fr = [];
     if (st.shot && SHOTS[st.shot.kind]) for (const f of [0, 0.5, 1]) {

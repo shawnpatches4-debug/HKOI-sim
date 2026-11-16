@@ -62,7 +62,7 @@ export const SHOTS = {
   tank: (S, side, age) => { const T = S.tank, a = (Math.sign(side) * (Math.abs(side) > 1 ? 60 : 120) + age * 1.5) * DEG, dir = add(V(S.b.x * Math.cos(a), 0, S.b.z * Math.cos(a)), S.p, Math.sin(a));
     return { pos: lift(S, add(add(T, dir, 15), V(0, 1, 0), 8), 3), look: add(T, V(0, 1, 0), 0.6), fov: 40 }; },   /* 8 m up: looking down over the bushes beside the tank (the trees drawn on the map are not in the sight-line grid) */
   // a Trophy launcher: low, beside the turret on the launcher's side
-  trophy: (S, side) => { const T = S.trophy || S.tank, sd = Math.sign(side), P = add(add(add(T, S.p, 7.5 * sd), S.b, Math.abs(side) > 1 ? -3.5 : 3.5), V(0, 1, 0), 0.8);
+  trophy: (S, side) => { const T = S.trophy || S.tank, o = norm(V(T.x - S.tank.x, 0, T.z - S.tank.z)), f = norm(V(-o.z, 0, o.x)), P = add(add(add(T, o, 7), f, Math.abs(side) > 1 ? -3 : 3), V(0, 1, 0), 1.2);   /* out from the turret on the launcher's own side, so the launcher faces the camera */
     return { pos: lift(S, P, 2.2), look: add(T, V(0, 1, 0), -0.4), fov: 40 }; },
   // from behind the tank, looking out along the threat's bearing: the tank low in the picture, the bearing running away to the horizon
   bearing: (S, side) => { const T = S.tank, P = add(add(add(T, S.b, -17), S.p, 4.5 * side), V(0, 1, 0), 5.5);

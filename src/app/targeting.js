@@ -274,8 +274,8 @@ export function layerSVG(L, focus) {
   const ring = (r, col, dash, on) => CI(cx, cy, r, ` fill="none" stroke="${col}" stroke-width="${on ? 3 : 1.5}"${dash ? ' stroke-dasharray="4 4"' : ''}${on ? '' : ' stroke-opacity=".55"'}`);
   o += ring(84, C.warn, true, focus === 'sense') + `<path d="M${cx},${cy} m-72,0 a72,72 0 1,0 144,0 a72,72 0 1,0 -144,0 M${cx},${cy} m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0" fill="${C.hk}" fill-opacity="${focus === 'cloud' ? 0.28 : 0.12}" fill-rule="evenodd"/>` + ring(34, '#ff9a6b', false, focus === 'he') + ring(16, C.good, false, focus === 'trophy') + tankSide(cx, cy + 4, 0.75);
   const tx = 196; let y = 54; const item = (head, sub, col, on) => { o += T(tx, y, head, ` class="b" style="fill:${col}${on ? '' : ';opacity:.7'}"`); y += 18; for (const s of sub) { o += T(tx, y, s, ' class="s"'); y += 16; } y += 10; };
-  item('Senses', [`laser warner, radar ${L.radarMode === 'continuous' ? 'always on' : ''}`, `up to ${L.tracks} tracks`], C.warn, focus === 'sense');
-  item('Cloud', [`${km2(L.obsMin)} to ${km2(L.obsMax)} out`, `${L.payload} g a round (assumed)`], C.hk, focus === 'cloud');
+  item('Senses', ['laser warner, radar', `${L.radarMode === 'continuous' ? 'always on, ' : ''}${L.tracks} tracks`], C.warn, focus === 'sense');
+  item('Cloud', [`${km2(L.obsMin)} to ${km2(L.obsMax)} out`, `${L.payload} g a round, assumed`], C.hk, focus === 'cloud');
   item('Airburst', [`drones, near ${m0(L.heDrone)}`], '#ff9a6b', focus === 'he');
   item('Trophy', [`at the hull, ${L.aps0} shots a side`], C.good, focus === 'trophy');
   return wrap(LAYER_W, LAYER_H, o);
@@ -312,4 +312,18 @@ export function droneSVG(M, tb, cfg) {
   if (cfg && cfg.hePk != null) line(`One burst downs it ${r0(100 * cfg.hePk)}% of the time (assumed)`, 's b');
   if (cfg && cfg.apsDrone != null) line(`Trophy, a drone: ${r0(100 * cfg.apsDrone)}% a shot (assumed)`, 's d');
   return wrap(DRONE_W, DRONE_H, o);
+}
+
+// A threat Trophy had to take (too close for a cloud, or unguided): its flight to scale, and the record's own times
+export const CLOSE_W = 360, CLOSE_H = 250;
+export function closeSVG(c, tb) {
+  if (!c) return ''; const X0 = 30, X1 = 330, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / c.R)), y = 84, t = tb - c.tL; let o = T(14, 22, 'ITS FLIGHT, SEEN FROM THE SIDE, TO SCALE', ' class="h"') + T(346, 22, secs(t), ' class="n e w"');
+  o += LN(X0 - 10, y + 14, X1 + 10, y + 14, C.ground, ' stroke-width="2"') + tankSide(X0, y + 14, 1.15) + teamIcon(X1, y + 14, 1.2) + T(X1, y + 33, m0(c.R), ' class="s m"') + T(X0, y + 33, '0', ' class="s m"');
+  if (t >= 0 && tb < c.tA) { const x = xs(c.R * (1 - Math.min(1, t / c.flight))); o += arrowHead(x, y, -1, 0, 8, C.bad); }
+  if (tb >= c.tA) o += T(xs(c.d), y + 6, '✕', ' class="big g m"') + T(xs(c.d) + 8, y - 12, `Trophy: ${m0(c.d)} out`, ' class="n g"');
+  let yy = y + 60; const line = (s2, cls) => { o += T(14, yy, s2, ` class="${cls}"`); yy += 21; };
+  line(`Flight: ${f2(c.flight)} s from ${m0(c.R)}`, 's b');
+  if (c.why === 'rpg') line('Unguided: no beam, nothing to blind', 's');
+  else { if (c.track != null) line(`Radar track: ${secs(c.track - c.tL)} after launch`, 's'); if (c.tof != null) line(`Round to ${m0(c.g0)} (nearest in table): ${f2(c.tof)} s`, "s"); if (c.form != null) line(`then the puff takes ${f2(c.form)} s to form (setting)`, 's d'); }
+  return wrap(CLOSE_W, CLOSE_H, o);
 }
