@@ -137,8 +137,14 @@ To meet a Kornet (250 m/s) at d = 900 m the gun fires when the missile is at 900
 Closing speed at the meet is about 649 + 250 = 900 m/s.
 
 Meeting range choice: before the fight the fire control builds a table `p(d)` for d = 400 ... 2,500 m by trial
-engagements and picks `argmax [ p(d) - 0.003 * rounds(d) ]`. Known flaw: the trials use a still tank and a steady
-gunner, so `p` is optimistic (see HKOI_NUMBERS.md).
+engagements (160 per range, one missile, fixed seed 99) and picks `argmax [ p(d) - 0.003 * rounds(d) ]`. `p` = share of trials
+in which the missile is cut and then misses.
+MODEL since 16 Nov 2026 (Shawn's go-ahead), `fc.table = 'honest'`: each trial draws an enemy gunner wander, 1-sigma uniform
+0.5 to 3 mrad (`fc.table_wander_mrad`, ASSUMED: the fire control does not know this gunner; these are the simulator's expert and
+default figures), and, when the crew reacts, moves the tank at the steady speed the driver holds while HKOI fires (`crew.steady_speed`,
+4 m/s, the mission's own rule) in a uniformly random direction (ASSUMED), which also enters the tracking and stabiliser error.
+`fc.table = 'still'` is the old table (still tank, steady gunner), which overrated short meets: with the Kornet spin model on it chose
+600 m (p 0.99); the honest table chooses 1,000 m (p 0.88). Still a planning estimate: no volley, no terrain, 160 trials per range.
 
 ### 3.4 Warning, track and time line
 
@@ -214,8 +220,22 @@ cut when tau >= tau_need                           tested every 0.02 s against t
 transmission = exp(-tau)                           tau 4.6 is 1%
 ```
 Clear air: `tau_need` is about 4.5 at 1 km. Dust (beta 2.5) lowers it to about 2.1 at 1 km.
-A cut is permanent (`drift.relock = false`, Shawn's direction; optimistic). If re-lock is switched on, the missile gets
-its beam back when the line has been clear for 0.3 s, it is within 4 m of the beam and more than 200 m out.
+MODEL: **a cut is permanent** for every kind. Shawn ordered a Kornet re-lock on 16 Nov 2026 and, after seeing its measurement the same day,
+ordered it dropped ("just drop the re lock mechanic"): `drift.relock_kornet = false` by default. The code stays as an option, OFF, so the
+comparison can be repeated. What the option does (`drift.relock_kornet = true`, `THREATS.kornet.relock_fly`): While blind it is tested every 0.02 s; it gets its beam back when all three hold:
+```
+line missile tail -> launcher clear (tau < tau_need) for reacquire_s = 0.3 s       ASSUMED: time to decode the coded beam again
+|missile - beam centre| <= beam_field_m = 4 m (beam centre includes the gunner's wander)   ASSUMED: the sight's zoom keeps the
+                                                                                    laser field a few metres across at every range
+missile still >= recapture_min_m = 200 m from the vehicle                          ASSUMED
+```
+Guidance then resumes **from the blind state** (position, velocity and fin acceleration where the missile really is) with the same
+autopilot as 3.10 (wn 2.5 rad/s, zeta 0.7, 0.12 s lag, 15 g). Whether it still hits comes out of that flight; the cloud can cut it
+again. The fire control sees it steering back and may fire again (the new burst starts from the missile's true state). If nothing
+stops it, its own corrected flight decides hit or miss (it already contains the gunner's wander). Record: `th.viz.relock =
+{ t, d, off_m, outcome: 'hit'|'miss'|'ground', t_end, miss_m, n }` (outcome 'hit' = back on target; Trophy may still stop it).
+Other kinds: a cut is still permanent. The old rule (`drift.relock = true`: back on the beam as if never cut, any beam-rider) is kept
+selectable for comparison only.
 SACLOS: when blocked, the cloud breaks the launcher's tracker with probability 0.6.
 
 **Rule of thumb for rounds needed (ESTIMATE, derived from 3.5 and 3.7, not from the engine):** N rounds placed with
@@ -253,7 +273,7 @@ lateral accel  = N(0, 1 m/s^2)
 vertical accel = -g*(1 - lift) + N(0, 1 m/s^2)       lift uniform 0..1 (default "drift")
                                                       lift = 0 "free fall" (spec sheet), lift = 1 "hold course"
 ```
-Kornet option `cfg.blind_spin` (Shawn, 16 Nov 2026; OFF by default): heading error of size uniform 15.7 to 31.4 mrad in a random direction round the spiral, lift 0 (pure drop), same trim noise.
+Kornet `cfg.blind_spin` (Shawn's figures 15 Nov, made the MODEL by his order of 16 Nov 2026; `blind_spin: false` gives the old draw): heading error of size uniform 15.7 to 31.4 mrad in a random direction round the spiral, lift 0 (pure drop), same trim noise.
 Blind position after time t: `y = y0 + v*t*hy + 0.5*ay*t^2`, same form for z.
 Outcome: ground short of the tank (z reaches 0), miss, or hit if at the vehicle plane
 `|y - tank| <= half width and |z - centre| <= half height` (half width 1.85 m front, 3.95 m flank; half height 1.2 m,
@@ -279,6 +299,31 @@ P_survive = 1 - mean(killed)          P_no_hits = share of raids with no hit at 
 margin (95%) = 1.96 * sqrt(p*(1-p)/N)
 ```
 
+### 3.13 Ordering the gun's work (scheduler), MODEL
+
+Candidates: every tracked threat that is guided (beam-rider and radio SACLOS get obscurant; drones and SAL missiles get HE), not in the
+masked arc, not too high, with time to fire before its minimum range (obscurant 350 m, HE arming + 40 m). Each has `ready` (track +
+fire-control latency), `ideal` (fire time to meet it at the table's best range, or 800/700 m for HE), `latest`, bearing and elevation.
+Gun time per burst `BD = (burst-1)*60/rof + 0.1`, slew as in 3.4. A burst is fired early if waiting would make the next one late.
+
+**'classic'** (`fc.scheduler = 'classic'`): with AI on, it starts from most-urgent-first (`latest`) and drops or swaps neighbours while that
+raises `sum p` (each threat's table value at its planned range, no Trophy, no meet range change), planning once at the start with every
+threat of the volley, even those not yet launched (it knows the future). Follow-up bursts are fitted later into gaps.
+
+**'smart'** (`fc.scheduler = 'smart'`, Shawn's order of 16 Nov 2026; THE DEFAULT since the 200-battle comparison the same day): plans only with what the fire control has at the moment it decides
+(threats already tracked, gun position and free time, magazines, Trophy shots left per side, its trial table). At each decision it
+searches the orders of the known candidates (every ordered subset up to 6, else a local search with remove / insert / move) and minimises
+```
+E = sum over known inbound threats, in order of impact, of  lethality_k * q * (1 - pk_T * avail)   + 0.0001 * bursts
+q      = 1 - p(meeting range of its planned burst)       p from the trial table at the range the burst would really meet it (0 if not engaged)
+avail  = min(1, expected Trophy shots left that side) * (1 - expected shot of the previous threat on that side if within 0.6 s)
+pk_T   = 0.9 cued, 0.85 uncued, 0.3 drone;  lethality_k = kill chance of that kind (table 2.4)
+```
+It commits only the first burst, then plans again after each burst and whenever a new track arrives before the gun must swing.
+Follow-up bursts (failed cut, re-lock, HE miss) become candidates in the same plan. It does not know the enemy gunner's wander,
+which missiles will miss by themselves, or false cues to come. The trial table is optimistic (no wander, still tank; see HKOI_NUMBERS.md),
+and the scheduler inherits that. Record: `rec.sched = [{ t, known, order: [{ idx, kind, tf, p, second }], left }]` per decision.
+
 ---
 
 ## 4. Measured performance of the model (see HKOI_NUMBERS.md for method)
@@ -298,7 +343,7 @@ with 120 g: 56.3% (72% cut).
 | Payload | about 40 g | 40 g | as much as fits: 50 to 65 g estimate |
 | Envelope | 800 to 3,500 m | meet 400 to 2,500 m, best 900 m for Kornet | open |
 | Blind missile | free fall | drift with random lift | open (unknown real behaviour) |
-| Re-lock | not covered | off | off |
+| Re-lock | not covered | off (a Kornet re-lock was tried on 16 Nov and dropped by Shawn's order; option drift.relock_kornet) | off |
 | Magazine | 80 + 40 | 150 + 150 | open |
 
 ## 6. Open design questions
@@ -307,7 +352,7 @@ with 120 g: 56.3% (72% cut).
 2. Real cavity volume and fuze mass for a 30 x 113 mm carrier shell (ask Northrop Grumman; XM1211 body is the nearest).
 3. Fuze setter for the M230LF.
 4. Does holding the tank still for the burst help more than moving? (model study, not yet run)
-5. Make the planning table include gunner wander and own movement.
+5. Make the planning table include gunner wander and own movement: DONE 16 Nov 2026 (fc.table = 'honest', see 3.3); the wander range and the steady-speed movement are assumptions.
 6. Is 3 mrad the right default gunner wander? It lets 80% of unprotected tanks survive, against the 80 to 90% hit rate
    usually credited to Kornet.
 7. Larger calibre (30 x 173 mm, 40 mm) as the route to a 100 g class payload.

@@ -7,7 +7,7 @@ const OBS_G = { beam_rider: 1, radio_saclos: 1 };
 // FPV operator skill (assumed, not measured): jink = multiplier on the unpredictable manoeuvre while rounds are in flight; feint = chance a burst is drawn by a break-away and wasted
 const DRONE_SKILL = { novice: { jink: 0.4, feint: 0 }, trained: { jink: 1, feint: 0 }, expert: { jink: 1.7, feint: 0.25 } };
 const THREATS = {
-  kornet:    { blind_spin: { cone_mrad_lo: 15.7, cone_mrad_hi: 31.4, lift: 0 }, name: 'Kornet-class ATGM', short: 'Kornet', guidance: 'beam_rider', speed: 250, range_min: 300, range_max: 5500, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.5, weave: 0, launch_h: 1.2, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
+  kornet:    { blind_spin: { cone_mrad_lo: 15.7, cone_mrad_hi: 31.4, lift: 0 }, relock_fly: true, name: 'Kornet-class ATGM', short: 'Kornet', guidance: 'beam_rider', speed: 250, range_min: 300, range_max: 5500, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.5, weave: 0, launch_h: 1.2, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   vikhr:     { name: 'Vikhr-class (helicopter)', short: 'Vikhr', guidance: 'beam_rider', speed: 610, range_min: 1500, range_max: 8000, rcs: 0.02, laser: true, strength: 0.25, los_off: 2.0, weave: 7.0, launch_h: 140, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   saclos:    { name: 'Radio-command SACLOS', short: 'SACLOS', guidance: 'radio_saclos', speed: 400, range_min: 400, range_max: 6000, rcs: 0.02, laser: false, strength: 0, los_off: 2.0, weave: 0, launch_h: 30, kill: 0.5, loss: 'drift', sd_s: 2, rf: true },
   sal:       { name: 'Semi-active laser missile', short: 'SAL', guidance: 'sal', speed: 300, range_min: 500, range_max: 8000, rcs: 0.02, laser: true, strength: 1.0, los_off: 0, weave: 0, launch_h: 60, kill: 0.55, loss: 'drift', sd_s: 2, rf: true },
@@ -33,17 +33,18 @@ const WEATHER = {
 function defaultConfig() {
   return {
     seed: 1, missions: 1000, hkoi_enabled: true, loss_behavior: null,
+    blind_spin: true,   // Kornet blind flight per Shawn's rolling-airframe physics (THREATS.kornet.blind_spin); his order of 16 Nov 2026 made it the model. false = the old 'drift' draw
     env: { terrain: 'open', weather: 'clear', wind_ms: null, gust_sigma_ms: 1, temp_c: 15, altitude_m: 0 },
     vehicle: { speed_ms: 0, half_w: 1.85, half_h: 1.2, half_len: 3.95 },
     enemy: { gunner_jitter_mrad: 3, jitter_tremor_frac: 0.5, drone_jink_g: 1.2, drone_skill: 'trained', drone_evasion: true, raid_size: 3, mix: { kornet: 0.55, vikhr: 0.2, saclos: 0.1, sal: 0.05, fpv: 0.1 }, window_s: 6, same_beam_pair_prob: 0.15, same_beam_gap_s: 1.5, decoys: 0, close_range_bias: 0, range_cap_m: null, kornet_min_m: 2000 },
-    fc: { ai: true, track_aim: false, own_lead: true, lead_mode: 'steering', lead_horizon_s: 1.2, lead_frac: 0.3, human_approval_s: 0, meet_mode: 'optimal', fixed_meet_m: 1000, ai_track_factor: 0.5, ai_weave_removal: 0.8, ai_init_s: 0.25, reengage: true, max_bursts: 4, sustain: true, sustain_max: 8, false_track_fire_p: 0.2, false_track_fire_p_ai: 0.03, motion_pred_m_per_mps: 0.4 },
+    fc: { scheduler: 'smart', table: 'honest', table_wander_mrad: [0.5, 3], ai: true, track_aim: false, own_lead: true, lead_mode: 'steering', lead_horizon_s: 1.2, lead_frac: 0.3, human_approval_s: 0, meet_mode: 'optimal', fixed_meet_m: 1000, ai_track_factor: 0.5, ai_weave_removal: 0.8, ai_init_s: 0.25, reengage: true, max_bursts: 4, sustain: true, sustain_max: 8, false_track_fire_p: 0.2, false_track_fire_p_ai: 0.03, motion_pred_m_per_mps: 0.4 },
     lwr: { bearing_sigma_deg: 8, latency_s: 0.1, pd_ref: 0.95, beam_rider_range_km_half: 4, false_alarm_per_min: 0.6, sal_designation_lead_s: 4, maws: false },
     radar: { mode: 'continuous', acq_range_ref_m: 15000, rcs_ref_m2: 0.02, rcs_log_sigma: 0.5, track_mrad: 2, track_init_s: 0.5, max_tracks: 64, search_s: 1.0, motion_mrad_per_mps: 0.08, sigint_time_const_s: 30 },
     eo: { enabled: true, angle_mrad: 0.3, max_range_m: 3000, max_extinction_per_km: 1.2 },
     gun: { obscurant_rounds: 150, he_rounds: 150, burst: 4, rof_rpm: 200, dispersion_mrad: 2, heat_mrad_per_round: 0.015, pointing_mrad: 0.5, stab_mrad_per_mps: 0.12, boresight_bias_mrad: 0.7, slew_az_dps: 90, turret_assist_dps: 40, slew_el_dps: 60, slew_acc_dps2: 400, stab_upset_mrad: 2, settle_s: 0.2, el_min_deg: -10, el_max_deg: 60, dead_zones_deg: [[155, 205]], jam_per_burst: 0.02, jam_clear_s: 4, fc_latency_s: 0.3 },
     rnd: { muzzle_v: 805, muzzle_v_sigma: 5, drag_k_ref: 2.4e-4, arm_distance_m: 60, fuze_radius_m: 5, he_drone_radius_m: 12, fuze_reliability: 0.97, ground_false_trigger: 0.04, payload_g: 75, colocate: true, colocate_timing_sigma_s: 0.004, upwind_offset: true, he_pk_drone: 0.7, he_pk_missile: 0.2, wind_estimate_sigma_ms: 1.5, density_estimate_sigma: 0.02 },
     obs: { alpha_m2_per_g: 0.85, sigma0_m: 2, eddy_K_m2s: 2, form_s: 0.3, tau_lock_margin: 4.6, own_sight_tau: 1, saclos_effect: 0.6 },
-    drift: { relock: false, heading_mrad: 3, trim_acc: 1, lift_lo: 0, lift_hi: 1, beam_field_m: 4, recapture_min_m: 200, reacquire_s: 0.3 },
+    drift: { relock: false, relock_kornet: false, heading_mrad: 3, trim_acc: 1, lift_lo: 0, lift_hi: 1, beam_field_m: 4, recapture_min_m: 200, reacquire_s: 0.3 },
     crew: { enabled: true, experience: 'trained', trust: 0.7, need: 0.75, doctrine: 'unsure', smoke: 'last', decide_s: 4, drill: true, accel: 2.4, evade_speed: 12, reverse_speed: 8, smoke_form_s: 3, smoke_s: 25, smoke_eff: 0.75 },
     // combined arms: an enemy tank the crew must fight with the main gun while missiles and drones come in (off by default)
     duel: { on: false, R: 1800, brg: 15, t0: 2, first_shot_s: [3, 7], reload_s: 7.5, p_hit_ref: 0.75, own_lay_s: 2.2, own_reload_s: 6, own_p_hit_ref: 0.92, own_p_kill: 0.75, turret_dps: 40, max_shots: 8 },
@@ -401,8 +402,11 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
   const bp = (d, T, t0) => { const tk = Math.min(T, t0 + LH0); return (Yv(tk) + (tk === T ? 0 : vYat(tk) * (T - tk)) + rng.normal(0, 0) ) * (1 - d / R); };
   const res = { rounds: 0, downrange: 0, cut: false, reason: null, own_block_s: 0, partner_cut: false, meet: null };
   // ---- missiles in flight (the target, and a second missile on the same beam if there is one)
-  const mk = (thr, t) => { const x = distAt(thr, t); return { th: thr, x, y: yB(x, t) + rng.normal(0, 0.3), z: zc(x) + rng.normal(0, 0.3), vy: 0, vz: -(LH - hh) / R * thr.v, ay: 0, az: G, mode: 'guided', tLoss: null, clear: 0, end: null, drift: null, traj: rec ? [] : null, tS: -1 }; };
-  const bodies = [mk(th, tf)]; if (partner) { const pb = mk(partner, Math.max(tf, partner.t0)); pb.wait = partner.t0; bodies.push(pb); }
+  // a missile that found its beam again after a cut is picked up where it really is (its re-lock state), not on the ideal line
+  const RS = th.relock_state && th.relock_state.t < tf ? th.relock_state : null;
+  const mk = (thr, t) => { if (RS && thr === th) { const x = distAt(thr, RS.t); return { th: thr, x, y: RS.y, z: RS.z, vy: RS.vy, vz: RS.vz, ay: RS.ay, az: RS.az, mode: 'guided', tLoss: null, clear: 0, end: null, drift: null, traj: rec ? [] : null, tS: -1 }; }
+    const x = distAt(thr, t); return { th: thr, x, y: yB(x, t) + rng.normal(0, 0.3), z: zc(x) + rng.normal(0, 0.3), vy: 0, vz: -(LH - hh) / R * thr.v, ay: 0, az: G, mode: 'guided', tLoss: null, clear: 0, end: null, drift: null, traj: rec ? [] : null, tS: -1 }; };
+  const bodies = [mk(th, tf)]; if (partner) { const pb = mk(partner, Math.max(tf, partner.t0)); pb.wait = Math.max(partner.t0, RS ? tf : -1e9); bodies.push(pb); }
   const M = bodies[0];
   // ---- rounds
   const disp0 = (g.dispersion_mrad + g.heat_mrad_per_round * ctx.rounds_fired) * 1e-3;
@@ -448,7 +452,7 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
   }
   // ---- step the world
   const dt = PH.dt, Kp = PH.wn * PH.wn, Kd = 2 * PH.zeta * PH.wn;
-  let t = tf, ownS = 0, win0 = null, win1 = null, guard = 0;
+  let t = RS ? RS.t : tf, ownS = 0, win0 = null, win1 = null, guard = 0;
   const tStop = Math.max(...bodies.map(b => b.th.impact)) + 0.5;
   const sample = (b, tt0) => { if (b.traj && tt0 - b.tS >= PH.sample - 1e-9) { b.traj.push([+tt0.toFixed(3), +b.x.toFixed(2), +b.y.toFixed(3), +b.z.toFixed(3), b.mode === 'blind' ? 1 : 0]); b.tS = tt0; } };
   while (t < tStop && guard++ < 6000) {
@@ -500,8 +504,8 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
         if (b.mode === 'guided' && blocked) {
           if (b === M && tt.guidance === 'radio_saclos' && b.saclos == null) b.saclos = rng.random() > ob.saclos_effect;
           if (!b.saclos) {
-            b.mode = 'blind'; b.tLoss = tn; b.clear = 0; b.lossX = b.x;
-            b.drift = drawDrift(rng, dr, loss, cfg.blind_spin === true ? tt : null);   /* off by default until Shawn chooses: see docs/WORKLOG.md 16 Nov */ b.vy += v * b.drift.hy; b.vz += v * b.drift.hz;
+            b.mode = 'blind'; b.tLoss = tn; b.clear = 0; b.lossX = b.x; if (b.tLoss0 == null) { b.tLoss0 = tn; b.lossX0 = b.x; }
+            b.drift = drawDrift(rng, dr, loss, cfg.blind_spin !== false ? tt : null);   /* on by default since Shawn's order of 16 Nov 2026 */ b.vy += v * b.drift.hy; b.vz += v * b.drift.hz;
             if (b === M && win0 == null) win0 = tn;
           }
         } else if (b.mode === 'blind') {
@@ -509,7 +513,17 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
           if (b === M && blocked) win1 = null;
           if (b === M && !blocked && b.clear >= (dr.reacquire_s || 0) && win1 == null) win1 = tn;
           if (loss === 'self_destruct' && tn - b.tLoss >= tt.sd_s) { b.end = { type: 'sd', t: b.tLoss + tt.sd_s }; continue; }
-          if (dr.relock && b.clear >= (dr.reacquire_s || 0) && Math.hypot(b.y - yB(b.x, tn), b.z - zc(b.x)) <= dr.beam_field_m && b.x >= dr.recapture_min_m) { b.end = { type: 'relock', t: tn }; b.mode = 'guided'; continue; }
+          // Re-lock with the real correction (Shawn, 16 Nov 2026), the Kornet (tt.relock_fly) unless drift.relock_kornet is false: once the line to
+          // the launcher has been clear for reacquire_s (0.3 s, ASSUMED time for the tail receiver to decode the coded beam again) and the missile
+          // is inside the beam's information field (beam_field_m 4 m from the beam centre, ASSUMED: the laser field is kept a few metres across
+          // at every range by the sight's zoom) and still recapture_min_m (200 m, ASSUMED) out, guidance resumes FROM WHERE THE MISSILE REALLY IS:
+          // its blind position, velocity and fin state. The same autopilot as guided flight (wn 2.5 rad/s, damping 0.7, 0.12 s lag, 15 g) then
+          // has to fly the error out in the time left; whether it still hits comes out of that flight, and the cloud can cut it again.
+          const rq = dr.reacquire_s || 0, flyOK = tt.relock_fly && dr.relock_kornet !== false;
+          if (flyOK || !dr.relock) { if (b.clear >= rq && b.x >= dr.recapture_min_m) { const jt = b.th.jit, by = yB(b.x, tn) + (jt ? jitAt(jt, tn, jt.py) * (R - b.x) : 0), bz = zc(b.x) + (jt ? jitAt(jt, tn, jt.pz) * (R - b.x) : 0), off = Math.hypot(b.y - by, b.z - bz);
+            if (off <= dr.beam_field_m) { if (flyOK) { (b.relocks = b.relocks || []).push({ t: tn, x: b.x, off, y: b.y, z: b.z, vy: b.vy, vz: b.vz, ay: b.ay, az: b.az, tLoss: b.tLoss }); b.mode = 'guided'; b.clear = 0; b.drift = null; continue; }
+              else if (b === M && res.relock_could == null) res.relock_could = tn; } } }   /* re-lock not allowed: only counted, nothing changes */
+          else if (b.clear >= rq && Math.hypot(b.y - yB(b.x, tn), b.z - zc(b.x)) <= dr.beam_field_m && b.x >= dr.recapture_min_m) { b.end = { type: 'relock', t: tn }; b.mode = 'guided'; continue; }   /* legacy re-lock (drift.relock): back on the beam as if never cut */
         }
       }
       if (b === M && b.mode === 'blind' && loss === 'self_destruct' && tn - b.tLoss >= tt.sd_s) { b.end = { type: 'sd', t: b.tLoss + tt.sd_s }; continue; }
@@ -531,16 +545,22 @@ function engageObscurant(ctx, th, tf, nRounds, partner, rec, maxExtra) {
   }
   if (!first) { res.reason = rounds.some(r => r.fate === 'downrange') ? 'fuze_miss' : 'false_trigger'; return res; }
   if (M.tLoss == null) { res.reason = M.saclos ? 'saclos_unaffected' : 'cloud_thin'; return res; }
-  const tCut = M.tLoss;
+  const tCut = M.tLoss0 != null ? M.tLoss0 : M.tLoss;
   if (distAt(th, tCut) <= 5) { res.reason = 'too_late'; return res; }
-  res.cut = true; res.sever = Math.max(M.lossX, 1); res.t_cut = tCut;
+  res.cut = true; res.sever = Math.max(M.lossX0 != null ? M.lossX0 : M.lossX, 1); res.t_cut = tCut;
   const e = M.end || { type: 'plane', t: th.impact, y: M.y, z: M.z - hh, hit: false };
-  if (e.type === 'sd') { res.outcome = 'self_destruct'; res.t_end = e.t; }
+  if (M.relocks) { const L = M.relocks[M.relocks.length - 1]; res.relocks = M.relocks.length; res.t_relock = L.t; res.relock_off = +L.off.toFixed(2); res.relock_state = { t: L.t, y: L.y, z: L.z, vy: L.vy, vz: L.vz, ay: L.ay, az: L.az }; if (M.tLoss !== M.tLoss0) res.t_recut = M.tLoss; }
+  if (M.relocks && M.mode === 'guided') {   // found its beam again and flew the correction to the end
+    if (e.type === 'ground') { res.outcome = 'relock_ground'; res.t_end = e.t; res.short = e.short; res.miss_m = e.short; res.miss_y = M.y; res.miss_z = -hh; }
+    else { res.outcome = e.hit ? 'relock_hit' : 'relock_miss'; res.miss_m = Math.hypot(e.y, e.z); res.miss_y = e.y; res.miss_z = e.z; res.t_end = e.t; res.short = 0; }
+  }
+  else if (e.type === 'sd') { res.outcome = 'self_destruct'; res.t_end = e.t; }
   else if (e.type === 'relock') { res.outcome = 'relock'; res.reason = 'relock'; res.t_relock = e.t; }
   else if (e.type === 'ground') { res.outcome = 'ground_short'; res.t_end = e.t; res.short = e.short; res.miss_m = e.short; res.miss_y = M.y; res.miss_z = -hh; }
   else { res.outcome = e.hit ? 'drift_hit' : 'drift_miss'; res.miss_m = Math.hypot(e.y, e.z); res.miss_y = e.y; res.miss_z = e.z; res.t_end = e.t; res.short = 0; }
   const P = bodies[1];
-  if (P && P.tLoss != null && P.end && P.end.type !== 'relock') {
+  if (P && P.relocks && P.mode === 'guided' && P.end) res.partner_relock = { t_cut: P.tLoss0, sever: Math.max(P.lossX0, 1), t: P.relocks[P.relocks.length - 1].t, hit: P.end.type === 'plane' && P.end.hit, ground: P.end.type === 'ground', y: P.end.type === 'plane' ? P.end.y : P.y, z: P.end.type === 'plane' ? P.end.z : -hh - 5, short: P.end.short };
+  else if (P && P.tLoss != null && P.end && P.end.type !== 'relock') {
     res.partner_cut = true; res.partner_sever = Math.max(P.lossX, 1); res.partner_t = P.tLoss;
     const pe = P.end;
     if (pe.type === 'plane') { res.partner_outcome = pe.hit ? 'drift_hit' : 'drift_miss'; res.partner_miss_y = pe.y; res.partner_miss_z = pe.z; }
@@ -556,6 +576,14 @@ function meetLookup(cfg, n) {
   n = n || 160;
   const rng = new RNG(99);
   const out = {};
+  // 'honest' table (Shawn's go-ahead, 16 Nov 2026; fc.table = 'still' gives the old one): the trials include what the fire control can expect but
+  // not know in advance. (1) The enemy gunner's wander: it does not know this gunner, so each trial draws a 1-sigma wander uniform between
+  // fc.table_wander_mrad[0] and [1] (ASSUMED 0.5 to 3 mrad: the simulator's expert and default figures), same spectrum as the mission (half slow,
+  // half tremor). (2) The tank's own movement: when the crew reacts, the driver holds the steady speed while HKOI fires (crew.steady_speed, 4 m/s,
+  // the mission's own rule), so each trial moves the tank at that speed in a random direction (ASSUMED uniform), which also enters the
+  // tracking and stabiliser error as in the mission. The table stays a planning estimate: one missile at a time, no volley, no terrain.
+  const honest = (cfg.fc.table || 'honest') === 'honest', crewMoves = honest && cfg.crew && cfg.crew.enabled, sv = cfg.crew && cfg.crew.steady_speed != null ? cfg.crew.steady_speed : 4;
+  const WR = cfg.fc.table_wander_mrad || [0.5, 3];
   for (const key of Object.keys(cfg.enemy.mix)) {
     const tt = THREATS[key];
     if (!tt || !(cfg.enemy.mix[key] > 0) || !OBS_G[tt.guidance]) continue;
@@ -570,6 +598,7 @@ function meetLookup(cfg, n) {
         th.los_slope = Math.max(tt.launch_h - 1.2, 0) / R;
         th.v_lat = ctx.speed * Math.sin(rng.uniform(0, 2 * Math.PI));
         th.wind_cross = ctx.wind * Math.sin(rng.uniform(0, 2 * Math.PI));
+        if (honest) { if (crewMoves) { ctx.speed = Math.max(ctx.speed, sv); th.v_lat = sv * Math.sin(rng.uniform(0, 2 * Math.PI)); } if (JHUMAN[tt.guidance]) th.jit = jitDraw(rng, rng.uniform(WR[0], WR[1]), 0.5); }
         if (d >= R) continue;
         const tf = timeAt(th, d) - tauOfS(d, cfg.rnd.muzzle_v, ctx.k);
         const mx = cfg.fc.sustain ? cfg.fc.sustain_max : 0, fcc = cfg.fc;
@@ -579,13 +608,13 @@ function meetLookup(cfg, n) {
         while (fcc.reengage && bursts < fcc.max_bursts) {
           let tReady;
           if (!r.cut) tReady = (r.t_last != null ? r.t_last : tPrev + 1) + (fcc.ai ? 0.6 : 1.0);
-          else if (r.outcome === 'relock') tReady = r.t_relock + (fcc.ai ? 0.3 : 0.8);
+          else if (r.outcome === 'relock' || r.outcome === 'relock_hit') { tReady = r.t_relock + (fcc.ai ? 0.3 : 0.8); if (r.relock_state) th.relock_state = r.relock_state; }
           else break;
           const tf2 = tReady + cfg.gun.fc_latency_s + fcc.human_approval_s + cfg.gun.settle_s;
           if (tf2 >= Math.min(timeAt(th, 350) - tauOfS(350, cfg.rnd.muzzle_v, ctx.k), timeAt(th, 0) - 0.5)) break;
           r = engageObscurant(ctx, th, tf2, cfg.gun.burst, null, null, mx); bursts++; tPrev = tf2; used += r.rounds;
         }
-        if (r.cut && (r.outcome === 'drift_miss' || r.outcome === 'ground_short' || r.outcome === 'self_destruct')) ok++;
+        if (r.cut && (r.outcome === 'drift_miss' || r.outcome === 'ground_short' || r.outcome === 'self_destruct' || r.outcome === 'relock_miss' || r.outcome === 'relock_ground')) ok++;
       }
       probs.push(ok / n); rds.push(used / n);
     }
@@ -599,6 +628,7 @@ function meetLookup(cfg, n) {
 function lookupKey(cfg) {
   const c = JSON.parse(JSON.stringify(cfg));
   delete c.seed; delete c.missions; delete c.hkoi_enabled; delete c.aps; delete c.crew;
+  if ((cfg.fc.table || 'honest') === 'honest' && cfg.crew) c.crew = { enabled: !!cfg.crew.enabled, steady_speed: cfg.crew.steady_speed };   // the honest table depends on the crew's movement
   const mix = c.enemy.mix; c.enemy = { mix };
   delete c.gun.obscurant_rounds; delete c.gun.he_rounds;
   return JSON.stringify(c);
@@ -703,7 +733,7 @@ function runMission(cfg, rng, lookup, rec) {
   const score = plan => plan.reduce((s, [c, tf]) => s + (tf !== null ? c.p : 0), 0);
 
   let planOrder;
-  if (fc.ai && cands.length) {
+  if (fc.ai && cands.length && fc.scheduler !== 'smart') {
     let order = cands.slice().sort((a, b) => a.latest - b.latest);
     let bestPlan = timing(order), best = score(bestPlan), improved = true;
     while (improved) {
@@ -1001,8 +1031,10 @@ function runMission(cfg, rng, lookup, rec) {
       }
       return;
     }
-    th.sever_m = r.sever;
+    if (r.relock_could != null && !th.viz.relock_could) th.viz.relock_could = r.relock_could;
+    th.sever_m = r.sever; delete th.relock_end;
     th.viz.sever = { t: r.t_cut, d: r.sever }; (th.viz.phases = th.viz.phases || []).push({ t: r.t_cut, mode: 'blind' });
+    if (r.relocks) { (th.viz.phases).push({ t: r.t_relock, mode: 'guided' }); if (r.t_recut != null) th.viz.phases.push({ t: r.t_recut, mode: 'blind' }); }
     if (rec) ev(r.t_cut, 'cut', th.idx, `Cloud blocks ${lbl(th)}'s beam at ${Math.round(r.sever)} m, guidance lost`);
     if (crewOn && CR.doctrine === 'cut') crewAct(r.t_cut + 0.6 * XP.delay, 'cut', th, false, false);
     say(r.t_cut + 0.1, 'GNR', 'Beam’s cut. It’s blind.', 'Cut! It’s blind!', `It\u2019s cut\u2014 it\u2019s cut! Is it still coming?!`);
@@ -1011,6 +1043,15 @@ function runMission(cfg, rng, lookup, rec) {
       th.state = 'destroyed'; th.defeated_by = 'self_destruct';
       th.viz.end = { t: r.t_end, type: 'self_destruct', d: distAt(th, r.t_end) };
       if (rec) ev(r.t_end, 'kill', th.idx, `${lbl(th)} self-destructs after ${THREATS[th.key].sd_s} s blind`);
+    } else if (oc === 'relock_hit' || oc === 'relock_miss' || oc === 'relock_ground') {
+      // found its beam again and is flying the correction (the physics in engageObscurant). The fire control only sees it steering back, so it
+      // tries again if it can; whether the missile can still reach the vehicle is already settled by its flight and is applied at the end
+      const d = Math.round(distAt(th, r.t_relock)), out = oc === 'relock_hit' ? 'hit' : oc === 'relock_miss' ? 'miss' : 'ground';
+      th.tags.push('relock'); th.viz.relock = { t: r.t_relock, d, off_m: r.relock_off, outcome: out, t_end: r.t_end, miss_m: r.miss_m != null ? +r.miss_m.toFixed(1) : null, n: r.relocks };
+      th.relock_state = r.relock_state; th.relock_end = { hit: oc === 'relock_hit', ground: oc === 'relock_ground', y: r.miss_y, z: r.miss_z, t: r.t_end, short: r.short, miss: r.miss_m };
+      retry.push({ th, t: r.t_relock + (fc.ai ? 0.3 : 0.8), kind: 'obs' });
+      if (rec) ev(r.t_relock, 'miss', th.idx, `Cloud clears, ${lbl(th)} finds its beam again at ${d} m, ${r.relock_off.toFixed(1)} m off it, and steers back`);
+      say(r.t_relock + 0.1, 'GNR', 'It’s back on the beam.', 'It’s back on the beam!', `IT’S BACK! IT’S GUIDING AGAIN!`);
     } else if (oc === 'relock') {
       th.tags.push('relock'); th.viz.relock = { t: r.t_relock }; th.viz.phases.push({ t: r.t_relock, mode: 'guided' }); retry.push({ th, t: r.t_relock + (fc.ai ? 0.3 : 0.8), kind: 'obs' });
       if (rec) ev(r.t_relock, 'miss', th.idx, `Cloud clears, ${lbl(th)} reacquires the beam at ${Math.round(distAt(th, r.t_relock))} m`);
@@ -1025,6 +1066,11 @@ function runMission(cfg, rng, lookup, rec) {
       th.state = 'blind_pending';
       th.blind = { y: r.miss_y, z: r.miss_z, tCut: r.t_cut, tEnd: r.t_end, hit0: oc === 'drift_hit', sever: r.sever };
     }
+    if (r.partner_relock && partner && partner.state === 'inbound') {
+      const q = r.partner_relock; partner.tags.push('cut_by_leader_cloud', 'relock'); partner.viz.sever = { t: q.t_cut, d: q.sever }; (partner.viz.phases = partner.viz.phases || []).push({ t: q.t_cut, mode: 'blind' }, { t: q.t, mode: 'guided' });
+      partner.viz.relock = { t: q.t, d: Math.round(distAt(partner, q.t)), outcome: q.hit ? 'hit' : q.ground ? 'ground' : 'miss' };
+      partner.relock_end = { hit: q.hit, ground: q.ground, y: q.y, z: q.z, t: partner.impact, short: q.short, miss: Math.hypot(q.y, q.z) };
+    }
     if (r.partner_cut && partner) {
       partner.tags.push('cut_by_leader_cloud');
       partner.viz.sever = { t: r.partner_t, d: r.partner_sever }; (partner.viz.phases = partner.viz.phases || []).push({ t: r.partner_t, mode: 'blind' });
@@ -1037,9 +1083,10 @@ function runMission(cfg, rng, lookup, rec) {
   // execute
   let gunT = -1e9, az = 0, el = 0; const fq = forced.slice();
   let obsLeft = g.obscurant_rounds, heLeft = g.he_rounds; const amSaid = {}, ammoCall = t => { if (heLeft <= 50 && heLeft > 0 && g.he_rounds > 50 && !amSaid.h50) { amSaid.h50 = 1; say(t + 1.2, 'GNR', 'HE at fifty rounds.', 'HE’s at fifty!', 'FIFTY ROUNDS OF HE LEFT!'); } if (heLeft <= 0 && !amSaid.h0) { amSaid.h0 = 1; say(t + 1.2, 'GNR', 'HE is out.', 'HE’s out!', 'NO HE! WE’RE OUT!'); if (rec) ev(t + 1.2, 'crew', -1, 'HKOI has fired its last HE round'); } if (obsLeft <= 50 && obsLeft > 0 && g.obscurant_rounds > 50 && !amSaid.o50) { amSaid.o50 = 1; say(t + 1.2, 'GNR', 'Obscurant at fifty rounds.', 'Obscurant’s at fifty!', 'FIFTY ROUNDS OF SMOKE LEFT!'); } };
-  for (let j = 0; j < planOrder.length; j++) {
-    const c = planOrder[j], th = c.th;
-    if (th.state !== 'inbound') continue;
+  // one planned engagement: the gun swings to c and fires when it can; nexts are the threats planned after it (for the early-fire rule and the sustain time)
+  function execPlanned(c, nexts) {
+    const th = c.th;
+    if (th.state !== 'inbound') return;
     const sl = slewTime(g, az, el, c.az, c.el);
     let tf = Math.max(c.ready, gunT + sl);
     while (fq.length && fq[0] <= tf) {
@@ -1052,23 +1099,23 @@ function runMission(cfg, rng, lookup, rec) {
     }
     if (tf < c.ideal) {
       let tw = c.ideal;
-      if (j + 1 < planOrder.length) {
-        const nx = planOrder[j + 1], nsl = slewTime(g, c.az, c.el, nx.az, nx.el);
+      if (nexts.length) {
+        const nx = nexts[0], nsl = slewTime(g, c.az, c.el, nx.az, nx.el);
         if (tw + BD + nsl > nx.latest) tw = Math.max(tf, Math.min(c.ideal, nx.latest - nsl - 0.1 - (g.burst - 1) * 60 / g.rof_rpm));
       }
       tf = tw;
     }
     for (const w of (cfg.player && cfg.player.hold) || []) if (tf >= w[0] && tf < (w[1] == null ? 1e9 : w[1])) tf = w[1] == null ? 1e9 : w[1];
-    if (tf >= dmT('hkoi')) { if (!th.tags.includes('hkoi_down')) th.tags.push('hkoi_down'); if (rec) ev(dmT('hkoi'), 'miss', th.idx, `HKOI was knocked out before it could fire at ${lbl(th)}`); continue; }
-    if (tf > c.latest) { if (tf >= 1e9 || ((cfg.player && cfg.player.hold) || []).some(w => c.latest >= w[0] && c.latest < (w[1] == null ? 1e9 : w[1]))) { th.tags.push('held'); if (rec) ev(c.latest, 'miss', th.idx, `Weapons hold: commander keeps HKOI from engaging ${lbl(th)}`); continue; }
-      th.tags.push('gun_busy'); if (rec) ev(c.latest, 'miss', th.idx, `Gun busy: no time left to engage ${lbl(th)}`); continue; }
-    if (c.kind === 'obs' && obsLeft <= 0) { th.tags.push('no_ammo'); if (rec) ev(tf, 'miss', th.idx, `Out of obscurant rounds for ${lbl(th)}`); continue; }
-    if (c.kind === 'he' && heLeft <= 0) { th.tags.push('no_ammo'); if (rec) ev(tf, 'miss', th.idx, `Out of HE rounds for ${lbl(th)}`); continue; }
+    if (tf >= dmT('hkoi')) { if (!th.tags.includes('hkoi_down')) th.tags.push('hkoi_down'); if (rec) ev(dmT('hkoi'), 'miss', th.idx, `HKOI was knocked out before it could fire at ${lbl(th)}`); return; }
+    if (tf > c.latest) { if (tf >= 1e9 || ((cfg.player && cfg.player.hold) || []).some(w => c.latest >= w[0] && c.latest < (w[1] == null ? 1e9 : w[1]))) { th.tags.push('held'); if (rec) ev(c.latest, 'miss', th.idx, `Weapons hold: commander keeps HKOI from engaging ${lbl(th)}`); return; }
+      th.tags.push('gun_busy'); if (rec) ev(c.latest, 'miss', th.idx, `Gun busy: no time left to engage ${lbl(th)}`); return; }
+    if (c.kind === 'obs' && obsLeft <= 0) { th.tags.push('no_ammo'); if (rec) ev(tf, 'miss', th.idx, `Out of obscurant rounds for ${lbl(th)}`); return; }
+    if (c.kind === 'he' && heLeft <= 0) { th.tags.push('no_ammo'); if (rec) ev(tf, 'miss', th.idx, `Out of HE rounds for ${lbl(th)}`); return; }
     crewClock(tf);
     if (trng(th).random() < g.jam_per_burst * (tf >= dmD('hkoi') ? 3 : 1)) {
       th.tags.push('jam'); add('jams');
       if (rec) ev(tf, 'miss', th.idx, `Gun jams while engaging ${lbl(th)} (${g.jam_clear_s} s to clear)`); say(tf + 0.2, 'GNR', 'Gun’s jammed. Clearing.', 'Jam! Clearing it!', 'IT’S JAMMED! IT’S JAMMED!'); say(tf + g.jam_clear_s, 'GNR', 'Gun’s clear.', 'Gun’s clear!', 'CLEAR! IT’S CLEAR!');
-      gunT = tf + g.jam_clear_s; az = c.az; el = c.el; busyPush([tf - sl, gunT]); retry.push({ th, t: gunT, kind: c.kind === 'obs' ? 'obs' : 'he', jam: true }); continue;
+      gunT = tf + g.jam_clear_s; az = c.az; el = c.el; busyPush([tf - sl, gunT]); retry.push({ th, t: gunT, kind: c.kind === 'obs' ? 'obs' : 'he', jam: true }); return;
     }
     const nr = Math.min(g.burst, c.kind === 'obs' ? obsLeft : heLeft);
     gunT = tf + (nr - 1) * 60 / g.rof_rpm + 0.1; az = c.az; el = c.el;
@@ -1077,18 +1124,134 @@ function runMission(cfg, rng, lookup, rec) {
       busyPush([tf - sl, gunT]);
       heLeft -= nr; ammoCall(tf);
       resolveHE(th, tf, nr, false);
-      continue;
+      return;
     }
     obsLeft -= nr; add('obs_rounds', nr); ammoCall(tf);
     busyPush([tf - sl, gunT]);
     // time the gun can spend holding this cloud before it must turn to the next planned threat
     let slack = 1e9;
-    for (let q = j + 1; q < planOrder.length; q++) { const nx = planOrder[q]; if (nx.th.state !== 'inbound') continue; slack = nx.ideal + 0.4 * (nx.latest - nx.ideal) - slewTime(g, c.az, c.el, nx.az, nx.el) - 0.1 - gunT; break; }
+    for (const nx of nexts) { if (nx.th.state !== 'inbound') continue; slack = nx.ideal + 0.4 * (nx.latest - nx.ideal) - slewTime(g, c.az, c.el, nx.az, nx.el) - 0.1 - gunT; break; }
     resolveObs(c, th, tf, nr, false, slack);
+  }
+  if (fc.scheduler !== 'smart') for (let j = 0; j < planOrder.length; j++) execPlanned(planOrder[j], planOrder.slice(j + 1));
+
+  // ---------------------------------------------------------------- the 'smart' scheduler (fc.scheduler = 'smart'; Shawn's order of 16 Nov 2026)
+  // It plans with what the fire control really has at the moment it decides: the tracks it holds (kind, range, closing speed, bearing, time to
+  // impact), its gun (where it points, when it is free), its magazines, Trophy's shots left on each side and its own trial table of defeat chances
+  // by kind and meeting range. It does NOT know the enemy gunner's wander, whether a missile will miss by itself, or false cues still to come.
+  // Each time the gun is free, or a new track arrives before the gun must start to swing, it searches the orders of the threats it knows
+  // (every ordered subset when there are up to 6, otherwise a local search) for the one with the fewest expected lethal hits:
+  //   for each known threat still coming, in order of impact: q = chance it gets past HKOI = 1 - p(meeting range of its planned burst),
+  //   Trophy on that side fires if it has a shot left and has reset (expected shots, 0.6 s reset), kill chance cued 0.9 / drone 0.3,
+  //   expected lethal hits += lethality of that kind (table 2.4) * q * (1 - Trophy kill chance * Trophy available).
+  // So the gun goes where it changes the outcome most: a threat that Trophy will take anyway on a side with shots left may be left to it,
+  // a threat on a side whose Trophy is empty gets the gun first, a late burst at a short, poor meeting range is valued as such, and
+  // missiles already cut, unguided rockets and threats out of reach are never given rounds. Only its first engagement is committed; it plans again
+  // after every burst and whenever a new threat is tracked. Follow-up bursts (after a failed cut, a re-lock or an HE miss) join the same plan.
+  if (fc.scheduler === 'smart' && cfg.hkoi_enabled) {
+    const AP = cfg.aps, apsOn = !!AP.enabled && !ctx.aps_inhibited, rof = 60 / g.rof_rpm;
+    const mag0 = { L: AP.mag_L != null ? AP.mag_L : AP.mag_per_side, R: AP.mag_R != null ? AP.mag_R : AP.mag_per_side };
+    const sideOf = th => (th.rel_brg > 0 && th.rel_brg < 180) ? 'R' : 'L', lethal = th => (THREATS[th.key] || {}).kill || 0.5;
+    const knownAt = (th, T) => (th.track !== null && th.track <= T) || (th.cue !== null && th.cue <= T);
+    const byImpact = threats.slice().sort((a, b) => a.impact - b.impact);
+    const meetP = (c, tf) => { if (c.kind === 'he') return c.p; const rem = distAt(c.th, tf); if (rem <= 0) return 0; const d = sOfTau(solveMeet(rem, c.th.v, rd.muzzle_v, ctx.k), rd.muzzle_v, ctx.k); return Math.max(0, pEst(lookup, c.th.key, d)); };
+    function simTiming(order) {
+      let gT = gunT, a = az, e = el; const out = [];
+      for (let j = 0; j < order.length; j++) {
+        const c = order[j], sl = slewTime(g, a, e, c.az, c.el); let tf = Math.max(c.ready, gT + sl);
+        if (tf < c.ideal) { let tw = c.ideal; if (j + 1 < order.length) { const nx = order[j + 1], nsl = slewTime(g, c.az, c.el, nx.az, nx.el); if (tw + BD + nsl > nx.latest) tw = Math.max(tf, Math.min(c.ideal, nx.latest - nsl - 0.1 - (g.burst - 1) * rof)); } tf = tw; }
+        if (tf > c.latest) { out.push([c, null]); continue; }
+        out.push([c, tf]); gT = tf + BD; a = c.az; e = c.el;
+      }
+      return out;
+    }
+    function cost(plan, T) {
+      const pH = new Map(); let n = 0;
+      for (const [c, tf] of plan) if (tf !== null) { n++; pH.set(c.th, 1 - (1 - (pH.get(c.th) || 0)) * (1 - meetP(c, tf))); }
+      const s = { L: mag0.L, R: mag0.R }, lastT = { L: -1e9, R: -1e9 }, lastF = { L: 0, R: 0 }; let E = 0;
+      for (const th of byImpact) {
+        if (th.state !== 'inbound' || !knownAt(th, T)) continue;
+        const sd = sideOf(th), q = 1 - (pH.get(th) || 0); let av = apsOn ? Math.min(1, Math.max(0, s[sd])) : 0;
+        if (th.impact - lastT[sd] < AP.reset_s) av *= 1 - lastF[sd];
+        const pk = THREATS[th.key].guidance === 'drone' ? AP.pk_drone : (th.track !== null ? AP.pk_cued : AP.pk_uncued);
+        E += lethal(th) * q * (1 - pk * av); s[sd] -= q * av; lastT[sd] = th.impact; lastF[sd] = q * av;
+      }
+      return E + 1e-4 * n;   // equal outcomes: the plan that fires fewer bursts
+    }
+    function bestPlan(list, T) {
+      let best = [], bestC = cost([], T);
+      if (list.length <= 6) {   // every ordered subset (at most 1,957 orders for 6 threats)
+        const used = new Array(list.length).fill(false), cur = [];
+        const dfs = () => { for (let i = 0; i < list.length; i++) { if (used[i]) continue; cur.push(list[i]); used[i] = true;
+          const pl = simTiming(cur); if (!pl.some(([, tf]) => tf === null)) { const cc = cost(pl, T); if (cc < bestC - 1e-12) { bestC = cc; best = pl; } dfs(); }
+          cur.pop(); used[i] = false; } };
+        dfs();
+        return best;
+      }
+      // more than 6: start from most urgent first, then remove, insert and move single threats while that lowers the expected hits
+      const val = o => { const ok = simTiming(o).filter(([, tf]) => tf !== null).map(([c]) => c), pl = simTiming(ok); return { o: ok, c: pl.some(([, tf]) => tf === null) ? 1e9 : cost(pl, T), pl }; };
+      let cur = val(list.slice().sort((a, b) => a.latest - b.latest)), improved = true, guard2 = 0;
+      while (improved && guard2++ < 200) {
+        improved = false; const o = cur.o, rest = list.filter(c => !o.includes(c)), trials = [];
+        for (let i = 0; i < o.length; i++) { trials.push(o.slice(0, i).concat(o.slice(i + 1))); for (let j = 0; j < o.length; j++) if (j !== i) { const x = o.slice(); const [m] = x.splice(i, 1); x.splice(j, 0, m); trials.push(x); } }
+        for (const r of rest) for (let j = 0; j <= o.length; j++) { const x = o.slice(); x.splice(j, 0, r); trials.push(x); }
+        for (const tr of trials) { const v = val(tr); if (v.c < cur.c - 1e-12) { cur = v; improved = true; break; } }
+      }
+      return cur.c < bestC ? cur.pl : best;
+    }
+    function retryCand(it) {
+      const th = it.th; if (th.state !== 'inbound') return null;
+      if ((th.n_bursts || 1) + 1 > (THREATS[th.key].guidance === 'drone' ? (fc.max_bursts_drone || 12) : fc.max_bursts)) return null;
+      const kind = it.kind, dMin = kind === 'obs' ? 350 : rd.arm_distance_m + 40, ready = it.t + g.fc_latency_s + fc.human_approval_s;
+      const latest = Math.min(timeAt(th, dMin) - tauOfS(dMin, rd.muzzle_v, ctx.k), timeAt(th, 0) - 0.5);
+      if (ready > latest) { th.tags.push('no_time_second'); if (rec) ev(Math.min(ready, th.impact - 0.2), 'miss', th.idx, `No time left for another burst at ${lbl(th)}`); return null; }
+      const d = Math.max(distAt(th, ready), 1), drone = THREATS[th.key].guidance === 'drone';
+      return { th, kind, ready, ideal: ready, latest, az: th.brg, el: Math.atan2(th.los_slope * d + 0.4, d) / DEG, p: kind === 'he' ? (drone ? rd.he_pk_drone : rd.he_pk_missile) : 0, dMin, second: true };
+    }
+    function execSecond(c, nexts) {
+      const th = c.th, kind = c.kind; if (th.state !== 'inbound') return;
+      th.n_bursts = (th.n_bursts || 1) + 1;
+      const sl = slewTime(g, az, el, c.az, c.el), tf = Math.max(c.ready, gunT + sl);
+      if (tf >= dmT('hkoi')) { if (!th.tags.includes('hkoi_down')) th.tags.push('hkoi_down'); return; }
+      if (tf > c.latest) { th.tags.push('no_time_second'); if (rec) ev(Math.min(c.ready, th.impact - 0.2), 'miss', th.idx, `No time left for another burst at ${lbl(th)}`); return; }
+      const left = kind === 'obs' ? obsLeft : heLeft;
+      if (left <= 0) { if (!th.tags.includes('no_ammo')) th.tags.push('no_ammo'); if (rec) ev(tf, 'miss', th.idx, `Out of ${kind === 'obs' ? 'obscurant' : 'HE'} rounds for another burst at ${lbl(th)}`); return; }
+      crewClock(tf);
+      if (trng(th).random() < g.jam_per_burst * (tf >= dmD('hkoi') ? 3 : 1)) { th.tags.push('jam'); add('jams'); gunT = tf + g.jam_clear_s; az = c.az; el = c.el; busyPush([tf - sl, gunT]); if (rec) ev(tf, 'miss', th.idx, `Gun jams on the follow-up burst at ${lbl(th)}`); th.n_bursts--; retry.push({ th, t: gunT, kind, jam: true }); return; }
+      const nr = Math.min(g.burst, left);
+      gunT = tf + (nr - 1) * rof + 0.1; az = c.az; el = c.el; busyPush([tf - sl, gunT]);
+      add('second_bursts'); if (!th.tags.includes('reengaged')) th.tags.push('reengaged'); (th.viz.extra = th.viz.extra || []).push(tf);
+      if (kind === 'he') { heLeft -= nr; ammoCall(tf); resolveHE(th, tf, nr, true); return; }
+      obsLeft -= nr; add('obs_rounds', nr); if (th.viz.fired == null) th.viz.fired = tf; th.viz.fired2 = tf;
+      let slack = 1e9; for (const nx of nexts) { if (nx.th.state !== 'inbound') continue; slack = nx.ideal + 0.4 * (nx.latest - nx.ideal) - slewTime(g, c.az, c.el, nx.az, nx.el) - 0.1 - gunT; break; }
+      resolveObs({ want: distAt(th, tf), ideal: tf, ready: tf }, th, tf, nr, true, slack);
+      for (const w of busy) if (w[1] > gunT) gunT = w[1];   // sustain rounds keep the gun on this cloud
+    }
+    const pool = cands.slice(), done = new Set(); let guard = 0;
+    if (rec) rec.sched = [];
+    while (guard++ < 400) {
+      if (fc.reengage) { while (retry.length) { const rc = retryCand(retry.shift()); if (rc) pool.push(rc); } } else retry.length = 0;
+      const live = pool.filter(c => !done.has(c) && c.th.state === 'inbound');
+      if (!live.length) break;
+      let T = Math.max(gunT, Math.min(...live.map(c => c.ready))), committed = false;
+      for (let k = 0; k < 64 && !committed; k++) {
+        const known = live.filter(c => c.ready <= T + 1e-9), later = live.filter(c => c.ready > T + 1e-9), nextR = later.length ? Math.min(...later.map(c => c.ready)) : Infinity;
+        const plan = bestPlan(known, T);
+        if (!plan.length) { if (nextR < Infinity) { T = nextR; continue; } for (const c of known) done.add(c); break; }
+        const [c0, tf0] = plan[0], sl0 = slewTime(g, az, el, c0.az, c0.el);
+        if (nextR < tf0 - sl0) { T = nextR; continue; }   // a new track comes in before the gun has to move: plan again with it
+        done.add(c0); committed = true;
+        if (rec) rec.sched.push({ t: +T.toFixed(2), known: known.map(c => c.th.idx), order: plan.map(([c, tf]) => ({ idx: c.th.idx, kind: c.kind, tf: +tf.toFixed(2), p: +meetP(c, tf).toFixed(2), second: !!c.second })), left: known.filter(c => !plan.some(([x]) => x === c)).map(c => c.th.idx) });
+        if (c0.second) execSecond(c0, plan.slice(1).map(x => x[0])); else execPlanned(c0, plan.slice(1).map(x => x[0]));
+      }
+    }
+    for (const c of pool) if (!c.second && c.th.viz.fired == null && c.th.state === 'inbound' && !c.th.tags.some(t => t === 'gun_busy' || t === 'no_ammo' || t === 'hkoi_down' || t === 'held' || t === 'jam')) {
+      c.th.tags.push('handed_to_aps'); if (rec) ev(c.ready, 'handoff', c.th.idx, `Fire control hands ${lbl(c.th)} to APS (better use of the gun elsewhere)`);
+    }
   }
   // Follow-up bursts: at missiles that steered back onto their beam after the cloud cleared, and at
   // drones or SAL missiles that an HE burst missed. Fits into gaps in the gun's schedule.
-  if (cfg.hkoi_enabled && fc.reengage) {
+  if (cfg.hkoi_enabled && fc.reengage && fc.scheduler !== 'smart') {
     let guard = 0;
     while (retry.length && guard++ < 40) {
       retry.sort((a, b) => a.t - b.t);
@@ -1119,6 +1282,15 @@ function runMission(cfg, rng, lookup, rec) {
   }
   // ---------------------------------------------------------------- settle blind missiles and the crew's moves
   crewPending(Infinity);
+  // missiles that found their beam again after a cut and were not stopped since: their own corrected flight decides (it already includes the gunner's wander)
+  for (const th of threats) {
+    const q = th.relock_end; if (!q || th.state !== 'inbound') continue;
+    th.will_miss = false; th.jitter_miss = false;
+    if (q.hit) { th.relock_hit = true; if (rec) ev(th.viz.relock.t + 0.4, 'miss', th.idx, `${lbl(th)} has corrected its course and is on target again`); continue; }
+    th.state = 'missed'; th.defeated_by = 'hkoi_cut'; th.tags.push('relock_' + (q.ground ? 'ground' : 'miss'));
+    th.viz.end = q.ground ? { t: q.t != null ? q.t : th.impact, type: 'ground', d: q.short, relock: true } : { t: th.impact, type: 'miss', lat: q.y, over: q.z != null ? +q.z.toFixed(2) : null, miss: q.miss != null ? +q.miss.toFixed(1) : null, relock: true };
+    if (rec) ev(th.viz.end.t, 'kill', th.idx, q.ground ? `${lbl(th)} could not climb back to its beam in time and hits the ground ${Math.round(q.short || 0)} m short` : `${lbl(th)} was back on its beam too late to correct and misses by ${(q.miss || 0).toFixed(1)} m`);
+  }
   for (const th of threats) {
     const b = th.blind; if (!b) continue;
     const dY = crewOn ? latOf(th, b.tEnd) - latOf(th, b.tCut) : 0;
@@ -1160,7 +1332,8 @@ function runMission(cfg, rng, lookup, rec) {
   const mag = { L: aps.mag_L != null ? aps.mag_L : aps.mag_per_side, R: aps.mag_R != null ? aps.mag_R : aps.mag_per_side }, last = { L: -1e9, R: -1e9 };
   // battle layer: the vehicle got behind ground or buildings while this missile was still being guided, so it lost its guidance and came down short
   for (const th of threats) if (th.state === 'inbound' && th.masked != null) { const short = Math.max(8, th.masked); th.state = 'missed'; th.defeated_by = th.mask_by || 'terrain_mask'; th.tags.push(th.mask_by || 'terrain_mask'); th.viz.end = { t: th.t0 + Math.max(th.R - short, 1) / th.v, type: 'ground', short, mask: true }; add('by_terrain'); if (rec) ev(th.viz.end.t, 'kill', th.idx, `${lbl(th)} loses its guidance when the vehicle drops out of the gunner's sight, and flies into the ground ${Math.round(short)} m short`); }
-  for (const th of threats) if (th.state === 'inbound' && th.will_miss) {
+  // the enemy gunner's wander only steers a missile that is still guided: a missile flying blind after a cut (drift_hit) cannot follow his aim (fault found by the cutfx helper, 16 Nov 2026)
+  for (const th of threats) if (th.state === 'inbound' && th.will_miss && !th.drift_hit) {
     if (th.jitter_miss) { const jm = th.jit_miss || [3, 0], d = Math.hypot(jm[0], jm[1]); th.state = 'missed'; th.defeated_by = 'gunner_jitter'; th.tags.push('gunner_jitter'); th.viz.end = jm[1] <= -cfg.vehicle.half_h ? { t: th.t0 + Math.max(th.R - 14, 1) / th.v, type: 'ground', short: 14, jit: true } : { t: th.impact, type: 'miss', lat: Math.abs(jm[0]) < 0.6 ? 0 : jm[0], over: +jm[1].toFixed(2), miss: +d.toFixed(1), jit: true };
       if (rec) ev(th.impact, 'kill', th.idx, jm[1] <= -cfg.vehicle.half_h ? `${lbl(th)} flies into the ground short of the vehicle: the enemy gunner's aim dipped` : `${lbl(th)} misses on its own: the enemy gunner's aim wandered ${d.toFixed(1)} m off the vehicle`); continue; }
     th.state = 'missed'; th.defeated_by = th.duel ? 'enemy_gunnery_miss' : 'unguided_miss'; th.viz.end = { t: th.impact, type: 'miss', lat: (th.idx % 2 ? 1 : -1) * (th.duel ? 3 : 5), miss: 4 + (th.idx * 7 % 9) };
@@ -1229,6 +1402,7 @@ function runMission(cfg, rng, lookup, rec) {
     if (th.viz.sever && !th.viz.sever.smoke && th.viz.fired != null && !th.tags.includes('cut_by_leader_cloud')) add('f_cut_direct');
     if (th.defeated_by === 'hkoi_cut' || th.defeated_by === 'hkoi_shared_cloud' || th.defeated_by === 'self_destruct' || th.defeated_by === 'hkoi_he' || th.defeated_by === 'hkoi_evade') add('f_hkoi_stop');
     if (th.defeated_by === 'aps') add('f_aps_stop');
+    if (th.key === 'kornet' && th.viz.sever && !th.viz.sever.smoke) { add('k_cut'); if (th.viz.relock) { add('k_relock'); if (th.state === 'hit') add('k_relock_hit'); if (th.relock_hit) add('k_relock_on_target'); } if (th.viz.relock_could) add('k_relock_could'); }
     if (th.state === 'hit') { add('f_hit'); add('leakH_' + leakHKOI(cfg, th)); add('leakA_' + leakAPS(cfg, th)); }
   }
   if (crewOn) {

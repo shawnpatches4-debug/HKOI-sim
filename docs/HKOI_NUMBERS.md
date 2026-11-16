@@ -154,3 +154,69 @@ Things Claude got wrong or loose on 14 Nov before reading this file, corrected h
 
 Other studies added on 14 Nov (all in `src/battle/study.js`, same seeds for every setup, fire-control table rebuilt per setup):
 `tests/battle/raids.js` (21 scenarios), `tests/battle/maps.js` (each map's real opening volleys), `tests/battle/stress.js` (a stream of up to 60 mixed threats arriving in groups until the vehicle is lost), `tests/battle/cloud.js` (which cloud input moves the planning table). Shawn's own v11 notebook uses a fill of 6.7 m2/g (60% carbon 8.5, 30% graphite 5.0, 10% brass 1.0) against the engine's 0.85, and this file records him choosing brass flake: the two disagree by a factor of about eight and the engine's figure has NOT been changed; the stress test offers the notebook fill as a labelled variant.
+
+## Addendum, 16 Nov 2026: Shawn's orders of 16 Nov, and the reference run with them
+
+Engine changes, all at his direction, none tuned to a target (formulas in HKOI_SPEC.md 3.3, 3.8, 3.10, 3.13):
+
+| Setting | Was | Now | Note |
+| --- | --- | --- | --- |
+| `blind_spin` (Kornet blind flight) | off | **on** | leaves its spiral along the tangent, 15.7 to 31.4 mrad off, no lift (his figures) |
+| `fc.table` (fire-control planning table) | still tank, steady gunner | **'honest'** | trials draw a gunner wander 0.5 to 3 mrad (ASSUMED) and move the tank at the 4 m/s steady speed in a random direction (ASSUMED). Fixes the known flaw above |
+| `fc.scheduler` | classic | **'smart'** | plans with what it knows at each moment, values Trophy shots left per side and the real meeting range; see the spec 3.13 |
+| `drift.relock_kornet` | (new) | **off** | Kornet re-lock flown from the blind state by the real autopilot: built, measured, and dropped by his order the same day. Kept as an option |
+| blind missile and gunner wander | a cut, blind missile on course could still be turned into a "gunner's aim wandered" miss | fixed | a blind missile cannot follow its gunner. 13 of 1,791 cut missiles in 2,000 raids, 6 of 479 in 400 battles |
+
+`node tests/study/hkoi_only.js 1000` on these defaults (commit after ac9e7bf):
+
+| Setup | Survive, gunner 3 mrad | Survive, gunner 0.5 mrad |
+| --- | --- | --- |
+| No protection | 81.2% ±2.4 | 32.6% ±2.9 |
+| Trophy only | 92.9% ±1.6 | 72.8% ±2.8 |
+| **HKOI only** | **86.1% ±2.1** | **48.1% ±3.1** |
+| HKOI + Trophy | 96.7% ±1.1 | 87.2% ±2.1 |
+
+Beams cut per missile engaged: 17 to 18% at 3 mrad, 49 to 53% at 0.5 mrad. Obscurant rounds per raid 21 to 23 (was 28 to 29).
+HKOI only, 0.5 mrad: crew does not move 62.8%; 50 g 41.3%; 65 g 45.1%; 120 g 58.9%; Kornet re-lock on 45.6%; spin off 48.2%;
+classic scheduler 47.5%; old re-lock rule 43.2%.
+
+Paired comparison, 3,000 raids per row (`node tests/study/engine_1116.js 3000 old,table,spin_table,spin_table_smart`), survival
+HKOI only 3 mrad / both 3 mrad / HKOI only 0.5 mrad / both 0.5 mrad:
+old 86.1 / 97.1 / 47.8 / 88.0; honest table only 86.0 / 97.0 / 47.0 / 88.3; spin + honest table, classic 85.4 / 96.9 / 48.0 / 87.5;
+**spin + honest table + smart (the defaults) 85.7 / 97.1 / 48.6 / 88.3**. No change beyond the margin (about ±1.2 to 1.8); about 20% fewer
+obscurant rounds. Trophy shots per raid at 0.5 mrad, both: 1.52 old, 1.40 now.
+Bigger volley (6 threats in 8 s, 1,500 raids, with re-lock on at the time): smart against classic +2.0 points HKOI only and +2.7 with Trophy at
+0.5 mrad, equal at 3 mrad.
+
+What the planning table chooses for the Kornet (median over 1,000 raids, 3 mrad): old table, spin off: meet 1,325 m, cut at 855 m;
+old table with spin on: meet 600 m, cut at 297 m (the table rated every range from 600 m at 0.99, so its ammunition charge picked the
+shortest); honest table with spin on: meet 998 m (planned defeat chance 0.88), cut at 534 m.
+
+Cut missiles passing within 2 m of the hull (`node tests/study/cut_pass.js raids 1000`, Shawn's "a missile fly like 1 meter above the
+tank"): 3 mrad: old 5% (Kornet 2%), spin with the old table 12% (Kornet 9%), now 6% (Kornet 2%). 0.5 mrad: 8% (Kornet 5%), 13% (9%),
+now 8% (Kornet 2%). The rest are Vikhr (helicopter beam-rider, 30 to 36% of its cuts within 2 m) and radio SACLOS (18 to 19%), cut under
+600 m: a beam-rider flies 2 to 2.5 m above the sight line, about 1 m over the roof equipment, and those kinds draw a blind lift of
+0 to 1 and a 3 mrad heading error, so a late cut barely moves them. Their blind flight is unchanged (no defensible figure yet).
+
+Kornet re-lock as measured before it was dropped (old table, spin on, 3,000 raids, HKOI only, 0.5 mrad): of 3,275 Kornets cut, 971 re-locked
+and 628 got back on target (445 hit). The re-locks that can happen come early: median 0.5 s blind, 2.5 to 2.8 m off the beam, about
+320 m out, which the autopilot corrects in about a second. A Kornet that drifts far leaves the 4 m beam field and cannot re-lock at all.
+This rests on the assumed 4 m field and 0.3 s recapture. Cost: about 4.5 points of HKOI-only survival at 0.5 mrad.
+
+200 standard battles per cell (`node tests/battle/standard.js 200 trained,veteran`), M1 lost, both defences / HKOI only, old engine
+against the new defaults with the classic and the smart scheduler:
+
+| Force | Crews | old | new, classic | new, smart |
+| --- | --- | --- | --- | --- |
+| light | trained | 14 / 51 | 15 / 51 | 14 / 53 |
+| light | veteran | 15 / 54 | 16 / 55 | 16 / 54 |
+| ambush | trained | 17 / 60 | 18 / 59 | 17 / 61 |
+| ambush | veteran | 28 / 64 | 29 / 64 | 24 / 64 |
+| drones | trained | 1 / 1 | 1 / 2 | 1 / 2 |
+| drones | veteran | 1 / 5 | 3 / 4 | 2 / 4 |
+| standoff | trained | 4 / 25 | 4 / 22 | 4 / 23 |
+| standoff | veteran | 7 / 43 | 6 / 45 | 6 / 45 |
+| heavy | trained | 26 / 71 | 24 / 72 | 23 / 69 |
+| heavy | veteran | 45 / 79 | 43 / 79 | 42 / 79 |
+
+Margin about ±7 points a cell. No cell moves beyond it; the smart scheduler is never worse than classic beyond it, so it is the default.

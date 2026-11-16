@@ -11,7 +11,7 @@
     "unguided_miss": 1,
     "aps": 2
    },
-   "obs": 123,
+   "obs": 134,
    "he": 150,
    "apsL": 3,
    "apsR": 3,
@@ -25,15 +25,15 @@
    "waves": 1,
    "teamsLeft": 0,
    "main": 15,
-   "killedByTank": 0,
-   "killedByMg": 2,
+   "killedByTank": 1,
+   "killedByMg": 1,
    "coax": 2400,
-   "m2": 384
+   "m2": 504
   },
-  "log": 102,
-  "events": 34,
+  "log": 82,
+  "events": 31,
   "over": "won",
-  "last": "Enemy breaks contact: 3 of 5 teams still able to fight, and they pull out."
+  "last": "Volley 2 over: 2 fired, 0 hits. HKOI rounds left 134 obscurant, 150 HE; Trophy 3 left, 3 right."
  },
  {
   "summary": {
@@ -79,7 +79,7 @@
     "gunner_jitter": 1,
     "aps": 3
    },
-   "obs": 105,
+   "obs": 119,
    "he": 150,
    "apsL": 3,
    "apsR": 2,
@@ -92,14 +92,14 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 8,
+   "main": 10,
    "killedByTank": 2,
    "killedByMg": 1,
    "coax": 2400,
    "m2": 552
   },
-  "log": 115,
-  "events": 48,
+  "log": 107,
+  "events": 44,
   "over": "won",
   "last": "Enemy breaks contact: 2 of 5 teams still able to fight, and they pull out."
  },
@@ -113,10 +113,10 @@
    "by": {
     "aps": 1,
     "unguided_miss": 1,
-    "hkoi_cut": 2,
-    "gunner_jitter": 2
+    "hkoi_cut": 3,
+    "gunner_jitter": 1
    },
-   "obs": 109,
+   "obs": 115,
    "he": 150,
    "apsL": 4,
    "apsR": 3,
@@ -129,16 +129,16 @@
    "wave": 2,
    "waves": 2,
    "teamsLeft": 3,
-   "main": 4,
+   "main": 3,
    "killedByTank": 0,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 480
   },
-  "log": 147,
-  "events": 66,
+  "log": 145,
+  "events": 67,
   "over": null,
-  "last": "Gunner lays on Kornet team #8, 2.92 km, bearing 271: it can fire on us."
+  "last": "Gunner picks up a heat signature: Kornet team #7 at 3120 m in the open."
  },
  {
   "summary": {
@@ -187,7 +187,7 @@
     "HIT": 1,
     "hkoi_cut": 2
    },
-   "obs": 128,
+   "obs": 125,
    "he": 150,
    "apsL": 3,
    "apsR": 2,
@@ -283,15 +283,14 @@
   "summary": {
    "t": 360,
    "alive": true,
-   "volleys": 4,
-   "fired": 6,
+   "volleys": 2,
+   "fired": 4,
    "hits": 0,
    "by": {
-    "hkoi_cut": 3,
-    "gunner_jitter": 2,
-    "terrain_mask": 1
+    "gunner_jitter": 3,
+    "hkoi_cut": 1
    },
-   "obs": 92,
+   "obs": 133,
    "he": 150,
    "apsL": 4,
    "apsR": 4,
@@ -304,16 +303,16 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 5,
+   "main": 14,
    "killedByTank": 1,
    "killedByMg": 1,
    "coax": 2360,
    "m2": 576
   },
-  "log": 147,
-  "events": 55,
+  "log": 71,
+  "events": 28,
   "over": "won",
-  "last": "Enemy breaks contact: 3 of 5 teams still able to fight, and they pull out."
+  "last": "Volley 2 over: 1 fired, 0 hits. HKOI rounds left 133 obscurant, 150 HE; Trophy 4 left, 4 right."
  },
  {
   "summary": {
@@ -324,10 +323,10 @@
    "hits": 0,
    "by": {
     "unguided_miss": 3,
-    "gunner_jitter": 3,
-    "hkoi_cut": 2
+    "gunner_jitter": 4,
+    "hkoi_cut": 1
    },
-   "obs": 106,
+   "obs": 119,
    "he": 150,
    "apsL": 4,
    "apsR": 4,
@@ -339,17 +338,17 @@
    },
    "wave": 2,
    "waves": 2,
-   "teamsLeft": 0,
-   "main": 8,
-   "killedByTank": 2,
+   "teamsLeft": 2,
+   "main": 4,
+   "killedByTank": 1,
    "killedByMg": 3,
    "coax": 2360,
    "m2": 552
   },
-  "log": 142,
-  "events": 59,
-  "over": "won",
-  "last": "Enemy breaks contact: 1 of 3 teams still able to fight, and they pull out."
+  "log": 150,
+  "events": 65,
+  "over": null,
+  "last": "Gunner lays on Kornet team #7, 3.20 km, bearing 338: it can fire on us."
  },
  {
   "summary": {
@@ -513,16 +512,16 @@
    "wave": 1,
    "waves": 1,
    "teamsLeft": 0,
-   "main": 8,
+   "main": 6,
    "killedByTank": 3,
    "killedByMg": 1,
    "coax": 2400,
    "m2": 576
   },
-  "log": 78,
-  "events": 40,
+  "log": 82,
+  "events": 42,
   "over": "won",
-  "last": "Enemy breaks contact: 1 of 5 teams still able to fight, and they pull out."
+  "last": "The group could not get a shot and pulls back."
  },
  {
   "summary": {

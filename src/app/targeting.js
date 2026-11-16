@@ -16,9 +16,9 @@
 // Frame rate: a diagram is a function of battle time only; the briefing redraws it when that time changes.
 
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
-// the two battles, found by a seed search on 15 Nov (scratchpad v2/briefing/search.mjs): a lone Kornet from 3.2 km cut by the first
+// the two battles, found by a seed search on 15 Nov (scratchpad v2/briefing/search.mjs; AIM_SETUP re-seeded 16 Nov to seed 11 after the engine changes): a lone Kornet cut by the first
 // burst and flying past blind; and a volley of five weapons at once (two Kornet, two Konkurs, an RPG)
-export const AIM_SETUP = S('forest', 3, 'ambush', 'trained', 1, 2), ORDER_SETUP = S('farmland', 3, 'ambush', 'trained', 1, 2);
+export const AIM_SETUP = S('forest', 3, 'ambush', 'trained', 1, 11), ORDER_SETUP = S('farmland', 3, 'ambush', 'trained', 1, 2);
 
 const NAME = { kornet: 'Kornet', vikhr: 'Vikhr', saclos: 'Konkurs', sal: 'laser-homing missile', fpv: 'FPV drone', fpv_fiber: 'fibre-optic FPV drone', rpg: 'RPG', ir: 'infrared missile', ke: 'tank round' };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'], word = n => (n >= 0 && n < WORDS.length ? WORDS[n] : String(n)), Word = n => { const w = word(n); return w.charAt(0).toUpperCase() + w.slice(1); };

@@ -7,6 +7,8 @@
 const { HK, Battle } = require('./load.js');
 const args = process.argv.slice(2), N = +(args.find(a => /^\d+$/.test(a)) || 200), SKILLS = (args.find(a => /^[a-z,]+$/.test(a) && !/^(off|auto)$/.test(a)) || 'trained,veteran').split(','), CDR = args.includes('auto') ? 'auto' : false;
 const cfg = HK.defaultConfig();
+/* engine settings for before/after comparisons (16 Nov 2026): sched=classic|smart, spin=0|1, relock=0|1 (Kornet re-lock with the real correction) */
+for (const a of args) { const m = a.match(/^(sched|spin|relock)=(\w+)$/); if (!m) continue; if (m[1] === 'sched') cfg.fc.scheduler = m[2]; else if (m[1] === 'spin') cfg.blind_spin = m[2] === '1'; else cfg.drift.relock_kornet = m[2] === '1'; }
 const FORCES = {
   light: { force: [{ type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },
   ambush: { force: [{ type: 'kornet', n: 2 }, { type: 'saclos', n: 2 }, { type: 'rpg', n: 1 }] },
@@ -17,14 +19,15 @@ const FORCES = {
 const BIOMES = ['farmland', 'desert', 'town', 'forest'], MISSIONS = ['hold', 'hold', 'advance', 'hunt'];
 function setup(kind) { const c = JSON.parse(JSON.stringify(cfg)); if (kind === 'trophy' || kind === 'neither') c.hkoi_enabled = false; if (kind === 'hkoi' || kind === 'neither') c.aps.enabled = false; return { cfg: c, lookup: c.hkoi_enabled ? HK.meetLookup(c) : {} }; }
 const SETUPS = { both: setup('both'), trophy: setup('trophy'), hkoi: setup('hkoi'), neither: setup('neither') };
-const pc = (x, n) => (n ? (100 * x / n).toFixed(0) : '0').padStart(3) + '%';
+const pc = (x, n) => x == null ? '  - ' : (n ? (100 * x / n).toFixed(0) : '0').padStart(3) + '%';
 console.log(`Standard forces, ${N} battles a cell (ground and mission mixed: hold, hold, advance, hunt; one wave; up to 600 s), commander ${CDR || 'off'}. M1 lost:`);
 console.log('force     crews     both  Trophy  HKOI  neither |  with both defences: launched/battle  hits/battle  teams lost/battle  length s  steps mean ms');
 let steps = 0, ms = 0;
-const ONLY = (args.find(a => /^only=/.test(a)) || '').slice(5).split(',').filter(Boolean);   /* only=ambush,heavy runs just those forces */
+const ONLY = (args.find(a => /^only=/.test(a)) || '').slice(5).split(',').filter(Boolean);
+const SU_ONLY = (args.find(a => /^setups=/.test(a)) || '').slice(7).split(',').filter(Boolean);   /* setups=both,hkoi: only those columns (the others print as 0%) */   /* only=ambush,heavy runs just those forces */
 for (const key of Object.keys(FORCES).filter(k => !ONLY.length || ONLY.includes(k))) for (const skill of SKILLS) {
   const row = {}; let fired = 0, hits = 0, kills = 0, len = 0;
-  for (const su of ['both', 'trophy', 'hkoi', 'neither']) { let lost = 0;
+  for (const su of ['both', 'trophy', 'hkoi', 'neither'].filter(x => !SU_ONLY.length || SU_ONLY.includes(x))) { let lost = 0;
     for (let i = 0; i < N; i++) {
       const b = new Battle.Battle(Object.assign({ biome: BIOMES[i % 4], mapSeed: 3 + (i % 5) * 2, seed: 500 + i, skill, mission: MISSIONS[i % 4], waves: 1, force: FORCES[key].force, raid: FORCES[key].raid, commander: CDR }, SETUPS[su]));
       const t0 = Date.now(); let n = 0; while (b.t < 600 && b.tank.alive && !b.over && n < 100000) { b.step(); n++; } if (su === 'both') { steps += n; ms += Date.now() - t0; }
