@@ -6,7 +6,8 @@
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
-import { AIM_SETUP, ORDER_SETUP, findAim, findOrder, layerFacts, cdrFacts, aimSteps, orderSteps, aimSVG, orderSVG, layerSVG, cdrSVG, aimStage, orderWhy } from '../../src/app/targeting.js';
+import { AIM_SETUP, ORDER_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, aimStage, orderWhy } from '../../src/app/targeting.js';
+import { CHAPTERS } from '../../src/app/tour.js';
 import { runToEnd } from '../../src/app/scenarios.js';
 const require = createRequire(import.meta.url);
 const { HK, World, Battle, EnemyVeh, Support } = require('../battle/load.js');
@@ -63,31 +64,33 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
     nChk++; if (!(D.tauS.some(q => q[0] >= D.cut.t - 0.15 && q[1] >= 0.6 * D.need))) fail('aim', 'the optical depth samples do not climb toward the threshold before the cut');
     // every event the engine logged for this threat lies inside the timeline
     for (const e of D.events) { nChk++; if (e.t < D.tL - 1e-6 || e.t > D.end.t + 15) fail('aim', 'event outside the time line', e.t, e.text); }
-    // the steps: in order, each inside the battle, each text whole, and each diagram drawn at its start, middle and end
-    const steps = aimSteps(D); let prev = -1;
+    // the steps (src/app/tour.js, chapter 'aim'): in order, each inside the battle, each text whole, each diagram drawn at its start, middle and end
+    const ch = CHAPTERS.find(c => c.key === 'aim'), MM = ch.find(B, HK), steps = ch.steps(MM), TB = tableFacts(B, D.key); let prev = -1;
+    eq('the table shown is the battle\'s own', TB.best, B.lookup.kornet.best_m); TB.grid.forEach((g, i) => eq(`table ${g} m`, TB.p[i], B.lookup.kornet.p[i]));
     steps.forEach((st, i) => { const tag = `aim step ${i + 1} (${st.key})`; textCheck(tag, st, B);
       nChk++; if (!(st.from <= st.to && st.from >= 0)) fail(tag, 'times', st.from, st.to);
       nChk++; if (st.from < prev - 3) fail(tag, 'goes back in time', st.from, prev); prev = st.from;
-      for (const u of [st.from, (st.from + st.to) / 2, st.to]) for (const compact of [false, true]) { const svg = aimSVG(D, u, { focus: st.diagram.focus, compact }); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2), compact ? '(compact)' : ''); }
-      save(`aim_${i + 1}_${st.key}`, aimSVG(D, st.to, { focus: st.diagram.focus })); });
+      for (const u of [st.from, (st.from + st.to) / 2, st.to]) { const svg = geoSVG(D, u, st.diagram.focus, TB); if (hole(svg)) fail(tag, 'diagram has a hole at', u.toFixed(2)); }
+      save(`aim_${i + 1}_${st.key}`, geoSVG(D, st.to, st.diagram.focus, TB)); });
     // the stage the diagram shows at the end of each step
-    const want = { launch: 0, warn: 1, radar: 3, plan: 3, burst: 5, bloom: 5, cut: 6, blind: 6 };
+    const want = { launch: 1, warn: 1, radar: 3, plan: 3, fire: 4, meet: 5, cloud: 5, cut: 6, blind: 7 };
     steps.forEach(st => { nChk++; const g = aimStage(D, st.to - D.T0); if (want[st.key] != null && g !== want[st.key]) fail(`aim step ${st.key}`, 'diagram stage at its end', g, 'expected', want[st.key]); });
-    for (let u = D.T0 + D.tL - 0.5; u < D.T0 + D.end.t + 0.8; u += 0.05) if (hole(aimSVG(D, u, {}))) { fail('aim diagram hole at', u); break; }
+    for (let u = D.T0 + D.tL - 0.5; u < D.T0 + D.end.t + 0.8; u += 0.05) for (const f of ['chain', 'table', 'bearing', 'light']) if (hole(geoSVG(D, u, f, TB))) { fail('aim diagram hole at', u, f); break; }
     // the steps' wording against the record (the words that carry a number)
-    const txt = Object.fromEntries(steps.map(st => [st.key, st.text()]));
+    const txt = Object.fromEntries(steps.map(st => [st.key, st.text({ b: B })]));
     const has = (k, s) => { nChk++; if (!txt[k].includes(s)) fail(`aim step ${k}`, 'does not say', JSON.stringify(s), '|', txt[k]); };
-    has('launch', (th.R / 1000).toFixed(2) + ' km'); has('warn', (th.cue - th.t0).toFixed(2) + ' s'); has('warn', (th.cue_d / 1000).toFixed(2) + ' km');
-    has('radar', ((th.R - th.v * (th.track - th.t0)) / 1000).toFixed(2) + ' km'); has('radar', (Math.round((th.impact - th.track) * 10) / 10).toFixed(1) + ' s to impact');
-    has('plan', Math.round(cand.want).toLocaleString('en-GB') + ' m'); has('plan', (Math.round(tof * 100) / 100).toFixed(2) + ' s');
-    has('burst', `${b.rounds.filter(r => r.extra).length} more`); has('cut', Math.round(b.res.sever).toLocaleString('en-GB') + ' m');
-    has('blind', D.end.type === 'ground' ? Math.round(b.res.short).toLocaleString('en-GB') + ' m short' : (Math.round(b.res.miss_m * 10) / 10).toFixed(1) + ' m wide');
+    has('launch', (th.R / 1000).toFixed(2) + ' km'); has('warn', (th.cue - th.t0).toFixed(2) + ' s'); has('warn', `${c.lwr.bearing_sigma_deg}°`);
+    has('radar', ((th.R - th.v * (th.track - th.t0)) / 1000).toFixed(2) + ' km');
+    has('plan', Math.round(cand.want).toLocaleString('en-GB') + ' m'); has('plan', (Math.round(tof * 100) / 100).toFixed(2) + ' s'); has('plan', Math.round(100 * cand.p) + '%');
+    has('fire', Math.round(th.R - th.v * (b.rounds[0].t_fire - th.t0)).toLocaleString('en-GB') + ' m');
+    has('meet', `${b.rounds.filter(r => r.extra).length} more`); has('cut', Math.round(b.res.sever).toLocaleString('en-GB') + ' m');
+    has('blind', D.end.type === 'ground' ? Math.round(b.res.short).toLocaleString('en-GB') + ' m short' : (Math.round(b.res.miss_m * 10) / 10).toFixed(1) + ' m');
     console.log(`ok   aim: ${D.name} from ${(D.R / 1000).toFixed(2)} km, volley at ${D.T0.toFixed(1)} s; warning +${D.warn.dt.toFixed(2)} s, track +${(D.radar.tTrack - D.tL).toFixed(2)} s, fire +${(D.plan.tF - D.tL).toFixed(2)} s, meet ${Math.round(D.plan.meet)} m, ${D.n} rounds, cut +${D.cut.dt.toFixed(2)} s at ${Math.round(D.cut.d)} m, ${D.end.type === 'ground' ? 'ground ' + Math.round(D.end.short) + ' m short' : 'missed by ' + D.end.miss.toFixed(1) + ' m'}`);
     // the overview and the commander's picture from the same battle
     const L = layerFacts(B, HK); for (const [k, x] of Object.entries(L)) { nChk++; if (x == null || Number.isNaN(x)) fail('layers', k, 'is missing'); }
     eq('layers: radar reference', L.radarRef, c.radar.acq_range_ref_m); eq('layers: Trophy shots a side', L.aps0, c.aps.mag_per_side); eq('layers: Kornet best meet', L.kornetBest, B.lookup.kornet.best_m);
-    for (const f of ['all', 'sense', 'cloud', 'air', 'trophy', 'none']) { const svg = layerSVG(L, f); if (hole(svg)) fail('layer diagram hole', f); if (f === 'all') save('layers', svg); }
-    const K = cdrFacts(B, D.T0 + D.tL - 1.2); if (!K) fail('cdr', 'no commander picture before the launch'); else { const C = B.commanderAt(D.T0 + D.tL - 1.2); eq('cdr belief radius', K.r, C.picture.r_m); eq('cdr report age', K.age, C.picture.age); const svg = cdrSVG(K, { tank: { e: B.tank.e, n: B.tank.n }, units: B.units }); if (hole(svg)) fail('cdr diagram hole'); save('cdr', svg); }
+    for (const f of ['sense', 'cloud', 'he', 'trophy']) { const svg = layerSVG(L, f); if (hole(svg)) fail('layer diagram hole', f); if (f === 'cloud') save('layers', svg); }
+    for (const f of ['beam', 'radio', 'laser']) { const svg = guideSVG(f); if (hole(svg)) fail('guide diagram hole', f); save('guide_' + f, svg); }
   }
 }
 // ---- 2. many at once ---------------------------------------------------------------------------------------------------------------
@@ -113,11 +116,8 @@ const textCheck = (tag, st, B) => { let text = ''; try { text = st.text({ b: B, 
       if (/too thin/.test(w)) { nChk++; if (!tags.includes('cloud_thin')) fail('order', `#${r.idx + 1} said cloud too thin, tags`, tags); }
       if (/cut/.test(w)) { nChk++; if (th.defeated_by !== 'hkoi_cut') fail('order', `#${r.idx + 1} said cut`); } }
     eq('Trophy shots in the volley', O.apsUsed, (rec.aps || []).length);
-    const steps = orderSteps(O);
-    steps.forEach((st, i) => { const tag = `order step ${i + 1} (${st.key})`; textCheck(tag, st, B);
-      nChk++; if (!(st.from <= st.to && st.from >= 0 && (st.to - st.from) / st.rate <= 24)) fail(tag, 'times', st.from, st.to);
-      for (const u of [st.from, (st.from + st.to) / 2, st.to]) if (hole(orderSVG(O, u, { all: st.diagram.all }))) fail(tag, 'diagram hole at', u);
-      save(`order_${i + 1}_${st.key}`, orderSVG(O, st.to, { all: st.diagram.all })); });
+    for (let u = O.T0 - 0.5; u < O.T0 + O.tEnd + 1; u += 0.1) if (hole(queueSVG(O, u))) { fail('queue diagram hole at', u); break; }
+    save('queue_end', queueSVG(O, O.T0 + O.tEnd + 0.5));
     console.log(`ok   order: ${O.n} threats in ${O.spread.toFixed(1)} s at ${O.T0.toFixed(1)} s; gun order ${O.gunOrder.map(r => r.label).join(', ')}; Trophy ${O.apsUsed}; ${O.rows.map(r => `${r.label}: ${orderWhy(r)}`).join('; ')}`);
   }
 }

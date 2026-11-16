@@ -1,23 +1,27 @@
 // The HKOI briefing, the Scenarios page and the first-run help: the parts of the page that explain the simulator to a newcomer.
 //
-// THE BRIEFING is a guided demonstration in chapters. Nothing in it is staged. Each chapter loads a real battle (a battle is fully
-// decided by its settings and seed), finds the moment it wants in that battle's own record (CHAPTERS[i].find), and then drives
-// the page's own replay machinery: jump to a time, play at a chosen rate, stop at the instant that matters. The camera is placed
-// by the film director's rigs (director.film), and labels with leader lines are laid over the real objects: the missile, its
-// launcher, the cloud, the weapon station. Every number in the text is read from the battle record or from the engine's settings;
-// where a setting is an assumption the text says "assumed".
+// Rewritten from scratch on 16 Nov 2026 after Shawn's verdict on 1.1: "go back and start the briefing and aiming explanations from
+// scratch. make them 100 times better. they have bad camera angles and dont really do a good job at explaining."
 //
-// The first half of this file (CHAPTERS and what they need) uses no page and no drawing, so `node tests/app/tour.test.mjs`
-// fights every chapter's battle and checks that each moment still exists and each sentence still reads. The second half is
-// the page: Guide (made once by main.js), Briefing, Help.
+// THE BRIEFING tells one story in seven chapters: the problem (guided missiles; Trophy's few shots; how a beam-rider is steered and
+// why blinding it works), what HKOI is, one engagement from launch to the blind missile's end ("How HKOI aims" on the title screen is
+// that chapter and the next on their own), several threats at once, drones, what HKOI cannot do, and what it adds in numbers.
+// Nothing in it is staged. Each chapter loads a real battle (fully decided by its settings and seed; the battles were picked by an
+// honest seed search, tests/app/brief_search.mjs), finds its moments in that battle's record, and drives the page's own replay: jump
+// to a time, play with slow motion into the key instant, stop there. Every number in the text is read from the record, the engine's
+// settings or the fire control's own table; an assumed figure says "assumed". The camera shots are the briefing's own
+// (src/app/briefcam.js) and the node test checks every step's framing.
 //
-// Frame rate: the simulation is advanced by the page as always; this file only reads battle time. The only things it animates
-// are label positions (a function of where the objects are this frame) and nothing else, so it looks the same at any frame rate.
+// The first half of this file (CHAPTERS and what they need) uses no page, so `node tests/app/tour.test.mjs` fights every chapter's
+// battle and checks each moment, sentence and framing. The second half is the page: Guide (made once by main.js), Briefing, Help.
+//
+// Frame rate: the simulation is advanced by the page as always; this file only reads battle time. The camera and the labels are
+// functions of where things are this frame and of battle time, so they look the same at any frame rate.
 import { ScenarioPage, SCENARIOS } from './scenarios.js';
-import { AIM_SETUP, ORDER_SETUP, findAim, findOrder, layerFacts, cdrFacts, aimSteps, orderSteps, aimSVG, orderSVG, layerSVG, cdrSVG, aimTimeAt, AIM_W, AIM_H } from './targeting.js';
+import { AIM_SETUP, findAim, findOrder, layerFacts, tableFacts, geoSVG, queueSVG, layerSVG, guideSVG, endPhrase } from './targeting.js';
+import { SHOTS, chooseSide, frameOf, clearArea } from './briefcam.js';
 
 const S = (biome, map, force, skill, waves, seed) => ({ biome, map, force, skill, waves, seed });
-const TOWN = S('town', 6, 'ambush', 'trained', 3, 2), FARM = S('farmland', 6, 'drones', 'trained', 1, 1), DESERT = S('desert', 6, 'heavy', 'trained', 3, 2);
 const NUM = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen'];
 const NAME = { kornet: 'Kornet', vikhr: 'Vikhr', saclos: 'Konkurs', sal: 'laser-homing missile', fpv: 'FPV drone', fpv_fiber: 'fibre-optic FPV drone', rpg: 'RPG', ir: 'infrared missile', ke: 'tank round' };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -54,11 +58,6 @@ function endWords(e) {
   return e.kind === 'catastrophic' ? `${clock(e.t)} in, a ${e.by} reaches the ammunition and the crew is lost` : e.kind === 'ammo_vented' ? `${clock(e.t)} in, a ${e.by} sets the turret ammunition burning; the blow-out panels vent it and ${who}` : `${clock(e.t)} in, a ${e.by} knocks it out and ${who}`;
 }
 // the calm moment before the targeting chapter's launch, and the settings the one-minute overview quotes
-const A = (M, u) => M.T0 + u;
-function findOverview(B, HK) { const D = findAim(B, HK); if (!D) return null; return { L: layerFacts(B, HK), calm: Math.max(0.5, D.T0 + D.tL - 6), D }; }
-// the threat chapter tells the same shot as the targeting chapter, from the enemy's side, with his commander's picture just before launch
-function findThreat(B, HK) { const D = findAim(B, HK); if (!D) return null; D.cdr = cdrFacts(B, D.T0 + D.tL - 1.2); return D; }
-// drones: one shot down by its first airburst, and one that took several
 function findDrones(B) {
   const mk = (v, th) => { const bs = bursts(v, th, false), end = th.viz.end; return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tF: v.t0 + bs[0].rounds[0].t_fire, tK: v.t0 + end.t, d: end.d, n: bs.length, rounds: bs.reduce((k, b) => k + b.rounds.length, 0), first: bs[0].rounds.length, speed: th.v, name: NAME[th.key] || th.key, fibre: th.key === 'fpv_fiber' }; };
   const ok = (v, th) => /^fpv/.test(th.key) && th.defeated_by === 'hkoi_he' && th.viz.end.type === 'he_kill' && bursts(v, th, false).length > 0;
@@ -78,152 +77,192 @@ function findLimits(B) {
   return { close, rpg, cfg: settings(B), all: tally(B) };
 }
 // saturation: the biggest volley, the first hit on the vehicle and why nothing stopped it, and how the crew stood at the end
-function findSaturation(B, HK) {
-  let big = null; for (const v of B.volleys) if (!big || v.rec.threats.length > big.rec.threats.length) big = v;
-  const mkHit = (v, th) => { const tags = th.tags || [], aps = (v.rec.aps || []).find(q => q.idx === th.idx);
-    const hk = tags.includes('no_ammo') ? 'HKOI had no rounds of the right kind left for it' : tags.includes('unguided_ignored') || th.key === 'rpg' ? 'it is unguided, so HKOI held its fire' : tags.includes('handed_to_aps') ? 'it was launched too close for a cloud, so the fire control handed it to Trophy' : tags.includes('gun_busy') ? 'the gun was busy with another threat' : tags.includes('no_time') || tags.includes('min_range') ? 'there was no time for HKOI to engage it' : tags.includes('he_miss') ? 'HKOI\'s airbursts missed it' : tags.includes('drift_hit') ? 'HKOI cut its guidance too late to throw it off' : tags.includes('cloud_thin') ? 'HKOI\'s cloud was too thin to break its guidance' : tags.includes('saclos_unaffected') ? 'the cloud did not blind it' : th.viz.fired != null ? 'HKOI fired at it and did not stop it' : 'HKOI did not get a shot at it';
-    const ap = tags.includes('aps_empty') ? 'Trophy had no shot left on that side' : tags.includes('aps_reset') ? 'Trophy on that side had fired a moment before and was not ready again' : aps ? (aps.kill ? 'Trophy fired' : 'Trophy fired and missed') : 'Trophy did not fire';
-    const tH = v.t0 + th.viz.end.t, fe = (B.events || []).find(e => !e.wing && e.type === 'tank_fate' && Math.abs(e.t - tH) < 0.5);
-    return { id: ident(v, th), t0: v.t0, tL: v.t0 + th.t0, tH, R: th.R, harm: fe && !th.viz.end.killing && fe.kind !== 'ok' ? fe.cause : null, name: NAME[th.key] || th.key, hk, aps: ap, empty: tags.includes('aps_empty'), killing: !!th.viz.end.killing, pk: HK && HK.THREATS && HK.THREATS[th.key] ? HK.THREATS[th.key].kill : null }; };
-  const hit = each(B, (v, th) => (th.viz.end.type === 'hit' ? mkHit(v, th) : null)), empty = each(B, (v, th) => (th.viz.end.type === 'hit' && (th.tags || []).includes('aps_empty') ? mkHit(v, th) : null));
-  if (!big || !hit) return null;
-  const all = tally(B), kinds = {}; for (const th of big.rec.threats) kinds[th.key] = (kinds[th.key] || 0) + 1; const dirs = new Set(big.rec.threats.map(th => Math.round((((th.brg % 360) + 360) % 360) / 45) % 8));
-  const cs = B.crewState ? B.crewState() : null, crew = {}; if (cs && cs.who) for (const r of Object.keys(CREW)) if (cs.who[r]) crew[r] = { state: cs.who[r].state, status: cs.who[r].status };
-  return { big: { v: big.i, t0: big.t0, n: big.rec.threats.length, spread: Math.max(...big.rec.threats.map(o => o.t0)) - Math.min(...big.rec.threats.map(o => o.t0)), dirs: dirs.size, kinds: Object.entries(kinds).map(([k, n]) => `${word(n)} ${NAME[k] || k}${n > 1 && !/s$/.test(NAME[k] || k) ? 's' : ''}`), brg: big.rec.threats[0].brg },
-    hit, empty: empty && hit && empty.tH !== hit.tH ? empty : null, crew, cfg: settings(B), all,
-    /* the closing still: a lost vehicle is shown 3.5 s after the hit that decided it, with the first man climbing out (the replay runs 4 s past the end) */
-    tEnd: all.end ? Math.min(B.t + 3.5, all.end.t + 3.5) : Math.max(1, B.t - 0.5) };
-}
-
 // ---- reading the battle as it stands now (the page hands the live battle; the node test hands the finished one) -----------------
 const mags = b => { const st = (b && b.tank && b.tank.st) || {}; return { obs: st.obs, he: st.he, L: st.apsL, R: st.apsR }; };
 function crewNow(b) { const cs = b && b.crewState ? b.crewState() : null; if (!cs || !cs.on || !cs.who) return null; const o = {}; for (const r of Object.keys(CREW)) if (cs.who[r]) o[r] = { state: cs.who[r].state, status: cs.who[r].status }; return o; }
 const crewLine = c => Object.keys(CREW).filter(r => c[r]).map(r => `${CREW[r]} ${c[r].status === 'down' ? 'out of action' : c[r].status === 'wounded' ? 'wounded and ' + c[r].state : c[r].state}`).join(', ');
 
 // ---- the chapters --------------------------------------------------------------------------------------------------------------
-// A step: { head, text(X), from, to, rate, shot, marks, lines, panel }.
-//   from, to   battle time in seconds: the replay jumps to `from`, plays at `rate` and stops at `to` (from === to: a still moment)
-//   shot       what the film director's rigs are handed (director.film): { rig } or { cam }, completed here with the threat's identity
-//   marks      labels with leader lines: { at: 'missile' | 'launcher' | 'tank' | 'station' | 'trophy' | 'cloud' | 'point', id, text, tone }
-//              (cloud: x metres out along the threat's bearing, r how far from there a puff may be; point: d metres out along it;
-//               after: shown only once battle time has passed it; gone: what a missile's label says, where it was last seen, once it has ended)
-//   lines      'beam' (launcher to missile), 'track' (station to this missile), 'tracks' (station to every missile in the air)
-//   X          { b: the battle as it stands, inAir: missiles and drones in the air now }
-const mk = (at, text, id, more) => Object.assign({ at, text, id }, more || {});
-const shotOf = (base, id, more) => Object.assign({}, base, id ? { v: id.v, idx: id.idx, uid: id.uid, brg: id.brg, R: id.R } : null, more || null);
+// A step: { key, head, text(X), facts, from, to, rates, freeze, shot, id, pts, marks, lines, diagram, panel }
+//   from, to   battle time: the replay jumps to `from`, plays and stops at `to` (from === to: a still picture)
+//   rates      [[battle time, playback rate], ...]: the rate changes as play passes each time (slow motion into the key instant)
+//   freeze     what the stopped picture is, in a few words ("frozen at the cut")
+//   shot       { kind, o, subj, size, min }: a camera from src/app/briefcam.js (SHOTS[kind] with options o), and the framing the
+//              node test holds it to: the subject `subj` must be inside the clear picture and at least `min` of the screen height
+//              tall for an object `size` metres high (min 0: only inside)
+//   id         the threat the step is about: { v: volley, idx, uid: launching team, brg, R }
+//   pts        named points out along that threat's line: { name: [metres from the tank, metres above the ground] }
+//   marks      labels with leader lines: { at: 'missile' | 'launcher' | 'tank' | 'station' | 'trophy' | 'pt', text, tone, pt, after, gone }
+//   lines      'track' (radar: station to the missile), 'bearing' (the warning's bearing, out from the tank)
+//   diagram    { kind: 'geo' | 'queue' | 'layers' | 'guide', focus }
+//   X          { b: the battle as it stands }
+const mk = (at, text, more) => Object.assign({ at, text }, more || {});
+const MAIN = AIM_SETUP, DRONES = S('desert', 3, 'drones', 'trained', 1, 3), LIMITS = S('desert', 6, 'light', 'trained', 2, 3);
+const pct = p => Math.round(100 * p) + '%';
+const f2 = x => (Math.round(x * 100) / 100).toFixed(2), m0 = m => Math.round(m).toLocaleString('en-GB') + ' m', km2 = m => (m / 1000).toFixed(2) + ' km';
+// the whole battle's story for chapters 1 to 4 (one battle): the lone Kornet, the volley of four, the settings, the planning table
+function findMain(B, HK) {
+  const D = findAim(B, HK), O = findOrder(B, HK); if (!D || !O) return null;
+  const kill = HK && HK.THREATS && HK.THREATS[D.key] ? HK.THREATS[D.key].kill : null;
+  return { D, O, L: layerFacts(B, HK), TB: tableFacts(B, D.key), cfg: settings(B), kill, calm: Math.max(1, D.T0 + D.tL - 7), all: tally(B) };
+}
+const lineH = 4;   /* metres above the ground for a point on a missile's line: a beam-rider flies 2 to 2.5 m above its gunner's sight line (engine los_off) */
 
 export const CHAPTERS = [
-  { key: 'overview', name: 'HKOI in one minute', setup: AIM_SETUP, find: findOverview, steps: M => [
-    { head: 'What HKOI is', from: M.calm, to: M.calm, rate: 1, shot: { rig: 'tank' }, diagram: { kind: 'layers', L: M.L, focus: 'all' },
-      marks: [mk('station', 'HKOI: 30 mm weapon station and radar', null, { tone: 'good' })],
-      text: () => `HKOI is a 30 mm gun on the turret roof with its own radar and a laser warner. It does not try to hit a guided missile: it bursts a small cloud on the line between the missile and the enemy gunner, so the missile loses its guidance. Trophy, at the hull, is the last layer.` },
-    { head: 'Four layers, four jobs', from: M.calm, to: M.calm, rate: 1, shot: { rig: 'tank', turn: 120 }, diagram: { kind: 'layers', L: M.L, focus: 'cloud' },
-      marks: [mk('station', 'Cloud: out to ' + km(M.L.obsMax), null, { tone: 'good' }), mk('trophy', 'Trophy: at the hull', M.D.id, { tone: 'good', side: 'L' })],
-      text: () => `Sensors find the threat. Obscurant rounds blind laser beam-riders and radio-command missiles ${km(M.L.obsMin)} to ${km(M.L.obsMax)} out. Airburst rounds from the same gun shoot down drones. Trophy fires at whatever still comes on, ${word(2 * M.L.aps0)} shots in all.` },
-    { head: 'What none of them stop', from: M.calm, to: M.calm, rate: 1, shot: { rig: 'tank', turn: 220 }, diagram: { kind: 'layers', L: M.L, focus: 'none' },
-      marks: [mk('tank', 'M1A2 SEPv3', null, { tone: 'warn' })],
-      text: () => `Nothing here stops a tank's armour-piercing round. A missile fired from too close leaves no time for a cloud, and too many at once overwhelm one gun and ${word(2 * M.L.aps0)} Trophy shots. The rest of this briefing shows each of these on real battles from the simulator.` },
-  ] },
-  { key: 'threat', name: 'The threat', setup: AIM_SETUP, find: findThreat, steps: M => [
-    !M.cdr ? null : { head: 'Where the enemy thinks you are', from: A(M, M.tL - 1.2), to: A(M, M.tL - 1.2), rate: 1, shot: shotOf({ rig: 'site' }, M.id), diagram: { kind: 'cdr', K: M.cdr },
-      marks: [mk('launcher', `${M.name} team`, M.id, { tone: 'bad' })],
-      text: () => `The enemy side, through its commander's map. His last word of the tank is a ${M.cdr.src === 'report' ? "team's report" : M.cdr.src === 'sound' ? 'bearing from the sound of its gun' : 'guess'} ${s1(M.cdr.age)} s old, good to about ${km(M.cdr.r)}. He has a ${M.name} team ${km(M.R)} away with the tank in its sight.` },
-    { head: 'The missile rides a laser beam', from: A(M, M.tL - 0.4), to: A(M, M.tL + 3), rate: 0.5, shot: shotOf({ rig: 'shoulder' }, M.id), lines: ['beam'],
-      marks: [mk('missile', `${M.name} missile, ${Math.round(M.speed)} m/s`, M.id, { tone: 'bad' }), mk('beam', 'Laser guidance beam', M.id, { tone: 'bad' })],
-      text: () => `The missile has no eyes of its own. The launcher shines a laser beam at the tank, and the missile steers to stay in the middle of it, reading it through a receiver in its tail. The red line is the beam. This is a real battle, played again: nothing here is staged.` },
-    { head: 'The gunner must see the tank all the way', from: A(M, M.tL + 0.6), to: A(M, Math.min(M.plan.tF - 0.2, M.tL + 4)), rate: 1, shot: shotOf({ cam: 'enemy' }, M.id),
-      marks: [mk('tank', 'The tank', null, { tone: 'good' })],
-      text: () => `The enemy gunner's sight. The flight takes ${s1(M.flight)} s, and for all of it two things must stay true: he can see the tank, and his missile can see the beam. HKOI goes after the second.` },
+  { key: 'problem', name: 'The problem', setup: MAIN, find: findMain, steps: M => { const D = M.D, A = u => D.T0 + D.tL + u, id = D.id; return [
+    { key: 'team', head: 'A missile team, 3 km away', from: A(-1.8), to: A(0.9), rates: [[A(-1.8), 1], [A(-0.3), 0.2], [A(0.25), 0.5]], freeze: 'just after launch', id,
+      shot: { kind: 'team', subj: 'launcher', size: 1.8, min: 0.07 }, marks: [mk('launcher', `${D.name} team`, { tone: 'bad' }), mk('missile', `${D.name} missile`, { tone: 'bad' })],
+      facts: [['Range', km2(D.R)], ['Speed', `${Math.round(D.speed)} m/s`], ['Flight', `${f2(D.flight)} s`]],
+      text: () => `This is a real battle from the simulator, played back. A ${D.name} anti-tank missile team fires at the tank from ${km2(D.R)}. The missile needs ${f2(D.flight)} s to get there.${M.kill != null ? ` In the model one hit knocks the tank out ${pct(M.kill)} of the time (assumed).` : ''}` },
+    { key: 'beam', head: 'It rides a laser beam', from: A(2.2), to: A(4.6), rates: [[A(2.2), 0.4]], freeze: 'in flight', id,
+      shot: { kind: 'line', o: { track: true, span: 46, back: 0.35, up: 0.12 }, subj: 'missile', size: 1.2, min: 0 }, diagram: { kind: 'guide', focus: 'beam' },
+      marks: [mk('missile', 'Missile', { tone: 'bad' }), mk('beamtag', 'Laser beam from the launcher', { tone: 'bad' })],
+      text: () => `The missile has no eyes at the front. The team's sight shines a laser beam at the tank. A receiver in the missile's tail looks back at that beam and steers to stay in its middle. As long as the gunner keeps his sight on the tank, the missile follows it.` },
+    { key: 'weak', head: 'Its weak point: the tail looks back', from: A(4.6), to: A(5.6), rates: [[A(4.6), 0.4]], freeze: 'in flight', id,
+      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: { kind: 'guide', focus: 'beam' },
+      marks: [mk('missile', 'Its receiver looks back from here', { tone: 'bad' }), mk('launcher', 'The laser comes from here', { tone: 'bad' })],
+      text: () => `This is the missile's own view backwards, towards the launcher. Put a cloud anywhere on this line and the beam no longer reaches the receiver. With nothing to steer by, the missile flies on blind and misses. That is HKOI's whole idea: blind the missile, do not try to hit it.` },
+    { key: 'trophy', head: 'Trophy: the last line, few shots', from: M.calm, to: M.calm, freeze: 'before the shot', id,
+      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.1 }, marks: [mk('trophy', 'Trophy launcher', { tone: 'good', side: 'L' })],
+      facts: [['Shots a side', String(M.cfg.aps0)], ['Reaches out', m0(M.cfg.apsR)]],
+      text: () => `The tank already has Trophy: a radar and a launcher on each side of the turret that fire a charge at a missile in the last metres. It works well, but it has only ${word(M.cfg.aps0)} shots a side before it must be reloaded. A defence that stops missiles further out saves those shots for what nothing else can stop.` },
+  ]; } },
+  { key: 'hkoi', name: 'Meet HKOI', setup: MAIN, find: findMain, steps: M => { const D = M.D, L = M.L, id = D.id, t = M.calm; return [
+    { key: 'station', head: 'A 30 mm gun on the roof', from: t, to: t + 3, rates: [[t, 1]], freeze: 'waiting', id, shot: { kind: 'station', subj: 'station', size: 1, min: 0.12 },
+      marks: [mk('station', 'HKOI weapon station', { tone: 'good' })], facts: [['Obscurant rounds', String(L.obs0)], ['Airburst rounds', String(L.he0)], ['Rate of fire', `${L.rof} a minute`]],
+      text: () => `HKOI is this remote weapon station: a 30 mm cannon on the turret roof, aimed by a computer. It carries two kinds of round: ${L.obs0} obscurant rounds that burst into a small cloud, and ${L.he0} airburst rounds that explode beside a drone.` },
+    { key: 'senses', head: 'What tells it where to look', from: t + 3, to: t + 6, rates: [[t + 3, 1]], freeze: 'waiting', id, shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 }, diagram: { kind: 'layers', focus: 'sense' },
+      marks: [mk('station', 'Radar and gun', { tone: 'good' }), mk('tank', 'Laser warning receivers', { tone: 'warn' })],
+      text: () => `A laser warning receiver feels a guidance beam touch the tank and reports its direction. A radar, always on, then finds the missile in that direction and tracks it. Trophy's own short radar also passes on what it sees inside ${m0(L.apsR)}. A computer, the fire control, decides when and where to fire.` },
+    { key: 'layers', head: 'Layers, from far to near', from: t + 6, to: t + 6, freeze: 'waiting', id, shot: { kind: 'overhead', o: { h: 75 }, subj: 'tank', size: 3, min: 0.04 }, diagram: { kind: 'layers', focus: 'cloud' },
+      marks: [mk('tank', 'The tank', { tone: 'good' })],
+      text: () => `So the defence is in layers. HKOI lays its cloud ${m0(L.obsMin)} to ${m0(L.obsMax)} out, where its planning table goes. Its airburst meets drones near ${m0(L.heDrone)}. Trophy at the hull takes whatever is left. Next: one missile, start to finish.` },
+  ]; } },
+  { key: 'aim', name: 'One shot, start to finish', setup: MAIN, find: findMain, steps: M => { const D = M.D, A = u => D.T0 + u, id = D.id, geo = focus => ({ kind: 'geo', focus });
+    const far = Math.max(...D.puffs.map(p => p.x)), r1 = D.rounds[0], fates = [D.nBloom ? `${D.nBloom} burst` : '', D.nDown ? `${D.nDown} flew on without bursting` : '', D.nCo ? `${D.nCo} were timed to burst` : ''].filter(Boolean).join(', ');
+    const pts = { meet: [D.plan.want, lineH], fire: [D.plan.dFire, lineH], cut: [D.cut.d, lineH], end: [D.end.type === 'ground' ? D.end.short : 4, 0.5] };
+    return [
+    { key: 'launch', head: '1. Launch', from: A(D.tL - 1.2), to: A(D.warn.t), rates: [[A(D.tL - 1.2), 0.5], [A(D.tL - 0.2), 0.1]], freeze: 'at the warning', id, pts,
+      shot: { kind: 'team', subj: 'launcher', size: 1.8, min: 0.07 }, diagram: geo('chain'), marks: [mk('launcher', `${D.name} team, ${km2(D.R)}`, { tone: 'bad' })],
+      facts: [['Range', km2(D.R)], ['Bearing', `${Math.round(D.brg)}°`], ['Speed', `${Math.round(D.speed)} m/s`]],
+      text: () => `The same shot, now step by step. The clock starts at launch. The team fires from ${km2(D.R)} away, from bearing ${Math.round(D.brg)}° (the compass direction seen from the tank). Every number on these pages comes from the simulator's record of this one shot.` },
+    { key: 'warn', head: '2. The laser warning', from: A(D.warn.t), to: A(D.warn.t), freeze: 'at the warning', id, pts, lines: ['bearing'],
+      shot: { kind: 'bearing', subj: 'tank', size: 3, min: 0.06 }, diagram: geo('bearing'), marks: [mk('bearing', `Warning from ${Math.round(D.brg)}°`, { tone: 'warn' })],
+      text: () => `${f2(D.warn.dt)} s after launch the laser warning receiver feels the beam and reports its direction: ${Math.round(D.brg)}°. It cannot tell the range. Its ${D.warn.sigma}° bearing error is a setting the simulator does not use yet: the radar is pointed exactly down the reported bearing.` },
+    { key: 'radar', head: '3. The radar finds it', from: A(D.warn.t), to: A(D.radar.tTrack + 0.2), rates: [[A(D.warn.t), 0.1]], freeze: 'track formed', id, pts, lines: ['bearing', 'track'],
+      shot: { kind: 'bearing', subj: 'tank', size: 3, min: 0.06 }, diagram: geo('bearing'), marks: [mk('missile', `Track: ${km2(D.radar.dTrack)}, ${Math.round(D.radar.closing)} m/s`, { tone: 'bad', after: A(D.radar.tTrack) })],
+      facts: [['Found', `${f2(D.radar.tAcq - D.warn.t)} s after warning`], ['Track at', km2(D.radar.dTrack)], ['To impact', `${f2(D.radar.tti)} s`]],
+      text: () => `The radar looks down that bearing and finds the missile ${f2(D.radar.tAcq - D.warn.t)} s after the warning. ${f2(D.radar.init)} s later it holds a track: ${km2(D.radar.dTrack)} out, closing at ${Math.round(D.radar.closing)} m/s. Shawn's "firing corridor" is, in this model, simply that bearing.` },
+    { key: 'plan', head: '4. Planning where to meet it', from: A(D.plan.tF - 0.6), to: A(D.plan.tF - 0.6), freeze: 'before firing', id, pts,
+      shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, diagram: geo('table'), marks: [mk('station', 'Gun laid on the bearing', { tone: 'good' }), mk('pt', `Meeting point, ${m0(D.plan.want)}`, { tone: 'good', pt: 'meet' })],
+      facts: [['Meet at', m0(D.plan.want)], ['Table says', pct(D.plan.p)], ['Round flies', `${f2(D.plan.tof)} s`]],
+      text: () => `The fire control looks up its table, made beforehand from many trial engagements (gunner's wander and the tank's own movement included, assumed figures). A cloud ${m0(D.plan.want)} out cut a ${D.name} in ${pct(D.plan.p)} of trials, the best distance. A round takes ${f2(D.plan.tof)} s to get there, so the gun waits ${f2(D.plan.wait)} s.` },
+    { key: 'fire', head: '5. Fire', from: A(D.plan.tF - 0.35), to: A(D.plan.tF + (D.nFirst - 1) * D.plan.gap + 0.25), rates: [[A(D.plan.tF - 0.35), 0.25]], freeze: 'burst fired', id, pts,
+      shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, diagram: geo('chain'), marks: [mk('station', `${D.nFirst} rounds, ${f2(D.plan.gap)} s apart`, { tone: 'good' })],
+      facts: [['Fired at', `${f2(D.plan.tF - D.tL)} s`], ['Missile then', m0(D.plan.dFire)], ['Muzzle speed', `${Math.round(D.plan.v0)} m/s`]],
+      text: () => `${f2(D.plan.tF - D.tL)} s after launch, with the missile ${m0(D.plan.dFire)} out, the gun fires ${word(D.nFirst)} obscurant rounds, ${f2(D.plan.gap)} s apart. They are not aimed to hit the missile. They are timed to arrive beside its path and burst just behind it.` },
+    { key: 'meet', head: '6. Overtake and bloom', from: A(r1.tPass - 0.45), to: A(D.tFirstPuff + 0.1), rates: [[A(r1.tPass - 0.45), 0.12]], freeze: 'first puff', id, pts,
+      shot: { kind: 'line', o: { track: true, span: 70, back: -0.25, up: 0.1 }, subj: 'missile', size: 1.2, min: 0 }, diagram: geo('chain'),
+      marks: [mk('missile', D.name, { tone: 'bad' })],
+      text: () => `${f2(r1.tPass - r1.tFire)} s later the first round reaches the missile, ${m0(r1.d)} out. The rounds pass it and burst just behind it, on the line back to the launcher: overtake and bloom. Of ${D.n} rounds, ${fates}. The radar saw it still guiding after the first ${D.nFirst}, so ${D.nExtra} more followed.` },
+    { key: 'cloud', head: "7. The missile's view: the cloud", from: A(D.tFirstPuff), to: A(D.cut.t - 0.05), rates: [[A(D.tFirstPuff), 0.25]], freeze: 'just before the cut', id, pts,
+      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: geo('light'), marks: [mk('launcher', 'Laser source', { tone: 'bad' })],
+      text: () => `Looking back from just behind the missile's tail towards the launcher. Each round leaves a puff about ${Math.round(2 * D.s0)} m across (${D.payload} g of obscurant, an assumed round). Puffs between the missile and the launcher dim the beam. The panel shows how much light still gets through.` },
+    { key: 'cut', head: '8. Cut', from: A(D.cut.t - 0.35), to: A(D.cut.t + 0.04), rates: [[A(D.cut.t - 0.35), 0.1]], freeze: 'frozen at the cut', id, pts,
+      shot: { kind: 'tail', o: { back: 10 }, subj: 'launcher', size: 0, min: 0 }, diagram: geo('light'), marks: [mk('missile', 'CUT: blind', { tone: 'hk' })],
+      facts: [['Cut at', m0(D.cut.d)], ['After launch', `${f2(D.cut.dt)} s`], ['Light left', `under ${(100 * Math.exp(-D.need)).toFixed(1)}%`]],
+      text: () => `${f2(D.cut.dt)} s after launch the light reaching the tail drops below ${(100 * Math.exp(-D.need)).toFixed(1)}%, the level the model says the receiver needs. The missile, ${m0(D.cut.d)} from the tank, has lost its guidance. ${f2(D.cut.t - D.tFirstPuff)} s from the first puff to the cut.` },
+    { key: 'blind', head: '9. Blind flight', from: A(D.cut.t + 0.04), to: A(D.end.t + 0.35), rates: [[A(D.cut.t + 0.04), 0.4]], freeze: 'where it ended', id, pts,
+      shot: { kind: 'chase', o: { back: 22 }, subj: 'end', size: 0, min: 0 }, diagram: geo('chain'), marks: [mk('missile', 'Blind', { tone: 'hk', gone: endPhrase(D), goneTone: 'warn' }), mk('tank', 'The tank', { tone: 'good' })],
+      text: () => `With no beam, the ${D.name} keeps rolling but gets no more corrections. In the model it leaves its corkscrew along a straight line and, with no steering lift, sinks: this one ${endPhrase(D)} of the tank, ${f2(D.end.gone)} s after the cut. Trophy never had to fire.` },
+  ]; } },
+  { key: 'many', name: 'Several at once', setup: MAIN, find: findMain, steps: M => { const O = M.O, A = u => O.T0 + u, idOf = r => ({ v: O.id.v, idx: r.idx, uid: r.uid, brg: r.brg, R: r.R });
+    const kinds = {}; for (const r of O.rows) kinds[r.name] = (kinds[r.name] || 0) + 1; const kl = Object.entries(kinds).map(([k, n]) => `${word(n)} ${k}${n > 1 && !/s$/.test(k) ? 's' : ''}`);
+    const first = O.gunOrder[0], toAps = O.rows.filter(r => r.by === 'aps'), h = toAps[0], cuts = O.rows.filter(r => r.by === 'hkoi_cut'), skim = cuts.filter(r => r.endType === 'miss' && r.miss != null).sort((a, b) => a.miss - b.miss)[0];
+    const hits = O.rows.filter(r => r.endType === 'hit'), skimCut = skim && skim.cutT != null ? Math.max(0, skim.R - skim.speed * (skim.cutT - skim.t0)) : 0;
+    const steps = [
+    { key: 'many', head: `${Word(O.n)} at once`, from: A(-0.3), to: A(Math.min(2.4, O.lastTrack + 0.4)), rates: [[A(-0.3), 0.4]], freeze: 'all tracked', id: idOf(first),
+      shot: { kind: 'overhead', o: { h: 170, fov: 50 }, subj: 'tank', size: 3, min: 0.012 }, lines: ['tracks'], diagram: { kind: 'queue' }, marks: [mk('tank', 'The tank', { tone: 'good' })],
+      text: () => `${Math.round(O.T0)} s into the same battle, ${list(kl)} were fired within ${(Math.round(O.spread * 10) / 10).toFixed(1)} s from different directions. The radar tracks them all within ${(Math.round(O.lastTrack * 10) / 10).toFixed(1)} s. But there is one gun: the fire control has to choose.` },
+    { key: 'queue', head: 'Who gets the gun', from: A(first.bursts[0].tf - 0.3), to: A(first.bursts[0].tf + 0.6), rates: [[A(first.bursts[0].tf - 0.3), 0.25]], freeze: 'first burst', id: idOf(first),
+      shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, diagram: { kind: 'queue' }, marks: [mk('station', `Firing at ${first.label}`, { tone: 'good' })],
+      text: () => `It plans with what it knows at each moment: when each one will arrive, where a cloud could meet it, and how many Trophy shots are left on that side. ${first.label} gets the gun first.${h ? ` ${h.label}, fired from only ${km2(h.R)}, arrives too soon for a cloud to work: it is left to Trophy.` : ''}` },
+  ];
+    if (h) steps.push({ key: 'trophy', head: 'Trophy takes what HKOI cannot', from: A(h.endT - 1.1), to: A(h.endT + 0.25), rates: [[A(h.endT - 1.1), 0.25]], freeze: 'Trophy fires', id: idOf(h),
+      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.08 }, diagram: { kind: 'queue' }, marks: [mk('trophy', 'Trophy fires', { tone: 'good', side: (h.aps[0] || {}).side || 'L' }), mk('missile', h.label, { tone: 'bad' })],
+      text: () => `Trophy destroys ${h.label} in the last metres. ${toAps.length > 1 ? `It took ${word(toAps.length)} in this volley. ` : ''}That is the point of sharing the work: Trophy's few shots go where a cloud has no time to work, and HKOI saves them everywhere else.` });
+    steps.push({ key: 'result', head: hits.length ? 'How the volley ended' : 'None of them hit', from: A(O.tEnd + 0.4), to: A(O.tEnd + 0.4), freeze: 'after the volley', id: idOf(skim || first),
+      shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 }, diagram: { kind: 'queue' }, marks: [mk('tank', hits.length ? 'Hit' : 'Unhurt', { tone: hits.length ? 'bad' : 'good' })],
+      text: () => `HKOI's clouds cut ${word(cuts.length)}, Trophy took ${word(toAps.length)}${hits.length ? `, and ${word(hits.length)} hit` : ', none hit'}.${skim ? ` A cut missile still flies on: ${skim.label} lost its guidance ${m0(skimCut)} out and passed ${(Math.round(skim.miss * 10) / 10).toFixed(1)} m from the hull's centre. A late cut is not a safe cut.` : ''}` });
+    return steps; } },
+  { key: 'drones', name: 'Drones', setup: DRONES, find: findDrones, steps: M => { const o = M.one, kmh = Math.round(o.speed * 3.6 / 10) * 10; return [
+    { key: 'drone', head: 'A drone has no beam to cut', from: Math.max(o.tL + 0.4, o.tF - 3), to: o.tF - 0.2, rates: [[0, 0.5]], freeze: 'before firing', id: o.id, pts: { kill: [o.d, 30] },
+      shot: { kind: 'chase', o: { back: 16 }, subj: 'missile', size: 0.5, min: 0 }, marks: [mk('missile', cap(o.name), { tone: 'bad' })],
+      text: () => `An FPV drone: a small racing aircraft with an anti-tank charge, flown by a pilot through a video link at about ${kmh} km/h. It has no guidance beam to cut, so HKOI uses its other magazine: airburst rounds that explode beside it.` },
+    { key: 'airburst', head: 'Airburst', from: o.tF - 0.2, to: o.tK + 0.5, rates: [[o.tF - 0.2, 0.25]], freeze: 'shot down', id: o.id, pts: { kill: [o.d, 30] },
+      shot: { kind: 'chase', o: { back: 26 }, subj: 'missile', size: 0.5, min: 0 }, marks: [mk('missile', cap(o.name), { tone: 'bad', gone: 'Shot down here', goneTone: 'good' })],
+      facts: [['Rounds', String(o.first)], ['Down at', m0(o.d)], ['After firing', `${f2(o.tK - o.tF)} s`]],
+      text: () => `The gun fires ${word(o.first)} airburst rounds set to explode beside the drone. It falls ${m0(o.d)} from the tank, ${f2(o.tK - o.tF)} s after the first round left the gun. In the model one full burst brings a drone down ${pct(M.cfg.hePk)} of the time before it can dodge (assumed).` },
+  ]; } },
+  { key: 'limits', name: 'What HKOI cannot do', setup: LIMITS, find: (B, HK) => { const r = findLimits(B); if (r) r.keSpeed = HK && HK.THREATS && HK.THREATS.ke ? HK.THREATS.ke.speed : null; return r; }, steps: M => [
+    !M.rpg ? null : { key: 'rpg', head: 'Unguided: nothing to blind', from: Math.max(0, M.rpg.tL - 0.8), to: M.rpg.tA + 0.3, rates: [[Math.max(0, M.rpg.tL - 0.8), 0.25]], freeze: 'Trophy fired', id: M.rpg.id, pts: { site: [M.rpg.R, 1] },
+      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.08 }, marks: [mk('missile', 'RPG rocket', { tone: 'bad' }), mk('trophy', 'Trophy', { tone: 'good', side: M.rpg.side, after: M.rpg.tA })],
+      text: () => `An RPG is an unguided rocket: once it is fired there is nothing to blind. This one came from ${m0(M.rpg.R)} and arrived in ${f2(M.rpg.flight)} s. HKOI holds its fire on rockets. Trophy destroyed it ${m0(M.rpg.d)} from the armour.` },
+    !M.close ? null : { key: 'close', head: 'Too close for a cloud', from: Math.max(0, M.close.tL - 0.5), to: M.close.tA + 0.3, rates: [[Math.max(0, M.close.tL - 0.5), 0.5], [M.close.tA - 0.8, 0.2]], freeze: 'Trophy fired', id: M.close.id, pts: { site: [M.close.R, 1] },
+      shot: { kind: 'trophy', subj: 'trophy', size: 1, min: 0.08 }, marks: [mk('missile', cap(M.close.name), { tone: 'bad' }), mk('trophy', 'Trophy', { tone: 'good', side: M.close.side })],
+      text: () => `This ${M.close.name} came from ${km2(M.close.R)}: ${f2(M.close.flight)} s of flight. A cloud needs time: the rounds must fly out, burst, and the puffs must form on the line. The fire control judged there was not enough and left it to Trophy, which destroyed it ${m0(M.close.d)} from the armour.` },
+    { key: 'none', head: 'What nothing here stops', from: (M.rpg || M.close).tA + 2, to: (M.rpg || M.close).tA + 2, freeze: 'after', id: (M.rpg || M.close).id, shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 },
+      marks: [mk('tank', 'M1A2 SEPv3', { tone: 'warn' })],
+      text: X => { const m = mags(X.b); return `A tank's armour-piercing round flies at ${M.keSpeed ? M.keSpeed.toLocaleString('en-GB') + ' m/s' : 'well over 1,000 m/s'}: nothing in this simulator stops it. And many missiles at once can use up both Trophy's shots and the gun's time.${m.L != null ? ` Trophy shots left here: ${m.L} left side, ${m.R} right.` : ''}` } },
   ].filter(Boolean) },
-  { key: 'aim', name: 'How HKOI aims', setup: AIM_SETUP, find: (B, HK) => findAim(B, HK), steps: D => aimSteps(D), span: D => [D.T0 + D.tL - 0.5, D.T0 + D.end.t + 0.8], zero: D => D.T0 + D.tL },
-  { key: 'order', name: 'Many at once', setup: ORDER_SETUP, find: (B, HK) => findOrder(B, HK), steps: O => orderSteps(O), span: O => [O.T0 - 0.3, O.T0 + O.tEnd + 0.5], zero: O => O.T0 },
-  { key: 'drones', name: 'Drones', setup: FARM, find: findDrones, steps: M => [
-    { head: 'A threat with no beam to cut', from: Math.max(0, M.one.t0 - 2.5), to: Math.max(M.one.t0 + 0.2, M.one.tF - 0.4), rate: 1, shot: shotOf({ rig: 'gun' }, M.one.id), lines: ['track'],
-      marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad' }), mk('station', 'HKOI weapon station', null, { tone: 'good' })],
-      text: () => `An FPV drone: a small racing aircraft with an anti-tank warhead, flown by a pilot through a video link at about ${Math.round(M.one.speed * 3.6 / 10) * 10} km/h. There is no guidance beam to cut, and a drone on a fibre-optic line cannot be jammed either. It has to be shot down.` },
-    { head: 'Airburst', from: Math.max(0, M.one.tF - 1), to: M.one.tK + 0.6, rate: 0.5, shot: shotOf({ rig: 'follow', up: 16, out: 36 }, M.one.id), lines: ['track'],
-      marks: [mk('missile', cap(M.one.name), M.one.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' }), mk('station', 'HKOI: high-explosive rounds', null, { tone: 'good' })],
-      text: () => `The same gun, the other magazine. HKOI fires ${word(M.one.first)} high-explosive rounds set to burst beside the drone, and it is destroyed ${km(M.one.d)} from the vehicle, ${s1(Math.max(0, M.one.tK - M.one.tF))} s after the first round left the gun.` },
-    { head: "The pilot's goggles", from: Math.max(0, M.one.tF - 2.5), to: Math.max(M.one.tF, M.one.tK - 0.12), rate: 0.5, shot: shotOf({ cam: 'fpv' }, M.one.id), marks: [],
-      text: () => `The same drone through its pilot's video feed: speed, height and distance are the battle's own; the picture noise is representative. He is flying it at the tank; a moment from now, ${km(M.one.d)} out, HKOI's high-explosive rounds burst around it, ${s1(Math.max(0, M.one.tK - M.one.tF))} s after the gun opened, and the feed goes dead.` },
-    !M.multi ? null : { head: 'Sometimes it takes more than one burst', from: Math.max(0, M.multi.tF - 1), to: M.multi.tK + 0.6, rate: 1, shot: shotOf({ rig: 'follow', up: 16, out: 36 }, M.multi.id), lines: ['track'],
-      marks: [mk('missile', cap(M.multi.name), M.multi.id, { tone: 'bad', gone: 'Drone destroyed here', goneTone: 'good' })],
-      text: () => `This ${M.multi.name} took ${word(M.multi.n)} bursts, ${M.multi.rounds} rounds, and came within ${km(M.multi.d)} before it fell. In the model one full burst brings a drone down ${Math.round(100 * M.cfg.hePk)}% of the time before the pilot's dodging is counted (assumed). The magazine holds ${M.cfg.he0} of these rounds; this whole battle used ${M.cfg.he0 - M.all.heLeft}.` },
-  ].filter(Boolean) },
-  { key: 'limits', name: 'Limits', setup: TOWN, find: findLimits, steps: M => [
-    !M.close ? null : { head: M.close.why === 'handed' || M.close.why === 'min' ? 'Too close for a cloud' : 'When the cloud is not enough', from: Math.max(0, M.close.tL - 0.6), to: M.close.tA + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.close.id), lines: ['beam'],
-      marks: [mk('missile', cap(M.close.name), M.close.id, { tone: 'bad' }), mk('point', 'Destroyed by Trophy here', M.close.id, { tone: 'good', d: M.close.d, h: 1.6, after: M.close.tA }), mk('trophy', 'Trophy launcher', M.close.id, { tone: 'good', side: M.close.side })],
-      text: () => (M.close.why === 'handed' ? `This ${M.close.name} was launched from only ${km(M.close.R)}: ${s1(M.close.flight)} s of flight. The fire control judged there was no time for a cloud to form and work, and handed it straight to Trophy, the inner layer, which destroyed it ${Math.round(M.close.d)} m from the armour.`
-        : M.close.why === 'min' ? `This ${M.close.name} was launched from only ${km(M.close.R)}, inside the distance HKOI needs to put a cloud on its line. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
-        : M.close.why === 'saclos' ? `A ${M.close.name} is steered by commands from its launcher, which watches a flare in the missile's tail. A cloud blinds that kind less surely than a beam-rider: ${Math.round(100 * M.cfg.saclos)}% of the time in the model (assumed), and not this time. Trophy destroyed it ${Math.round(M.close.d)} m from the armour.`
-        : M.close.why === 'thin' ? `HKOI fired at this ${M.close.name}, but the cloud was too thin to break its guidance. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`
-        : `HKOI did not stop this ${M.close.name}. Trophy, the inner layer, destroyed it ${Math.round(M.close.d)} m from the armour.`) },
-    !M.rpg ? null : { head: 'Nothing to blind', from: Math.max(0, M.rpg.tL - 1.2), to: M.rpg.tA + 0.6, rate: 0.25, shot: shotOf({ rig: 'replay' }, M.rpg.id),
-      marks: [mk('missile', 'RPG rocket', M.rpg.id, { tone: 'bad' }), mk('point', 'Destroyed by Trophy here', M.rpg.id, { tone: 'good', d: M.rpg.d, h: 1.6, after: M.rpg.tA }), mk('trophy', 'Trophy launcher', M.rpg.id, { tone: 'good', side: M.rpg.side })],
-      text: () => `An RPG is unguided: once it is fired there is nothing to blind. This one came from ${Math.round(M.rpg.R)} m and was on the vehicle in ${s1(M.rpg.flight)} s. HKOI holds its fire on rockets, and Trophy destroyed it ${Math.round(M.rpg.d)} m from the armour.` },
-    { head: 'Eight shots, and what nothing stops', from: (M.rpg || M.close).tA + 2, to: (M.rpg || M.close).tA + 2, rate: 1, shot: shotOf({ rig: 'tank' }, (M.rpg || M.close).id),
-      marks: [mk('trophy', 'Trophy: one launcher each side', (M.rpg || M.close).id, { tone: 'good', side: 'L' })],
-      text: X => { const m = mags(X.b); return `Trophy carries ${word(2 * M.cfg.aps0)} shots, ${word(M.cfg.aps0)} on each side (Shawn's figure).${m.L != null ? ` At this point in the battle it has ${word(m.L)} left on the left and ${word(m.R)} on the right.` : ''} A tank gun's long-rod round arrives at about 1,700 m/s: in this model neither HKOI nor Trophy does anything against it. Only armour and not being seen help there.`; } },
-  ].filter(Boolean) },
-  { key: 'saturation', name: 'Saturation', setup: DESERT, find: findSaturation, steps: M => [
-    { head: 'Many at once', from: Math.max(0, M.big.t0 - 0.5), to: M.big.t0 + Math.min(5, M.big.spread + 2.5), rate: 0.5, shot: shotOf({ rig: 'wide' }, { v: M.big.v, idx: 0, uid: null, brg: M.big.brg, R: 0 }), lines: ['tracks'],
-      marks: [mk('station', 'One gun, one cloud at a time', null, { tone: 'warn' })],
-      text: () => `A prepared defence does not fire one missile at a time. In this volley ${word(M.big.n)} threats were launched within ${s1(M.big.spread)} s from ${word(M.big.dirs)} ${pl(M.big.dirs, 'direction')}: ${list(M.big.kinds)}. HKOI has one gun, and Trophy a few shots a side.` },
-    { head: 'The first one through', from: Math.max(0, M.hit.tH - 3), to: M.hit.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.hit.id),
-      marks: [mk('missile', cap(M.hit.name), M.hit.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.hit.name}`, null, { tone: 'bad', after: M.hit.tH })],
-      text: () => `${clock(M.hit.tH)} into the battle a ${M.hit.name} fired from ${km(M.hit.R)} hits the vehicle: ${M.hit.hk}, and ${M.hit.aps}. ${M.hit.killing ? 'The vehicle is lost.' : `The vehicle survives it${M.hit.pk != null ? `: in the model a hit from this weapon knocks the vehicle out ${Math.round(100 * M.hit.pk)}% of the time (assumed)` : ''}.${M.hit.harm ? ` But not whole. ${M.hit.harm}` : ''}`}` },
-    !M.empty ? null : { head: 'Handed to an empty launcher', from: Math.max(0, M.empty.tH - 3), to: M.empty.tH + 0.7, rate: 0.5, shot: shotOf({ rig: 'replay' }, M.empty.id),
-      marks: [mk('missile', cap(M.empty.name), M.empty.id, { tone: 'bad' }), mk('tank', `Hit by the ${M.empty.name}`, null, { tone: 'bad', after: M.empty.tH }), mk('trophy', 'Trophy: empty on this side', M.empty.id, { tone: 'warn', side: 'empty' })],
-      text: X => { const m = mags(X.b); return `${clock(M.empty.tH)} into the battle, a ${M.empty.name} from ${km(M.empty.R)}: ${M.empty.hk}, and ${M.empty.aps}. It hits.${m.obs != null ? ` Magazines at this point: obscurant ${m.obs}, airburst ${m.he}, Trophy ${m.L} left and ${m.R} right.` : ''}`; } },
-    { head: M.all.alive ? 'Where it runs out' : 'How it ends', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id),
-      marks: [mk('station', `Obscurant rounds left: ${M.all.obs}`, null, { tone: 'warn' }), mk('trophy', `Trophy shots left: ${M.all.apsL + M.all.apsR}`, M.hit.id, { tone: 'warn', side: 'L' })],
-      text: () => `By the end, ${Math.round(M.all.t / 60)} minutes in: ${M.all.fired} threats fired at the vehicle. HKOI stopped ${M.all.hkoi}, Trophy ${M.all.aps}, ${M.all.miss} missed and ${word(M.all.hits)} hit. Obscurant rounds left: ${M.all.obs} of ${M.cfg.obs0}. Trophy shots left: ${M.all.apsL + M.all.apsR} of ${2 * M.cfg.aps0}. ${M.all.alive ? `The vehicle is still alive${M.all.result === 'withdrawn' ? ' and breaks contact, which is the right call' : ''}: the next volley would meet almost no defence.` : `The vehicle is lost${M.all.stuck != null ? `, still where the hit at ${clock(M.all.stuck)} stopped it` : ''}: ${endWords(M.all.end) || 'destroyed'}.`}` },
-  ].filter(Boolean) },
-  { key: 'crew', name: 'The crew', setup: DESERT, find: findSaturation, steps: M => [
-    { head: 'Inside, when it hits', from: Math.max(0, M.hit.tH - 2.2), to: M.hit.tH + 2.5, rate: 0.5, shot: shotOf({ cam: 'in_gnr', inside: true }, M.hit.id), marks: [],
-      text: () => `The same hit from the gunner's seat. The simulator carries the crew as four men. Each has his own stress, which rises with near misses, hits, wounds and overload and falls again in quiet spells.` },
-    { head: 'Stress', from: M.hit.tH + 6, to: M.hit.tH + 6, rate: 1, shot: shotOf({ rig: 'tank', turn: 180 }, M.hit.id), marks: [mk('tank', 'Four men inside', null, { tone: 'warn' })],
-      text: X => { const c = crewNow(X.b); return `${c ? `A few seconds after the hit: ${crewLine(c)}. ` : ''}A shaken man works slower. A panicked one can freeze or get his drill wrong, and a crew can abandon a vehicle that could still fight. How hard stress bites is an assumption in the model, not a measurement.`; } },
-    { head: 'What it leaves behind', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank' }, M.hit.id), marks: [mk('tank', 'The crew at the end of the battle', null, { tone: 'warn' })],
-      text: () => { const C = Object.values(M.crew), hurt = C.some(c => c.status !== 'ok'), spent = C.some(c => c.state !== 'steady');
-        return `At the end of this battle: ${C.length ? crewLine(M.crew) : 'crew stress was switched off'}. ${!M.all.hits ? 'No hit landed.' : M.all.alive ? `${Word(M.all.hits)} ${pl(M.all.hits, 'hit')} landed and the vehicle survived them${hurt ? '' : ', nobody was wounded'}${spent ? ', and the crew is still spent' : ''}. Keeping hits off the armour matters even when the armour would have held.` : `${Word(M.all.hits)} ${pl(M.all.hits, 'hit')} landed and the last one ended it: ${endWords(M.all.end) || 'the vehicle is destroyed'}. Being steady is not protection: only the defences and the armour are.`}`; } },
-  ] },
-  { key: 'evidence', name: 'The evidence', setup: DESERT, find: findSaturation, steps: M => [
-    { head: 'One battle proves nothing', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'numbers',
-      text: () => `Everything so far was one battle each, picked to show something. To learn what HKOI is worth, the simulator fights the same raid many times under four setups, on the same dice: both systems, Trophy alone, HKOI alone, neither. A small run is being fought right now, below.` },
-    { head: 'Where to go from here', from: M.tEnd, to: M.tEnd, rate: 1, shot: shotOf({ rig: 'tank', turn: 90 }, M.hit.id), marks: [], panel: 'next',
-      text: () => `Run the numbers fights thousands of raids, map by map or as whole battles, and lists why hits got through. Scenarios has ${String(NUM[SCENARIOS.length] || SCENARIOS.length).toLowerCase()} battles picked to show one thing each. The Ladder is ten raids of rising difficulty to fight yourself. Every figure in this simulator is a model's answer built on stated assumptions, not a test result.` },
+  { key: 'numbers', name: 'What it adds', setup: MAIN, find: findMain, steps: M => [
+    { key: 'table', head: 'One battle proves nothing', from: M.calm, to: M.calm, freeze: '', id: M.D.id, shot: { kind: 'tank', subj: 'tank', size: 3, min: 0.18 }, panel: 'ref', marks: [],
+      text: () => `Each chapter showed one picked battle. To learn what HKOI is worth, the simulator fights the same raid a thousand times under four setups, on the same dice. ${gain()}` },
+    { key: 'next', head: 'Try it yourself', from: M.calm, to: M.calm, freeze: '', id: M.D.id, shot: { kind: 'station', subj: 'station', size: 1, min: 0.1 }, panel: 'numbers', marks: [],
+      text: () => `Below, a small run of ${600} raids starts now in your browser, so you can see the spread for yourself. Run the numbers on the title screen fights thousands, map by map. Scenarios has ${String(NUM[SCENARIOS.length] || SCENARIOS.length).toLowerCase()} battles picked to show one thing each.` },
   ] },
 ];
+// the reference run quoted on the last chapter: docs/HKOI_NUMBERS.md, addendum of 16 Nov 2026, `node tests/study/hkoi_only.js 1000`
+// (1,000 raids per row, the same dice for every setup, the 1.1 engine). A measured record, not a setting; the page says where it is from.
+const gain = () => { const R = REFERENCE.rows, d = (a, b, k) => Math.round(R[a][k] - R[b][k]); return `Measured that way, HKOI adds ${d(2, 0, 1)} points of survival alone and ${d(3, 1, 1)} on top of Trophy against average gunners; against the best gunners ${d(2, 0, 2)} and ${d(3, 1, 2)}.`; };
+export const REFERENCE = { src: 'Measured 16 Nov 2026: 1,000 raids per row, same dice for each setup (tests/study/hkoi_only.js)', head: ['Setup', 'Average gunner (3 mrad)', 'Best gunner (0.5 mrad)'],
+  rows: [['No protection', 81.2, 32.6], ['Trophy only', 92.9, 72.8], ['HKOI only', 86.1, 48.1], ['HKOI and Trophy', 96.7, 87.2]], cut: 'Beams cut per missile engaged: 17 to 18% (average gunner), 49 to 53% (best gunner).' };
 export const sameSetup = (a, b) => !!a && !!b && a.biome === b.biome && a.map === b.map && a.force === b.force && a.skill === b.skill && a.waves === b.waves && a.seed === b.seed;
 
 // ================================================================================================================================
 // The page
+// The panel's width and the top bar's height are briefcam.js PANEL (the camera framing and the node test use the same figures).
 const CSS = `
+  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(14px, 1.02vw, 20px); }   /* everything is sized in em from this */
+  #tour > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  #tour .tl { position: absolute; left: 0; top: 0; padding: .3em .65em .34em; border-radius: 6px; background: rgba(5, 9, 8, .88); border: 2px solid rgba(255, 255, 255, .55); color: #fff; font-weight: 700; font-size: 1.02em; line-height: 1.2; white-space: nowrap; will-change: transform; }
+  #tour .tl.good { border-color: #39d98a; color: #d2ffe8; } #tour .tl.bad { border-color: #ff6b5e; color: #ffe0dc; } #tour .tl.warn { border-color: #ffb347; color: #ffecc9; } #tour .tl.hk { border-color: #6fd3ff; color: #d9f4ff; } #tour .tl.off { opacity: .85; }
+  #tour-top { position: absolute; left: 0; right: 0; top: 0; height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: .35em; padding: 0 .7em; pointer-events: none; background: linear-gradient(180deg, rgba(4, 8, 7, .85), rgba(4, 8, 7, .35)); overflow: hidden; }
+  #tour-top button { pointer-events: auto; cursor: pointer; font-size: .8em; padding: .3em .75em; border-radius: 99px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(5, 9, 8, .8); color: #c6d2cb; white-space: nowrap; }
+  #tour-top button:hover { border-color: var(--accent); color: #fff; } #tour-top button.on { background: var(--accent); border-color: var(--accent); color: #05130c; font-weight: 700; } #tour-top button.done { color: var(--accent); border-color: var(--line); }
+  #tour-card { position: absolute; left: 0; top: 44px; bottom: 0; width: clamp(330px, 33vw, 640px); box-sizing: border-box; display: flex; flex-direction: column; pointer-events: auto; background: rgba(6, 11, 9, .95); border-right: 1px solid var(--line); box-shadow: 6px 0 30px rgba(0, 0, 0, .35); }
+  #tour-card .tp-body { flex: 1; min-height: 0; overflow-y: auto; padding: .8em 1.05em .4em; }
+  #tour-card .tp-tag { font: 700 .74em/1.2 var(--mono); letter-spacing: .1em; color: var(--accent); text-transform: uppercase; }
+  #tour-card .tp-dots { display: flex; align-items: center; gap: .32em; margin: .45em 0 .2em; flex-wrap: wrap; }
+  #tour-card .tp-dots button { width: .8em; height: .8em; padding: 0; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .35); background: transparent; cursor: pointer; }
+  #tour-card .tp-dots button.done { background: rgba(57, 217, 138, .45); border-color: var(--accent); } #tour-card .tp-dots button.on { background: var(--accent); border-color: var(--accent); transform: scale(1.25); }
+  #tour-card .tp-dots span { margin-left: .5em; font: .74em var(--mono); color: var(--dim); }
+  #tour-card h2 { margin: .25em 0 .3em; font-size: 1.5em; line-height: 1.15; letter-spacing: .005em; }
+  #tour-card .tp-text { margin: 0 0 .6em; font-size: 1.08em; line-height: 1.45; color: #eef5f0; }
+  #tour-card .tp-facts { display: flex; gap: .5em; margin: 0 0 .7em; flex-wrap: wrap; } #tour-card .tp-facts[hidden] { display: none; }
+  #tour-card .tp-facts div { flex: 1 1 0; min-width: 6.5em; padding: .35em .55em .4em; border-radius: 7px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .1); }
+  #tour-card .tp-facts b { display: block; font: 700 1.12em/1.15 var(--mono); color: #fff; } #tour-card .tp-facts span { display: block; font-size: .78em; color: var(--dim); margin-top: .1em; }
+  #tour-diag svg { display: block; width: 100%; max-width: 560px; height: auto; } #tour-diag[hidden] { display: none; }
+  #tour-panel table { width: 100%; border-collapse: collapse; font-size: .9em; margin: .2em 0 .4em; } #tour-panel th, #tour-panel td { padding: .3em .4em; border-bottom: 1px solid rgba(255, 255, 255, .1); text-align: right; } #tour-panel th:first-child, #tour-panel td:first-child { text-align: left; }
+  #tour-panel th { font-size: .82em; color: var(--dim); font-weight: 600; } #tour-panel tr.hk td { color: #9fe3ff; font-weight: 700; } #tour-panel .tp-cap { font-weight: 700; } #tour-panel .tp-note { font-size: .8em; color: var(--dim); margin: .3em 0; }
+  #tour-panel .pg-tbl { font-size: .82em; } #tour-panel .pg-take { font-size: .95em; margin: .35em 0; } #tour-panel .pg-note { font-size: .8em; margin: .35em 0; } #tour-panel .tp-row { display: flex; gap: .4em; flex-wrap: wrap; margin-top: .6em; }
+  #tour-card .tp-btns { display: flex; gap: .5em; padding: .6em 1.05em .3em; border-top: 1px solid rgba(255, 255, 255, .08); } #tour-card .tp-btns .btn { flex: 1; font-size: 1em; padding: .55em .5em; } #tour-card .tp-btns .btn.primary { flex: 1.6; font-size: 1.08em; font-weight: 700; }
+  #tour-card .tp-foot { display: flex; align-items: center; gap: .6em; padding: .2em 1.05em .6em; } #tour-card .tp-foot .btn { font-size: .82em; padding: .3em .8em; margin-left: auto; }
+  #tour-card .tp-rate { font: 700 .72em var(--mono); letter-spacing: .06em; color: var(--dim); } #tour-card .tp-rate.slow { color: var(--warn); }
+  #tour-card .tp-keys { font: .68em var(--mono); color: rgba(150, 165, 158, .7); white-space: nowrap; } @media (max-width: 1250px) { #tour-card .tp-keys { display: none; } }
+  #tour-veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 8, 7, .82); font: 1.05em var(--mono); color: var(--dim); letter-spacing: .1em; pointer-events: auto; }
   body.tour-on #status, body.tour-on #sline, body.tour-on #gauges, body.tour-on #warn, body.tour-on #facerow, body.tour-on #threats, body.tour-on #engleft, body.tour-on #engright,
   body.tour-on #logov, body.tour-on #strip, body.tour-on #dock, body.tour-on #hud, body.tour-on #marks, body.tour-on #units, body.tour-on #xr, body.tour-on #dir-tag, body.tour-on #title, body.tour-on #result, body.tour-on #cmd, body.tour-on #cmdmenu { display: none !important; }
-  #tour { position: fixed; inset: 0; z-index: 8; pointer-events: none; font-size: clamp(14px, .95vw, 21px); }   /* everything in the briefing is sized in em from this: 14 px on a small window, about 18 px at 1920 wide */
-  #tour svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-  #tour .tl { position: absolute; left: 0; top: 0; padding: .28em .6em .32em; border-radius: 5px; background: rgba(5, 9, 8, .86); border: 1px solid rgba(255, 255, 255, .5); color: #fff; font-weight: 650; font-size: 1em; line-height: 1.2; white-space: nowrap; will-change: transform; text-shadow: 0 1px 2px #000; }
-  #tour .tl.good { border-color: var(--accent); color: #c9ffe4; } #tour .tl.bad { border-color: #ff6b5e; color: #ffd9d4; } #tour .tl.warn { border-color: var(--warn); color: #ffe6c2; }
-  #tour .tl.off { opacity: .8; font-weight: 500; }
-  #tour-top { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center; gap: .35em; flex-wrap: wrap; padding: .6em .8em; pointer-events: none; background: linear-gradient(180deg, rgba(4, 8, 7, .75), rgba(4, 8, 7, 0)); }
-  #tour-top button { pointer-events: auto; cursor: pointer; font-size: .86em; padding: .3em .7em; border-radius: 99px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(5, 9, 8, .78); color: #c6d2cb; white-space: nowrap; }
-  #tour-top button:hover { border-color: var(--accent); color: #fff; } #tour-top button.on { background: var(--accent); border-color: var(--accent); color: #05130c; font-weight: 700; } #tour-top button.done { color: var(--accent); border-color: var(--line); }
-  #tour-card { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(1180px, calc(100vw - 24px)); box-sizing: border-box; padding: .7em 1.1em .75em; pointer-events: auto; background: rgba(5, 9, 8, .93); border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 30px rgba(0, 0, 0, .55); max-height: 78vh; overflow-y: auto; }
-  #tour-card .th { display: flex; align-items: baseline; gap: .8em; margin-bottom: .25em; } #tour-card .th i { font: 700 .78em/1 var(--mono); font-style: normal; letter-spacing: .12em; color: var(--accent); text-transform: uppercase; white-space: nowrap; }
-  #tour-card .th b { font-size: 1.22em; letter-spacing: .01em; } #tour-card .th span { margin-left: auto; font: .78em/1 var(--mono); color: var(--dim); white-space: nowrap; } #tour-card .th span.slow { color: var(--warn); }
-  #tour-card p { margin: 0 0 .55em; font-size: 1.06em; line-height: 1.42; color: #e9f1ec; max-width: 110ch; }
-  #tour-card .tb { display: flex; gap: .5em; align-items: center; flex-wrap: wrap; } #tour-card .tb .sp { flex: 1; }
-  #tour-card .btn { font-size: .95em; padding: .38em .85em; } #tour-card .btn.primary { padding: .42em 1.3em; font-size: 1em; }
-  #tour-card .tk { font: .76em var(--mono); color: var(--dim); white-space: nowrap; } @media (max-width: 1100px) { #tour-card .tk { display: none; } }
-  #tour-panel { margin: 0 0 .6em; } #tour-panel .pg-tbl { font-size: .86em; } #tour-panel .pg-take { font-size: .98em; margin: .35em 0; } #tour-panel .pg-note { font-size: .84em; margin: .35em 0; } #tour-panel .pg-bar { margin: .3em 0; }
-  #tour-diag { position: absolute; left: 12px; top: 3.2em; pointer-events: auto; border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
-  #tour-diag svg { position: static; display: block; width: 100%; height: auto; } #tour-diag[hidden] { display: none; }
-  #tour-diag .dt { position: absolute; right: 8px; top: 6px; font: .7em var(--mono); color: var(--dim); }
-  #tour-card .sc { display: flex; align-items: center; gap: .6em; margin: 0 0 .5em; } #tour-card .sc[hidden] { display: none; } #tour-card .sc input { flex: 1; accent-color: var(--accent); }
-  #tour-card .sc span { font: .78em var(--mono); color: var(--dim); white-space: nowrap; }
-  #tour-veil { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 8, 7, .82); font: 1.05em var(--mono); color: var(--dim); letter-spacing: .1em; pointer-events: auto; }
   #t-main .mbtn.big { padding: 15px 18px; } #t-main .mbtn.big b { font-size: 21px; } #t-main .mbtn.second { border-color: var(--accent); }
   #t-main .t-pair { display: flex; gap: 10px; } #t-main .t-pair .mbtn { flex: 1; min-width: 0; } #t-main .t-pair .mbtn small { display: none; }
   @media (max-height: 760px) { #t-main { gap: 7px; } #t-main .mbtn { padding: 7px 14px; } #t-main .mbtn b { font-size: 16px; } #t-main .mbtn small { font-size: 12px; } #t-main .mbtn.big { padding: 9px 14px; } #t-main .mbtn.big b { font-size: 18px; } #t-main .sub { margin-bottom: 4px; } }
@@ -237,8 +276,7 @@ const CSS = `
   #help .hf { display: flex; gap: 12px; align-items: center; margin-top: 9px; flex-wrap: wrap; } #help .hf .btn.primary { padding: 8px 20px; } #help .hf span { color: var(--dim); font-size: 12.5px; flex: 1; min-width: 200px; }
   #bartip { position: fixed; z-index: 7; left: 0; top: 0; max-width: 300px; padding: 6px 10px; border-radius: 6px; background: rgba(5, 9, 8, .96); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.35; color: var(--fg); pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
 `;
-const TONES = { good: '#39d98a', bad: '#ff6b5e', warn: '#ffb347' };
-const STATION = { at: 'station' };
+const TONES = { good: '#39d98a', bad: '#ff6b5e', warn: '#ffb347', hk: '#6fd3ff' };
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 
@@ -253,7 +291,7 @@ export class Guide {
     this.scen = new ScenarioPage({ el, names: app.names, play: u => app.load(u, 'live'), replay: u => app.load(u, 'replay'), back: () => app.page(false), aim: () => { this.scen.close(); this.openAim(); } });
     this.brief = new Briefing(app, this); this.help = new Help(app, this);
     this._title(); this._tips();
-    { const a = app.q && app.q.get('aim'); if (a != null && a !== '') { const [c, st] = String(a).split('.').map(Number); setTimeout(() => { this.brief.start(CHAPTERS.findIndex(x => x.key === (c ? 'order' : 'aim')), st || 0, ['aim', 'order']); }, 0); } }
+    { const a = app.q && app.q.get('aim'); if (a != null && a !== '') { const [c, st] = String(a).split('.').map(Number); setTimeout(() => { this.brief.start(CHAPTERS.findIndex(x => x.key === (c ? 'many' : 'aim')), st || 0, ['aim', 'many']); }, 0); } }
     { const t = app.q && app.q.get('tour'); if (t != null && t !== '') { const [c, st] = String(t).split('.').map(Number); setTimeout(() => { this.brief.start(c || 0, st || 0); }, 0); } }   /* tour=3 or tour=3.2 in the address opens the briefing at that chapter and step (counted from 0): for checks and for sending someone a link */
     if (typeof window !== 'undefined' && window.__beta) window.__beta.guide = this;
     app.director.after = dt => this.update(dt);   /* once a frame, from the director's own update (before the cameras): keeps the frame loop in main.js untouched */
@@ -271,8 +309,8 @@ export class Guide {
   }
   openScenarios() { this.app.page(true); this.scen.open(); }
   chapterIndex(key) { return CHAPTERS.findIndex(c => c.key === key); }
-  // the targeting page: the briefing's two targeting chapters on their own ("How HKOI aims", then "Many at once")
-  openAim() { this.app.page(false); this.brief.start(CHAPTERS.findIndex(c => c.key === 'aim'), 0, ['aim', 'order']); }
+  // the targeting page: the briefing's two engagement chapters on their own ("One shot, start to finish", then "Several at once")
+  openAim() { this.app.page(false); this.brief.start(CHAPTERS.findIndex(c => c.key === 'aim'), 0, ['aim', 'many']); }
   // the control bar's own hints, shown at once instead of after the browser's long wait (the text is each button's own)
   _tips() {
     const tip = this.app.el('div'); tip.id = 'bartip'; tip.hidden = true; document.body.append(tip); let cur = null;
@@ -295,31 +333,34 @@ export class Guide {
   }
 }
 
+
 // ---- the briefing --------------------------------------------------------------------------------------------------------------
+// The text panel sits down the left side; the picture is the rest. The camera is the briefing's own (src/app/briefcam.js), with the
+// view offset that centres the picture in the free part. Labels with leader lines are laid over the real objects, kept inside the
+// free part. Nothing here changes the battle: it only reads it and moves the camera.
 class Briefing {
   constructor(app, guide) {
-    this.app = app; this.guide = guide; this.on = false; this.ci = 0; this.si = 0; this.steps = []; this.M = null; this.setup = null; this.phase = 'idle'; this.want = null; this.sched = false; this.snap = null; this.seen = new Set(); this.fault = null; this.quick = null; this.frames = 0;
-    const el = app.el, V = app.scene.camera.position.constructor;   /* three.js Vector3, without importing three here (the node test loads this file) */
-    this.v1 = new V(); this.v2 = new V(); this.v3 = new V(); this.v4 = new V();
+    this.app = app; this.guide = guide; this.on = false; this.ci = 0; this.si = 0; this.steps = []; this.M = null; this.setup = null; this.phase = 'idle'; this.want = null; this.sched = false; this.snap = null; this.seen = new Set(); this.fault = null; this.quick = null; this.only = null;
+    const el = app.el, Vc = app.scene.camera.position.constructor;   /* three.js Vector3, without importing three here (the node test loads this file) */
+    this.v1 = new Vc(); this.v2 = new Vc(); this.v3 = new Vc(); this.v4 = new Vc(); this.vm = new Vc(); this.vs = new Vc(); this.vt = new Vc(); this.vl = new Vc(); this.vlast = null;
     const root = this.root = el('div'); root.id = 'tour'; root.hidden = true;
     this.svg = svg('svg', {}); this.gl = svg('g', {}); this.gm = svg('g', {}); this.svg.append(this.gl, this.gm);
-    this.top = el('div'); this.top.id = 'tour-top'; this.pills = CHAPTERS.map((c, i) => { const b = el('button', null, `${i + 1} ${c.name}`); b.title = 'Go to this chapter'; b.onclick = () => this.go(i, 0); this.top.append(b); return b; });
+    this.top = el('div'); this.top.id = 'tour-top'; this.pills = CHAPTERS.map((c, i) => { const b = el('button', null, `${i + 1}  ${c.name}`); b.title = 'Go to this chapter'; b.onclick = () => this.go(i, 0); this.top.append(b); return b; });
     const card = this.card = el('div'); card.id = 'tour-card';
-    const th = el('div', 'th'); this.tag = el('i'); this.head = el('b'); this.rateTag = el('span'); th.append(this.tag, this.head, this.rateTag);
-    this.text = el('p'); this.panel = el('div'); this.panel.id = 'tour-panel'; this.panel.hidden = true;
-    /* the diagram beside the picture (src/app/targeting.js draws it from the record) and, for the targeting chapters, a time scrubber */
-    this.diag = el('div'); this.diag.id = 'tour-diag'; this.diag.hidden = true; this.diagKey = ''; this.diagT = null; this.lx = 6;
-    this.diag.addEventListener('pointerdown', e => this._diagClick(e)); this.diag.addEventListener('pointermove', e => { if (e.buttons & 1) this._diagClick(e); });
-    this.scr = el('div', 'sc'); this.scr.hidden = true; this.scrIn = el('input'); this.scrIn.type = 'range'; this.scrIn.min = 0; this.scrIn.max = 1000; this.scrIn.title = 'Drag through the engagement: the picture and the diagram follow';
-    this.scrLab = el('span'); this.scr.append(el('span', null, 'Time'), this.scrIn, this.scrLab); this.scrIn.addEventListener('input', () => { const sp = this.span; if (sp) this.scrub(sp[0] + (sp[1] - sp[0]) * this.scrIn.value / 1000); });
-    const tb = el('div', 'tb'), btn = (text, cls, tip, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.title = tip; b.onclick = fn; return b; };
-    this.bBack = btn('Back', '', 'The step before (left arrow)', () => this.back()); this.bAgain = btn('Watch again', '', 'Play this step again (R)', () => this.again());
-    this.bNext = btn('Next', 'primary', 'The next step (right arrow)', () => this.next()); this.bSkip = btn('Skip chapter', '', 'Jump to the next chapter', () => { const n = this._nextCh(this.ci, 1); if (n >= 0) this.go(n, 0); else this.stop(); }); this.bExit = btn('Exit', '', 'Leave the briefing (Esc)', () => this.stop());
-    tb.append(this.bBack, this.bAgain, this.bNext, el('span', 'tk', 'arrow keys: back and next · R: again · Esc: exit'), el('span', 'sp'), this.bSkip, this.bExit);
-    card.append(th, this.text, this.panel, this.scr, tb);
+    this.tag = el('div', 'tp-tag'); this.dots = el('div', 'tp-dots'); this.head = el('h2'); this.text = el('p', 'tp-text'); this.facts = el('div', 'tp-facts');
+    this.diag = el('div'); this.diag.id = 'tour-diag'; this.diag.hidden = true; this.diagKey = ''; this.diagT = null;
+    this.panel = el('div'); this.panel.id = 'tour-panel'; this.panel.hidden = true;
+    this.rateTag = el('div', 'tp-rate');
+    const body = el('div', 'tp-body'); body.append(this.tag, this.dots, this.head, this.text, this.facts, this.diag, this.panel);
+    const tb = el('div', 'tp-btns'), btn = (text, cls, tip, fn) => { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.title = tip; b.onclick = fn; return b; };
+    this.bBack = btn('Back', '', 'The step before (left arrow)', () => this.back()); this.bAgain = btn('Replay step', '', 'Play this step again (R)', () => this.again());
+    this.bNext = btn('Next', 'primary', 'The next step (right arrow)', () => this.next()); this.bExit = btn('Exit', '', 'Leave the briefing (Esc)', () => this.stop());
+    tb.append(this.bBack, this.bAgain, this.bNext);
+    const foot = el('div', 'tp-foot'); foot.append(this.rateTag, el('span', 'tp-keys', 'arrows: back, next · R: replay · Space: pause'), this.bExit);
+    card.append(body, tb, foot);
     this.veil = el('div'); this.veil.id = 'tour-veil'; this.veil.hidden = true;
-    root.append(this.svg, this.diag, this.top, card, this.veil); document.body.append(root);
-    this.marks = []; this.lines = [];   /* pools: { el, ln, dot, w, h, slot } and svg lines */
+    root.append(this.svg, this.top, card, this.veil); document.body.append(root);
+    this.marks = []; this.lines = [];
     window.addEventListener('keydown', e => {
       if (!this.on || e.ctrlKey || e.metaKey || e.altKey || (e.target && /INPUT|TEXTAREA/.test(e.target.tagName))) return;
       const k = e.code; let used = true;
@@ -329,11 +370,12 @@ class Briefing {
     }, true);
   }
   get step() { return this.steps[this.si] || null; }
+  get span() { return null; }   /* (the time scrubber of the earlier briefing is gone: Replay step plays a step again) */
 
   // ---- moving about -----------------------------------------------------------------------------------------------------------
   start(ci, si, only) { if (this.on) return; this.only = only ? only.map(k => CHAPTERS.findIndex(c => c.key === k)).filter(i => i >= 0) : null; if (this.only && this.only.indexOf(ci) < 0) ci = this.only[0]; this.snap = this.app.snapshot(); this.on = true; this.seen.clear(); this.setup = null; this.fault = null; document.body.classList.add('tour-on'); this.root.hidden = false; this.app.director.setHold(true); this.go(ci || 0, si || 0); }
   stop(then) {
-    if (!this.on) return; this.on = false; this.phase = 'idle'; this.diag.hidden = true; this.only = null; if (this.scrWait) { clearTimeout(this.scrWait); this.scrWait = null; } this.want = null; this._quickStop(); document.body.classList.remove('tour-on'); this.root.hidden = true; this.veil.hidden = true; this._hideMarks(); try { this._lift(0); } catch (e) { console.error(e); }
+    if (!this.on) return; this.on = false; this.phase = 'idle'; this.diag.hidden = true; this.only = null; this.want = null; this._quickStop(); document.body.classList.remove('tour-on'); this.root.hidden = true; this._hideMarks(); this._lift(0, 0);
     try { this.app.director.setHold(false); } catch (e) { console.error(e); }
     try { this.app.speed = 1; this.app.exit(this.snap); } catch (e) { console.error(e); try { this.app.toTitle(); } catch (e2) { console.error(e2); } }
     this.snap = null; this.setup = null; if (then) then();
@@ -342,23 +384,9 @@ class Briefing {
   _nextCh(ci, d) { for (let i = ci + d; i >= 0 && i < CHAPTERS.length; i += d) if (this._allowed(i)) return i; return -1; }
   next() { if (this.si + 1 < this.steps.length) this.go(this.ci, this.si + 1); else { const n = this._nextCh(this.ci, 1); if (n >= 0) this.go(n, 0); else this.stop(); } }
   back() { if (this.si > 0) this.go(this.ci, this.si - 1); else { const n = this._nextCh(this.ci, -1); if (n >= 0) this.go(n, -1); } }
-  get span() { const ch = CHAPTERS[this.ci]; return ch && ch.span && this.M && this.Mfor === ch ? ch.span(this.M) : null; }
-  // drag through the engagement: the replay jumps (at most a few times a second; a jump back re-runs the battle quietly) and stops
-  // there; the step whose window holds that moment becomes the current one, without moving the replay again
-  scrub(t) {
-    const A = this.app; if (!this.on || this.sched || !A.replay) return; A.playing = false; this.phase = 'hold'; this.scrT = t; this.to = t; this._rate();
-    let k = 0; this.steps.forEach((st, i) => { if (st.from <= t + 1e-6) k = i; }); if (k !== this.si) { this.si = k; const st = this.step; this.shot = Object.assign({ t0: st.from }, st.shot); for (const m of st.marks) m._seen = false; this._paint(); }
-    if (this.scrWait) return; const go = () => { this.scrWait = null; const tt = this.scrT; try { A.seek(tt); } catch (e) { console.error(e); } if (Math.abs(this.scrT - tt) > 1e-3) this.scrWait = setTimeout(go, 120); };
-    this.scrWait = setTimeout(go, 0);
-  }
-  _diagClick(e) {
-    const st = this.step; if (!st || !st.diagram || st.diagram.kind !== 'aim' || st.diagram.compact) return; const svgE = this.diag.querySelector('svg'); if (!svgE) return;
-    const r = svgE.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * AIM_W, y = (e.clientY - r.top) / r.height * AIM_H;
-    if (y < 470) return; const t = aimTimeAt(st.diagram.D, x); if (t != null) { e.preventDefault(); this.scrub(t); }
-  }
   again() { this.go(this.ci, this.si); }
-  // ask for chapter ci, step si (-1: its last step). The work is done a moment later so the "setting up" notice is on screen first;
-  // asking again before that simply changes what will be done, so hammering Next cannot queue up work or get stuck.
+  // ask for chapter ci, step si (-1: its last step). The work is done a frame later so the "setting up" notice is on screen first;
+  // asking again before that only changes what will be done, so hammering Next cannot queue up work.
   go(ci, si) {
     if (!this.on) return; if (ci >= CHAPTERS.length || (this.only && !this._allowed(ci))) { this.stop(); return; }
     this.want = { ci: Math.max(0, ci), si }; const heavy = !sameSetup(CHAPTERS[this.want.ci].setup, this.setup);
@@ -367,42 +395,75 @@ class Briefing {
     const run = () => { this.sched = false; try { this._enter(); } catch (e) { this._fail(e); } };
     if (heavy) requestAnimationFrame(() => requestAnimationFrame(run)); else requestAnimationFrame(run);
   }
-  _fail(e) { console.error(e); this.fault = String(e && e.message || e); this.phase = 'hold'; this.veil.hidden = true; this._hideMarks(); try { this._lift(0); } catch (x) { /* no camera to put back */ } try { this.app.playing = false; } catch (x) { /* nothing more to do */ } this._paint(); }
+  _fail(e) { console.error(e); this.fault = String(e && e.message || e); this.phase = 'hold'; this.veil.hidden = true; this._hideMarks(); try { this.app.playing = false; } catch (x) { /* nothing to stop */ } this._paint(); }
   _enter() {
     const A = this.app, w = this.want; if (!this.on || !w) return; this.want = null; this.fault = null;
     const ch = CHAPTERS[w.ci];
     if (!sameSetup(ch.setup, this.setup) || !A.replay) { A.load(ch.setup, 'replay'); this.setup = ch.setup; this.full = A.replay && A.replay.full; }
     if (w.ci !== this.ci || !this.M || this.Mfor !== ch) { this.M = this.full ? ch.find(this.full, A.HK) : null; this.Mfor = ch; this.steps = this.M ? ch.steps(this.M) : []; }
     this.ci = w.ci; this.si = w.si < 0 ? Math.max(0, this.steps.length - 1) : Math.min(w.si, Math.max(0, this.steps.length - 1));
-    A.director.filmEnd(); this._hideMarks(); this.veil.hidden = true; this._lift(0);
+    A.director.filmEnd(); this._hideMarks(); this.veil.hidden = true; this.vlast = null;
     const st = this.step;
     if (!st) { this.fault = 'This chapter\'s battle no longer contains the moment the chapter was built on.'; this.phase = 'hold'; A.playing = false; this._paint(); return; }
     const T = A.replay ? A.replay.T : 1e9, from = Math.max(0, Math.min(T - 0.2, st.from)), to = Math.max(from, Math.min(T - 0.1, st.to));
-    this.to = to; this.shot = Object.assign({ t0: from }, st.shot); for (const m of st.marks) m._seen = false;
-    { const u = this.shot.uid != null ? A.battle.units.find(x => x.id === this.shot.uid) : null; if (u) { this.shot.le = u.e; this.shot.ln = u.n; if (this.shot.cam === 'fpv' && A.cams.choose) A.cams.choose(u); } }
-    this.diagKey = ''; this.scrT = null;   /* where the launcher is: the rigs that frame the guidance line need its height */
-    A.seek(from); A.speed = st.rate || 1; A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
-    this.seen.add(this.ci + ':' + this.si); this._paint();
+    this.from = from; this.to = to; this.hurry = false; for (const m of st.marks) { m._seen = false; m._last = null; }
+    A.seek(from); this._free(); this.side = 1; this.side = this._side(st, from);
+    A.speed = this._rateAt(st, from); A.playing = to > from + 1e-3; this.phase = A.playing ? 'run' : 'hold'; this.frames = 0;
+    this.seen.add(this.ci + ':' + this.si); this.diagKey = ''; this._paint();
     if (st.panel === 'numbers' && A.pages && A.pages.quick) { try { this.quick = A.pages.quick(this.panel, 600); } catch (e) { console.error(e); } }
   }
   _quickStop() { if (this.quick) { try { this.quick.stop(); } catch (e) { /* already over */ } this.quick = null; } }
+  _rateAt(st, t) { let r = 1; for (const q of st.rates || []) if (q[0] <= t + 1e-6) r = q[1]; return r; }
+  // the camera is the briefing's: free mode, the page's own orbit control off (as the film director does it)
+  _free() { const A = this.app; if (A.cams._near0 != null) A.cams.set('orbit'); A.cams.mode = 'free'; A.scene.controls.enabled = false; A.cams.unit = null; }
 
-  // ---- the card ---------------------------------------------------------------------------------------------------------------
-  _ctx() { const A = this.app; return { b: A.battle, inAir: A.volleys && A.volleys.info ? A.volleys.info.length : null }; }
+  // ---- where things are this frame, for the camera and the labels -------------------------------------------------------------
+  _missile(id) { const A = this.app, v = id && A.battle.volleys[id.v]; if (!v || !A.volleys) return null; for (const m of A.volleys.info) if (m.th && m.th.idx === id.idx && v.rec.threats.indexOf(m.th) >= 0) return m; return null; }
+  // where the launching team stood: the engine's own frame, R metres out on bearing brg from where the tank was when the volley began
+  _launchAt(id, out) { const A = this.app, v = id && A.battle.volleys[id.v], T0 = (v && A.battle.tankAt && A.battle.tankAt(v.t0)) || A.shown, a = ((id && id.brg) || 0) * Math.PI / 180, R = (id && id.R) || 2000;
+    return A.scene.at(T0.e + Math.sin(a) * R, T0.n + Math.cos(a) * R, 1.3, out); }
+  _subjects(st) {
+    const A = this.app, sc = A.scene, T = A.shown, W = sc.world, S = this.S || (this.S = { pts: {} });
+    S.g = (x, z) => W.h(x, -z); S.tank = sc.at(T.e, T.n, 1.6, this.vt); S.launcher = this._launchAt(st.id, this.vl);
+    S.station = (A.tank.hkoiMuzzle && A.tank.hkoiMuzzle(this.vs)) || sc.at(T.e, T.n, 3.3, this.vs);
+    const F = frameOf(S.tank, S.launcher, S.g); S.b = F.b; S.p = F.p; S.R = F.R; S.at = F.at;
+    const tm = st.marks.find(m => m.at === 'trophy'), side = tm ? (tm.side || 'L') : (Math.sin(((st.id && st.id.brg) || 0) * Math.PI / 180 - T.h * Math.PI / 180) < 0 ? 'L' : 'R');
+    const V = A.volleys; S.trophy = V && V._apsPort && V.tankView ? V._apsPort(side, T, this.v3) : sc.at(T.e, T.n, 2.6, this.v3);
+    const m = this._missile(st.id); S.missile = m ? this.vm.copy(m.p) : null; S.mdir = m ? m.dir : null;
+    if (m) { if (!this.vlast) this.vlast = this.vm.clone(); this.vlast.copy(m.p); }
+    S.pts = {}; for (const k in st.pts || {}) S.pts[k] = F.at(st.pts[k][0], st.pts[k][1]); if (this.vlast) S.pts.last = this.vlast;
+    return S;
+  }
+  _side(st, t) { if (!st.shot || !st.shot.kind) return 1; try { const S = this._subjects(st), sub = S[st.shot.subj] || S.pts[st.shot.subj] || null; return chooseSide(st.shot.kind, S, st.shot.o, sub, this.app.scene.world); } catch (e) { console.error(e); return 1; } }
+  _camera(st, t) {
+    const A = this.app, cam = A.scene.camera, S = this._subjects(st), c = SHOTS[st.shot.kind](S, this.side, Math.max(0, t - this.from), st.shot.o || {});
+    if (A.cams.mode !== 'free') this._free();
+    cam.position.set(c.pos.x, c.pos.y, c.pos.z); cam.up.set(0, 1, 0); cam.lookAt(c.look.x, c.look.y, c.look.z); if (Math.abs(cam.fov - c.fov) > 0.01) { cam.fov = c.fov; cam.updateProjectionMatrix(); }
+    this.cam = c; return S;
+  }
+
+  // ---- the panel ----------------------------------------------------------------------------------------------------------------
+  _ctx() { return { b: this.app.battle }; }
   _paint() {
     const el = this.app.el, ch = CHAPTERS[this.ci], st = this.step, last = this._nextCh(this.ci, 1) < 0 && this.si >= this.steps.length - 1;
     this.pills.forEach((b, i) => { b.className = i === this.ci ? 'on' : this.seen.has(i + ':0') ? 'done' : ''; b.hidden = !this._allowed(i); });
-    this.scr.hidden = !this.span || !!this.fault;
-    { const list = this.only || CHAPTERS.map((c, i) => i), n = list.indexOf(this.ci); this.tag.textContent = `${this.only ? 'Part' : 'Chapter'} ${n + 1} of ${list.length} · ${ch.name}${this.steps.length > 1 ? ` · step ${this.si + 1} of ${this.steps.length}` : ''}`; }
-    let text = ''; if (this.fault) text = `This step could not be shown (${this.fault}). Next carries on.`; else if (st) { try { text = st.text(this._ctx()); } catch (e) { console.error(e); text = 'The text for this step could not be worked out from this battle. Next carries on.'; } }
+    { const list = this.only || CHAPTERS.map((c, i) => i), n = list.indexOf(this.ci); this.tag.textContent = `${this.only ? 'Part' : 'Chapter'} ${n + 1} of ${list.length}: ${ch.name}`; }
+    this.dots.textContent = ''; this.steps.forEach((s, i) => { const d = el('button', i === this.si ? 'on' : this.seen.has(this.ci + ':' + i) ? 'done' : ''); d.title = s.head; d.onclick = () => this.go(this.ci, i); this.dots.append(d); });
+    if (this.steps.length) this.dots.append(el('span', null, `step ${this.si + 1} of ${this.steps.length}`));
+    let text = ''; if (this.fault) text = `This step could not be shown (${this.fault}). Next carries on.`; else if (st) { try { text = st.text(this._ctx()); } catch (e) { console.error(e); text = 'The text for this step could not be worked out from this battle.'; } }
     this.head.textContent = this.fault ? 'Something went wrong here' : st ? st.head : ch.name; this.text.textContent = text;
-    this.bBack.disabled = this.ci === 0 && this.si === 0; this.bNext.textContent = last ? 'Finish' : 'Next'; this.bSkip.hidden = this._nextCh(this.ci, 1) < 0; this.bAgain.hidden = !st || !(st.to > st.from);
+    this.facts.textContent = ''; this.facts.hidden = !(st && st.facts && !this.fault); if (!this.facts.hidden) for (const [k, v] of st.facts) { const f = el('div'); f.append(el('b', null, v), el('span', null, k)); this.facts.append(f); }
+    this.bBack.disabled = this._nextCh(this.ci, -1) < 0 && this.si === 0; this.bNext.textContent = last ? 'Finish' : 'Next'; this.bAgain.hidden = !st || !(st.to > st.from);
     const p = this.panel; p.textContent = ''; p.hidden = !(st && st.panel) || !!this.fault;
-    if (st && st.panel === 'next' && !this.fault) { const row = el('div', 'tb'), b = (t, fn) => { const x = el('button', 'btn on', t); x.onclick = fn; return x; };
-      row.append(b('Open Run the numbers', () => this.stop(() => { const n = document.getElementById('o-numbers'); if (n) n.click(); })), b('Open Scenarios', () => this.stop(() => this.guide.openScenarios())), b('Start over', () => this.go(0, 0))); p.append(row); }
-    this._rate(); this.cardH = 0;
+    if (st && st.panel === 'ref' && !this.fault) { const R = REFERENCE, tbl = el('table'), hr = el('tr'); for (const h of R.head) hr.append(el('th', null, h)); tbl.append(hr);
+      for (const r of R.rows) { const tr = el('tr', /HKOI/.test(r[0]) ? 'hk' : ''); tr.append(el('td', null, r[0]), el('td', null, r[1].toFixed(1) + '%'), el('td', null, r[2].toFixed(1) + '%')); tbl.append(tr); }
+      p.append(el('div', 'tp-cap', 'Share of raids the tank survives'), tbl, el('div', 'tp-note', R.cut), el('div', 'tp-note', R.src)); }
+    if (st && st.panel === 'numbers' && !this.fault) { const row = el('div', 'tp-row'), b = (t, fn) => { const x = el('button', 'btn on', t); x.onclick = fn; return x; };
+      row.append(b('Open Run the numbers', () => this.stop(() => { const n = document.getElementById('o-numbers'); if (n) n.click(); })), b('Open Scenarios', () => this.stop(() => this.guide.openScenarios())), b('Start over', () => this.go(this.only ? this.only[0] : 0, 0))); p.append(row); }
+    this._rate();
   }
-  _rate() { const A = this.app, st = this.step; let t = '', slow = false; if (st && !this.fault) { if (this.phase === 'run') { slow = A.playing && A.speed < 1; t = !A.playing ? 'PAUSED' : A.speed < 1 ? `SLOW MOTION ×${A.speed}` : 'PLAYING'; } else t = st.to > st.from ? 'STOPPED AT THE MOMENT' : 'STILL'; } if (this.rateTag.textContent !== t) this.rateTag.textContent = t; this.rateTag.className = slow ? 'slow' : ''; }
+  _rate() { const A = this.app, st = this.step; let t = '', slow = false; if (st && !this.fault) { if (this.phase === 'run') { slow = A.playing && A.speed < 1; t = !A.playing ? 'PAUSED' : A.speed < 1 ? `SLOW MOTION ×${A.speed}` : 'PLAYING'; } else t = st.to > st.from ? `STOPPED: ${(st.freeze || '').toUpperCase()}` : st.freeze ? `STILL: ${st.freeze.toUpperCase()}` : 'STILL'; }
+    this.rateTag.textContent = t; this.rateTag.className = 'tp-rate' + (slow ? ' slow' : ''); }
 
   // ---- once a frame -----------------------------------------------------------------------------------------------------------
   update(dt) {
@@ -411,113 +472,93 @@ class Briefing {
     const st = this.step; if (!st || this.fault || this.sched) return;
     try {
       const t = Math.min(A.tNow, A.battle.t);
-      if (this.phase === 'run' && (t >= this.to - 1e-3 || (A.replay && A.battle.t >= A.replay.T - 0.06))) { A.playing = false; this.phase = 'hold'; this._rate(); if (st.text.length) this.text.textContent = st.text(this._ctx()); }
-      else if (this.phase === 'run' && !A.playing && this.frames > 2 && this.rateTag.textContent !== 'PAUSED') { /* the page stopped the clock itself (end of the replay) */ this.phase = 'hold'; this._rate(); }
+      if (this.phase === 'run') {
+        if (t >= this.to - 1e-3 || (A.replay && A.battle.t >= A.replay.T - 0.06)) { A.playing = false; this.phase = 'hold'; this._rate(); if (st.text.length) this.text.textContent = st.text(this._ctx()); }
+        else { const r = this._rateAt(st, t); if (A.playing && A.speed !== r && !this.hurry) { A.speed = r; this._rate(); } else if (!A.playing && this.frames > 2 && this.rateTag.textContent !== 'PAUSED') this._rate(); }
+      }
       this.frames++;
-      A.director.film(this.shot, t);
-      const side = this._diagram(st, t);
-      this._lift(A.cams.mode === 'free' && this.shot.rig !== 'cloud' ? Math.round((this.cardH || 150) * 0.42) : 0, A.cams.mode === 'free' ? Math.round(side / 2) : 0);   /* (the side view of the guidance line looks up at it from the ground: it already sits high in the picture) */
-      this._draw(st, t);
+      const W = A.scene.canvas.clientWidth || innerWidth, H = A.scene.canvas.clientHeight || innerHeight, C = clearArea(W, H); this.W = W; this.H = H; this.C = C;
+      const S = this._camera(st, t); this._lift(C.sx, C.sy);
+      this._diagram(st, t);
+      this._draw(st, t, S);
     } catch (e) { this._fail(e); }
   }
-
-  // The card covers the bottom of the picture, so for the director's own rigs the whole picture is moved up by a little under half
-  // the card's height (the camera's view offset: what was aimed at the middle of the window now sits in the middle of what is left).
-  // Sights and seats (the enemy's reticle, the HKOI sight) keep their true centre.
-  _lift(px, sx) {
-    const cam = this.app.scene.camera, cv = this.app.scene.canvas, W = cv.clientWidth || innerWidth, H = cv.clientHeight || innerHeight; sx = sx || 0;
-    if (px === this.lift && sx === this.liftX && W === this.liftW && H === this.liftH) return; this.lift = px; this.liftX = sx; this.liftW = W; this.liftH = H;
-    if (px || sx) cam.setViewOffset(W, H, -sx, px, W, H); else if (cam.view) cam.clearViewOffset();
+  // the picture's centre moved to the middle of the free part (the camera's view offset), so nothing the text names sits behind it
+  _lift(sx, sy) {
+    const cam = this.app.scene.camera, cv = this.app.scene.canvas, W = cv.clientWidth || innerWidth, H = cv.clientHeight || innerHeight;
+    if (sx === this.liftX && sy === this.liftY && W === this.liftW && H === this.liftH && (!!cam.view) === !!(sx || sy)) return; this.liftX = sx; this.liftY = sy; this.liftW = W; this.liftH = H;
+    if (sx || sy) cam.setViewOffset(W, H, -sx, -sy, W, H); else if (cam.view) cam.clearViewOffset();
   }
-  // The diagram panel on the left: drawn from the record for this battle time (only when that time or the step has changed), sized to
-  // the room above the card. Over a sight or a seat it is smaller, so the sight's own centre stays clear. Returns its width (0: none).
+  // the diagram in the panel, redrawn only when the step or the battle time (to 1/50 s) changes
   _diagram(st, t) {
-    const dg = st && st.diagram; if (!dg || this.fault) { if (!this.diag.hidden) this.diag.hidden = true; this.lx = 6; return 0; }
-    const A = this.app, W = this.app.scene.canvas.clientWidth || innerWidth, H = this.app.scene.canvas.clientHeight || innerHeight, ch = this.cardH || 150;
-    const ratio = dg.kind === 'cdr' ? 440 / 560 : dg.kind === 'aim' ? (dg.compact ? 230 / 560 : 540 / 560) : 520 / 560, sight = A.cams.mode !== 'free', roomH = H - ch - 66;
-    const w = Math.round(Math.max(220, Math.min(sight ? W * 0.27 : W * 0.43, roomH / ratio, 760)));
-    if (this.diag.hidden) this.diag.hidden = false; if (this.diagW !== w) { this.diagW = w; this.diag.style.width = w + 'px'; }
-    const key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
-    if (key !== this.diagKey || (dg.kind === 'aim' || dg.kind === 'order') && tq !== this.diagT) {
-      this.diagKey = key; this.diagT = tq; let html = '';
-      if (dg.kind === 'aim') html = aimSVG(dg.D, t, { focus: dg.focus, compact: dg.compact }); else if (dg.kind === 'order') html = orderSVG(dg.O, t, { all: dg.all });
-      else if (dg.kind === 'layers') html = layerSVG(dg.L, dg.focus); else if (dg.kind === 'cdr') html = cdrSVG(dg.K, { tank: { e: A.battle.tank.e, n: A.battle.tank.n }, units: A.battle.units });
-      this.diag.innerHTML = html;
-    }
-    { const sp = this.span; if (sp && !this.scr.hidden) { const v = Math.round(1000 * Math.max(0, Math.min(1, (t - sp[0]) / (sp[1] - sp[0])))); if (+this.scrIn.value !== v && document.activeElement !== this.scrIn) this.scrIn.value = v; const z = CHAPTERS[this.ci].zero ? CHAPTERS[this.ci].zero(this.M) : sp[0], lab = `${(t - z).toFixed(1)} s after ${CHAPTERS[this.ci].key === 'order' ? 'the first launch' : 'launch'}`; if (this.scrLab.textContent !== lab) this.scrLab.textContent = lab; } }
-    this.lx = 12 + w + 10; return w + 12;
+    const dg = st && st.diagram; if (!dg || this.fault) { if (!this.diag.hidden) this.diag.hidden = true; return; }
+    if (this.diag.hidden) this.diag.hidden = false;
+    const live = dg.kind === 'geo' || dg.kind === 'queue', key = this.ci + ':' + this.si + ':' + dg.kind, tq = Math.round(t * 50) / 50;
+    if (key === this.diagKey && (!live || tq === this.diagT)) return; this.diagKey = key; this.diagT = tq; const M = this.M; let html = '';
+    if (dg.kind === 'geo') html = geoSVG(M.D, t, dg.focus, M.TB); else if (dg.kind === 'queue') html = queueSVG(M.O, t); else if (dg.kind === 'layers') html = layerSVG(M.L, dg.focus); else if (dg.kind === 'guide') html = guideSVG(dg.focus);
+    this.diag.innerHTML = html;
+  }
+  // where the step's subject is on the screen now, through the real camera (tests/beta/tour.py reads this; the node test does the same
+  // from the record): inside the free part, and how many pixels a metre is there
+  framing() {
+    const st = this.step; if (!this.on || !st || !st.shot || !this.S || !this.C) return null; const p = this.S[st.shot.subj] || this.S.pts[st.shot.subj]; if (!p) return { subj: st.shot.subj, ok: st.shot.subj === 'missile', none: true };
+    const cam = this.app.scene.camera; cam.updateMatrixWorld(); const q = { x: 0, y: 0 }; if (!this._project(p, q)) return { subj: st.shot.subj, ok: false, behind: true };
+    const C = this.C, d = cam.position.distanceTo(p), px = this.H / (2 * Math.tan(cam.fov * Math.PI / 360) * d), size = (st.shot.size || 0) * px / this.H;
+    return { subj: st.shot.subj, x: Math.round(q.x), y: Math.round(q.y), size: Math.round(size * 1000) / 1000, ok: q.x >= C.x0 && q.x <= C.x1 && q.y >= C.y0 && q.y <= C.y1 && (!st.shot.min || size >= st.shot.min * 0.8) };
   }
   // ---- labels and lines over the picture ----------------------------------------------------------------------------------------
   _hideMarks() { for (const m of this.marks) { m.el.style.display = 'none'; m.ln.style.display = 'none'; m.dot.style.display = 'none'; m.slot = -1; } for (const l of this.lines) l.style.display = 'none'; }
-  _mark(i) { let m = this.marks[i]; if (!m) { const e = this.app.el('div', 'tl'); e.style.display = 'none'; this.root.insertBefore(e, this.top); m = this.marks[i] = { el: e, ln: svg('line', { 'stroke-width': 1.5 }), dot: svg('circle', { r: 6, fill: 'none', 'stroke-width': 2 }), text: null, tone: null, w: 0, h: 0, slot: -1, x: 0, y: 0 }; this.gm.append(m.ln, m.dot); } return m; }
+  _mark(i) { let m = this.marks[i]; if (!m) { const e = this.app.el('div', 'tl'); e.style.display = 'none'; this.root.insertBefore(e, this.top); m = this.marks[i] = { el: e, ln: svg('line', { 'stroke-width': 2 }), dot: svg('circle', { r: 7, fill: 'none', 'stroke-width': 2.5 }), slot: -1 }; this.gm.append(m.ln, m.dot); } return m; }
   _line(i) { let l = this.lines[i]; if (!l) { l = this.lines[i] = svg('line', { 'stroke-linecap': 'round' }); this.gl.append(l); } return l; }
-  _missile(id) { const A = this.app, v = A.battle.volleys[id.v]; if (!v || !A.volleys) return null; for (const m of A.volleys.info) if (m.th && m.th.idx === id.idx && v.rec.threats.indexOf(m.th) >= 0) return m; return null; }
-  _unit(uid) { return uid == null ? null : this.app.battle.units.find(u => u.id === uid) || null; }
-  // where a thing is in the world this frame (false: it is not there to point at)
-  _where(mk, out) {
-    const A = this.app, S = A.scene, T = A.shown, id = mk.id;
-    if (mk.after != null && Math.min(A.tNow, A.battle.t) < mk.after) return false;   /* a label for something that has not happened yet */
-    if (mk.at === 'tank') { S.at(T.e, T.n, 2.3, out); return true; }
-    if (mk.at === 'station') { const p = A.tank.hkoiMuzzle ? A.tank.hkoiMuzzle(out) : null; if (!p) S.at(T.e, T.n, 3.3, out); return true; }
-    if (mk.at === 'trophy') { const V = A.volleys; let side = mk.side || 'R'; if (side === 'empty') { const st = A.battle.tank.st || {}; side = st.apsR === 0 ? 'R' : 'L'; }   /* 'empty': the side with no shot left */
-      if (V && V._apsPort && V.tankView) V._apsPort(side, T, out); else S.at(T.e, T.n, 2.7, out); return true; }
-    if (mk.at === 'missile') { const m = this._missile(id); this.gone = false;
-      if (m) { (mk._last || (mk._last = out.clone())).copy(m.p); mk._seen = true; out.copy(m.p); return true; }
-      if (mk.gone && mk._seen) { this.gone = true; out.copy(mk._last); return true; }   /* it has ended: the label stays where it was last seen and says what became of it */
+  // where a label's object is this frame (false: not there to point at)
+  _where(mk, S, out) {
+    const A = this.app, t = Math.min(A.tNow, A.battle.t);
+    if (mk.after != null && t < mk.after) return false;
+    if (mk.at === 'tank') { out.copy(S.tank); out.y += 0.9; return true; }
+    if (mk.at === 'station') { out.copy(S.station); return true; }
+    if (mk.at === 'trophy') { out.copy(S.trophy); return true; }
+    if (mk.at === 'launcher') { out.copy(S.launcher); return true; }
+    if (mk.at === 'pt') { const p = S.pts[mk.pt]; if (!p) return false; out.copy(p); return true; }
+    if (mk.at === 'bearing') { const p = S.at(60, 3); out.copy(p); return true; }
+    if (mk.at === 'missile' || mk.at === 'beamtag') { mk._gone = false;
+      if (S.missile) { out.copy(S.missile); if (!mk._last) mk._last = S.missile.clone(); mk._last.copy(S.missile); mk._seen = true; if (mk.at === 'beamtag') { out.x += S.b.x * 14; out.z += S.b.z * 14; out.y += 0.6; } return true; }
+      if (mk.gone && mk._seen && mk._last) { mk._gone = true; out.copy(mk._last); return true; }
       return false; }
-    if (mk.at === 'launcher') { const u = this._unit(id.uid); if (!u || !u.alive || u.gone) return false; out.copy(A.unitPos(u)); out.y += 0.9; return true; }
-    if (mk.at === 'cloud') {   /* the puff that is out now nearest to where this burst was laid: a real puff, never the empty air between two */
-      const a = id.brg * Math.PI / 180, ce = T.e + Math.sin(a) * mk.x, cn = T.n + Math.cos(a) * mk.x, C = A.volleys && A.volleys.cloud, t = Math.min(A.tNow, A.battle.t); let best = (mk.r || 80), hit = false;
-      if (C && C.puffs) for (const p of C.puffs) { if (!p.on || t < p.tb) continue; const age = Math.max(0, t - p.t0), px = p.x + (p.vx || 0) * age, pz = p.z + (p.vz || 0) * age, d = Math.hypot(px - ce, -pz - cn); if (d >= best) continue; best = d; out.set(px, p.y, pz); hit = true; }
-      return hit; }
-    if (mk.at === 'point') { const a = id.brg * Math.PI / 180; S.at(T.e + Math.sin(a) * mk.d, T.n + Math.cos(a) * mk.d, mk.h || 0.6, out); return true; }   /* a spot on the ground along the threat's bearing, once it has happened */
     return false;
   }
-  // a point in the world to a point on the page; false when it is behind the camera
   _project(p, out) { const cam = this.app.scene.camera; this.v4.copy(p).applyMatrix4(cam.matrixWorldInverse); if (this.v4.z > -cam.near) return false; this.v4.applyMatrix4(cam.projectionMatrix); out.x = (this.v4.x * 0.5 + 0.5) * this.W; out.y = (-this.v4.y * 0.5 + 0.5) * this.H; return true; }
-  // a line between two points in the world, cut off where it passes behind the camera
   _segment(a, b, l) {
-    const cam = this.app.scene.camera, n = -cam.near - 0.01, A = this.v3.copy(a).applyMatrix4(cam.matrixWorldInverse), B = this.v4.copy(b).applyMatrix4(cam.matrixWorldInverse);
-    if (A.z > n && B.z > n) return false;
-    if (A.z > n) A.lerp(B, (A.z - n) / (A.z - B.z)); else if (B.z > n) B.lerp(A, (B.z - n) / (B.z - A.z));
-    A.applyMatrix4(cam.projectionMatrix); B.applyMatrix4(cam.projectionMatrix);
-    this.sx1 = (A.x * 0.5 + 0.5) * this.W; this.sy1 = (-A.y * 0.5 + 0.5) * this.H; this.sx2 = (B.x * 0.5 + 0.5) * this.W; this.sy2 = (-B.y * 0.5 + 0.5) * this.H;
-    if (l) { l.setAttribute('x1', this.sx1.toFixed(1)); l.setAttribute('y1', this.sy1.toFixed(1)); l.setAttribute('x2', this.sx2.toFixed(1)); l.setAttribute('y2', this.sy2.toFixed(1)); }
+    const cam = this.app.scene.camera, n = -cam.near - 0.01, P = this.v3.copy(a).applyMatrix4(cam.matrixWorldInverse), Q = this.v4.copy(b).applyMatrix4(cam.matrixWorldInverse);
+    if (P.z > n && Q.z > n) return false;
+    if (P.z > n) P.lerp(Q, (P.z - n) / (P.z - Q.z)); else if (Q.z > n) Q.lerp(P, (Q.z - n) / (Q.z - P.z));
+    P.applyMatrix4(cam.projectionMatrix); Q.applyMatrix4(cam.projectionMatrix);
+    l.setAttribute('x1', ((P.x * 0.5 + 0.5) * this.W).toFixed(1)); l.setAttribute('y1', ((-P.y * 0.5 + 0.5) * this.H).toFixed(1)); l.setAttribute('x2', ((Q.x * 0.5 + 0.5) * this.W).toFixed(1)); l.setAttribute('y2', ((-Q.y * 0.5 + 0.5) * this.H).toFixed(1));
     return true;
   }
-  _blind(th, tv) { let md = 'guided'; for (const p of th.viz.phases || []) if (p.t <= tv) md = p.mode; return md === 'blind'; }
-  _draw(st, t) {
-    const A = this.app, cam = A.scene.camera, cv = A.scene.canvas; cam.updateMatrixWorld(); this.W = cv.clientWidth || innerWidth; this.H = cv.clientHeight || innerHeight;
-    if (!this.cardH || this.frames % 30 === 0) this.cardH = this.card.offsetHeight + 18;
-    const k = Math.max(0.82, Math.min(1.5, this.W / 1500)), floor = this.H - this.cardH, P = this.v1, Q = this.v2, pt = this.pt || (this.pt = { x: 0, y: 0 });
-    // lines first: the guidance beam, the radar's tracks
-    let nl = 0; const beamMid = this.bm || (this.bm = { on: false, x: 0, y: 0 }); beamMid.on = false;
+  _draw(st, t, S) {
+    const A = this.app, cam = A.scene.camera; cam.updateMatrixWorld(); const C = this.C, k = Math.max(0.9, Math.min(1.6, this.W / 1400)), P = this.v1, Q = this.v2, pt = this.pt || (this.pt = { x: 0, y: 0 });
+    // lines: the warning's bearing, the radar's track(s)
+    let nl = 0;
     for (const kind of st.lines || []) {
-      if (kind === 'beam' || kind === 'track') { const id = st.marks.find(m => m.at === 'missile' || m.at === 'beam'), m = id ? this._missile(id.id) : null; if (!m) continue;
-        if (kind === 'beam') { const v = A.battle.volleys[id.id.v], la = v.launches.find(q => q.u && q.u.id === id.id.uid), u0 = la && la.u0, u = this._unit(id.id.uid); if (u0) A.scene.at(u0.e, u0.n, 1.3, P); else if (u) { P.copy(A.unitPos(u)); P.y += 1.3; } else continue;   /* the same end point as the page's own guidance line (volleyview._launcher) */ const l = this._line(nl), blind = this._blind(m.th, t - v.t0);
-          if (!this._segment(P, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', blind ? 'rgba(200,205,202,.75)' : 'rgba(255,70,55,.8)'); l.setAttribute('stroke-width', (1.6 * k).toFixed(2)); l.setAttribute('stroke-dasharray', blind ? '3 7' : '');
-          { /* the label for the beam points at the middle of the part of it that is on the page */ let x1 = this.sx1, y1 = this.sy1, x2 = this.sx2, y2 = this.sy2; const cl = (x, y) => x >= 0 && x <= this.W && y >= 40 && y <= floor;
-            for (let i = 0; i < 12 && !cl(x1, y1); i++) { x1 += (x2 - x1) * 0.12; y1 += (y2 - y1) * 0.12; } for (let i = 0; i < 12 && !cl(x2, y2); i++) { x2 += (x1 - x2) * 0.12; y2 += (y1 - y2) * 0.12; }
-            if (cl(x1, y1) && cl(x2, y2)) { beamMid.on = true; beamMid.x = x1 + (x2 - x1) * 0.45; beamMid.y = y1 + (y2 - y1) * 0.45; } } }
-        else { this._where(STATION, P); const l = this._line(nl); if (!this._segment(P, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
-      else if (kind === 'tracks' && A.volleys) { this._where(STATION, P); for (const m of A.volleys.info) { if (m.tracked === false && !m.drone) continue; Q.copy(P); const l = this._line(nl); if (!this._segment(Q, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,190,80,.85)'); l.setAttribute('stroke-width', (1.4 * k).toFixed(2)); l.setAttribute('stroke-dasharray', '7 6'); } }
+      if (kind === 'bearing') { const l = this._line(nl); P.copy(S.tank); P.y += 1.4; Q.copy(S.at(Math.min(S.R, 1500), 3)); if (!this._segment(P, Q, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(255,179,71,.9)'); l.setAttribute('stroke-width', (3 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(10 * k).toFixed(0)} ${(7 * k).toFixed(0)}`); }
+      else if (kind === 'track') { if (!S.missile || t < (this.M && this.M.D ? this.M.D.T0 + this.M.D.radar.tTrack : 0)) continue; const l = this._line(nl); if (!this._segment(S.station, S.missile, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(57,217,138,.9)'); l.setAttribute('stroke-width', (2.2 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(3 * k).toFixed(0)} ${(5 * k).toFixed(0)}`); }
+      else if (kind === 'tracks' && A.volleys) { for (const m of A.volleys.info) { if (m.tracked === false && !m.drone) continue; const l = this._line(nl); if (!this._segment(S.tank, m.p, l)) continue; nl++; l.style.display = ''; l.setAttribute('stroke', 'rgba(57,217,138,.85)'); l.setAttribute('stroke-width', (2 * k).toFixed(1)); l.setAttribute('stroke-dasharray', `${(3 * k).toFixed(0)} ${(5 * k).toFixed(0)}`); } }
     }
     for (let i = nl; i < this.lines.length; i++) this.lines[i].style.display = 'none';
-    // labels: each keeps the side of its object it was first given unless that side stops fitting
-    const placed = this.placed || (this.placed = []); placed.length = 0; let nm = 0;
+    // labels: each keeps the side of its object it was first given unless that side stops fitting; all inside the free part
+    const placed = this.placed || (this.placed = []); placed.length = 0; let nm = 0; const x0 = C.x0, x1 = C.x1, y0 = C.y0, y1 = C.y1;
     for (const mkv of st.marks) {
-      const m = this._mark(nm++); let on, ax, ay, off = false;
-      if (mkv.at === 'beam') { on = beamMid.on; ax = beamMid.x; ay = beamMid.y; }
-      else { on = this._where(mkv, P) && this._project(P, pt); ax = pt.x; ay = pt.y; if (on && (ax < this.lx || ax > this.W - 6 || ay < 44 || ay > floor - 4)) { if (mkv.at === 'cloud' || mkv.at === 'trophy' || mkv.at === 'station') on = false; else { off = true; ax = Math.max(this.lx + 8, Math.min(this.W - 14, ax)); ay = Math.max(52, Math.min(floor - 12, ay)); } } }
+      const m = this._mark(nm++); let on = this._where(mkv, S, P) && this._project(P, pt), ax = pt.x, ay = pt.y, off = false;
+      if (on && (ax < x0 || ax > x1 || ay < y0 || ay > y1)) { if (mkv.at === 'missile' || mkv.at === 'launcher' || mkv.at === 'pt') { off = true; ax = Math.max(x0 + 8, Math.min(x1 - 8, ax)); ay = Math.max(y0 + 8, Math.min(y1 - 8, ay)); } else on = false; }
       if (!on) { m.el.style.display = 'none'; m.ln.style.display = 'none'; m.dot.style.display = 'none'; m.slot = -1; continue; }
-      const gone = mkv.at === 'missile' && this.gone, text = gone ? mkv.gone : typeof mkv.text === 'function' ? mkv.text(this._ctx()) : mkv.text, tone = ((gone && mkv.goneTone) || mkv.tone || '') + (off ? ' off' : '');
-      if (text !== m.text || tone !== m.tone || m.k !== k) { m.text = text; m.tone = tone; m.k = k; m.el.textContent = text; m.el.className = 'tl ' + tone; m.el.style.display = ''; m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; m.slot = -1; const c = TONES[(gone && mkv.goneTone) || mkv.tone] || '#fff'; m.ln.setAttribute('stroke', c); m.dot.setAttribute('stroke', c); }
-      const dx = 44 * k, dy = 52 * k, fits = s => { const x = s & 1 ? ax - dx - m.w : ax + dx, y = s & 2 ? ay + dy - m.h / 2 : ay - dy - m.h / 2; if (x < this.lx || x + m.w > this.W - 6 || y < 44 || y + m.h > floor) return false; for (const q of placed) if (x < q[0] + q[2] + 6 && x + m.w + 6 > q[0] && y < q[1] + q[3] + 4 && y + m.h + 4 > q[1]) return false; m.x = x; m.y = y; return true; };
+      const gone = mkv._gone, text = gone ? mkv.gone : mkv.text, tone = ((gone && mkv.goneTone) || mkv.tone || '') + (off ? ' off' : '');
+      if (text !== m.text || tone !== m.tone || m.k !== k) { m.text = text; m.tone = tone; m.k = k; m.el.textContent = (off ? '→ ' : '') + text; m.el.className = 'tl ' + tone; m.el.style.display = ''; m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; m.slot = -1; const c = TONES[(tone || '').split(' ')[0]] || '#ffffff'; m.ln.setAttribute('stroke', c); m.dot.setAttribute('stroke', c); }
+      const dx = 46 * k, dy = 54 * k, fits = s => { const x = s & 1 ? ax - dx - m.w : ax + dx, y = s & 2 ? ay + dy - m.h / 2 : ay - dy - m.h / 2; if (x < x0 || x + m.w > x1 || y < y0 || y + m.h > y1) return false; for (const q of placed) if (x < q[0] + q[2] + 6 && x + m.w + 6 > q[0] && y < q[1] + q[3] + 6 && y + m.h + 6 > q[1]) return false; m.x = x; m.y = y; return true; };
       if (m.slot < 0 || !fits(m.slot)) { m.slot = -1; for (const s of [nm % 2 ? 0 : 1, nm % 2 ? 1 : 0, 2, 3]) if (fits(s)) { m.slot = s; break; } }
-      if (m.slot < 0) { m.x = Math.max(this.lx, Math.min(this.W - m.w - 6, ax + dx)); m.y = Math.max(44, Math.min(floor - m.h, ay - dy - m.h / 2 - placed.length * (m.h + 4))); }   /* nowhere free: over the picture, stacked */
+      if (m.slot < 0) { m.x = Math.max(x0, Math.min(x1 - m.w, ax + dx)); m.y = Math.max(y0, Math.min(y1 - m.h, ay - dy - m.h / 2 - placed.length * (m.h + 4))); }
       placed.push([m.x, m.y, m.w, m.h]);
       m.el.style.display = ''; m.el.style.transform = `translate(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px)`;
-      const lx = ax < m.x ? m.x : ax > m.x + m.w ? m.x + m.w : ax, ly = ay < m.y ? m.y : ay > m.y + m.h ? m.y + m.h : ay, d = Math.hypot(lx - ax, ly - ay) || 1, r = 6 * k;
+      const lx = ax < m.x ? m.x : ax > m.x + m.w ? m.x + m.w : ax, ly = ay < m.y ? m.y : ay > m.y + m.h ? m.y + m.h : ay, d = Math.hypot(lx - ax, ly - ay) || 1, r = 7 * k;
       m.dot.style.display = off ? 'none' : ''; m.dot.setAttribute('cx', ax.toFixed(1)); m.dot.setAttribute('cy', ay.toFixed(1)); m.dot.setAttribute('r', r.toFixed(1));
       m.ln.style.display = ''; m.ln.setAttribute('x1', (ax + (lx - ax) / d * (off ? 0 : r)).toFixed(1)); m.ln.setAttribute('y1', (ay + (ly - ay) / d * (off ? 0 : r)).toFixed(1)); m.ln.setAttribute('x2', lx.toFixed(1)); m.ln.setAttribute('y2', ly.toFixed(1));
     }
