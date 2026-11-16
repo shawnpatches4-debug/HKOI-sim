@@ -39,6 +39,7 @@ export class VolleyView {
     // guidance lines: one object for whole lines, one (dashed) for the part that is cut
     this.beamOn = this._lines(false); this.beamCut = this._lines(true);
     this.blindLine = this._lines(false, 5.5);   /* the path a cut missile flies blind: wider than the guidance line, so it reads at a distance */
+    this.tagged = new Set();   /* threats whose own cut label stands in for the page's threat tag this frame (main.js drawMarks skips them) */
     this.marks = new CutMarks(); this.group.add(this.marks.mesh); this.labels = new CutLabels(); this._q0 = new THREE.Vector3(); this._q1 = new THREE.Vector3(); this._qc = new THREE.Vector3();   /* the cut highlight (cutfx.js) */
   }
   _lines(dashed, wide) {
@@ -150,9 +151,9 @@ export class VolleyView {
     if (cs.ring > 0) { const d = cam.position.distanceTo(P), px = Math.max(0.6, d * pixA), f = cs.ring; this.marks.add(P, px * (10 + 46 * f * (2 - f)), BLIND, 1.4 * (1 - f), true); if (f < 0.3) this.marks.add(P, px * 18, [1, 1, 1], 1.3 * (1 - f / 0.3), false); }
     if (!this.seen.has(key + 'c')) { this.seen.add(key + 'c'); if (cs.age < 0.6) this.emit('cut', P.clone(), { key: th.key, d: cs.d }); }
     if (!play || fromSight || this._sight) { this.pos(v, th, l, Math.min(tv, end.t), this.tmp); return; }
-    const sub = `cut at ${Math.round(cs.d).toLocaleString('en-US')} m`;
-    if (cs.phase === 'end') { const a = tv - end.t; if (a < T_LABEL_END) this.labels.add(cam, this.pos(v, th, l, end.t, this._q0), cs.text, sub, 'end', a > T_LABEL_END - 1 ? T_LABEL_END - a : 1); }
-    else this.labels.add(cam, this.pos(v, th, l, tv, this._q0), cs.text, sub, 'cut', 1);
+    const nm = SHORT[th.key] || (window.HK.THREATS[th.key] || {}).short || th.key, sub = `cut at ${Math.round(cs.d).toLocaleString('en-US')} m`;
+    if (cs.phase === 'end') { const a = tv - end.t; if (a < T_LABEL_END) this.labels.add(cam, this.pos(v, th, l, end.t, this._q0), `${nm}: ${cs.text}`, sub, 'end', a > T_LABEL_END - 1 ? T_LABEL_END - a : 1); }
+    else { this.labels.add(cam, this.pos(v, th, l, tv, this._q0), `${nm} ${cs.text}`, sub, 'cut', 1); this.tagged.add(th); }
     this.pos(v, th, l, Math.min(tv, end.t), this.tmp);   /* put the working values back for the missile's own drawing */
   }
 
@@ -220,7 +221,7 @@ export class VolleyView {
     const v = B.volleys.length ? B.volleys[B.volleys.length - 1] : null;
     if (!v) { this.cloud.update(t, s); this._flush(this.beamOn); this._flush(this.beamCut); this._flush(this.blindLine); this.marks.flush(); this.labels.flush(); return; }
     const tv = t - v.t0, rec = v.rec; this._first(v); this.aimAt = null;
-    this._sight = false; for (const l of v.launches) if (l.u0 && Math.hypot(s.camera.position.x - l.u0.e, s.camera.position.z + l.u0.n) < 40) this._sight = true;   /* looking through an enemy sight: only that sight's own label is shown */
+    this.tagged.clear(); this._sight = false; for (const l of v.launches) if (l.u0 && Math.hypot(s.camera.position.x - l.u0.e, s.camera.position.z + l.u0.n) < 40) this._sight = true;   /* looking through an enemy sight: only that sight's own label is shown */
     if (this.curV !== v.i) { this.curV = v.i; for (const [k, st] of this.live) if (!k.startsWith(v.i + ':')) { this.group.remove(st.mesh); this.live.delete(k); } }   /* nothing of an earlier engagement is left hanging in the air */
     const cam = s.camera, pixA = 2 * Math.tan((cam.fov || 50) * Math.PI / 360) / (s.canvas ? s.canvas.clientHeight || 720 : 720), bt = typeof window !== 'undefined' && window.__beta, play = !(bt && bt.state) || bt.state() === 'play';   /* labels only in a battle being played, not behind the title */
 
@@ -242,9 +243,9 @@ export class VolleyView {
         const burning = !rpg || tv - th.t0 < 0.7, U = m.userData;
         if (drone) m.rotateZ(Math.sin(tv * 4.3 + th.idx) * 0.14);
         if (U.flame) { U.flame.visible = burning; if (burning) { const fl = 0.8 + 0.4 * hash(Math.floor(t * 60) + th.idx); U.flame.scale.set(1, 1, fl); } }
-        const lost = cs && cs.phase === 'blind' && cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600;   /* looking from the launcher (enemy sight): the cloud hides the tracer flare, as the engine says it hides the line */
-        if (U.flame && lost) U.flame.visible = false;
-        if (U.glow) { U.glow.visible = burning && !lost; const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz, sz, 1); }
+        const lost = cs && cs.phase === 'blind' && cam.position.distanceToSquared(this._launcher(v, th, l, this._qc)) < 1600, fadeK = lost ? Math.max(0, 1 - cs.age / 0.4) : 1;   /* looking from the launcher (enemy sight): the tracer flare fades into the cloud over 0.4 s, as the engine says the cloud blocks that line */
+        if (U.flame && lost && fadeK <= 0) U.flame.visible = false;
+        if (U.glow) { U.glow.visible = burning && fadeK > 0; U.glow.material = cs && cs.phase === 'blind' && !lost ? blueGlow(U.glow.material) : (U.glow.material._base || U.glow.material);   /* blind: its glow turns HKOI blue */ const d = cam.position.distanceTo(p), sz = Math.max(1.5, d * pixA * 5) * (0.85 + 0.3 * hash(Math.floor(t * 45) + th.idx * 3)); U.glow.scale.set(sz * fadeK, sz * fadeK, 1); }
         // the smoke trail: one puff every few metres of flight, laid at the points the missile really passed
         if (!drone ? burning : true) {
           const spacing = (drone ? 7 : rpg ? 1.4 : th.v > 320 ? 2.1 : 1.6) / Math.max(0.35, fx.q)   /* close enough that the puffs join into one trail instead of a string of beads */, step = spacing / Math.max(10, th.v); let guard = 0;
@@ -267,7 +268,7 @@ export class VolleyView {
             const C = fc != null ? this.tmp3.lerpVectors(L, p, fc) : null, B = this.tmp4;
             if (C) { this._seg(this.beamOn, L, C, col, col, 1, 1); if (cs.beam > 0) this._seg(this.beamOn, C, p, col, col, cs.beam * 0.8, cs.beam * 0.8);
               const d = cam.position.distanceTo(C), px = Math.max(0.6, d * pixA); this.marks.add(C, px * 15, [1, 0.96, 0.88], cs.mark, false); this.marks.add(C, px * 9, BLIND, cs.mark * 0.7, true);
-              if (play && cs.age < 3 && cam.position.distanceToSquared(L) < 1600) this.labels.add(cam, B.copy(C), 'TRACER LOST', 'in the cloud: no guidance', 'sight', 1); }
+            }
             else if (cs.beam > 0) this._seg(this.beamOn, L, p, col, col, cs.beam * 0.8, cs.beam * 0.8);
           }
           else if (fc == null) { if (blind) this._seg(this.beamCut, L, p, GREY, GREY, 1, 1); else this._seg(this.beamOn, L, p, col, col, 1, 1); }
@@ -367,4 +368,7 @@ export class VolleyView {
   }
 }
 const GREY = [0.72, 0.76, 0.8];
+const SHORT = { kornet: 'Kornet', saclos: 'Konkurs', vikhr: 'Vikhr' };
+// one shared blue copy of the missiles' glow material, for a missile flying blind (cut): made once, never per frame
+let _blue = null; function blueGlow(m) { if (m._base) return m; if (!_blue) { _blue = m.clone(); _blue.color.setRGB(1.6, 3.6, 6.0); _blue._base = m; } return _blue; }
 const _res = new THREE.Vector2();

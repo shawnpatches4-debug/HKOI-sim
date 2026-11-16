@@ -2,9 +2,10 @@
 # Needs the restricted test server (BASE); run it as  PORT=<port> bash tools/run_test.sh tests/beta/cutfx.py <out folder> after
 # PORT=<port> bash tools/dev.sh build. The battle is the page's own (standoff, desert, map 3, seed 6); the cut picked is the longest
 # blind flight of the first engagement. Pictures (prefix + name):
-#   orbit_a   side view about 350 m from the point of the cut, 0.25 s after it        orbit_b  the same 1.5 s after it
+#   orbit_0   side view about 350 m from the point of the cut, 0.15 s after it      orbit_a  the same 0.25 s after it        orbit_b  the same 1.5 s after it
 #   cdr       the commander's view 0.25 s after it                                       director the director filming it, captions on
 #   enemy     the enemy gunner's sight 0.8 s after it                                     map      the map 1.5 s after it
+#   end_cdr   the commander's view 0.3 s after the end      end_near  40 m beside where it passed or landed, 0.3 s after
 #   endlabel  side view of where it ended, 1 s after the end
 # Prints what the page said about the cut and any page errors. W, H, GFX from the environment (960, 540, medium).
 import asyncio, os, sys, json
@@ -26,7 +27,7 @@ CAM = r'''(([tv, side, up]) => { const B = __beta, C = window.__cut, v = B.battl
   const V = B.scene.camera.position.constructor, P = B.volleys.pos(v, th, l, Math.min(tv, th.viz.end.t), new V()), T = B.battle.tankAt(v.t0 + tv), L = l.u0 || l.u;
   const dE = L.e - T.e, dN = L.n - T.n, d = Math.hypot(dE, dN), pe = dN / d, pn = -dE / d;   /* to the right of the line */
   B.cams.set('orbit'); B.cams.mode = 'free'; B.scene.controls.enabled = false; const cam = B.scene.camera; cam.up.set(0, 1, 0);
-  const F = P.clone(); F.x += dE / d * side * 0.45; F.z -= dN / d * side * 0.45;   /* look a little up the line from the point, so the cloud and the break are in the picture with it */
+  const F = P.clone(); F.x += dE / d * side * 0.25; F.z -= dN / d * side * 0.25;   /* look a little up the line from the point, so the cloud and the break are in the picture with it */
   cam.position.set(P.x + pe * side - dE / d * side * 0.2, P.y + up, P.z - pn * side + dN / d * side * 0.2); cam.lookAt(F); if (cam.fov !== 40) { cam.fov = 40; cam.updateProjectionMatrix(); }
   return [+P.x.toFixed(1), +P.y.toFixed(1), +P.z.toFixed(1)]; })'''
 
@@ -43,6 +44,8 @@ async def main():
         info = json.loads(await pg.evaluate(SETUP)); print('cut', json.dumps(info)); tC, tE, t0 = info['tCut'], info['tEnd'], info['t0']
         async def shot(name, settle=4500):
             await pg.wait_for_timeout(settle); await pg.screenshot(path=os.path.join(OUT, PRE + name + '.png'), timeout=90000); print(name, await pg.evaluate(INFO))
+        await pg.evaluate(PLAY, tC + 0.15)
+        await pg.evaluate(CAM, [tC - t0, 330, 60]); await shot('orbit_0')
         await pg.evaluate(PLAY, tC + 0.25)
         await pg.evaluate(CAM, [tC - t0, 330, 60]); await shot('orbit_a')
         await pg.evaluate("void (__beta.cams.set('cdr'))"); await shot('cdr')
@@ -55,6 +58,9 @@ async def main():
         await pg.evaluate(CAM, [tC - t0 + 1.5, 330, 60]); await shot('orbit_b')
         await pg.evaluate("void (__beta.openMap())"); await shot('map'); await pg.keyboard.press('KeyM'); await pg.wait_for_timeout(500)
         await pg.evaluate("void ((() => { const m = document.getElementById('map'); if (m && !m.hidden) document.getElementById('map-close').click(); })())")
+        await pg.evaluate(PLAY, tE + 0.3)
+        await pg.evaluate("void (__beta.cams.set('cdr'))"); await shot('end_cdr')
+        await pg.evaluate(CAM, [tE - t0, 40, 6]); await shot('end_near')
         await pg.evaluate(PLAY, tE + 1.0)
         await pg.evaluate(CAM, [tE - t0, 160, 25]); await shot('endlabel')
         print('errors', json.dumps(errs[:10])); await b.close()

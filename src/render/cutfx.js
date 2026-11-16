@@ -88,16 +88,24 @@ export class CutMarks {
 export class CutLabels {
   constructor() { this.pool = []; this.n = 0; this.v = new THREE.Vector3(); this.box = null; }
   _host() { if (this.box || typeof document === 'undefined') return this.box; const m = document.getElementById('marks'); if (!m) return null; this.box = m; return m; }
-  // p: scene point; text; sub: a second smaller line; style: 'cut' | 'end' | 'sight'
+  // p: scene point; text; sub: a second smaller line; style: 'cut' (a cut missile in flight: this REPLACES the page's red threat tag
+  // for it, same place and shape, in HKOI blue) | 'end' (where it ended) | 'sight'. A crossed square marks the point, the words sit
+  // on a dark backing beside it.
   add(cam, p, text, sub, style, alpha) {
     const box = this._host(); if (!box) return; let L = this.pool[this.n];
-    if (!L) { L = document.createElement('div'); L.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;will-change:transform;font:700 12px/1.25 var(--mono, monospace);letter-spacing:.04em;text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,.8)'; L.append(document.createElement('b'), document.createElement('div')); L.lastChild.style.cssText = 'font-weight:600;font-size:10.5px;opacity:.85'; box.append(L); this.pool.push(L); }
+    if (!L) {
+      L = document.createElement('div'); L.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;will-change:transform;font:700 12px/1.25 var(--mono, monospace);letter-spacing:.03em';
+      const i = document.createElement('i'); i.style.cssText = 'position:absolute;left:-9px;top:-9px;width:16px;height:16px;border:2px solid currentColor;box-sizing:border-box;font:700 12px/12px var(--mono, monospace);text-align:center;font-style:normal'; i.textContent = '\u2715';
+      const t = document.createElement('span'); t.style.cssText = 'position:absolute;left:14px;top:-11px;background:rgba(3,10,16,.82);padding:3px 7px 4px;border-radius:3px;border-left:3px solid currentColor';
+      t.append(document.createElement('b'), document.createElement('div')); t.lastChild.style.cssText = 'font-weight:600;font-size:10.5px;color:#d8f2ff;opacity:.9';
+      L.append(i, t); box.append(L); this.pool.push(L);
+    }
     this.n++;
     const v = this.v.copy(p).project(cam), on = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1; L.hidden = !on; if (!on) return;
     const W = box.clientWidth || innerWidth, H = box.clientHeight || innerHeight, x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H;
-    L.style.transform = `translate(${(x + 14).toFixed(1)}px, ${(y + 12).toFixed(1)}px)`;   /* below and right of the point: clear of the threat marker's own label */
-    const col = style === 'sight' ? '#b8ff9a' : style === 'end' ? '#d8f2ff' : '#8fdcff';
-    if (L.firstChild.textContent !== text) L.firstChild.textContent = text; if (L.lastChild.textContent !== (sub || '')) L.lastChild.textContent = sub || '';
+    L.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    const col = style === 'sight' ? '#b8ff9a' : style === 'end' ? '#bfe9ff' : '#8fdcff', T = L.lastChild;
+    if (T.firstChild.textContent !== text) T.firstChild.textContent = text; if (T.lastChild.textContent !== (sub || '')) T.lastChild.textContent = sub || '';
     if (L.style.color !== col) L.style.color = col; const op = String(Math.round(alpha * 100) / 100); if (L.style.opacity !== op) L.style.opacity = op;
   }
   flush() { for (let i = this.n; i < this.pool.length; i++) if (!this.pool[i].hidden) this.pool[i].hidden = true; this.n = 0; }
