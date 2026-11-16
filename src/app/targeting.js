@@ -165,7 +165,7 @@ export const endPhrase = D => (D.end.type === 'ground' ? `fell ${m0(D.end.short)
 // launcher seen from the side (distances true, heights stretched by the stated factor). Bottom, by focus: 'chain' the six links of
 // the chain with their times, 'table' the fire control's planning table, 'bearing' the warning seen from above, 'light' how much of
 // the beam still reaches the missile's tail.
-export const GEO_W = 360, GEO_H = 318;
+export const GEO_W = 360, GEO_H = 340;
 export function geoSVG(D, tb, focus, TB) {
   const t = tb - D.T0, X0 = 34, X1 = 326, xs = d => X0 + (X1 - X0) * Math.max(0, Math.min(1, d / D.R)), yG = 128, VZ = 4.2, hy = z => yG - 10 - z * VZ;
   const ex = Math.round(VZ / ((X1 - X0) / D.R)), st = aimStage(D, t), m = missileAt(D, t), F = D.frame; let o = '';
@@ -195,7 +195,7 @@ export function geoSVG(D, tb, focus, TB) {
   if (st >= 6) { const x = xs(D.cut.d); o += LN(x, yG - 4, x, 60, C.hk, ' stroke-width="1.5"') + T(x + 4, 64, `CUT at ${m0(D.cut.d)}`, ' class="n k"'); }
   if (st >= 7) { const x = xs(D.end.type === 'ground' ? D.end.short : 0); o += T(x, yG + 5, '✕', ' class="big w m"') + T(Math.max(x + 8, 64), yG + 36, endPhrase(D), ' class="s w b"'); }
   // the bottom half
-  const y0 = 152;
+  const y0 = 174;
   if (focus === 'table' && TB) o += tablePart(D, TB, y0);
   else if (focus === 'bearing') o += bearingPart(D, t, y0);
   else if (focus === 'light') o += lightPart(D, t, y0);
